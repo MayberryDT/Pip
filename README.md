@@ -69,7 +69,7 @@ Private beta flow:
 - The shield control exposes manual refresh, protected-savings settings, sign-out, and delete-data.
 - `/api/sync/manual` runs server-side provider sync, rate limits manual refreshes, records sync logs, and stores a Free Cash snapshot. Plaid syncs every stored Item and can return a `partial` result when at least one institution refreshed but another needs repair.
 - `/api/sync/status` reports last refresh, stale connection state, and latest sync failure details for the shield drawer.
-- `/api/providers/connect` creates the authenticated Plaid Link session used by the drawer's connect/repair action.
+- `/api/providers/connect` creates the authenticated Plaid Link session used by the chat connect/repair action.
 - `/api/providers/plaid/exchange` exchanges Plaid Link public tokens server-side and stores encrypted Plaid access tokens.
 - `/api/providers/teller/health` reports whether Teller Connect, mTLS, and token encryption are configured.
 - `/api/providers/teller/enrollment` stores a Teller Connect enrollment token server-side after the connect nonce matches.
@@ -92,8 +92,15 @@ PLAID_PRODUCTS=transactions
 PLAID_COUNTRY_CODES=US
 PLAID_CLIENT_NAME=Spendable
 PLAID_DAYS_REQUESTED=90
+PLAID_REDIRECT_URI=https://free-cash-mayberrydt.netlify.app/plaid/oauth
 FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=
 ```
+
+Plaid OAuth redirect setup:
+
+- Production Netlify: `PLAID_REDIRECT_URI=https://free-cash-mayberrydt.netlify.app/plaid/oauth`
+- Local development: `PLAID_REDIRECT_URI=http://localhost:3000/plaid/oauth`
+- The same URI must be added to the Plaid Dashboard redirect URI allowlist for the active Plaid environment.
 
 Plaid access tokens and transaction cursors are stored only in the private service-role credentials table. Browser code receives Link tokens and public tokens only; long-lived provider secrets stay server-side.
 Manual sync stores normalized account and transaction rows, while raw provider payload columns remain empty by default to reduce private-beta data exposure.

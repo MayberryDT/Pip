@@ -15,6 +15,7 @@ import {
   type FinancialProvider,
   type SyncStatusResponse,
 } from "@/components/data-controls-helpers";
+import { openPlaidLink } from "@/lib/providers/plaid/link-browser";
 
 type SettingsResponse = {
   protectedSavingsMonthlyCents: number;
@@ -55,32 +56,6 @@ type ConnectSessionResponse = {
     kind: string;
   };
 };
-
-type PlaidSuccessMetadata = {
-  institution?: {
-    name?: string;
-    institution_id?: string;
-  };
-};
-
-type PlaidConnection = {
-  publicToken: string | null;
-  metadata: PlaidSuccessMetadata;
-};
-
-declare global {
-  interface Window {
-    Plaid?: {
-      create(input: {
-        token: string;
-        onSuccess(publicToken: string | null, metadata: PlaidSuccessMetadata): void;
-        onExit(error: { error_message?: string } | null): void;
-      }): {
-        open(): void;
-      };
-    };
-  }
-}
 
 export function DataControls() {
   const [open, setOpen] = useState(false);
@@ -445,56 +420,4 @@ function isPlaidConnectConfig(connect: ConnectSessionResponse["connect"]): conne
       "mode" in connect &&
       (connect.mode === "connect" || connect.mode === "repair"),
   );
-}
-
-async function openPlaidLink(config: PlaidConnectConfig): Promise<PlaidConnection> {
-  await loadPlaidScript();
-
-  return new Promise((resolve, reject) => {
-    const handler = window.Plaid?.create({
-      token: config.linkToken,
-      onSuccess(publicToken, metadata) {
-        resolve({
-          publicToken,
-          metadata,
-        });
-      },
-      onExit(error) {
-        reject(new Error(error?.error_message ?? "Plaid Link closed."));
-      },
-    });
-
-    if (!handler) {
-      reject(new Error("Plaid Link did not load."));
-      return;
-    }
-
-    handler.open();
-  });
-}
-
-async function loadPlaidScript() {
-  if (window.Plaid) {
-    return;
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(
-      'script[src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"]',
-    );
-
-    if (existing) {
-      existing.addEventListener("load", () => resolve(), { once: true });
-      existing.addEventListener("error", () => reject(new Error("Plaid Link failed to load.")), {
-        once: true,
-      });
-      return;
-    }
-
-    const script = document.createElement("script");
-    script.src = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error("Plaid Link failed to load."));
-    document.body.appendChild(script);
-  });
 }

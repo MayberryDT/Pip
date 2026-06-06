@@ -16,6 +16,7 @@ import type { FreeCashResult } from "@/lib/types";
 import { AgentInput } from "@/components/AgentInput";
 import { AgentThread } from "@/components/AgentThread";
 import { PromptChips } from "@/components/PromptChips";
+import { openPlaidLink } from "@/lib/providers/plaid/link-browser";
 
 type ThreadItem = {
   id: string;
@@ -24,9 +25,6 @@ type ThreadItem = {
   errorText?: string;
   isPending?: boolean;
 };
-
-const PLAID_SCRIPT_SRC = "https://cdn.plaid.com/link/v2/stable/link-initialize.js";
-const PLAID_SCRIPT_LOAD_TIMEOUT_MS = 12_000;
 
 const GUEST_ONBOARDING_CHIPS: PromptChip[] = [
   {
@@ -98,32 +96,6 @@ type ConnectSessionResponse = {
     kind: string;
   };
 };
-
-type PlaidSuccessMetadata = {
-  institution?: {
-    name?: string;
-    institution_id?: string;
-  };
-};
-
-type PlaidConnection = {
-  publicToken: string | null;
-  metadata: PlaidSuccessMetadata;
-};
-
-declare global {
-  interface Window {
-    Plaid?: {
-      create(input: {
-        token: string;
-        onSuccess(publicToken: string | null, metadata: PlaidSuccessMetadata): void;
-        onExit(error: { error_message?: string } | null): void;
-      }): {
-        open(): void;
-      };
-    };
-  }
-}
 
 export type SpendableAuthState =
   | {
@@ -1073,98 +1045,6 @@ function isPlaidConnectConfig(connect: ConnectSessionResponse["connect"]): conne
       "mode" in connect &&
       (connect.mode === "connect" || connect.mode === "repair"),
   );
-}
-
-async function openPlaidLink(config: PlaidConnectConfig): Promise<PlaidConnection> {
-  await loadPlaidScript();
-
-  return new Promise((resolve, reject) => {
-    const handler = window.Plaid?.create({
-      token: config.linkToken,
-      onSuccess(publicToken, metadata) {
-        resolve({
-          publicToken,
-          metadata,
-        });
-      },
-      onExit(error) {
-        reject(new Error(error?.error_message ?? "Plaid Link closed."));
-      },
-    });
-
-    if (!handler) {
-      reject(new Error("Plaid Link did not load."));
-      return;
-    }
-
-    try {
-      handler.open();
-    } catch (error) {
-      reject(error instanceof Error ? error : new Error("Plaid Link could not open."));
-    }
-  });
-}
-
-async function loadPlaidScript() {
-  if (window.Plaid) {
-    return;
-  }
-
-  const existing = document.querySelector<HTMLScriptElement>(`script[src="${PLAID_SCRIPT_SRC}"]`);
-
-  if (existing?.dataset.loadState === "failed") {
-    existing.remove();
-  } else if (existing) {
-    await waitForPlaidScript(existing);
-    return;
-  }
-
-  const script = document.createElement("script");
-  script.src = PLAID_SCRIPT_SRC;
-  script.dataset.loadState = "loading";
-  document.body.appendChild(script);
-  await waitForPlaidScript(script);
-}
-
-async function waitForPlaidScript(script: HTMLScriptElement) {
-  if (window.Plaid) {
-    return;
-  }
-
-  await new Promise<void>((resolve, reject) => {
-    const timeoutId = window.setTimeout(() => {
-      cleanup();
-      script.dataset.loadState = "failed";
-      script.remove();
-      reject(
-        new Error(
-          "Plaid is taking too long to open. Check pop-up or script blockers, then tap Connect data again.",
-        ),
-      );
-    }, PLAID_SCRIPT_LOAD_TIMEOUT_MS);
-
-    function cleanup() {
-      window.clearTimeout(timeoutId);
-      script.removeEventListener("load", handleLoad);
-      script.removeEventListener("error", handleError);
-    }
-
-    function handleLoad() {
-      cleanup();
-      script.dataset.loadState = "loaded";
-      resolve();
-    }
-
-    function handleError() {
-      cleanup();
-      script.dataset.loadState = "failed";
-      script.remove();
-      reject(new Error("Plaid failed to load. Check pop-up or script blockers, then tap Connect data again."));
-    }
-
-    script.addEventListener("load", handleLoad, { once: true });
-    script.addEventListener("error", handleError, { once: true });
-  });
 }
 
 async function fetchAgentResponse(

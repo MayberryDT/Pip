@@ -18,6 +18,7 @@ export type PlaidConfig = {
   countryCodes: CountryCode[];
   clientName: string;
   daysRequested: number;
+  redirectUri?: string;
 };
 
 export type PlaidReadiness = {
@@ -51,6 +52,7 @@ export function getPlaidConfig(env: Record<string, string | undefined> = process
     countryCodes: parseCountryCodes(env.PLAID_COUNTRY_CODES),
     clientName: env.PLAID_CLIENT_NAME?.trim() || "Spendable",
     daysRequested: parseDaysRequested(env.PLAID_DAYS_REQUESTED),
+    redirectUri: getPlaidRedirectUri(env),
   };
 }
 
@@ -119,6 +121,7 @@ export async function createPlaidConnectSession(input: {
     client_name: config.clientName,
     language: "en",
     country_codes: config.countryCodes,
+    ...(config.redirectUri ? { redirect_uri: config.redirectUri } : {}),
     user: {
       client_user_id: input.userId,
     },
@@ -183,4 +186,63 @@ function parseDaysRequested(value: string | undefined): number {
   }
 
   return Math.min(730, Math.max(30, Math.round(days)));
+}
+
+function getPlaidRedirectUri(env: Record<string, string | undefined>): string | undefined {
+  const explicitRedirectUri = normalizeAbsoluteUrl(env.PLAID_REDIRECT_URI);
+
+  if (explicitRedirectUri) {
+    return explicitRedirectUri;
+  }
+
+  const appOrigin = normalizeOrigin(
+    env.NEXT_PUBLIC_SITE_URL ||
+      env.URL ||
+      env.DEPLOY_PRIME_URL ||
+      (env.NODE_ENV === "development" ? "http://localhost:3000" : undefined),
+  );
+
+  if (!appOrigin) {
+    return undefined;
+  }
+
+  return `${appOrigin}/plaid/oauth`;
+}
+
+function normalizeOrigin(rawUrl: string | undefined): string | null {
+  if (!rawUrl?.trim()) {
+    return null;
+  }
+
+  const trimmedUrl = rawUrl.trim();
+  const urlWithProtocol =
+    trimmedUrl.startsWith("http://") || trimmedUrl.startsWith("https://")
+      ? trimmedUrl
+      : `https://${trimmedUrl}`;
+
+  try {
+    return new URL(urlWithProtocol).origin;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeAbsoluteUrl(rawUrl: string | undefined): string | undefined {
+  if (!rawUrl?.trim()) {
+    return undefined;
+  }
+
+  const urlWithProtocol =
+    rawUrl.trim().startsWith("http://") || rawUrl.trim().startsWith("https://")
+      ? rawUrl.trim()
+      : `https://${rawUrl.trim()}`;
+
+  try {
+    const url = new URL(urlWithProtocol);
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  } catch {
+    return undefined;
+  }
 }
