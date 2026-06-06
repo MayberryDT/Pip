@@ -70,7 +70,12 @@ describe("Supabase financial-data schema", () => {
     expect(migration).toContain("user_id uuid not null references auth.users(id) on delete cascade");
     expect(migration).toContain("revoke all on schema private from anon, authenticated;");
     expect(migration).toContain("to service_role");
+    expect(allMigrations).toContain("grant usage on schema private to service_role;");
+    expect(allMigrations).toContain(
+      "grant select, insert, update, delete on private.provider_credentials to service_role;",
+    );
     expect(migration).not.toContain("on private.provider_credentials\nfor all\nto authenticated");
+    expect(allMigrations).not.toContain("grant select on private.provider_credentials to authenticated");
   });
 
   it("uses auth.uid policies for user-owned rows", () => {
