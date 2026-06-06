@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
     const supabase = await createSupabaseServerClient();
 
-    const origin = new URL(request.url).origin;
+    const origin = getAppOrigin(request);
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -48,6 +48,42 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json(toErrorBody(error), { status: 500 });
+  }
+}
+
+function getAppOrigin(request: Request): string {
+  const explicitUrl = normalizeOrigin(
+    process.env.NEXT_PUBLIC_SITE_URL || process.env.URL || process.env.DEPLOY_PRIME_URL,
+  );
+
+  if (explicitUrl) {
+    return explicitUrl;
+  }
+
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  if (forwardedHost) {
+    const forwardedProto = request.headers.get("x-forwarded-proto") || "https";
+    return normalizeOrigin(`${forwardedProto}://${forwardedHost}`) ?? new URL(request.url).origin;
+  }
+
+  return new URL(request.url).origin;
+}
+
+function normalizeOrigin(rawUrl: string | undefined): string | null {
+  if (!rawUrl?.trim()) {
+    return null;
+  }
+
+  const trimmedUrl = rawUrl.trim();
+  const urlWithProtocol =
+    trimmedUrl.startsWith("http://") || trimmedUrl.startsWith("https://")
+      ? trimmedUrl
+      : `https://${trimmedUrl}`;
+
+  try {
+    return new URL(urlWithProtocol).origin;
+  } catch {
+    return null;
   }
 }
 

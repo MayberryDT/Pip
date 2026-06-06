@@ -72,6 +72,7 @@ describe("POST /api/auth/sign-in", () => {
 
   it("normalizes invited emails and sends the magic link to the callback route", async () => {
     enableSupabaseEnv();
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
     const supabase = createSupabaseClient();
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
     routeMocks.assertInvitedEmail.mockResolvedValue(undefined);
@@ -86,7 +87,33 @@ describe("POST /api/auth/sign-in", () => {
     expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
       email: "mayberrydt@gmail.com",
       options: {
-        emailRedirectTo: "http://localhost/auth/callback",
+        emailRedirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback",
+        shouldCreateUser: true,
+      },
+    });
+  });
+
+  it("uses forwarded host headers when no canonical site URL is configured", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.assertInvitedEmail.mockResolvedValue(undefined);
+
+    const response = await POST(
+      jsonRequest(
+        { email: "mayberrydt@gmail.com" },
+        {
+          "x-forwarded-host": "free-cash-mayberrydt.netlify.app",
+          "x-forwarded-proto": "https",
+        },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
+      email: "mayberrydt@gmail.com",
+      options: {
+        emailRedirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback",
         shouldCreateUser: true,
       },
     });
@@ -109,11 +136,12 @@ function createSupabaseClient() {
   };
 }
 
-function jsonRequest(body: unknown) {
+function jsonRequest(body: unknown, headers: Record<string, string> = {}) {
   return new Request("http://localhost/api/auth/sign-in", {
     method: "POST",
     headers: {
       "content-type": "application/json",
+      ...headers,
     },
     body: JSON.stringify(body),
   });
