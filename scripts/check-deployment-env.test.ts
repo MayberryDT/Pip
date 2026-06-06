@@ -1,0 +1,122 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { describe, expect, it } from "vitest";
+
+const scriptPath = resolve(process.cwd(), "scripts/check-deployment-env.mjs");
+
+describe("check-deployment-env", () => {
+  it("passes fake mode only when fake-data mode is explicit", async () => {
+    const cwd = createTempProject(`
+FREE_CASH_SUPABASE_MODE=off
+`);
+
+    const result = await runCheck(cwd, "--mode=fake");
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Deployment env check passed for fake mode.");
+  });
+
+  it("fails beta mode with exact missing server-side requirements", async () => {
+    const cwd = createTempProject(`
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
+FREE_CASH_OPERATOR_TOKEN=operator-token
+FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=token-key
+PLAID_CLIENT_ID=plaid-client-id
+PLAID_SECRET=plaid-secret
+PLAID_ENV=sandbox
+`);
+
+    const result = await runCheck(cwd, "--mode=beta");
+    const output = result.stderr + result.stdout + result.warnings;
+
+    expect(result.status).toBe(1);
+    expect(output).toContain("Deployment env check failed for beta mode.");
+    expect(output).toContain("- SUPABASE_SERVICE_ROLE_KEY");
+    expect(output).toContain(
+      "- OPENAI_API_KEY, OPENAI_BASE_URL, or NETLIFY_AI_GATEWAY_BASE_URL plus NETLIFY_AI_GATEWAY_KEY",
+    );
+    expect(output).toContain("- PLAID_ENV=sandbox uses Plaid sandbox data, not real bank data.");
+    expect(output).not.toContain("operator-token");
+    expect(output).not.toContain("plaid-secret");
+  });
+
+  it("allows Netlify AI Gateway base URL instead of a direct OpenAI key", async () => {
+    const cwd = createTempProject(`
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
+SUPABASE_SERVICE_ROLE_KEY=service-role-key
+FREE_CASH_OPERATOR_TOKEN=operator-token
+FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=token-key
+PLAID_CLIENT_ID=plaid-client-id
+PLAID_SECRET=plaid-secret
+PLAID_ENV=production
+OPENAI_BASE_URL=https://free-cash.netlify.app/.netlify/ai
+`);
+
+    const result = await runCheck(cwd, "--mode=beta");
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Deployment env check passed for beta mode.");
+  });
+
+  it("allows Netlify AI Gateway explicit injected variables without a direct OpenAI key", async () => {
+    const cwd = createTempProject(`
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
+SUPABASE_SERVICE_ROLE_KEY=service-role-key
+FREE_CASH_OPERATOR_TOKEN=operator-token
+FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=token-key
+PLAID_CLIENT_ID=plaid-client-id
+PLAID_SECRET=plaid-secret
+PLAID_ENV=production
+NETLIFY_AI_GATEWAY_BASE_URL=https://api.netlify.com/ai/v1
+NETLIFY_AI_GATEWAY_KEY=netlify-gateway-key
+`);
+
+    const result = await runCheck(cwd, "--mode=beta");
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Deployment env check passed for beta mode.");
+  });
+});
+
+function createTempProject(envFile: string): string {
+  const cwd = mkdtempSync(join(tmpdir(), "free-cash-env-check-"));
+  writeFileSync(join(cwd, ".env"), envFile.trimStart());
+  return cwd;
+}
+
+async function runCheck(cwd: string, mode: "--mode=beta" | "--mode=fake") {
+  const output = {
+    stdout: [] as string[],
+    stderr: [] as string[],
+    warnings: [] as string[],
+  };
+  const module = await import(pathToFileURL(scriptPath).href);
+  const runDeploymentEnvCheck = module.runDeploymentEnvCheck as (input: {
+    argv: string[];
+    cwd: string;
+    env: Record<string, string | undefined>;
+    stdout: (line: string) => void;
+    stderr: (line: string) => void;
+    warn: (line: string) => void;
+  }) => number;
+  const status = runDeploymentEnvCheck({
+    argv: ["node", scriptPath, mode],
+    cwd,
+    env: {},
+    stdout: (line) => output.stdout.push(line),
+    stderr: (line) => output.stderr.push(line),
+    warn: (line) => output.warnings.push(line),
+  });
+
+  return {
+    status,
+    stdout: output.stdout.join("\n"),
+    stderr: output.stderr.join("\n"),
+    warnings: output.warnings.join("\n"),
+  };
+}

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Spendable icon">
+  <rect width="512" height="512" rx="96" fill="#F7F3EA"/>
+  <circle cx="256" cy="256" r="156" fill="#171A1F"/>
+  <path fill="#F7F3EA" d="M154 284h52c7 28 28 44 59 44 26 0 46-11 60-34l44 26c-23 40-58 60-104 60-60 0-102-36-113-96h-32v-36h28v-7h-28v-36h33c12-58 54-93 112-93 46 0 81 20 104 60l-44 26c-14-23-34-34-60-34-30 0-51 15-59 41h93v36H199v7h100v36H154z"/>
+</svg>

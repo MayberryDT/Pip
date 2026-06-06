@@ -1,0 +1,41 @@
+{
+  "name": "spendable",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build --webpack",
+    "start": "next start",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "test:watch": "vitest",
+    "check:deployment": "node scripts/check-deployment-env.mjs",
+    "check:netlify-bundle": "node scripts/check-netlify-bundle.mjs",
+    "deploy:netlify": "node scripts/safe-netlify-deploy.mjs"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.107.0",
+    "lucide-react": "^0.468.0",
+    "next": "latest",
+    "openai": "^6.42.0",
+    "plaid": "^42.2.0",
+    "react": "latest",
+    "react-dom": "latest",
+    "zod": "^3.24.1"
+  },
+  "overrides": {
+    "postcss": "^8.5.10"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0",
+    "@types/node": "^22.10.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.10",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

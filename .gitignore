@@ -1,0 +1,11 @@
+node_modules/
+.next/
+out/
+test-results/
+playwright-report/
+tsconfig.tsbuildinfo
+.env*
+!.env.example
+
+# Local Netlify folder
+.netlify
