@@ -1,3 +1,5 @@
+import { getCalendarDate } from "@/lib/date/calendar";
+
 export type FinancialProvider = "mock" | "teller" | "plaid";
 
 export type SyncStatusResponse = {
@@ -9,6 +11,7 @@ export type SyncStatusResponse = {
     lastSuccessfulSyncAt: string | null;
     staleAfter: string | null;
     isStale: boolean;
+    errorCode?: string | null;
     errorMessage: string | null;
   }>;
   latestSyncRun: {
@@ -92,17 +95,17 @@ export function getConnectionStatusMessage(syncStatus: SyncStatusResponse | null
   const repairInstitution = getRepairablePlaidInstitution(syncStatus);
 
   if (repairInstitution) {
-    return `${repairInstitution.institutionName} needs repair. Use Repair connection before relying on refreshed Spendable Cash.`;
+    return `${repairInstitution.institutionName} needs repair. Use Repair connection before relying on refreshed Spendable Cash Today.`;
   }
 
   const staleInstitutions = syncStatus.institutions.filter((institution) => institution.isStale);
 
   if (staleInstitutions.length === 1) {
-    return `${staleInstitutions[0].institutionName} data is stale. Refresh before relying on Spendable Cash.`;
+    return `${staleInstitutions[0].institutionName} data is stale. Refresh before relying on Spendable Cash Today.`;
   }
 
   if (staleInstitutions.length > 1) {
-    return `${staleInstitutions.length} connections have stale data. Refresh before relying on Spendable Cash.`;
+    return `${staleInstitutions.length} connections have stale data. Refresh before relying on Spendable Cash Today.`;
   }
 
   return null;
@@ -149,12 +152,54 @@ export function formatLastRefresh(syncStatus: SyncStatusResponse | null): string
   }).format(new Date(latestInstitutionSync));
 }
 
+export function shouldRefreshConnectedDataForToday(
+  syncStatus: SyncStatusResponse,
+  now = new Date(),
+  timeZone?: string,
+): boolean {
+  if (syncStatus.hasStaleInstitution) {
+    return true;
+  }
+
+  const lastSuccessfulSyncAt = syncStatus.institutions
+    .map((institution) => institution.lastSuccessfulSyncAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
+
+  if (!lastSuccessfulSyncAt) {
+    return false;
+  }
+
+  return (
+    getCalendarDate(new Date(lastSuccessfulSyncAt), { timeZone }) !==
+    getCalendarDate(now, { timeZone })
+  );
+}
+
 function getRepairablePlaidInstitution(syncStatus: SyncStatusResponse | null) {
   return syncStatus?.institutions.find((institution) => {
     if (institution.provider !== "plaid") {
       return false;
     }
 
-    return ["failed", "stale", "revoked"].includes(institution.status);
+    return isRepairablePlaidErrorCode(institution.errorCode) || institution.status === "revoked";
   });
+}
+
+function isRepairablePlaidErrorCode(errorCode: string | null | undefined): boolean {
+  return [
+    "item-login-required",
+    "invalid-credentials",
+    "invalid-mfa",
+    "item-locked",
+    "mfa-not-supported",
+    "user-setup-required",
+    "invalid-access-token",
+    "item-not-found",
+    "user-permission-revoked",
+    "user-account-revoked",
+    "access-not-granted",
+    "no-accounts",
+  ].includes((errorCode ?? "").toLowerCase());
 }

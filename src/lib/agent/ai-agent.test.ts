@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { agentFinalOutputSchema, agentMessageMaxChars } from "@/lib/agent/response-schema";
+import { agentFinalOutputSchema, agentMessageMaxChars, cardSchema } from "@/lib/agent/response-schema";
 import {
   FREE_CASH_AI_MODEL,
   NETLIFY_AI_GATEWAY_MODEL,
@@ -8,8 +8,11 @@ import {
   getOpenAIClientConfig,
   getOpenAIApiKeyForSdk,
   runAIAgent,
+  __agentTestHooks,
 } from "@/lib/agent/ai-agent";
 import { createMockModelClient } from "../../../tests/helpers/mock-agent-runtime";
+import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { fakeSnapshot } from "@/lib/fake-data";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -50,7 +53,7 @@ describe("runAIAgent", () => {
           shownCards: [
             {
               type: "free_cash_explanation",
-              title: "Why Spendable Cash changed",
+              title: "Why this number changed",
             },
           ],
           lastToolNames: ["get_free_cash_drivers"],
@@ -210,6 +213,85 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("uses an insight card for payday impact questions", async () => {
+    const response = await runAIAgent(
+      { message: "How does payday affect my money?" },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["compose_insight_card"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "Payday impact",
+    });
+
+    if (response.cards[0]?.type !== "insight_card") {
+      throw new Error("Expected insight card.");
+    }
+
+    expect(response.cards[0].rows.map((row) => row.id)).toEqual(
+      expect.arrayContaining(["income", "daily-income", "spending", "protected-savings", "today"]),
+    );
+  });
+
+  it("uses an insight card for factor questions without replacing why-this-number", async () => {
+    const response = await runAIAgent(
+      { message: "What factors affect today's Spendable Cash?" },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["compose_insight_card"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "What affects today",
+    });
+
+    const whyResponse = await runAIAgent(
+      { message: "Why this number?" },
+      createMockModelClient(),
+    );
+
+    expect(whyResponse.usedTools).toEqual(["get_free_cash_drivers"]);
+    expect(whyResponse.cards[0]).toMatchObject({
+      type: "free_cash_explanation",
+    });
+  });
+
+  it("routes insight prompts through the real forced-tool classifier", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "How does payday affect my money?",
+      }),
+    ).toMatchObject({
+      toolName: "compose_insight_card",
+      args: {
+        topic: "payday_impact",
+      },
+      requireCard: true,
+    });
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "What factors affect today's Spendable Cash?",
+      }),
+    ).toMatchObject({
+      toolName: "compose_insight_card",
+      args: {
+        topic: "spendable_factors",
+      },
+      requireCard: true,
+    });
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Why this number?",
+      }),
+    ).toMatchObject({
+      toolName: "get_free_cash_drivers",
+      requireCard: true,
+    });
+  });
+
   it("can discuss broad finance topics without pretending to show a card", async () => {
     const response = await runAIAgent(
       { message: "Let's talk about credit cards" },
@@ -283,6 +365,202 @@ describe("runAIAgent", () => {
         },
       ],
     });
+  });
+
+  it("rejects invalid insight cards at the response schema boundary", () => {
+    expect(() =>
+      cardSchema.parse({
+        type: "insight_card",
+        title: "Too small",
+        summary: "This does not have enough rows.",
+        rows: [
+          {
+            id: "income",
+            label: "Income",
+            amountCents: 10000,
+            tone: "positive",
+          },
+          {
+            id: "today",
+            label: "Today",
+            amountCents: 4300,
+            tone: "positive",
+          },
+        ],
+      }),
+    ).toThrow();
+  });
+
+  it("filters retired default prompt chips without adding deterministic fallback chips", () => {
+    const chips = __agentTestHooks.selectPromptChips(
+      {
+        message: "I can help.",
+        responseMode: "chat_only",
+        promptChips: [
+          {
+            id: "ai-why",
+            label: "Why this number?",
+            prompt: "Why this number?",
+          },
+          {
+            id: "ai-spend",
+            label: "Can I spend $50?",
+            prompt: "Can I spend $50?",
+          },
+          {
+            id: "ai-changed",
+            label: "What changed?",
+            prompt: "What changed?",
+          },
+        ],
+      },
+      {
+        conversationState: {
+          shownCards: [],
+          lastToolNames: [],
+          promptChips: [
+            {
+              id: "why",
+              label: "Why this number?",
+              prompt: "Why this number?",
+            },
+            {
+              id: "spend-50",
+              label: "Can I spend $50?",
+              prompt: "Can I spend $50?",
+            },
+            {
+              id: "what-changed",
+              label: "What changed?",
+              prompt: "What changed?",
+            },
+          ],
+        },
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        snapshot: fakeSnapshot,
+      } as never,
+      calculateFreeCash(fakeSnapshot),
+    );
+
+    expect(chips).toEqual([]);
+  });
+
+  it("keeps fresh model-generated prompt chips for ready users", () => {
+    const chips = __agentTestHooks.selectPromptChips(
+      {
+        message: "I can help.",
+        responseMode: "chat_only",
+        promptChips: [
+          {
+            id: "ai-behind",
+            label: "Main drivers",
+            prompt: "Show drivers behind this number",
+          },
+          {
+            id: "ai-bills",
+            label: "Upcoming bills",
+            prompt: "What bills are coming up?",
+          },
+          {
+            id: "ai-payday",
+            label: "Payday impact",
+            prompt: "How did payday affect today?",
+          },
+        ],
+      },
+      {
+        conversationState: {
+          shownCards: [],
+          lastToolNames: [],
+          promptChips: [],
+        },
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        snapshot: fakeSnapshot,
+      } as never,
+      calculateFreeCash(fakeSnapshot),
+    );
+
+    expect(chips.map((chip) => chip.label)).toEqual(["Main drivers", "Upcoming bills", "Payday impact"]);
+    expect(chips[0]?.prompt).toBe("Show drivers behind this number");
+  });
+
+  it("keeps prompt-chip refreshes populated when every generated chip repeats recent history", () => {
+    const recentPromptChips = [
+      {
+        id: "ai-bills",
+        label: "Upcoming bills",
+        prompt: "What bills are coming up?",
+      },
+      {
+        id: "ai-payday",
+        label: "Payday impact",
+        prompt: "How did payday affect today?",
+      },
+      {
+        id: "ai-trend",
+        label: "Show my trend",
+        prompt: "Show my Spendable Cash trend",
+      },
+    ];
+    const chips = __agentTestHooks.selectPromptChips(
+      {
+        message: "Ready.",
+        responseMode: "chat_only",
+        promptChips: recentPromptChips,
+      },
+      {
+        requestKind: "prompt_chips",
+        conversationState: {
+          shownCards: [],
+          lastToolNames: [],
+          promptChips: recentPromptChips,
+        },
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        snapshot: fakeSnapshot,
+      } as never,
+      calculateFreeCash(fakeSnapshot),
+    );
+
+    expect(chips.map((chip) => chip.label)).toEqual(["Upcoming bills", "Payday impact", "Show my trend"]);
+  });
+
+  it("repairs detached metric openings instead of throwing a visible error", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage("Spendable Cash Today is below zero right now."),
+    ).toBe("I found Spendable Cash Today below zero right now.");
+  });
+
+  it("allows suggestion-menu replies that mention possible future card topics", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "You can ask about why it changed, forecast hints, or to see a quick breakdown. Pick a chip or tell me a dollar amount.",
+      ),
+    ).toContain("forecast hints");
+  });
+
+  it("allows suggestion-menu replies that mention transactions without returning a card", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "You could ask to see recent transactions, check upcoming bills, or test a purchase amount.",
+      ),
+    ).toContain("recent transactions");
+  });
+
+  it("repairs recurring activity display promises without a recurring card", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "Here are the subscriptions I found: YouTube Premium may repeat soon.",
+      ),
+    ).toBe("I can talk through likely repeats: YouTube Premium may repeat soon.");
   });
 
   it("rejects long visible final messages at the structured output boundary", () => {

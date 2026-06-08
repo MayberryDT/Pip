@@ -7,9 +7,13 @@ export function PromptChips({
   chips: PromptChip[];
   onSelect: (chip: PromptChip) => void;
 }) {
+  if (chips.length === 0) {
+    return null;
+  }
+
   return (
     <div
-      className="-mx-1 flex gap-2 overflow-x-auto overflow-y-hidden px-1 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="scrollbar-none -mx-5 flex flex-nowrap justify-start gap-2 overflow-x-auto overflow-y-visible px-5 pb-1"
       data-testid="prompt-chips"
     >
       {chips.slice(0, 3).map((chip) => (

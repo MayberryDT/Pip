@@ -13,6 +13,14 @@ export const productEventNames = [
   "missing_card_nudge_suppressed",
   "connect_session_created",
   "connect_session_failed",
+  "plaid_link_started",
+  "plaid_link_event",
+  "plaid_link_succeeded",
+  "plaid_link_failed",
+  "plaid_exchange_succeeded",
+  "plaid_exchange_failed",
+  "plaid_sync_succeeded",
+  "plaid_sync_failed",
   "negative_free_cash_follow_up",
   "settings_updated",
   "manual_sync_succeeded",
@@ -25,6 +33,14 @@ export type ProductEventName = (typeof productEventNames)[number];
 export const clientReportedProductEventNames = [
   "free_cash_viewed",
   "prompt_chip_selected",
+  "plaid_link_started",
+  "plaid_link_event",
+  "plaid_link_succeeded",
+  "plaid_link_failed",
+  "plaid_exchange_succeeded",
+  "plaid_exchange_failed",
+  "plaid_sync_succeeded",
+  "plaid_sync_failed",
 ] as const;
 
 export type ClientReportedProductEventName = (typeof clientReportedProductEventNames)[number];

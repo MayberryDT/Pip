@@ -173,6 +173,61 @@ describe("manual sync provider failures", () => {
     });
   });
 
+  it("uses Pip's app calendar day for snapshots near the UTC date boundary", async () => {
+    const now = new Date("2026-06-08T03:30:00.000Z");
+    const captures = createCaptures();
+    const supabase = createManualSyncClient(captures);
+
+    mocks.getFinancialDataProvider.mockReturnValue({
+      createConnectSession: vi.fn(),
+      handleConnectCallback: vi.fn().mockResolvedValue({
+        provider: "plaid",
+        institutionId: "institution-good",
+        institutionName: "Good Bank",
+        status: "connected",
+      }),
+      syncAccounts: vi.fn().mockResolvedValue([
+        {
+          id: "provider-account-1",
+          name: "Everyday Checking",
+          institutionName: "Good Bank",
+          kind: "checking",
+          balanceCents: 100000,
+        },
+      ]),
+      syncTransactions: vi.fn().mockResolvedValue([
+        {
+          id: "provider-tx-1",
+          accountId: "provider-account-1",
+          date: "2026-06-07",
+          description: "Coffee",
+          amountCents: -425,
+          kind: "purchase",
+        },
+      ]),
+      syncBalances: vi.fn().mockResolvedValue([
+        {
+          accountId: "provider-account-1",
+          name: "Everyday Checking",
+          institutionName: "Good Bank",
+          kind: "checking",
+          balanceCents: 100000,
+        },
+      ]),
+    });
+
+    await runManualSync(supabase, {
+      userId: "user-1",
+      provider: "plaid",
+      now,
+    });
+
+    expect(captures.freeCashSnapshotInserts[0]).toMatchObject({
+      user_id: "user-1",
+      as_of_date: "2026-06-07",
+    });
+  });
+
   it("marks the institution failed when a Plaid repair error stops sync", async () => {
     const now = new Date("2026-06-05T12:00:00.000Z");
     const providerError = new ProviderSyncError({

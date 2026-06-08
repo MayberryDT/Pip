@@ -30,7 +30,7 @@ describe("PlaidOAuthResume", () => {
   it("renders the secure connection shell", () => {
     const markup = renderToStaticMarkup(<PlaidOAuthResume />);
 
-    expect(markup).toContain("Spendable");
+    expect(markup).toContain("Pip");
     expect(markup).toContain("Finishing your secure Plaid connection.");
   });
 
@@ -56,12 +56,13 @@ describe("PlaidOAuthResume", () => {
         linkToken: "link-oauth-123",
         mode: "connect",
       },
-      {
+      expect.objectContaining({
         receivedRedirectUri: "https://free-cash-mayberrydt.netlify.app/plaid/oauth?oauth_state_id=state-1",
         persistToken: false,
-      },
+        onEvent: expect.any(Function),
+      }),
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/providers/plaid/exchange", {
+    expect(fetchMock).toHaveBeenCalledWith("/api/providers/plaid/exchange", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -75,7 +76,7 @@ describe("PlaidOAuthResume", () => {
         },
       }),
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/sync/manual", {
+    expect(fetchMock).toHaveBeenCalledWith("/api/sync/manual", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -85,6 +86,12 @@ describe("PlaidOAuthResume", () => {
         reason: "manual",
       }),
     });
+    expect(getEventFetchCalls(fetchMock).map((call) => call.eventName)).toEqual([
+      "plaid_link_started",
+      "plaid_link_succeeded",
+      "plaid_exchange_succeeded",
+      "plaid_sync_succeeded",
+    ]);
     expect(plaidMocks.clearPersistedPlaidLinkToken).toHaveBeenCalled();
   });
 
@@ -101,7 +108,6 @@ describe("PlaidOAuthResume", () => {
       receivedRedirectUri: "https://free-cash-mayberrydt.netlify.app/plaid/oauth?oauth_state_id=state-1",
     });
 
-    expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith("/api/sync/manual", {
       method: "POST",
       headers: {
@@ -112,9 +118,27 @@ describe("PlaidOAuthResume", () => {
         reason: "repair",
       }),
     });
+    expect(getEventFetchCalls(fetchMock).map((call) => call.eventName)).toEqual([
+      "plaid_link_started",
+      "plaid_link_succeeded",
+      "plaid_sync_succeeded",
+    ]);
     expect(plaidMocks.clearPersistedPlaidLinkToken).toHaveBeenCalled();
   });
 });
+
+function getEventFetchCalls(fetchMock: ReturnType<typeof vi.mocked<typeof fetch>>) {
+  return fetchMock.mock.calls
+    .filter(([url]) => url === "/api/events")
+    .map(([, options]) => {
+      const body = JSON.parse(String(options?.body ?? "{}")) as {
+        eventName: string;
+        properties: Record<string, unknown>;
+      };
+
+      return body;
+    });
+}
 
 function jsonResponse(body: unknown, init: ResponseInit = {}) {
   return new Response(JSON.stringify(body), {

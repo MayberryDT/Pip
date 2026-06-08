@@ -129,7 +129,7 @@ function buildDrivers(input: {
     {
       id: "protected-savings",
       label: "Protected savings",
-      detail: "Savings held back before Spendable Cash is calculated.",
+      detail: "Savings held back before Spendable Cash Today is calculated.",
       amountCents: -input.protectedSavingsMonthlyCents,
       tone: "neutral",
     },
@@ -169,7 +169,7 @@ function buildDrivers(input: {
     drivers.push({
       id: "pending-card-spend",
       label: "Pending card spend included",
-      detail: "Pending card purchases are included so Spendable Cash does not look too high.",
+      detail: "Pending card purchases are included so Spendable Cash Today does not look too high.",
       amountCents: -pendingCardSpendCents,
       tone: "warning",
     });
@@ -208,7 +208,7 @@ function buildWindowMovementDrivers(
     drivers.push({
       id: "exited-window",
       label: "Left the window",
-      detail: `Transactions dated ${exitedDate} no longer count in Spendable Cash.`,
+      detail: `Transactions dated ${exitedDate} no longer count in Spendable Cash Today.`,
       amountCents: exitedDeltaCents,
       tone: toneForAmount(exitedDeltaCents),
     });
@@ -241,12 +241,22 @@ function buildWarnings(
   return [
     {
       id: "missing-card",
-      label: "Spendable Cash may be missing card spend",
-      detail: `A payment to ${issuers.join(", ")} appears in checking, but that card is not connected.`,
+      label: "Possible missing card",
+      detail: formatMissingCardDetail(issuers),
       tone: "warning",
       issuerName: issuers.join(", "),
     },
   ];
+}
+
+function formatMissingCardDetail(issuers: string[]): string {
+  const issuerText = issuers.join(", ");
+
+  if (issuers.length > 1) {
+    return `I see payments to ${issuerText}, but those cards are not connected.`;
+  }
+
+  return `I see a payment to ${issuerText}, but that card is not connected.`;
 }
 
 function normalizeIssuerName(issuerName: string): string {
@@ -267,7 +277,7 @@ function buildDataStates(
     {
       id: "pending-transactions" as const,
       label: "Pending transactions included",
-      detail: "Pending card purchases are already counted in Spendable Cash and may settle differently.",
+      detail: "Pending card purchases are already counted in Spendable Cash Today and may settle differently.",
       amountCents: -pendingCardSpendCents,
       tone: "warning" as const,
     },

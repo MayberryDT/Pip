@@ -107,6 +107,20 @@ export type AgentCard =
       dayCount: number;
     }
   | {
+      type: "insight_card";
+      title: string;
+      summary: string;
+      rows: Array<{
+        id: string;
+        label: string;
+        amountCents?: number;
+        valueText?: string;
+        detail?: string;
+        tone: "positive" | "negative" | "neutral" | "warning";
+      }>;
+      footer?: string;
+    }
+  | {
       type: "connect_account";
       title: string;
       detail: string;

@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getCurrentAppDate } from "@/lib/date/app-date";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
 import { loadFinancialSnapshotForUser } from "@/lib/data/financial-repository";
 import { recordProductEvent } from "@/lib/data/product-events";
@@ -477,7 +478,7 @@ async function upsertDefaultSettings(
 
   if (existing) {
     return {
-      asOfDate: now.toISOString().slice(0, 10),
+      asOfDate: getCurrentAppDate(now),
       protectedSavingsMonthlyCents: existing.protected_savings_monthly_cents,
     };
   }
@@ -498,7 +499,7 @@ async function upsertDefaultSettings(
   }
 
   return {
-    asOfDate: now.toISOString().slice(0, 10),
+    asOfDate: getCurrentAppDate(now),
     protectedSavingsMonthlyCents: data.protected_savings_monthly_cents,
   };
 }

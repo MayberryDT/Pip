@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
+  getCurrentAppDate,
   loadCachedFreeCashResultForUser,
   markFreeCashSnapshotsStaleForUser,
   mapAccountRow,
@@ -110,6 +111,29 @@ describe("financial repository row mapping", () => {
     });
     expect(conditions).toEqual([
       ["user_id", "user-1"],
+      ["as_of_date", getCurrentAppDate()],
+      ["stale", false],
+    ]);
+  });
+
+  it("can load a cached Free Cash result for a specific app date", async () => {
+    const conditions: Array<[string, unknown]> = [];
+    const cachedResult = calculateFreeCash(fakeSnapshot);
+    const supabase = createFreeCashSnapshotsClient({
+      resultRows: [
+        {
+          result: cachedResult,
+        },
+      ],
+      conditions,
+    });
+
+    await expect(loadCachedFreeCashResultForUser(supabase, "user-1", "2026-06-08")).resolves.toMatchObject({
+      freeCashTodayCents: 4300,
+    });
+    expect(conditions).toEqual([
+      ["user_id", "user-1"],
+      ["as_of_date", "2026-06-08"],
       ["stale", false],
     ]);
   });

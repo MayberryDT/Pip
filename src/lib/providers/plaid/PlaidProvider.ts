@@ -43,7 +43,7 @@ export class PlaidProvider implements FinancialDataProvider {
     transactionCursor: string;
   }) => Promise<void>;
   private credentialCache = new Map<string, Promise<PlaidStoredCredential>>();
-  private accountCache = new Map<string, Promise<Awaited<ReturnType<PlaidClient["accountsBalanceGet"]>>["data"]["accounts"]>>();
+  private accountCache = new Map<string, Promise<Awaited<ReturnType<PlaidClient["accountsGet"]>>["data"]["accounts"]>>();
 
   constructor(input: {
     config?: PlaidConfig;
@@ -139,7 +139,7 @@ export class PlaidProvider implements FinancialDataProvider {
 
   async syncAccounts(userId: string): Promise<Account[]> {
     const credential = await this.loadCredential(userId);
-    const accounts = await this.loadBalanceAccounts(userId);
+    const accounts = await this.loadAccounts(userId);
 
     return accounts.map((account) => normalizePlaidAccount(account, credential.institutionName));
   }
@@ -175,7 +175,7 @@ export class PlaidProvider implements FinancialDataProvider {
 
   async syncBalances(userId: string): Promise<AccountBalanceSummary[]> {
     const credential = await this.loadCredential(userId);
-    const accounts = await this.loadBalanceAccounts(userId);
+    const accounts = await this.loadAccounts(userId);
 
     return accounts.map((account) => normalizePlaidBalance(account, credential.institutionName));
   }
@@ -198,18 +198,18 @@ export class PlaidProvider implements FinancialDataProvider {
   private async syncCredential(
     credential: PlaidStoredCredential,
   ): Promise<ProviderInstitutionSyncSuccess> {
-    const [balanceAccounts, transactionSync] = await Promise.all([
+    const [plaidAccounts, transactionSync] = await Promise.all([
       this.requestWithPlaidError(credential, () =>
-        this.getClient().accountsBalanceGet({
+        this.getClient().accountsGet({
           access_token: credential.accessToken,
         }),
       ).then((response) => response.data.accounts),
       this.syncTransactionsForCredential(credential),
     ]);
-    const accounts = balanceAccounts.map((account) =>
+    const accounts = plaidAccounts.map((account) =>
       normalizePlaidAccount(account, credential.institutionName),
     );
-    const balances = balanceAccounts.map((account) =>
+    const balances = plaidAccounts.map((account) =>
       normalizePlaidBalance(account, credential.institutionName),
     );
     const nextCursor = transactionSync.nextCursor;
@@ -273,7 +273,7 @@ export class PlaidProvider implements FinancialDataProvider {
     };
   }
 
-  private async loadBalanceAccounts(userId: string) {
+  private async loadAccounts(userId: string) {
     const cached = this.accountCache.get(userId);
 
     if (cached) {
@@ -282,7 +282,7 @@ export class PlaidProvider implements FinancialDataProvider {
 
     const promise = this.loadCredential(userId).then((credential) =>
       this.requestWithPlaidError(credential, () =>
-        this.getClient().accountsBalanceGet({
+        this.getClient().accountsGet({
           access_token: credential.accessToken,
         }),
       ).then((response) => response.data.accounts),

@@ -1,5 +1,30 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Spendable icon">
-  <rect width="512" height="512" rx="96" fill="#F7F3EA"/>
-  <circle cx="256" cy="256" r="156" fill="#171A1F"/>
-  <path fill="#F7F3EA" d="M154 284h52c7 28 28 44 59 44 26 0 46-11 60-34l44 26c-23 40-58 60-104 60-60 0-102-36-113-96h-32v-36h28v-7h-28v-36h33c12-58 54-93 112-93 46 0 81 20 104 60l-44 26c-14-23-34-34-60-34-30 0-51 15-59 41h93v36H199v7h100v36H154z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Pip icon">
+  <defs>
+    <radialGradient id="body" cx="0" cy="0" r="1" gradientTransform="matrix(142 186 -168 128 209 143)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E2E8D8"/>
+      <stop offset="0.72" stop-color="#BFC8AF"/>
+      <stop offset="1" stop-color="#AEB99F"/>
+    </radialGradient>
+    <linearGradient id="shadow" x1="130" x2="382" y1="422" y2="422" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#D8CCBC" stop-opacity="0"/>
+      <stop offset="0.5" stop-color="#A99B89" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#D8CCBC" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="#FBF7EF"/>
+  <ellipse cx="256" cy="418" rx="134" ry="25" fill="url(#shadow)"/>
+  <path fill="url(#body)" d="M127 305c0-112 53-212 136-212 85 0 133 104 126 214-5 82-56 121-132 121-75 0-130-42-130-123Z"/>
+  <path fill="#D7DDCD" fill-opacity=".2" d="M142 293c0-98 45-187 119-187 75 0 115 95 109 188-5 68-47 101-113 101-64 0-115-36-115-102Z"/>
+  <path d="M142 300c-27 3-36 28-27 50 9 24 34 18 43-8" fill="none" stroke="#9DAA8F" stroke-width="22" stroke-linecap="round"/>
+  <path d="M365 302c27-8 41 8 37 30-5 25-29 27-39 5" fill="none" stroke="#9DAA8F" stroke-width="22" stroke-linecap="round"/>
+  <circle cx="214" cy="215" r="13" fill="#252622"/>
+  <circle cx="304" cy="215" r="13" fill="#252622"/>
+  <path d="M225 247c20 23 45 23 65 0" fill="none" stroke="#252622" stroke-width="11" stroke-linecap="round"/>
+  <g stroke="#708165" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M346 330c11-52 35-90 69-123" fill="none" stroke-width="10"/>
+    <path d="M370 273c-24-5-31-25-16-40 21 3 30 23 16 40Z" fill="#8E9C7F" stroke-width="5"/>
+    <path d="M393 241c-20-13-18-34 3-46 17 14 16 34-3 46Z" fill="#8E9C7F" stroke-width="5"/>
+    <path d="M405 219c5-26 27-38 45-31 0 25-18 39-45 31Z" fill="#8E9C7F" stroke-width="5"/>
+    <path d="M353 313c-22-3-29-21-16-35 19 3 28 19 16 35Z" fill="#8E9C7F" stroke-width="5"/>
+  </g>
 </svg>

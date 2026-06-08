@@ -4,17 +4,17 @@ export default function PrivacyPage() {
   return (
     <LegalShell title="Privacy">
       <p>
-        Spendable is an experimental app. It stores normalized financial data, account metadata, sync
-        logs, user settings, and product events needed to calculate Spendable Cash and support beta
-        testing.
+        Pip is an experimental app. It stores normalized financial data, account metadata, sync
+        logs, user settings, and product events needed to calculate Spendable Cash Today and support
+        beta testing.
       </p>
       <p>
-        Spendable does not store bank usernames or passwords and does not move money. Provider
+        Pip does not store bank usernames or passwords and does not move money. Provider
         tokens and credentials are handled server-side only. Raw provider payloads should be kept
         minimal and used for troubleshooting or normalization.
       </p>
       <p>
-        You can ask Spendable to delete stored financial data in the chat. Deletion removes
+        You can ask Pip to delete stored financial data in the chat. Deletion removes
         financial rows, sync logs, product events, connected institutions, missing-card preferences,
         provider tokens, and settings for your account.
       </p>

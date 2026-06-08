@@ -5,7 +5,7 @@ import {
   type AgentRuntime,
   type RunAiAgentInput,
 } from "@/lib/agent/ai-agent";
-import { getOnboardingPromptChips, getSuggestedPrompts } from "@/lib/agent/suggested-prompts";
+import { getOnboardingPromptChips } from "@/lib/agent/suggested-prompts";
 import { runAgentTool } from "@/lib/agent/tool-runner";
 import { fakeSnapshot } from "@/lib/fake-data";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
@@ -24,6 +24,29 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
   const result = calculateFreeCash(snapshot);
   const normalized = input.message.trim().toLowerCase();
   const amountCents = extractDollarAmount(input.message);
+
+  if (input.requestKind === "prompt_chips") {
+    return baseResponse(input, {
+      message: "Ready.",
+      promptChips: [
+        {
+          id: "ai-upcoming-bills",
+          label: "Upcoming bills",
+          prompt: "What bills are coming up?",
+        },
+        {
+          id: "ai-payday-impact",
+          label: "Payday impact",
+          prompt: "How did payday affect today?",
+        },
+        {
+          id: "ai-show-trend",
+          label: "Show my trend",
+          prompt: "Show my Spendable Cash Today trend",
+        },
+      ],
+    });
+  }
 
   if (input.selectedPromptChipId === "get-signed-up") {
     return baseResponse(input, {
@@ -75,7 +98,7 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
 
   if (/^(hi|hello|hey|yo)\b/.test(normalized)) {
     return baseResponse(input, {
-      message: "Hi. Ask me about Spendable Cash or setup.",
+      message: "Hi. Ask me about Spendable Cash Today or setup.",
     });
   }
 
@@ -83,7 +106,7 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     if (amountCents === null) {
       if (/\b(any|money|at all|negative)\b/.test(normalized)) {
         return baseResponse(input, {
-          message: "Spendable Cash is a signal, not a hard limit.",
+          message: "I use Spendable Cash Today as a signal, not a hard limit.",
           usedTools: ["get_free_cash_snapshot"],
         });
       }
@@ -130,6 +153,14 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return toolResponse(input, "show_spending_breakdown", {});
   }
 
+  if (isPaydayImpactPrompt(normalized)) {
+    return toolResponse(input, "compose_insight_card", { topic: "payday_impact" });
+  }
+
+  if (isSpendableFactorsInsightPrompt(normalized)) {
+    return toolResponse(input, "compose_insight_card", { topic: "spendable_factors" });
+  }
+
   if (/\btransactions?\b|\brecent\b|\bcharges?\b|\bactivity\b/.test(normalized)) {
     return toolResponse(input, "show_recent_transactions", { limit: 6 });
   }
@@ -150,8 +181,8 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
 
   return baseResponse(input, {
     message: result.freeCashTodayCents < 0
-      ? "Spendable Cash is below zero right now."
-      : "I can help with Spendable Cash.",
+      ? "Spendable Cash Today is below zero right now."
+      : "I can help with Spendable Cash Today.",
   });
 }
 
@@ -173,6 +204,7 @@ function toolResponse(
     define_spendable_cash: "get_spendable_cash_definition",
     detect_missing_card: "get_data_quality",
     show_math: "get_free_cash_math",
+    compose_insight_card: "compose_insight_card",
     answer_unrelated: "answer_unrelated",
   } satisfies Record<Parameters<typeof runAgentTool>[0], string>;
   const usedTools = [toolNameByRunner[toolName]];
@@ -194,7 +226,6 @@ function baseResponse(
   input: RunAiAgentInput,
   overrides: Partial<AgentResponse>,
 ): AgentResponse {
-  const snapshot = input.snapshot ?? fakeSnapshot;
   const onboardingChips = input.onboardingState
     ? getOnboardingPromptChips(input.onboardingState)
     : [];
@@ -202,9 +233,7 @@ function baseResponse(
   return {
     message: "Mock model response.",
     cards: [],
-    promptChips: onboardingChips.length > 0
-      ? onboardingChips
-      : getSuggestedPrompts(calculateFreeCash(snapshot)),
+    promptChips: onboardingChips,
     usedTools: [],
     responseMode: "chat_only",
     ...overrides,
@@ -222,38 +251,61 @@ function createToolMessage(response: AgentResponse): string {
   const card = response.cards[0];
 
   if (card?.type === "purchase_simulation") {
-    return `That would put Spendable Cash at ${formatMoney(card.afterTodayCents)}.`;
+    if (card.afterTodayCents < 0) {
+      return `You can, but it would put you ${formatMoney(Math.abs(card.afterTodayCents))} over today.`;
+    }
+
+    return `That would leave ${formatMoney(card.afterTodayCents)} for today.`;
   }
 
   if (card?.type === "recent_transactions") {
-    return "These are the recent items.";
+    return "I found these recent items.";
   }
 
   if (card?.type === "spending_breakdown") {
-    return "This breaks down the main money groups.";
+    return "I grouped the main money flows.";
   }
 
   if (card?.type === "recurring_activity") {
-    return "These are likely repeating items.";
+    return "I found likely repeating items.";
   }
 
   if (card?.type === "spendable_cash_forecast") {
-    return `This forecasts ${card.horizonDays} days.`;
+    return `I mapped the next ${card.horizonDays} days.`;
   }
 
   if (card?.type === "math_breakdown") {
-    return "This is the math.";
+    return "I pulled the math.";
+  }
+
+  if (card?.type === "insight_card") {
+    return "I put the main pieces in a card.";
   }
 
   if (card?.type === "true_balances") {
-    return "These are the real balances.";
+    return "I found your actual balances. They are different from Spendable Cash Today.";
   }
 
-  return "This shows what changed.";
+  return "I found what changed.";
 }
 
 function isSpendingPrompt(normalized: string): boolean {
   return /\b(spend|buy|purchase|order|afford|pay|cost)\b/.test(normalized);
+}
+
+function isPaydayImpactPrompt(normalized: string): boolean {
+  return (
+    /\b(payday|paycheck|paychecks?|payroll|deposit|deposits?|income)\b/.test(normalized) &&
+    /\b(affect|affected|impact|impacts?|change|changed|mean|means|help|helps|lift|lifts|money|number|spendable cash)\b/.test(normalized)
+  );
+}
+
+function isSpendableFactorsInsightPrompt(normalized: string): boolean {
+  return (
+    /\b(factors?|affect|affects|affected|impact|impacts?|influence|influences)\b/.test(normalized) &&
+    /\b(today|number|spendable cash today|spendable cash|money)\b/.test(normalized) &&
+    !isPaydayImpactPrompt(normalized)
+  );
 }
 
 function isShortPurchaseFollowUp(

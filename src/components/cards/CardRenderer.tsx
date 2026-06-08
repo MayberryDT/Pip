@@ -1,7 +1,6 @@
 import {
   AlertTriangle,
   ArrowDownRight,
-  ArrowRight,
   Calculator,
   CalendarClock,
   CreditCard,
@@ -9,6 +8,7 @@ import {
   Landmark,
   ListChecks,
   Repeat,
+  Sparkles,
   TrendingUp,
 } from "lucide-react";
 import type { AgentCard } from "@/lib/agent/card-types";
@@ -25,18 +25,14 @@ export function CardRenderer({
     case "free_cash_explanation":
       return (
         <CardShell icon={<ListChecks aria-hidden="true" size={18} />} title={card.title}>
-          <p className="text-sm leading-6 text-ink/[0.68]">{card.summary}</p>
-          <div className="mt-4 space-y-2">
+          <div className="space-y-1.5">
             {card.drivers.slice(0, 5).map((driver) => (
-              <div key={driver.id} className="flex items-start justify-between gap-4 rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-2">
-                <div>
-                  <p className="text-sm font-semibold text-ink">{driver.label}</p>
-                  <p className="text-xs leading-5 text-ink/[0.55]">{driver.detail}</p>
-                </div>
-                <p className={driver.amountCents < 0 ? "text-sm font-semibold text-coral" : "text-sm font-semibold text-moss"}>
-                  {driver.amountCents === 0 ? "OK" : formatMoney(driver.amountCents)}
-                </p>
-              </div>
+              <MoneyRow
+                key={driver.id}
+                label={getCompactDriverLabel(driver.label)}
+                value={driver.amountCents === 0 ? "Counted" : formatMoney(driver.amountCents)}
+                tone={driver.amountCents < 0 ? "negative" : driver.amountCents > 0 ? "positive" : "neutral"}
+              />
             ))}
           </div>
           {card.warnings.map((warning) => (
@@ -56,18 +52,20 @@ export function CardRenderer({
     case "purchase_simulation":
       return (
         <CardShell icon={<ArrowDownRight aria-hidden="true" size={18} />} title={card.title}>
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <MoneyBlock label="Now" value={formatMoney(card.beforeCents)} />
-            <ArrowRight aria-hidden="true" className="text-ink/[0.36]" size={20} />
-            <MoneyBlock label="After" value={formatMoney(card.afterTodayCents)} danger={card.afterTodayCents < 0} />
+          <div className="space-y-1.5">
+            <MoneyRow
+              label="Current Spendable Cash"
+              value={formatMoney(card.beforeCents)}
+              tone={card.beforeCents < 0 ? "negative" : "positive"}
+            />
+            <MoneyRow label="Purchase" value={formatMoney(-card.amountCents)} tone="negative" />
+            <MoneyRow
+              label="After purchase"
+              value={formatMoney(card.afterTodayCents)}
+              tone={card.afterTodayCents < 0 ? "negative" : "positive"}
+              strong
+            />
           </div>
-          <p className="mt-4 text-sm leading-6 text-ink/[0.62]">
-            A {formatMoney(card.amountCents)} purchase would leave Spendable Cash at{" "}
-            <strong className={card.afterTodayCents < 0 ? "text-coral" : "text-moss"}>
-              {formatMoney(card.afterTodayCents)}
-            </strong>
-            . The rolling-window average would become {formatMoney(card.monthlyAverageAfterCents)}.
-          </p>
         </CardShell>
       );
 
@@ -157,13 +155,17 @@ export function CardRenderer({
     case "spendable_cash_forecast":
       return (
         <CardShell icon={<TrendingUp aria-hidden="true" size={18} />} title={card.title}>
-          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
-            <MoneyBlock label="Now" value={formatMoney(card.currentSpendableCashCents)} />
-            <ArrowRight aria-hidden="true" className="text-ink/[0.36]" size={20} />
-            <MoneyBlock
+          <div className="space-y-1.5">
+            <MoneyRow
+              label="Now"
+              value={formatMoney(card.currentSpendableCashCents)}
+              tone={card.currentSpendableCashCents < 0 ? "negative" : "positive"}
+            />
+            <MoneyRow
               label={`${card.horizonDays} days`}
               value={formatMoney(card.projectedSpendableCashCents)}
-              danger={card.projectedSpendableCashCents < 0}
+              tone={card.projectedSpendableCashCents < 0 ? "negative" : "positive"}
+              strong
             />
           </div>
           <div className="mt-4 space-y-2">
@@ -193,7 +195,7 @@ export function CardRenderer({
     case "missing_card_nudge":
       return (
         <CardShell icon={<CreditCard aria-hidden="true" size={18} />} title={card.title}>
-          <WarningBlock detail={card.detail} label={card.title} />
+          <p className="text-sm leading-6 text-ink/[0.68]">{card.detail}</p>
           {card.issuerName && onSuppressMissingCard ? (
             <button
               type="button"
@@ -223,6 +225,23 @@ export function CardRenderer({
         </CardShell>
       );
 
+    case "insight_card":
+      return (
+        <CardShell icon={<Sparkles aria-hidden="true" size={18} />} title={card.title}>
+          <p className="text-sm leading-6 text-ink/[0.68]">{card.summary}</p>
+          <div className="mt-3 space-y-2">
+            {card.rows.map((row) => (
+              <InsightRow key={row.id} row={row} />
+            ))}
+          </div>
+          {card.footer ? (
+            <p className="mt-3 text-xs font-semibold uppercase leading-5 tracking-normal text-taupe">
+              {card.footer}
+            </p>
+          ) : null}
+        </CardShell>
+      );
+
     case "connect_account":
       return (
         <CardShell icon={<CreditCard aria-hidden="true" size={18} />} title={card.title}>
@@ -242,14 +261,92 @@ function CardShell({
   children: React.ReactNode;
 }) {
   return (
-    <section className="glass-panel p-5">
-      <div className="mb-3">
-        <span className="sr-only">{icon}</span>
-        <h3 className="text-xs font-bold uppercase tracking-normal text-taupe">{title}</h3>
+    <section className="glass-panel p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="grid h-7 w-7 place-items-center rounded-full border border-moss/15 bg-moss/[0.08] text-moss">
+          {icon}
+        </span>
+        <h3 className="text-[0.72rem] font-bold uppercase leading-none tracking-normal text-taupe">{title}</h3>
       </div>
       {children}
     </section>
   );
+}
+
+function InsightRow({
+  row,
+}: {
+  row: Extract<AgentCard, { type: "insight_card" }>["rows"][number];
+}) {
+  const value = typeof row.amountCents === "number"
+    ? formatMoney(row.amountCents)
+    : row.valueText ?? "Included";
+
+  return (
+    <div className="flex min-h-12 items-center justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
+      <div className="min-w-0">
+        <p className="text-sm font-semibold text-ink">{row.label}</p>
+        {row.detail ? (
+          <p className="mt-0.5 text-xs leading-5 text-ink/[0.56]">{row.detail}</p>
+        ) : null}
+      </div>
+      <span className={["shrink-0 text-sm font-bold", toneClass(row.tone)].join(" ")}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function toneClass(tone: "positive" | "negative" | "neutral" | "warning"): string {
+  if (tone === "positive") {
+    return "text-moss";
+  }
+
+  if (tone === "negative") {
+    return "text-coral";
+  }
+
+  if (tone === "warning") {
+    return "text-gold";
+  }
+
+  return "text-ink/[0.58]";
+}
+
+function MoneyRow({
+  label,
+  value,
+  tone,
+  strong,
+}: {
+  label: string;
+  value: string;
+  tone: "positive" | "negative" | "neutral";
+  strong?: boolean;
+}) {
+  const valueClass = tone === "negative"
+    ? "text-coral"
+    : tone === "positive"
+      ? "text-moss"
+      : "text-ink/[0.58]";
+
+  return (
+    <div className="flex min-h-10 items-center justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
+      <span className={strong ? "text-sm font-semibold text-ink" : "text-sm font-medium text-ink/[0.68]"}>
+        {label}
+      </span>
+      <span className={[strong ? "text-base font-bold" : "text-sm font-semibold", valueClass].join(" ")}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function getCompactDriverLabel(label: string): string {
+  return label
+    .replace("Rent is included", "Rent included")
+    .replace("Pending card spend included", "Pending card spend")
+    .replace("Card payment deduped", "Card payment deduped");
 }
 
 function WarningBlock({
@@ -262,7 +359,7 @@ function WarningBlock({
   label?: string;
 }) {
   return (
-    <div className="mt-3 flex gap-3 rounded-[1rem] border border-gold/15 bg-gold/[0.08] px-3 py-3 text-sm leading-6 text-ink/[0.68]">
+    <div className="mt-3 flex gap-3 rounded-[0.9rem] border border-gold/15 bg-gold/[0.08] px-3 py-2.5 text-sm leading-5 text-ink/[0.68]">
       <AlertTriangle aria-hidden="true" className="mt-1 shrink-0 text-gold" size={17} />
       <div>
         {label ? (
@@ -273,25 +370,6 @@ function WarningBlock({
         ) : null}
         <p>{detail}</p>
       </div>
-    </div>
-  );
-}
-
-function MoneyBlock({
-  label,
-  value,
-  danger,
-}: {
-  label: string;
-  value: string;
-  danger?: boolean;
-}) {
-  return (
-    <div className="rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-3">
-      <p className="text-xs font-semibold uppercase tracking-normal text-ink/[0.44]">{label}</p>
-      <p className={danger ? "mt-1 text-2xl font-semibold text-coral" : "mt-1 text-2xl font-semibold text-moss"}>
-        {value}
-      </p>
     </div>
   );
 }

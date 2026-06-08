@@ -134,6 +134,15 @@ const forecastPointSchema = z.object({
   rollingNetCents: z.number().int(),
 });
 
+const insightCardRowSchema = z.object({
+  id: z.string().min(1).max(80),
+  label: z.string().min(1).max(60),
+  amountCents: z.number().int().optional(),
+  valueText: z.string().min(1).max(60).optional(),
+  detail: z.string().min(1).max(160).optional(),
+  tone: moneyToneSchema,
+});
+
 export const cardSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("free_cash_explanation"),
@@ -210,6 +219,13 @@ export const cardSchema = z.discriminatedUnion("type", [
     protectedSavingsMonthlyCents: z.number().int(),
     rollingNetCents: z.number().int(),
     dayCount: z.number().int(),
+  }),
+  z.object({
+    type: z.literal("insight_card"),
+    title: z.string().min(1).max(80),
+    summary: z.string().min(1).max(240),
+    rows: z.array(insightCardRowSchema).min(3).max(6),
+    footer: z.string().min(1).max(160).optional(),
   }),
   z.object({
     type: z.literal("connect_account"),

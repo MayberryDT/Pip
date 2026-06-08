@@ -3,9 +3,9 @@ import type { FreeCashResult } from "@/lib/types";
 
 export const guestOnboardingPromptChips: PromptChip[] = [
   {
-    id: "how-spendable-works",
+    id: "how-pip-works",
     label: "How it works",
-    prompt: "Tell me how Spendable works",
+    prompt: "Tell me how Pip works",
   },
   {
     id: "get-signed-up",
@@ -39,9 +39,9 @@ export const consentOnboardingPromptChips: PromptChip[] = [
 
 export const dataOnboardingPromptChips: PromptChip[] = [
   {
-    id: "how-spendable-works",
+    id: "how-pip-works",
     label: "How it works",
-    prompt: "Tell me how Spendable works",
+    prompt: "Tell me how Pip works",
   },
   {
     id: "connect-data",
@@ -55,46 +55,21 @@ export const dataOnboardingPromptChips: PromptChip[] = [
   },
 ];
 
-export function getSuggestedPrompts(result: FreeCashResult): PromptChip[] {
-  const base: PromptChip[] = [
-    {
-      id: "why",
-      label: "Why this number?",
-      prompt: "Why this number?",
-    },
-    {
-      id: "spend-50",
-      label: "Can I spend $50?",
-      prompt: "Can I spend $50?",
-    },
-    {
-      id: "forecast",
-      label: "Show forecast",
-      prompt: "Show my Spendable Cash forecast",
-    },
-  ];
+const retiredDefaultPromptChipTexts = new Set([
+  "why this number?",
+  "can i spend $50?",
+  "what changed?",
+]);
 
-  if (result.warnings.some((warning) => warning.id === "missing-card")) {
-    return base;
-  }
+export function getSuggestedPrompts(_result: FreeCashResult): PromptChip[] {
+  return [];
+}
 
-  if (result.freeCashTodayCents < 0) {
-    return [
-      base[0],
-      {
-        id: "math",
-        label: "Show math",
-        prompt: "Show the math",
-      },
-      {
-        id: "breakdown",
-        label: "Show breakdown",
-        prompt: "Show my spending breakdown",
-      },
-    ];
-  }
-
-  return base;
+export function isRetiredDefaultPromptChip(chip: Pick<PromptChip, "label" | "prompt">): boolean {
+  return (
+    retiredDefaultPromptChipTexts.has(normalizePromptChipText(chip.label)) ||
+    retiredDefaultPromptChipTexts.has(normalizePromptChipText(chip.prompt))
+  );
 }
 
 export function getOnboardingPromptChips(input: {
@@ -130,4 +105,8 @@ export function selectPromptChipsFromAllowlist(
   }
 
   return allowlist.slice(0, 3);
+}
+
+function normalizePromptChipText(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, " ").trim();
 }

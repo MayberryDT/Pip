@@ -1,6 +1,8 @@
-# Spendable
+# Pip
 
-Mobile-first, agent-first Spendable app with fake-data mode, Google OAuth Supabase flows, Plaid connection support, and OpenAI Agents SDK tooling. The user-facing daily metric is Spendable Cash.
+Mobile-first, agent-first Pip app with fake-data mode, Google OAuth Supabase flows, Plaid connection support, and OpenAI Agents SDK tooling. The user-facing daily metric is Spendable Cash Today.
+
+Pip shows the number your bank won't show you: what is actually spendable today. The product stays intentionally narrow: one number, ask Pip, no dashboard, no menus, and true balances only when the user asks.
 
 ## Development
 
@@ -16,20 +18,20 @@ Open http://localhost:3000.
 The project is linked to `free-cash-mayberrydt` on Netlify.
 
 - Site URL: https://free-cash-mayberrydt.netlify.app
-- Latest verified production deploy: https://6a25e955a8c3e5481d38f722--free-cash-mayberrydt.netlify.app
+- Latest verified production deploy: https://6a265f4336389d2a1930a78b--free-cash-mayberrydt.netlify.app
 - Latest verified draft deploy: https://6a23aec6c0e9cfd227824f80--free-cash-mayberrydt.netlify.app
 - Netlify is configured for real beta mode with Supabase, Netlify AI Gateway/OpenAI, and Plaid sandbox env. Fake-data preview deploys remain available with `FREE_CASH_DEPLOY_MODE=fake npm run deploy:netlify`.
 - `npm run deploy:netlify` hides local `.env*` files during the local Netlify build, skips stale function cache reuse, and checks generated function bundles for accidental env-file inclusion.
 
 ## AI Agent
 
-`/api/agent` uses the official OpenAI Agents SDK on top of the Responses API. The Spendable agent can answer conversationally without a tool, call deterministic app tools when it needs setup state or financial facts, and decide whether to show a card, update context, or ask a clarification. The Free Cash engine still owns all money math.
+`/api/agent` uses the official OpenAI Agents SDK on top of the Responses API. Pip can answer conversationally without a tool, call deterministic app tools when it needs setup state or financial facts, and decide whether to show a card, update context, or ask a clarification. The internal Free Cash engine still owns all money math.
 
 Agent tools return deterministic financial facts and available typed cards. The model may choose when to call tools and how to explain the result, but it does not emit card selectors or card payloads in final structured output. The server derives final cards only from tool-produced card objects before returning them to the UI. Conversation state is bounded to recent messages, recent shown card types/titles, and recent tool names so the agent can avoid repeating the same card.
 
 Guest onboarding, protected-savings consent, Plaid connect/repair, manual refresh, and delete-data confirmation also go through `/api/agent`. The model writes the visible chat reply, while server tools perform deterministic side effects and may return a typed `clientAction` such as `oauth_redirect`, `open_plaid`, or `reload` for the browser to execute. The React app should not add a parallel regex/canned-response chat path.
 
-Explicit prompt-chip actions such as "Why this number?", "Show the math", "Show recent transactions", true/real balance requests, and specific purchase tests force the matching SDK tool call so the card is reliable, then the model writes the visible reply. Visible financial-agent replies are capped at 220 characters and 35 words, with instructions for fifth-grade reading level. If the SDK rejects the final structured assistant response, the response is too long, or the response violates Spendable language rules, `/api/agent` asks the model for one stricter repair attempt. If that repair also fails, the route returns an error rather than substituting canned chat text.
+Explicit prompt-chip actions such as "Why this number?", "Show the math", "Show recent transactions", true/real balance requests, and specific purchase tests force the matching SDK tool call so the card is reliable, then the model writes the visible reply. Visible financial-agent replies are capped at 220 characters and 35 words, with instructions for fifth-grade reading level. If the SDK rejects the final structured assistant response, the response is too long, or the response violates Pip language rules, `/api/agent` asks the model for one stricter repair attempt. If that repair also fails, the route returns an error rather than substituting canned chat text.
 
 The agent also generates the next prompt chips in its structured output. The server trims, dedupes, and validates those chips before returning them, and only permits protected setup chip ids such as `get-signed-up`, `connect-data`, `use-default-savings`, and `set-250-savings` when the current onboarding state makes that action valid. Initial and invalid-chip states may still fall back to contextual defaults, but normal post-response chips should be model-authored.
 
@@ -72,18 +74,18 @@ Google signup flow:
 
 - `/api/auth/oauth/google` starts the primary Google OAuth flow through Supabase Auth.
 - `/api/auth/sign-in` remains a magic-link fallback route, but it is not the default onboarding path.
-- `/auth/callback` exchanges the auth code or OTP and returns signed-in users to the same Spendable screen. Any Google account can sign up.
-- Authenticated users must accept the real-data consent step and can keep or change the default protected-savings amount before seeing Free Cash.
-- Chat owns setup and account actions. Manual refresh, protected-savings settings, provider repair, sign-out, and delete-data should be reached through Spendable rather than a separate settings/dashboard surface.
-- `/api/sync/manual` runs server-side provider sync, rate limits manual refreshes, records sync logs, and stores a Free Cash snapshot. Plaid syncs every stored Item and can return a `partial` result when at least one institution refreshed but another needs repair.
+- `/auth/callback` exchanges the auth code or OTP and returns signed-in users to the same Pip screen. Any Google account can sign up.
+- Authenticated users must accept the real-data consent step and can keep or change the default protected-savings amount before seeing Spendable Cash Today.
+- Chat owns setup and account actions. Manual refresh, protected-savings settings, provider repair, sign-out, and delete-data should be reached through Pip rather than a separate settings/dashboard surface.
+- `/api/sync/manual` runs server-side provider sync, rate limits manual refreshes, records sync logs, and stores a Spendable Cash Today snapshot. Plaid syncs every stored Item and can return a `partial` result when at least one institution refreshed but another needs repair.
 - `/api/sync/status` reports last refresh, stale connection state, and latest sync failure details for chat-owned refresh and repair prompts.
 - `/api/agent` creates the Plaid Link session for chat connect/repair through an agent tool; `/api/providers/connect` remains the lower-level provider connect route.
 - `/api/providers/plaid/exchange` exchanges Plaid Link public tokens server-side and stores encrypted Plaid access tokens.
 - `/api/providers/teller/health` reports whether Teller Connect, mTLS, and token encryption are configured.
 - `/api/providers/teller/enrollment` stores a Teller Connect enrollment token server-side after the connect nonce matches.
-- `/api/usage` summarizes monthly Free Cash views, prompt-chip taps, AI questions, follow-ups, spend tests, balance reveals, missing-card outcomes, negative follow-ups, estimated model calls, provider syncs, partial syncs, and failed syncs for beta cost and product-proof control.
-- `/api/events` records authenticated beta product events such as Free Cash views and prompt-chip taps.
-- `/api/agent` records server-derived beta events for agent questions, follow-ups, purchase simulations, true-balance reveals, missing-card nudges, and negative Free Cash follow-ups.
+- `/api/usage` summarizes monthly Spendable Cash Today views, prompt-chip taps, AI questions, follow-ups, spend tests, balance reveals, missing-card outcomes, negative follow-ups, estimated model calls, provider syncs, partial syncs, and failed syncs for beta cost and product-proof control.
+- `/api/events` records authenticated beta product events such as Spendable Cash Today views and prompt-chip taps.
+- `/api/agent` records server-derived beta events for agent questions, follow-ups, purchase simulations, true-balance reveals, missing-card nudges, and negative Spendable Cash Today follow-ups.
 - `/api/operator/overview` is a bearer-token-protected server route for beta operations. It summarizes stale connections, partial/failed syncs, and product-proof event counts without adding an in-app dashboard.
 - `/api/operator/agent-chats` is a bearer-token-protected review route for recent agent turns. Supabase-backed beta runs read `agent_chat_turns`; local development without Supabase reads `/tmp/spendable-agent-chat-turns.jsonl`.
 - The authenticated home screen reads `/api/free-cash` so the top number follows stored Supabase data after a manual sync.
@@ -99,7 +101,7 @@ PLAID_SECRET=
 PLAID_ENV=sandbox
 PLAID_PRODUCTS=transactions
 PLAID_COUNTRY_CODES=US
-PLAID_CLIENT_NAME=Spendable
+PLAID_CLIENT_NAME=Pip
 PLAID_DAYS_REQUESTED=90
 PLAID_REDIRECT_URI=https://free-cash-mayberrydt.netlify.app/plaid/oauth
 FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=
@@ -160,7 +162,7 @@ SPENDABLE_LIVE_STORAGE_STATE=/tmp/spendable-live-auth.json npm run test:e2e:live
 
 `npm run capture:live-auth` opens Playwright against production and saves to `/tmp/spendable-live-auth.json` by default. Override the target or file path with `-- --base-url=https://... --storage-state=/tmp/other-state.json` when needed.
 
-That smoke expects the Google user to complete OAuth, consent, Plaid sandbox connection, manual sync, and return to the same Spendable screen with a real Free Cash number. It fails if the saved session is still at the guest, consent, or connect-data stage. When Plaid automation is enabled, it also requires successful `/api/providers/plaid/exchange` and `/api/sync/manual` responses, then verifies `/api/sync/status` shows a connected Plaid institution, a succeeded Plaid sync run, and nonzero synced account and transaction counts before asking the AI why the number changed.
+That smoke expects the Google user to complete OAuth, consent, Plaid sandbox connection, manual sync, and return to the same Pip screen with a real Spendable Cash Today number. It fails if the saved session is still at the guest, consent, or connect-data stage. When Plaid automation is enabled, it also requires successful `/api/providers/plaid/exchange` and `/api/sync/manual` responses, then verifies `/api/sync/status` shows a connected Plaid institution, a succeeded Plaid sync run, and nonzero synced account and transaction counts before asking the AI why the number changed.
 
 To let the smoke attempt the Plaid Sandbox Link step itself after Google OAuth, save storage state after signing in with a Google user and run:
 

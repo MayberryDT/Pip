@@ -28,10 +28,10 @@ export function captureLiveAuthState({
     return 1;
   }
 
-  stdout("Opening Playwright codegen for Spendable live auth capture.");
+  stdout("Opening Playwright codegen for Pip live auth capture.");
   stdout(`Base URL: ${baseUrl}`);
   stdout(`Storage state output: ${storageState}`);
-  stdout("Sign in with any Google account, wait until Spendable returns to the app, then close the browser window.");
+  stdout("Sign in with any Google account, wait until Pip returns to the app, then close the browser window.");
 
   const result = spawn(
     "npx",

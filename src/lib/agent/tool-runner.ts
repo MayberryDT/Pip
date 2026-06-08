@@ -9,6 +9,7 @@ import {
   buildSpendingBreakdown,
 } from "@/lib/free-cash/insights";
 import { fakeSnapshot } from "@/lib/fake-data";
+import { formatMoney } from "@/lib/money";
 import type { FinancialSnapshot } from "@/lib/types";
 
 export const agentToolNames = [
@@ -22,6 +23,7 @@ export const agentToolNames = [
   "define_spendable_cash",
   "detect_missing_card",
   "show_math",
+  "compose_insight_card",
   "answer_unrelated",
 ] as const;
 
@@ -36,6 +38,9 @@ const recentTransactionsArgsSchema = z.object({
 });
 const forecastArgsSchema = z.object({
   horizon_days: z.number().int().min(1).max(14).default(14),
+});
+const insightCardArgsSchema = z.object({
+  topic: z.enum(["payday_impact", "spendable_factors"]),
 });
 
 const emptyArgsSchema = z.object({}).passthrough();
@@ -78,6 +83,10 @@ export function runAgentTool(
     case "show_math":
       emptyArgsSchema.parse(rawArgs ?? {});
       return showMath(snapshot);
+    case "compose_insight_card": {
+      const args = insightCardArgsSchema.parse(rawArgs ?? {});
+      return composeInsightCard(args.topic, snapshot);
+    }
     case "answer_unrelated":
       emptyArgsSchema.parse(rawArgs ?? {});
       return answerUnrelated(snapshot);
@@ -110,7 +119,7 @@ function explainFreeCash(snapshot: FinancialSnapshot): AgentResponse {
   const cards: AgentResponse["cards"] = [
     {
       type: "free_cash_explanation",
-      title: "Why Spendable Cash changed",
+      title: "Why this number changed",
       summary,
       drivers: result.drivers,
       warnings: result.warnings,
@@ -296,7 +305,7 @@ function detectMissingCard(snapshot: FinancialSnapshot): AgentResponse {
           type: "connect_account",
           title: "Connect or repair data",
           detail:
-            "Ask me in chat to connect Plaid, repair a stale bank connection, or add the card that is missing from Spendable Cash.",
+            "Ask me in chat to connect Plaid, repair a stale bank connection, or add the card that is missing from Spendable Cash Today.",
         },
   ];
 
@@ -329,6 +338,101 @@ function showMath(snapshot: FinancialSnapshot): AgentResponse {
     promptChips: getSuggestedPrompts(result),
     ...baseResponse("show_math", cards),
   };
+}
+
+function composeInsightCard(
+  topic: z.infer<typeof insightCardArgsSchema>["topic"],
+  snapshot: FinancialSnapshot,
+): AgentResponse {
+  const result = calculateFreeCash(snapshot);
+  const card = topic === "payday_impact"
+    ? buildPaydayImpactCard(result)
+    : buildSpendableFactorsCard(result);
+  const cards: AgentResponse["cards"] = [card];
+
+  return {
+    message: "",
+    cards,
+    promptChips: getSuggestedPrompts(result),
+    ...baseResponse("compose_insight_card", cards),
+  };
+}
+
+function buildPaydayImpactCard(result: ReturnType<typeof calculateFreeCash>): Extract<AgentResponse["cards"][number], { type: "insight_card" }> {
+  const dailyIncomeCents = Math.round(result.incomeTotalCents / result.window.dayCount);
+
+  return {
+    type: "insight_card",
+    title: "Payday impact",
+    summary:
+      `Income adds ${formatMoney(result.incomeTotalCents)} inside this rolling month. Spread over ${result.window.dayCount} days, that is about ${formatMoney(dailyIncomeCents)} per day before spending and protected savings.`,
+    rows: [
+      {
+        id: "income",
+        label: "Income counted",
+        amountCents: result.incomeTotalCents,
+        detail: "Paychecks and deposits inside the rolling month.",
+        tone: result.incomeTotalCents > 0 ? "positive" : "neutral",
+      },
+      {
+        id: "daily-income",
+        label: "Daily lift",
+        amountCents: dailyIncomeCents,
+        detail: `Income spread across ${result.window.dayCount} days.`,
+        tone: dailyIncomeCents > 0 ? "positive" : "neutral",
+      },
+      {
+        id: "spending",
+        label: "Spending and bills",
+        amountCents: -result.spendingTotalCents,
+        detail: "Spending offsets income before today's number.",
+        tone: result.spendingTotalCents > 0 ? "negative" : "neutral",
+      },
+      {
+        id: "protected-savings",
+        label: "Protected savings",
+        amountCents: -result.protectedSavingsMonthlyCents,
+        detail: "Held out before I calculate Spendable Cash Today.",
+        tone: result.protectedSavingsMonthlyCents > 0 ? "neutral" : "positive",
+      },
+      {
+        id: "today",
+        label: "Today",
+        amountCents: result.freeCashTodayCents,
+        detail: "After income, spending, and protected savings.",
+        tone: toneForAmount(result.freeCashTodayCents),
+      },
+    ],
+    footer: "Payday helps most while it stays inside the rolling window.",
+  };
+}
+
+function buildSpendableFactorsCard(result: ReturnType<typeof calculateFreeCash>): Extract<AgentResponse["cards"][number], { type: "insight_card" }> {
+  return {
+    type: "insight_card",
+    title: "What affects today",
+    summary: summarizeFreeCash(result),
+    rows: result.drivers.slice(0, 6).map((driver) => ({
+      id: driver.id,
+      label: driver.label,
+      amountCents: driver.amountCents,
+      detail: driver.detail,
+      tone: driver.tone,
+    })),
+    footer: "Positive rows lift the number; negative rows pull it down.",
+  };
+}
+
+function toneForAmount(amountCents: number): "positive" | "negative" | "neutral" {
+  if (amountCents > 0) {
+    return "positive";
+  }
+
+  if (amountCents < 0) {
+    return "negative";
+  }
+
+  return "neutral";
 }
 
 function answerUnrelated(snapshot: FinancialSnapshot): AgentResponse {

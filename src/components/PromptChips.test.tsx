@@ -10,12 +10,14 @@ describe("PromptChips", () => {
     );
 
     expect(markup.match(/<button/g)).toHaveLength(3);
-    expect(markup).toContain("Why this number?");
-    expect(markup).toContain("Can I spend $50?");
+    expect(markup).toContain("Upcoming bills");
     expect(markup).toContain("Show true balances");
+    expect(markup).toContain("Try $25");
     expect(markup).not.toContain("Show recent transactions");
     expect(markup).not.toContain("Show the math");
+    expect(markup).toContain("flex-nowrap");
     expect(markup).toContain("overflow-x-auto");
+    expect(markup).toContain("scrollbar-none");
     expect(markup).toContain("whitespace-nowrap");
     expect(markup).not.toContain("role=&quot;menu&quot;");
   });
@@ -23,19 +25,19 @@ describe("PromptChips", () => {
 
 const overflowingPromptChips: PromptChip[] = [
   {
-    id: "why",
-    label: "Why this number?",
-    prompt: "Why this number?",
-  },
-  {
-    id: "spend-50",
-    label: "Can I spend $50?",
-    prompt: "Can I spend $50?",
+    id: "upcoming-bills",
+    label: "Upcoming bills",
+    prompt: "What bills are coming up?",
   },
   {
     id: "balances",
     label: "Show true balances",
     prompt: "Show true balances",
+  },
+  {
+    id: "try-25",
+    label: "Try $25",
+    prompt: "Can I spend $25?",
   },
   {
     id: "transactions",

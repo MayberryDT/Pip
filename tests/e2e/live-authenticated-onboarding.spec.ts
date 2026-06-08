@@ -18,7 +18,7 @@ test.describe("live authenticated onboarding smoke", () => {
     storageState: usableStorageState,
   });
 
-  test("proves the deployed Google onboarding path reaches connected Free Cash", async ({
+  test("proves the deployed Google onboarding path reaches connected Spendable Cash Today", async ({
     page,
   }) => {
     await page.goto("/");
@@ -26,8 +26,8 @@ test.describe("live authenticated onboarding smoke", () => {
 
     await assertAuthenticatedSession(page);
 
-    await expect(page.getByText("Spendable", { exact: true })).toBeVisible();
-    await expect(page.getByLabel("Ask Spendable")).toBeVisible();
+    await expect(page.getByText("Pip", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Ask Pip")).toBeVisible();
     await completeConsentIfNeeded(page);
 
     await completePlaidIfNeeded(page);
@@ -35,19 +35,28 @@ test.describe("live authenticated onboarding smoke", () => {
     await expect(page.getByTestId("free-cash-number")).not.toHaveText("$--", {
       timeout: 15_000,
     });
-    await expect(page.getByRole("button", { name: "Why this number?" })).toBeVisible();
-
     const responsePromise = page.waitForResponse((response) => {
-      return response.url().includes("/api/agent") && response.request().method() === "POST";
+      if (!response.url().includes("/api/agent") || response.request().method() !== "POST") {
+        return false;
+      }
+
+      try {
+        const body = response.request().postDataJSON() as { requestKind?: string } | null;
+
+        return body?.requestKind !== "prompt_chips";
+      } catch {
+        return true;
+      }
     });
-    await page.getByRole("button", { name: "Why this number?" }).click();
+    await page.getByLabel("Ask Pip").fill("Why this number?");
+    await page.getByRole("button", { name: "Send" }).click();
     const response = await responsePromise;
     const payload = await response.json();
 
     expect(response.ok()).toBe(true);
     expect(payload.audit?.usedModel).toBe(true);
     expect(payload.audit?.toolNames).toContain("get_free_cash_drivers");
-    await expect(page.getByRole("heading", { name: "Why Free Cash changed" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Why this number changed" })).toBeVisible();
   });
 });
 
@@ -66,18 +75,18 @@ async function completeConsentIfNeeded(page: Page) {
     return;
   }
 
-  await page.getByLabel("Ask Spendable").fill("200");
+  await page.getByLabel("Ask Pip").fill("200");
   const consentResponse = page.waitForResponse((response) => {
     return response.url().includes("/api/auth/consent") && response.request().method() === "POST";
   });
   await page.getByRole("button", { name: "Send" }).click();
   await expect((await consentResponse).ok()).toBe(true);
-  await expect(page.getByText("You’re set. I’m loading your Free Cash number")).toBeVisible();
+  await expect(page.getByText("You’re set. I’m loading Spendable Cash Today")).toBeVisible();
   await page.waitForLoadState("domcontentloaded");
 }
 
 async function completePlaidIfNeeded(page: Page) {
-  const connectStep = page.getByText("Step 3 is connecting your data.");
+  const connectStep = page.getByText("Connect your data and I’ll calculate Spendable Cash Today.");
 
   if (!(await connectStep.isVisible().catch(() => false))) {
     await assertConnectedSyncStatus(page);

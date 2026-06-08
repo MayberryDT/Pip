@@ -24,8 +24,8 @@ describe("CardRenderer", () => {
     const element = CardRenderer({
       card: {
         type: "missing_card_nudge",
-        title: "Spendable Cash may be missing card spend",
-        detail: "A payment to Capital One appears in checking, but that card is not connected.",
+        title: "Possible missing card",
+        detail: "I see a payment to Capital One, but that card is not connected.",
         issuerName: "Capital One",
       },
       onSuppressMissingCard: (issuerName) => suppressedIssuers.push(issuerName),
@@ -71,7 +71,7 @@ function getRenderableCards(): Array<{
       name: "free_cash_explanation",
       card: {
         type: "free_cash_explanation",
-        title: "Why Spendable Cash changed",
+        title: "Why this number changed",
         summary: "$43 comes from income, spending, and protected savings.",
         drivers: [
           {
@@ -85,8 +85,8 @@ function getRenderableCards(): Array<{
         warnings: [
           {
             id: "missing-card",
-            label: "Spendable Cash may be missing card spend",
-            detail: "A payment to Capital One appears in checking.",
+            label: "Possible missing card",
+            detail: "I see a payment to Capital One, but that card is not connected.",
             tone: "warning",
             issuerName: "Capital One",
           },
@@ -102,12 +102,11 @@ function getRenderableCards(): Array<{
         ],
       },
       expectedText: [
-        "Why Spendable Cash changed",
-        "$43 comes from income, spending, and protected savings.",
+        "Why this number changed",
         "Income in window",
         "$3,200",
-        "Spendable Cash may be missing card spend",
-        "A payment to Capital One appears in checking.",
+        "Possible missing card",
+        "I see a payment to Capital One, but that card is not connected.",
         "Pending transactions included",
         "-$25",
         "Pending card purchases are included.",
@@ -123,7 +122,7 @@ function getRenderableCards(): Array<{
         afterTodayCents: -700,
         monthlyAverageAfterCents: -700,
       },
-      expectedText: ["Purchase simulation", "Now", "After", "$43", "-$7"],
+      expectedText: ["Purchase simulation", "Current Spendable Cash", "Purchase", "After purchase", "$43", "-$50", "-$7"],
     },
     {
       name: "true_balances",
@@ -276,13 +275,13 @@ function getRenderableCards(): Array<{
       name: "missing_card_nudge",
       card: {
         type: "missing_card_nudge",
-        title: "Spendable Cash may be missing card spend",
-        detail: "A payment to Capital One appears in checking, but that card is not connected.",
+        title: "Possible missing card",
+        detail: "I see a payment to Capital One, but that card is not connected.",
         issuerName: "Capital One",
       },
       expectedText: [
-        "Spendable Cash may be missing card spend",
-        "A payment to Capital One appears in checking",
+        "Possible missing card",
+        "I see a payment to Capital One, but that card is not connected.",
         "Hide nudge",
       ],
     },
@@ -304,6 +303,48 @@ function getRenderableCards(): Array<{
         "Protected savings",
         "Rolling net",
         "$1,780",
+      ],
+    },
+    {
+      name: "insight_card",
+      card: {
+        type: "insight_card",
+        title: "Payday impact",
+        summary: "Income is helping today, but spending and protected savings still count first.",
+        rows: [
+          {
+            id: "income",
+            label: "Income counted",
+            amountCents: 320000,
+            detail: "Paychecks inside the rolling month.",
+            tone: "positive",
+          },
+          {
+            id: "spending",
+            label: "Spending and bills",
+            amountCents: -122000,
+            detail: "Spending offsets income.",
+            tone: "negative",
+          },
+          {
+            id: "today",
+            label: "Today",
+            valueText: "On track",
+            detail: "The daily signal after the main factors.",
+            tone: "neutral",
+          },
+        ],
+        footer: "Payday helps most while it stays inside the rolling window.",
+      },
+      expectedText: [
+        "Payday impact",
+        "Income is helping today",
+        "Income counted",
+        "$3,200",
+        "Spending and bills",
+        "-$1,220",
+        "On track",
+        "Payday helps most",
       ],
     },
     {

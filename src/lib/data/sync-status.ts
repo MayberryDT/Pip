@@ -12,6 +12,7 @@ export type InstitutionSyncStatus = {
   lastSuccessfulSyncAt: string | null;
   staleAfter: string | null;
   isStale: boolean;
+  errorCode: string | null;
   errorMessage: string | null;
 };
 
@@ -67,6 +68,7 @@ export async function loadSyncStatusForUser(
     lastSuccessfulSyncAt: row.last_successful_sync_at,
     staleAfter: row.stale_after,
     isStale: isInstitutionStale(row, now),
+    errorCode: row.error_code,
     errorMessage: row.error_message,
   }));
   const latestSyncRun = syncRunsResult.data?.[0] ? mapLatestSyncRun(syncRunsResult.data[0]) : null;

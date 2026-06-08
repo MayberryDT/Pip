@@ -34,6 +34,7 @@ describe("PlaidProvider contract", () => {
       pending: false,
     } as PlaidTransaction,
   ];
+  const accountsBalanceGet = vi.fn();
   const client = {
     linkTokenCreate: vi.fn().mockResolvedValue({
       data: {
@@ -41,7 +42,8 @@ describe("PlaidProvider contract", () => {
       },
     }),
     itemPublicTokenExchange: vi.fn(),
-    accountsBalanceGet: vi.fn().mockResolvedValue({
+    accountsBalanceGet,
+    accountsGet: vi.fn().mockResolvedValue({
       data: {
         accounts,
       },
@@ -104,7 +106,7 @@ describe("PlaidProvider contract", () => {
       client: {
         linkTokenCreate,
         itemPublicTokenExchange: vi.fn(),
-        accountsBalanceGet: vi.fn(),
+        accountsGet: vi.fn(),
         transactionsSync: vi.fn(),
       } as unknown as PlaidClient,
       config: getPlaidConfig({
@@ -161,6 +163,7 @@ describe("PlaidProvider contract", () => {
         amountCents: -425,
       }),
     ]);
+    expect(accountsBalanceGet).not.toHaveBeenCalled();
   });
 
   it("syncs every stored Plaid item and isolates a failed institution", async () => {
@@ -169,7 +172,7 @@ describe("PlaidProvider contract", () => {
       client: {
         linkTokenCreate: vi.fn(),
         itemPublicTokenExchange: vi.fn(),
-        accountsBalanceGet: vi.fn(async (request: { access_token: string }) => {
+        accountsGet: vi.fn(async (request: { access_token: string }) => {
           if (request.access_token === "access-token-failed") {
             throw {
               response: {
@@ -271,7 +274,7 @@ describe("PlaidProvider contract", () => {
       client: {
         linkTokenCreate: vi.fn(),
         itemPublicTokenExchange: vi.fn(),
-        accountsBalanceGet: vi.fn().mockRejectedValue({
+        accountsGet: vi.fn().mockRejectedValue({
           response: {
             data: {
               error_code: "ITEM_LOGIN_REQUIRED",

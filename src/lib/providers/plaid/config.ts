@@ -30,7 +30,7 @@ export type PlaidReadiness = {
 
 export type PlaidClient = Pick<
   PlaidApi,
-  "accountsBalanceGet" | "itemPublicTokenExchange" | "linkTokenCreate" | "transactionsSync"
+  "accountsGet" | "itemPublicTokenExchange" | "linkTokenCreate" | "transactionsSync"
 >;
 
 const plaidProductMap: Record<string, Products> = {
@@ -50,7 +50,7 @@ export function getPlaidConfig(env: Record<string, string | undefined> = process
     environment: parsePlaidEnvironment(env.PLAID_ENV),
     products: parsePlaidProducts(env.PLAID_PRODUCTS),
     countryCodes: parseCountryCodes(env.PLAID_COUNTRY_CODES),
-    clientName: env.PLAID_CLIENT_NAME?.trim() || "Spendable",
+    clientName: env.PLAID_CLIENT_NAME?.trim() || "Pip",
     daysRequested: parseDaysRequested(env.PLAID_DAYS_REQUESTED),
     redirectUri: getPlaidRedirectUri(env),
   };

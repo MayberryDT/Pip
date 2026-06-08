@@ -165,7 +165,7 @@ export const agentEvalCases = [
   {
     id: "how-it-works",
     description: "Product explanation should not say Free Cash or point to screens.",
-    message: "Tell me how Spendable works",
+    message: "Tell me how Pip works",
     expectNoCards: true,
   },
 ];
@@ -176,12 +176,10 @@ const disallowedTextChecks = [
   { label: "safe to spend", pattern: /\bsafe to spend\b/i },
   { label: "safe to buy", pattern: /\bsafe to buy\b/i },
   { label: "you can afford", pattern: /\byou can afford\b/i },
-  { label: "you can spend", pattern: /\byou can spend\b/i },
-  { label: "you cannot spend", pattern: /\byou cannot spend\b/i },
-  { label: "you can't spend", pattern: /\byou can't spend\b/i },
-  { label: "you cant spend", pattern: /\byou cant spend\b/i },
   { label: "financial advice", pattern: /\bfinancial advice\b/i },
   { label: "financial advisor", pattern: /\bfinancial advisor\b/i },
+  { label: "third-person Pip self-reference", pattern: /\bpip\s+(?:is|does|can|will|would|helps?|shows?|uses?|turns|stores|needs|calculates?|explains?|answers?)\b/i },
+  { label: "detached metric opening", pattern: /^spendable cash today is\b/i },
   { label: "money shorthand", pattern: /-?\$\d+(?:\.\d+)?k\b/i },
 ];
 
@@ -264,7 +262,7 @@ function validateVisibleText({ label, text, failures }) {
   }
 
   if (wordCount(text) > 45) {
-    failures.push(`${label} is too long for the short Spendable voice (${wordCount(text)} words).`);
+    failures.push(`${label} is too long for the short Pip voice (${wordCount(text)} words).`);
   }
 
   if (text.length > 260) {
@@ -353,6 +351,9 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
 
   validateVisibleText({ label: "assistant message", text: message, failures });
   validateDisplayPromise({ label: "assistant message", text: message, cardTypes, failures });
+  if (cardTypes.length > 0 && /\?\s*$/.test(message.trim())) {
+    failures.push("assistant message ends with a follow-up question after returning a card.");
+  }
   validatePromptChips({ promptChips, failures });
 
   for (const toolName of asArray(caseDef.expectedTools)) {
@@ -469,7 +470,7 @@ export async function runAgentEval({
   const selectedCases = selectEvalCases(cases, caseIds);
   const results = [];
 
-  log(`Running ${selectedCases.length} Spendable agent eval cases against ${agentUrl}`);
+  log(`Running ${selectedCases.length} Pip agent eval cases against ${agentUrl}`);
 
   for (const caseDef of selectedCases) {
     const caseStart = Date.now();
@@ -536,7 +537,7 @@ export async function runAgentEval({
   };
 
   writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
-  log(`Wrote Spendable agent eval report to ${reportPath}`);
+  log(`Wrote Pip agent eval report to ${reportPath}`);
 
   return report;
 }

@@ -8,6 +8,7 @@ import {
   getPlaidConnectRequest,
   getRefreshLabel,
   getRefreshProvider,
+  shouldRefreshConnectedDataForToday,
   type SyncStatusResponse,
 } from "@/components/data-controls-helpers";
 
@@ -25,8 +26,7 @@ describe("data control helpers", () => {
   });
 
   it.each([
-    ["failed status", { isStale: false, status: "failed" }],
-    ["stale status", { isStale: false, status: "stale" }],
+    ["login-required error", { isStale: false, status: "failed", errorCode: "item-login-required" }],
     ["revoked status", { isStale: false, status: "revoked" }],
   ])("switches Plaid into repair mode for a %s institution", (_name, overrides) => {
     const status = createSyncStatus({
@@ -49,7 +49,33 @@ describe("data control helpers", () => {
       institutionId: "institution_plaid_1",
     });
     expect(getConnectionStatusMessage(status)).toBe(
-      "Test Bank needs repair. Use Repair connection before relying on refreshed Spendable Cash.",
+      "Test Bank needs repair. Use Repair connection before relying on refreshed Spendable Cash Today.",
+    );
+  });
+
+  it("treats non-repair Plaid failures as refreshable", () => {
+    const status = createSyncStatus({
+      hasStaleInstitution: true,
+      institutions: [
+        createInstitution({
+          id: "institution_plaid_1",
+          institutionName: "Wise (US)",
+          provider: "plaid",
+          status: "failed",
+          isStale: true,
+          errorCode: "invalid-product",
+          errorMessage: "client is not authorized to access the following products: [\"balance\"]",
+        }),
+      ],
+    });
+
+    expect(getConnectLabel(status)).toBe("Reconnect data");
+    expect(getRefreshProvider(status)).toBe("plaid");
+    expect(canRefreshData(status)).toBe(true);
+    expect(getRefreshLabel(status)).toBe("Refresh data");
+    expect(getPlaidConnectRequest(status)).toEqual({ mode: "connect" });
+    expect(getConnectionStatusMessage(status)).toBe(
+      "Wise (US) data is stale. Refresh before relying on Spendable Cash Today.",
     );
   });
 
@@ -72,7 +98,7 @@ describe("data control helpers", () => {
     expect(getRefreshLabel(status)).toBe("Refresh data");
     expect(getPlaidConnectRequest(status)).toEqual({ mode: "connect" });
     expect(getConnectionStatusMessage(status)).toBe(
-      "Plaid Bank data is stale. Refresh before relying on Spendable Cash.",
+      "Plaid Bank data is stale. Refresh before relying on Spendable Cash Today.",
     );
   });
 
@@ -94,7 +120,7 @@ describe("data control helpers", () => {
     });
 
     expect(getConnectionStatusMessage(status)).toBe(
-      "2 connections have stale data. Refresh before relying on Spendable Cash.",
+      "2 connections have stale data. Refresh before relying on Spendable Cash Today.",
     );
   });
 
@@ -178,6 +204,44 @@ describe("data control helpers", () => {
 
     expect(formatLastRefresh(status)).toMatch(/Jun 6/);
   });
+
+  it("requests a new-day refresh using the user's calendar day", () => {
+    const status = createSyncStatus({
+      institutions: [
+        createInstitution({
+          provider: "plaid",
+          lastSuccessfulSyncAt: "2026-06-08T03:30:00.000Z",
+        }),
+      ],
+    });
+
+    expect(
+      shouldRefreshConnectedDataForToday(
+        status,
+        new Date("2026-06-08T15:00:00.000Z"),
+        "America/Denver",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not refresh again when the latest sync already happened today", () => {
+    const status = createSyncStatus({
+      institutions: [
+        createInstitution({
+          provider: "plaid",
+          lastSuccessfulSyncAt: "2026-06-08T15:00:00.000Z",
+        }),
+      ],
+    });
+
+    expect(
+      shouldRefreshConnectedDataForToday(
+        status,
+        new Date("2026-06-08T18:00:00.000Z"),
+        "America/Denver",
+      ),
+    ).toBe(false);
+  });
 });
 
 function createSyncStatus(overrides: Partial<SyncStatusResponse> = {}): SyncStatusResponse {
@@ -200,6 +264,7 @@ function createInstitution(
     lastSuccessfulSyncAt: null,
     staleAfter: null,
     isStale: false,
+    errorCode: null,
     errorMessage: null,
     ...overrides,
   };

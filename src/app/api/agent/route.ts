@@ -41,6 +41,7 @@ import type { FinancialSnapshot } from "@/lib/types";
 
 const requestSchema = z.object({
   message: z.string().min(1).max(500),
+  requestKind: z.enum(["chat", "prompt_chips"]).optional(),
   conversationId: z
     .string()
     .min(1)
@@ -70,6 +71,16 @@ const requestSchema = z.object({
         .max(8)
         .optional(),
       lastToolNames: z.array(z.string().min(1).max(80)).max(8).optional(),
+      promptChips: z
+        .array(
+          z.object({
+            id: z.string().min(1).max(80),
+            label: z.string().min(1).max(36),
+            prompt: z.string().min(1).max(160),
+          }),
+        )
+        .max(24)
+        .optional(),
     })
     .optional(),
 });
@@ -113,6 +124,7 @@ export async function POST(request: Request) {
       {
         message: parsed.data.message,
         snapshot: routeContext.snapshot,
+        requestKind: parsed.data.requestKind,
         history: parsed.data.history,
         conversationState: parsed.data.conversationState,
         syncStatus: routeContext.syncStatus,
@@ -122,40 +134,44 @@ export async function POST(request: Request) {
       },
     );
 
-    await Promise.all([
-      recordAgentEvents(routeContext.eventContext, {
-        message: parsed.data.message,
-        historyLength: parsed.data.history?.length ?? 0,
-        response,
-        freeCashTodayCents: routeContext.snapshot
-          ? calculateFreeCash(routeContext.snapshot).freeCashTodayCents
-          : null,
-      }),
-      recordAgentChatTurnSafely(routeContext.eventContext?.supabase ?? null, {
-        userId: routeContext.eventContext?.userId ?? null,
-        conversationId,
-        userMessage: parsed.data.message,
-        response,
-        requestMetadata: createChatTurnRequestMetadata(parsed.data, routeContext),
-      }),
-    ]);
+    if (parsed.data.requestKind !== "prompt_chips") {
+      await Promise.all([
+        recordAgentEvents(routeContext.eventContext, {
+          message: parsed.data.message,
+          historyLength: parsed.data.history?.length ?? 0,
+          response,
+          freeCashTodayCents: routeContext.snapshot
+            ? calculateFreeCash(routeContext.snapshot).freeCashTodayCents
+            : null,
+        }),
+        recordAgentChatTurnSafely(routeContext.eventContext?.supabase ?? null, {
+          userId: routeContext.eventContext?.userId ?? null,
+          conversationId,
+          userMessage: parsed.data.message,
+          response,
+          requestMetadata: createChatTurnRequestMetadata(parsed.data, routeContext),
+        }),
+      ]);
+    }
 
     return NextResponse.json(response);
   } catch (error) {
     const payload = toAgentErrorPayload(error);
     const { status, ...body } = payload;
 
-    await recordAgentChatTurnSafely(routeContext?.eventContext?.supabase ?? null, {
-      userId: routeContext?.eventContext?.userId ?? null,
-      conversationId,
-      userMessage: parsed.data.message,
-      errorMessage: [body.error, body.detail].filter(Boolean).join(" "),
-      requestMetadata: {
-        ...createChatTurnRequestMetadata(parsed.data, routeContext),
-        errorCode: body.code,
-        status,
-      },
-    });
+    if (parsed.data.requestKind !== "prompt_chips") {
+      await recordAgentChatTurnSafely(routeContext?.eventContext?.supabase ?? null, {
+        userId: routeContext?.eventContext?.userId ?? null,
+        conversationId,
+        userMessage: parsed.data.message,
+        errorMessage: [body.error, body.detail].filter(Boolean).join(" "),
+        requestMetadata: {
+          ...createChatTurnRequestMetadata(parsed.data, routeContext),
+          errorCode: body.code,
+          status,
+        },
+      });
+    }
 
     return NextResponse.json(body, { status });
   }
@@ -167,10 +183,12 @@ function createChatTurnRequestMetadata(
 ): Record<string, Json> {
   return {
     scenario: input.scenario ?? null,
+    requestKind: input.requestKind ?? "chat",
     selectedPromptChipId: input.selectedPromptChipId ?? null,
     historyLength: input.history?.length ?? 0,
     shownCardCount: input.conversationState?.shownCards?.length ?? 0,
     lastToolCount: input.conversationState?.lastToolNames?.length ?? 0,
+    promptChipCount: input.conversationState?.promptChips?.length ?? 0,
     onboardingStatus: routeContext?.onboardingState.status ?? null,
     hasFinancialData: routeContext?.onboardingState.hasFinancialData ?? false,
     hasSnapshot: Boolean(routeContext?.snapshot),
@@ -586,8 +604,25 @@ function getRepairablePlaidInstitution(syncStatus: SyncStatus | null) {
       return false;
     }
 
-    return ["failed", "stale", "revoked"].includes(institution.status) || institution.isStale;
+    return isRepairablePlaidErrorCode(institution.errorCode) || institution.status === "revoked";
   });
+}
+
+function isRepairablePlaidErrorCode(errorCode: string | null | undefined): boolean {
+  return [
+    "item-login-required",
+    "invalid-credentials",
+    "invalid-mfa",
+    "item-locked",
+    "mfa-not-supported",
+    "user-setup-required",
+    "invalid-access-token",
+    "item-not-found",
+    "user-permission-revoked",
+    "user-account-revoked",
+    "access-not-granted",
+    "no-accounts",
+  ].includes((errorCode ?? "").toLowerCase());
 }
 
 function isPlaidConnectSession(connect: unknown): connect is PlaidConnectSession {

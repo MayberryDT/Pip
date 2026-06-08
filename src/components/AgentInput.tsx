@@ -9,7 +9,7 @@ export function AgentInput({
   busy,
   disabled,
   onSubmit,
-  placeholder = "Ask anything...",
+  placeholder = "Ask Pip anything...",
 }: {
   busy?: boolean;
   disabled?: boolean;
@@ -41,8 +41,8 @@ export function AgentInput({
 
     const result = onSubmit(trimmed);
     setMessage("");
-    requestAnimationFrame(() => inputRef.current?.focus());
-    void Promise.resolve(result).finally(() => inputRef.current?.focus());
+    resetComposerViewport(inputRef.current);
+    void Promise.resolve(result).finally(() => resetComposerViewport(inputRef.current));
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -69,7 +69,7 @@ export function AgentInput({
         onChange={(event) => setMessage(event.target.value)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}
-        aria-label="Ask Spendable"
+        aria-label="Ask Pip"
         disabled={disabled}
       />
       <button
@@ -83,4 +83,12 @@ export function AgentInput({
       </button>
     </form>
   );
+}
+
+function resetComposerViewport(input: HTMLTextAreaElement | null) {
+  input?.blur();
+
+  requestAnimationFrame(() => {
+    window.scrollTo(0, 0);
+  });
 }

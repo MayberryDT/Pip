@@ -10,7 +10,7 @@ describe("agent tool runner", () => {
 
     expect(runAgentTool("explain_free_cash", {}, fakeSnapshot).cards[0]).toMatchObject({
       type: "free_cash_explanation",
-      title: "Why Spendable Cash changed",
+      title: "Why this number changed",
     });
     expect(runAgentTool("simulate_purchase", { amount_cents: 5000 }, fakeSnapshot).cards[0]).toMatchObject({
       type: "purchase_simulation",
@@ -29,6 +29,35 @@ describe("agent tool runner", () => {
       protectedSavingsMonthlyCents: result.protectedSavingsMonthlyCents,
       rollingNetCents: result.rollingNetCents,
       dayCount: result.window.dayCount,
+    });
+    expect(runAgentTool("compose_insight_card", { topic: "payday_impact" }, fakeSnapshot).cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "Payday impact",
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          id: "income",
+          amountCents: result.incomeTotalCents,
+        }),
+        expect.objectContaining({
+          id: "today",
+          amountCents: result.freeCashTodayCents,
+        }),
+      ]),
+    });
+    expect(runAgentTool("compose_insight_card", { topic: "spendable_factors" }, fakeSnapshot).cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "What affects today",
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          id: "income",
+        }),
+        expect.objectContaining({
+          id: "spending",
+        }),
+        expect.objectContaining({
+          id: "protected-savings",
+        }),
+      ]),
     });
     expect(runAgentTool("detect_missing_card", {}, fakeSnapshot).cards[0]).toMatchObject({
       type: "missing_card_nudge",
@@ -82,7 +111,7 @@ describe("agent tool runner", () => {
       type: "connect_account",
       title: "Connect or repair data",
       detail:
-        "Ask me in chat to connect Plaid, repair a stale bank connection, or add the card that is missing from Spendable Cash.",
+        "Ask me in chat to connect Plaid, repair a stale bank connection, or add the card that is missing from Spendable Cash Today.",
     });
   });
 

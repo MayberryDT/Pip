@@ -7,6 +7,9 @@ import type {
   TransactionRow,
   UserSettingsRow,
 } from "@/lib/supabase/database.types";
+import { getCurrentAppDate } from "@/lib/date/app-date";
+
+export { getCurrentAppDate } from "@/lib/date/app-date";
 
 export async function loadFinancialSnapshotForUser(
   supabase: SupabaseClient<Database>,
@@ -63,11 +66,13 @@ export async function loadFinancialSnapshotForUser(
 export async function loadCachedFreeCashResultForUser(
   supabase: SupabaseClient<Database>,
   userId: string,
+  asOfDate = getCurrentAppDate(),
 ): Promise<FreeCashResult | null> {
   const { data, error } = await supabase
     .from("free_cash_snapshots")
     .select("result")
     .eq("user_id", userId)
+    .eq("as_of_date", asOfDate)
     .eq("stale", false)
     .order("created_at", { ascending: false })
     .limit(1);
@@ -137,7 +142,7 @@ export function mapUserSettingsRow(
   suppressedMissingCardIssuers: string[] = [],
 ): UserSettings {
   return {
-    asOfDate: new Date().toISOString().slice(0, 10),
+    asOfDate: getCurrentAppDate(),
     protectedSavingsMonthlyCents: row.protected_savings_monthly_cents,
     suppressedMissingCardIssuers,
   };

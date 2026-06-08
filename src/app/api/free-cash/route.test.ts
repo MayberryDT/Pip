@@ -69,7 +69,7 @@ describe("GET /api/free-cash", () => {
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
       code: "no-financial-data",
-      error: "Connect financial data before using live Spendable Cash.",
+      error: "Connect financial data before using live Spendable Cash Today.",
     });
   });
 });

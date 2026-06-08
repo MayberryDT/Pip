@@ -82,7 +82,7 @@ function writeProofReport({ path, env, requiresPlaid, stdout }) {
     plaidAutomationEnabled: env.SPENDABLE_LIVE_COMPLETE_PLAID === "1",
     command: "npm run test:e2e:live:final",
     evidence:
-      "The live Playwright smoke passed against production with authenticated session, Plaid exchange/sync/status checks, Free Cash number, and deployed AI tool usage assertions.",
+      "The live Playwright smoke passed against production with authenticated session, Plaid exchange/sync/status checks, Spendable Cash Today number, and deployed AI tool usage assertions.",
   };
 
   writeFileSync(path, `${JSON.stringify(report, null, 2)}\n`);

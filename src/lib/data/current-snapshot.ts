@@ -10,7 +10,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export class NoFinancialDataError extends Error {
-  constructor(message = "Connect financial data before using live Spendable Cash.") {
+  constructor(message = "Connect financial data before using live Spendable Cash Today.") {
     super(message);
     this.name = "NoFinancialDataError";
   }

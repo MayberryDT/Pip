@@ -47,6 +47,7 @@ describe("Supabase financial-data schema", () => {
       missing_card_preferences: ["select", "insert", "delete"],
       product_events: ["select", "insert", "delete"],
       data_deletion_requests: ["select", "insert"],
+      agent_chat_turns: ["select", "insert"],
     };
 
     Object.entries(policyMatrix).forEach(([tableName, operations]) => {

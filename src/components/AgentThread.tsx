@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { AgentResponse } from "@/lib/agent/card-types";
+import { PipAvatar } from "@/components/brand/PipAvatar";
 import { CardRenderer } from "@/components/cards/CardRenderer";
 
 export type AgentThreadItem = {
@@ -59,17 +60,20 @@ export function AgentThread({
             {item.userText}
           </div>
           {item.response ? (
-            <div className="chat-message-in chat-message-in-delay space-y-3">
-              <p className="glass-panel font-display px-5 py-4 text-[1.35rem] leading-[1.32] text-ink max-[380px]:text-[1.18rem]">
-                {item.response.message}
-              </p>
-              {item.response.cards.map((card, index) => (
-                <CardRenderer
-                  key={`${item.id}-${card.type}-${index}`}
-                  card={card}
-                  onSuppressMissingCard={onSuppressMissingCard}
-                />
-              ))}
+            <div className="chat-message-in chat-message-in-delay flex items-start gap-3">
+              <PipAvatar size="sm" expression="happy" ariaLabel="Pip" />
+              <div className="min-w-0 flex-1 space-y-3">
+                <p className="glass-panel px-4 py-3 text-sm font-medium leading-6 text-ink/[0.82]">
+                  {item.response.message}
+                </p>
+                {item.response.cards.map((card, index) => (
+                  <CardRenderer
+                    key={`${item.id}-${card.type}-${index}`}
+                    card={card}
+                    onSuppressMissingCard={onSuppressMissingCard}
+                  />
+                ))}
+              </div>
             </div>
           ) : item.isPending ? (
             <ThinkingBubble />
@@ -86,18 +90,21 @@ export function AgentThread({
 
 function ThinkingBubble() {
   return (
-    <div
-      className="chat-message-in glass-panel inline-flex items-center gap-3 px-5 py-4 text-sm font-semibold text-taupe"
-      data-testid="agent-thinking"
-      role="status"
-      aria-live="polite"
-    >
-      <span>Thinking</span>
-      <span className="inline-flex items-center gap-1" aria-hidden="true">
-        <span className="thinking-dot" />
-        <span className="thinking-dot thinking-dot-delay-1" />
-        <span className="thinking-dot thinking-dot-delay-2" />
-      </span>
+    <div className="chat-message-in chat-message-in-delay flex items-start gap-3">
+      <PipAvatar size="sm" expression="happy" ariaLabel="Pip" />
+      <div
+        className="glass-panel inline-flex items-center gap-3 px-5 py-4 text-sm font-semibold text-taupe"
+        data-testid="agent-thinking"
+        role="status"
+        aria-live="polite"
+      >
+        <span>Thinking</span>
+        <span className="inline-flex items-center gap-1" aria-hidden="true">
+          <span className="thinking-dot" />
+          <span className="thinking-dot thinking-dot-delay-1" />
+          <span className="thinking-dot thinking-dot-delay-2" />
+        </span>
+      </div>
     </div>
   );
 }

@@ -27,6 +27,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
   }
 
+  let userId: string | null = null;
+  let institutionName = "Plaid institution";
+
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -38,6 +41,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
     }
 
+    userId = user.id;
     const body = await request.json().catch(() => null);
     const parsed = exchangeSchema.safeParse(body);
 
@@ -51,7 +55,7 @@ export async function POST(request: Request) {
       public_token: parsed.data.publicToken,
     });
     const admin = createSupabaseAdminClient();
-    const institutionName = parsed.data.metadata?.institution?.name ?? "Plaid institution";
+    institutionName = parsed.data.metadata?.institution?.name ?? "Plaid institution";
     const institution = await upsertPlaidInstitution(admin, {
       userId: user.id,
       institutionName,
@@ -71,6 +75,10 @@ export async function POST(request: Request) {
       status: "item-exchanged",
       institutionName,
     });
+    await recordProductEventSafely(admin, user.id, "plaid_exchange_succeeded", {
+      provider: "plaid",
+      institutionName,
+    });
 
     return NextResponse.json({
       status: "connected",
@@ -78,6 +86,14 @@ export async function POST(request: Request) {
       institutionName,
     });
   } catch (error) {
+    if (userId) {
+      await recordProductEventSafely(createSupabaseAdminClient(), userId, "plaid_exchange_failed", {
+        provider: "plaid",
+        institutionName,
+        error: getSafeErrorMessage(error, "Plaid exchange request failed."),
+      });
+    }
+
     return NextResponse.json(toErrorBody(error), { status: 500 });
   }
 }

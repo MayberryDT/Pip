@@ -12,7 +12,7 @@ describe("Spendable Cash explanation primitives", () => {
     expect(summary).toContain("$4,200 income");
     expect(summary).toContain("-$2,624 spending");
     expect(summary).toContain("-$243 protected savings");
-    expect(summary).toContain("rolling calendar-month window");
+    expect(summary).not.toContain("rolling calendar-month window");
     expect(summary).not.toContain("Trailhead Apartments");
     expect(summary).not.toContain("City Market");
     expect(summary).not.toContain("Copper Cup");
@@ -26,10 +26,10 @@ describe("Spendable Cash explanation primitives", () => {
 
   it("falls back to spending pressure or income depending on the aggregate result", () => {
     expect(getPrimaryDriver(calculateFreeCash(spendingSnapshot))).toBe(
-      "Spending in the current window is the biggest pressure on Spendable Cash.",
+      "Spending in the current window is the biggest pressure on Spendable Cash Today.",
     );
     expect(getPrimaryDriver(calculateFreeCash(incomeOnlySnapshot))).toBe(
-      "Income is carrying the current Spendable Cash number.",
+      "Income is carrying the current Spendable Cash Today number.",
     );
   });
 });

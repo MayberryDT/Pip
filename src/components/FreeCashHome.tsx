@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
 import type {
   AgentClientAction,
   AgentResponse,
@@ -9,9 +10,11 @@ import type {
 } from "@/lib/agent/card-types";
 import {
   getOnboardingPromptChips,
-  getSuggestedPrompts,
 } from "@/lib/agent/suggested-prompts";
 import {
+  canRefreshData,
+  getRefreshProvider,
+  shouldRefreshConnectedDataForToday,
   type FinancialProvider,
   type SyncStatusResponse,
 } from "@/components/data-controls-helpers";
@@ -21,8 +24,10 @@ import { formatMoney } from "@/lib/money";
 import type { FreeCashResult } from "@/lib/types";
 import { AgentInput } from "@/components/AgentInput";
 import { AgentThread } from "@/components/AgentThread";
+import { PipAvatar } from "@/components/brand/PipAvatar";
 import { PromptChips } from "@/components/PromptChips";
 import { openPlaidLink } from "@/lib/providers/plaid/link-browser";
+import type { PlaidEventMetadata } from "@/lib/providers/plaid/link-browser";
 
 type ThreadItem = {
   id: string;
@@ -63,14 +68,22 @@ export function FreeCashHome({
   const [serverErrorText, setServerErrorText] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatusResponse | null>(null);
   const [hasLoadedServerState, setHasLoadedServerState] = useState(false);
+  const [backendReloadKey, setBackendReloadKey] = useState(0);
+  const [hasAttemptedDailyRefresh, setHasAttemptedDailyRefresh] = useState(false);
   const isOnboarding = authState?.status === "guest" || authState?.status === "needs-consent";
   const result = isOnboarding ? null : enableAccountControls ? serverResult : localResult;
   const hasLoadedServerResult = Boolean(result);
   const freeCashTodayCents = result?.freeCashTodayCents;
   const [thread, setThread] = useState<ThreadItem[]>([]);
   const [chips, setChips] = useState<PromptChip[]>(() =>
-    getDefaultPromptChips(authState, enableAccountControls, null, localResult),
+    getDefaultPromptChips(authState, enableAccountControls, null),
   );
+  const [chipHistory, setChipHistory] = useState<PromptChip[]>(() =>
+    getDefaultPromptChips(authState, enableAccountControls, null),
+  );
+  const promptChipRequestKeyRef = useRef<string | null>(null);
+  const lastNonEmptyChipsRef = useRef<PromptChip[]>(chips);
+  const [promptChipRefreshSequence, setPromptChipRefreshSequence] = useState(0);
   const [isSending, setIsSending] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const hasConversation = thread.length > 0;
@@ -113,7 +126,7 @@ export function FreeCashHome({
           setServerErrorText(
             payload && typeof payload.error === "string"
               ? payload.error
-              : "Connect financial data before using live Spendable Cash.",
+              : "Connect financial data before using live Spendable Cash Today.",
           );
           setHasLoadedServerState(true);
         }
@@ -145,15 +158,130 @@ export function FreeCashHome({
     return () => {
       ignore = true;
     };
-  }, [enableAccountControls, scenario]);
+  }, [backendReloadKey, enableAccountControls, scenario]);
 
   useEffect(() => {
-    setChips(getDefaultPromptChips(authState, enableAccountControls, result, localResult));
+    if (
+      !enableAccountControls ||
+      authState?.status !== "ready" ||
+      !syncStatus ||
+      hasAttemptedDailyRefresh ||
+      !shouldRefreshConnectedDataForToday(syncStatus)
+    ) {
+      return;
+    }
+
+    const provider = getRefreshProvider(syncStatus);
+
+    if (!provider || !canRefreshData(syncStatus)) {
+      return;
+    }
+
+    setHasAttemptedDailyRefresh(true);
+    void runRefreshFromChat(provider, "manual")
+      .then(() => {
+        setBackendReloadKey((current) => current + 1);
+      })
+      .catch(() => {
+        setBackendReloadKey((current) => current + 1);
+      });
+  }, [authState?.status, enableAccountControls, hasAttemptedDailyRefresh, syncStatus]);
+
+  useEffect(() => {
+    if (hasConversation) {
+      return;
+    }
+
+    const defaultChips = getDefaultPromptChips(authState, enableAccountControls, result);
+
+    setChips(defaultChips);
+    setChipHistory(defaultChips);
 
     if (!enableAccountControls) {
       setThread([]);
     }
-  }, [authState, enableAccountControls, localResult, result]);
+  }, [authState, enableAccountControls, hasConversation, localResult, result]);
+
+  useEffect(() => {
+    if (chips.length > 0) {
+      lastNonEmptyChipsRef.current = chips;
+    }
+  }, [chips]);
+
+  useEffect(() => {
+    if (
+      isOnboarding ||
+      !result ||
+      (chips.length >= 3 && promptChipRefreshSequence === 0) ||
+      !conversationId ||
+      isSending
+    ) {
+      return;
+    }
+
+    const latestThreadItem = thread.at(-1);
+    const latestThreadFingerprint = latestThreadItem
+      ? [
+          thread.length,
+          latestThreadItem.id,
+          latestThreadItem.response?.message ?? latestThreadItem.errorText ?? latestThreadItem.userText,
+        ].join(":")
+      : "home";
+
+    const requestKey = [
+      authState?.status ?? "demo",
+      enableAccountControls ? "live" : "demo",
+      scenario,
+      result.window.endDate,
+      result.freeCashTodayCents,
+      latestThreadFingerprint,
+      promptChipRefreshSequence,
+    ].join("|");
+
+    if (promptChipRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    let ignore = false;
+    promptChipRequestKeyRef.current = requestKey;
+
+    void fetchAgentResponse(
+      "Create prompt chips for the current Pip screen.",
+      scenario,
+      thread,
+      chips,
+      chipHistory,
+      conversationId,
+      undefined,
+      "prompt_chips",
+    )
+      .then((response) => {
+        if (ignore || response.promptChips.length === 0) {
+          return;
+        }
+
+        setChips(response.promptChips);
+        setChipHistory((current) => mergePromptChipHistory(current, response.promptChips));
+        setPromptChipRefreshSequence(0);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      ignore = true;
+    };
+  }, [
+    authState?.status,
+    chipHistory,
+    chips,
+    conversationId,
+    enableAccountControls,
+    isOnboarding,
+    isSending,
+    promptChipRefreshSequence,
+    result,
+    scenario,
+    thread,
+  ]);
 
   async function submitPrompt(message: string, selectedPromptChipId?: string) {
     if (isSending) {
@@ -162,6 +290,7 @@ export function FreeCashHome({
 
     const itemId = createThreadItemId();
     const historyBeforeSend = thread;
+    const chipHistoryBeforeSend = mergePromptChipHistory(chipHistory, chips);
 
     setThread((current) => [
       ...current,
@@ -178,6 +307,8 @@ export function FreeCashHome({
         message,
         scenario,
         historyBeforeSend,
+        chips,
+        chipHistoryBeforeSend,
         conversationId ?? createConversationId(),
         selectedPromptChipId,
       );
@@ -193,7 +324,21 @@ export function FreeCashHome({
             : item,
         ),
       );
-      setChips(response.promptChips);
+      const nextVisibleChips = getNextVisiblePromptChips(
+        response.promptChips,
+        chips,
+        lastNonEmptyChipsRef.current,
+      );
+
+      setChips(nextVisibleChips);
+      setChipHistory((current) =>
+        mergePromptChipHistory(current, chips, nextVisibleChips, response.promptChips),
+      );
+
+      if (response.promptChips.length < 3) {
+        setPromptChipRefreshSequence((current) => current + 1);
+      }
+
       await executeClientAction(response.clientAction);
     } catch (error) {
       setThread((current) =>
@@ -201,6 +346,7 @@ export function FreeCashHome({
           item.id === itemId
             ? {
                 ...item,
+                response: undefined,
                 errorText: getAgentErrorText(error),
                 isPending: false,
               }
@@ -284,18 +430,26 @@ export function FreeCashHome({
     <main className="free-cash-app-shell h-[100dvh] overflow-hidden px-5 py-5 text-ink sm:px-6">
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[430px] flex-col">
         <section className={hasConversation ? "spendable-hero is-chatting" : "spendable-hero"}>
-          <p className="spendable-label">
-            Spendable Cash
-          </p>
-          <h1
+          <h1 className="pip-brand-title">
+            <span className="sr-only">Pip</span>
+            <img
+              className="pip-wordmark-image"
+              src="/brand/pip-wordmark.png"
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+            />
+          </h1>
+          <p className="spendable-label">Spendable Cash Today</p>
+          <div
             className="spendable-number"
             data-testid="free-cash-number"
           >
             {result ? formatMoney(result.freeCashTodayCents) : "$--"}
-          </h1>
+          </div>
         </section>
 
-        <section className="mt-6 flex min-h-0 flex-1 flex-col max-[380px]:mt-5">
+        <section className={hasConversation ? "mt-3 flex min-h-0 flex-1 flex-col" : "mt-6 flex min-h-0 flex-1 flex-col max-[380px]:mt-5"}>
           {isOnboarding && thread.length === 0 ? (
             <OnboardingIntro authNotice={authNotice} authState={authState} />
           ) : isCheckingLiveData && thread.length === 0 ? (
@@ -303,7 +457,7 @@ export function FreeCashHome({
           ) : isReadyWithoutData && thread.length === 0 ? (
             <ReadyIntro connectionNotice={connectionNotice} variant="needs-data" />
           ) : thread.length === 0 ? (
-            <DefaultInsightCards connectionNotice={connectionNotice} result={result} />
+            <DefaultAssistantIntro connectionNotice={connectionNotice} result={result} />
           ) : (
             <AgentThread
               thread={thread}
@@ -345,34 +499,106 @@ export function FreeCashHome({
   }
 
   async function completePlaidClientAction(plaid: PlaidClientActionConfig) {
-    const connection = await openPlaidLink(plaid);
+    await trackPlaidClientEvent("plaid_link_started", {
+      mode: plaid.mode ?? "connect",
+      environment: plaid.environment,
+      surface: "chat",
+    });
+
+    let connection;
+
+    try {
+      connection = await openPlaidLink(plaid, {
+        onEvent: (eventName, metadata) => {
+          void trackPlaidLinkEvent(eventName, metadata, plaid, "chat");
+        },
+      });
+      await trackPlaidClientEvent("plaid_link_succeeded", {
+        mode: plaid.mode ?? "connect",
+        environment: plaid.environment,
+        surface: "chat",
+        institutionName: connection.metadata.institution?.name ?? null,
+        institutionId: connection.metadata.institution?.institution_id ?? null,
+      });
+    } catch (error) {
+      await trackPlaidClientEvent("plaid_link_failed", {
+        mode: plaid.mode ?? "connect",
+        environment: plaid.environment,
+        surface: "chat",
+        errorMessage: getClientErrorMessage(error),
+      });
+      throw error;
+    }
 
     if (plaid.mode === "repair") {
-      await runRefreshFromChat("plaid", "repair");
+      await runPlaidRefreshWithTelemetry("repair");
       return;
     }
 
     if (!connection.publicToken) {
+      await trackPlaidClientEvent("plaid_exchange_failed", {
+        mode: plaid.mode ?? "connect",
+        environment: plaid.environment,
+        surface: "chat",
+        errorMessage: "Plaid did not return a public token.",
+      });
       throw new Error("Plaid did not return a public token.");
     }
 
-    const exchangeResponse = await fetch("/api/providers/plaid/exchange", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        publicToken: connection.publicToken,
-        metadata: connection.metadata,
-      }),
-    });
-    const exchangePayload = await exchangeResponse.json().catch(() => null);
+    try {
+      const exchangeResponse = await fetch("/api/providers/plaid/exchange", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          publicToken: connection.publicToken,
+          metadata: connection.metadata,
+        }),
+      });
+      const exchangePayload = await exchangeResponse.json().catch(() => null);
 
-    if (!exchangeResponse.ok) {
-      throw new Error(getErrorMessage(exchangePayload, "Plaid exchange failed."));
+      if (!exchangeResponse.ok) {
+        throw new Error(getErrorMessage(exchangePayload, "Plaid exchange failed."));
+      }
+
+      await trackPlaidClientEvent("plaid_exchange_succeeded", {
+        mode: plaid.mode ?? "connect",
+        environment: plaid.environment,
+        surface: "chat",
+        institutionName: connection.metadata.institution?.name ?? null,
+        institutionId: connection.metadata.institution?.institution_id ?? null,
+      });
+    } catch (error) {
+      await trackPlaidClientEvent("plaid_exchange_failed", {
+        mode: plaid.mode ?? "connect",
+        environment: plaid.environment,
+        surface: "chat",
+        institutionName: connection.metadata.institution?.name ?? null,
+        institutionId: connection.metadata.institution?.institution_id ?? null,
+        errorMessage: getClientErrorMessage(error),
+      });
+      throw error;
     }
 
-    await runRefreshFromChat("plaid");
+    await runPlaidRefreshWithTelemetry("manual");
+  }
+
+  async function runPlaidRefreshWithTelemetry(reason: "manual" | "repair") {
+    try {
+      await runRefreshFromChat("plaid", reason);
+      await trackPlaidClientEvent("plaid_sync_succeeded", {
+        reason,
+        surface: "chat",
+      });
+    } catch (error) {
+      await trackPlaidClientEvent("plaid_sync_failed", {
+        reason,
+        surface: "chat",
+        errorMessage: getClientErrorMessage(error),
+      });
+      throw error;
+    }
   }
 
   async function runRefreshFromChat(provider: FinancialProvider, reason: "manual" | "repair" = "manual") {
@@ -407,11 +633,14 @@ function OnboardingIntro({
     return (
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
         <section className="glass-panel px-6 py-4">
+          <div className="mb-4">
+            <PipAvatar size="sm" expression="reassuring" ariaLabel="Pip" />
+          </div>
           <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
             Welcome back. Step 2 is choosing protected savings.
           </p>
           <p className="mt-3 text-sm leading-6 text-ink/[0.66]">
-            This is money I keep out of Spendable Cash before answering spending questions. Choose a
+            This is money I keep out of Spendable Cash Today before answering spending questions. Choose a
             monthly amount now, or tap Use $200 to keep going.
           </p>
         </section>
@@ -423,13 +652,17 @@ function OnboardingIntro({
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
       <section className="glass-panel px-6 py-4">
         {authNotice ? <AuthNotice /> : null}
-        <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
-          Welcome to Spendable. Your Spendable Cash number starts here.
-        </p>
-        <p className="mt-3 text-sm leading-6 text-ink/[0.66]">
-          I’ll walk you through setup right here: sign in, choose protected savings, connect your
-          account data, then I’ll calculate Spendable Cash.
-        </p>
+        <div className="flex items-start gap-4">
+          <PipAvatar size="sm" expression="happy" ariaLabel="Pip" />
+          <div>
+            <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
+              Hi, I’m Pip. I’ll show what’s actually spendable today.
+            </p>
+            <p className="mt-3 text-sm leading-6 text-ink/[0.66]">
+              Sign in, choose protected savings, and connect account data here in chat.
+            </p>
+          </div>
+        </div>
       </section>
     </div>
   );
@@ -455,8 +688,11 @@ function ReadyIntro({
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
         {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
         <section className="glass-panel px-6 py-4">
+          <div className="mb-4">
+            <PipAvatar size="sm" expression="neutral" ariaLabel="Pip" />
+          </div>
           <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
-            Welcome back. I’m checking for connected data.
+            I’m checking for connected data.
           </p>
           <p className="mt-3 text-sm leading-6 text-ink/[0.66]">
             If nothing is connected yet, I’ll start the next step here in chat.
@@ -470,55 +706,57 @@ function ReadyIntro({
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
       <section className="glass-panel px-6 py-4">
         {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
-        <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
-          You’re signed in. Step 3 is connecting your data.
-        </p>
-        <p className="mt-3 text-sm leading-6 text-ink/[0.66]">
-          Tap Connect data and I’ll open Plaid. After your accounts sync, Spendable turns the real
-          balances and transactions into one Spendable Cash number.
-        </p>
-      </section>
-
-      <section className="glass-panel px-6 py-4">
-        <p className="text-xs font-bold uppercase tracking-normal text-taupe">What happens next</p>
-        <p className="font-display mt-3 text-[1.34rem] leading-[1.3] text-ink max-[380px]:text-[1.18rem]">
-          You can ask why the number changed, whether a purchase fits, or what data is missing.
-        </p>
+        <div className="flex items-start gap-4">
+          <PipAvatar size="sm" expression="happy" ariaLabel="Pip" />
+          <div>
+            <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
+              Connect your data and I’ll calculate Spendable Cash Today.
+            </p>
+            <p className="mt-3 text-sm leading-6 text-ink/[0.66]">
+              Tap Connect data and I’ll open Plaid. Then you can ask why the number changed or whether a purchase fits.
+            </p>
+          </div>
+        </div>
       </section>
     </div>
   );
 }
 
-function DefaultInsightCards({
+function DefaultAssistantIntro({
   connectionNotice,
   result,
 }: {
   connectionNotice?: "plaid-connected";
   result: FreeCashResult | null;
 }) {
-  const amount = result ? formatMoney(result.freeCashTodayCents) : "Spendable Cash";
+  const isNegative = Boolean(result && result.freeCashTodayCents < 0);
+  const overAmount = result ? formatMoney(Math.abs(Math.min(result.freeCashTodayCents, 0))) : "";
 
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
       {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
-      <section className="glass-panel px-6 py-4">
-        <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
-          {result
-            ? `Good morning. You have ${amount} in spendable cash.`
-            : "Connect data to calculate Spendable Cash."}
-        </p>
-        <p className="font-display mt-3 text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
-          {result ? "Here's what's behind that number." : "Then ask what's behind the number."}
-        </p>
-      </section>
-
-      <section className="glass-panel px-6 py-4">
-        <p className="text-xs font-bold uppercase tracking-normal text-taupe">Temporary insight</p>
-        <p className="font-display mt-3 text-[1.34rem] leading-[1.3] text-ink max-[380px]:text-[1.18rem]">
-          It's based on what's real, what's due, and what you've told me matters.
-        </p>
-        <p className="mt-3 text-sm font-medium text-taupe">Updated throughout the day</p>
-      </section>
+      <div className="assistant-intro-stack">
+        <section className="glass-panel assistant-intro-message px-5 py-4">
+          <p className="font-display text-[1.28rem] leading-[1.32] text-ink max-[380px]:text-[1.16rem]">
+            {isNegative
+              ? `You’re ${overAmount} over today. Ask why to see what caused it.`
+              : "Hi, I’m Pip. I’ll show what’s actually spendable today."}
+          </p>
+        </section>
+        <div className="assistant-intro-character" role="img" aria-label="Pip">
+          <Image
+            src="/brand/pip-waving.png"
+            alt=""
+            aria-hidden="true"
+            width={416}
+            height={484}
+            sizes="160px"
+            className="assistant-intro-character-image"
+            draggable={false}
+            priority
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -528,7 +766,7 @@ function PlaidConnectedNotice() {
     <section className="glass-panel px-6 py-4">
       <p className="text-xs font-bold uppercase tracking-normal text-taupe">Plaid connected</p>
       <p className="font-display mt-3 text-[1.34rem] leading-[1.3] text-ink max-[380px]:text-[1.18rem]">
-        Your account data connected successfully. I’m using it here to calculate Spendable Cash.
+        Your account data connected successfully. I’m using it here to calculate Spendable Cash Today.
       </p>
     </section>
   );
@@ -536,21 +774,20 @@ function PlaidConnectedNotice() {
 
 function getInputPlaceholder(authState: SpendableAuthState | undefined): string {
   if (authState?.status === "guest") {
-    return "Ask or continue with Google...";
+    return "Ask Pip anything...";
   }
 
   if (authState?.status === "needs-consent") {
     return "Protected savings, e.g. 200...";
   }
 
-  return "Ask anything...";
+  return "Ask Pip anything...";
 }
 
 function getDefaultPromptChips(
   authState: SpendableAuthState | undefined,
   enableAccountControls: boolean,
   result: FreeCashResult | null,
-  localResult: FreeCashResult,
 ): PromptChip[] {
   if (authState?.status === "guest" || authState?.status === "needs-consent") {
     return getOnboardingPromptChips({
@@ -566,7 +803,7 @@ function getDefaultPromptChips(
     });
   }
 
-  return getSuggestedPrompts(result ?? localResult);
+  return [];
 }
 
 function getErrorMessage(payload: unknown, fallback: string): string {
@@ -581,8 +818,11 @@ async function fetchAgentResponse(
   message: string,
   scenario: FakeDataScenario,
   thread: ThreadItem[],
+  visibleChips: PromptChip[],
+  chipHistory: PromptChip[],
   conversationId: string,
   selectedPromptChipId?: string,
+  requestKind: "chat" | "prompt_chips" = "chat",
 ): Promise<AgentResponse> {
   const response = await fetch("/api/agent", {
     method: "POST",
@@ -591,11 +831,12 @@ async function fetchAgentResponse(
     },
     body: JSON.stringify({
       message,
+      requestKind,
       conversationId,
       scenario,
       selectedPromptChipId,
       history: getThreadHistory(thread),
-      conversationState: getConversationState(thread),
+      conversationState: getConversationState(thread, visibleChips, chipHistory),
     }),
   });
 
@@ -630,7 +871,11 @@ function getThreadHistory(thread: ThreadItem[]) {
   }).slice(-8);
 }
 
-function getConversationState(thread: ThreadItem[]) {
+function getConversationState(
+  thread: ThreadItem[],
+  visibleChips: PromptChip[],
+  chipHistory: PromptChip[],
+) {
   const shownCards = thread
     .flatMap((item) => item.response?.cards ?? [])
     .map((card) => ({
@@ -641,11 +886,51 @@ function getConversationState(thread: ThreadItem[]) {
   const lastToolNames = thread
     .flatMap((item) => item.response?.usedTools ?? item.response?.audit.toolNames ?? [])
     .slice(-8);
+  const promptChips = [
+    ...chipHistory,
+    ...thread.flatMap((item) => item.response?.promptChips ?? []),
+    ...visibleChips,
+  ].slice(-24);
 
   return {
     shownCards,
     lastToolNames,
+    promptChips,
   };
+}
+
+function mergePromptChipHistory(...chipSets: PromptChip[][]): PromptChip[] {
+  const merged: PromptChip[] = [];
+  const seen = new Set<string>();
+
+  chipSets.flat().forEach((chip) => {
+    const key = `${chip.label.toLowerCase()}|${chip.prompt.toLowerCase()}`;
+
+    if (seen.has(key)) {
+      return;
+    }
+
+    seen.add(key);
+    merged.push(chip);
+  });
+
+  return merged.slice(-24);
+}
+
+function getNextVisiblePromptChips(
+  responseChips: PromptChip[],
+  currentChips: PromptChip[],
+  lastNonEmptyChips: PromptChip[],
+): PromptChip[] {
+  if (responseChips.length > 0) {
+    return responseChips;
+  }
+
+  if (currentChips.length > 0) {
+    return currentChips;
+  }
+
+  return lastNonEmptyChips;
 }
 
 function getAgentErrorText(error: unknown): string {
@@ -654,6 +939,57 @@ function getAgentErrorText(error: unknown): string {
   }
 
   return "AI request failed.";
+}
+
+function getClientErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message.slice(0, 180);
+  }
+
+  return "Unknown client error.";
+}
+
+export const __freeCashHomeTestHooks = {
+  getNextVisiblePromptChips,
+};
+
+function getPlaidEventProperties(
+  eventName: string,
+  metadata: PlaidEventMetadata | undefined,
+  plaid: PlaidClientActionConfig,
+  surface: "chat" | "oauth_resume",
+): Record<string, string | number | boolean | null> {
+  return {
+    eventName: eventName.slice(0, 80),
+    mode: plaid.mode ?? "connect",
+    environment: plaid.environment,
+    surface,
+    errorCode: metadata?.error_code?.slice(0, 80) ?? null,
+    errorMessage: metadata?.error_message?.slice(0, 180) ?? null,
+    exitStatus: metadata?.exit_status?.slice(0, 80) ?? null,
+    institutionName: metadata?.institution_name?.slice(0, 120) ?? null,
+    institutionId: metadata?.institution_id?.slice(0, 120) ?? null,
+    linkSessionId: metadata?.link_session_id?.slice(0, 120) ?? null,
+    requestId: metadata?.request_id?.slice(0, 120) ?? null,
+    status: metadata?.status?.slice(0, 80) ?? null,
+    viewName: metadata?.view_name?.slice(0, 80) ?? null,
+  };
+}
+
+async function trackPlaidLinkEvent(
+  eventName: string,
+  metadata: PlaidEventMetadata | undefined,
+  plaid: PlaidClientActionConfig,
+  surface: "chat" | "oauth_resume",
+) {
+  await trackProductEvent("plaid_link_event", getPlaidEventProperties(eventName, metadata, plaid, surface));
+}
+
+async function trackPlaidClientEvent(
+  eventName: string,
+  properties: Record<string, string | number | boolean | null>,
+) {
+  await trackProductEvent(eventName, properties);
 }
 
 function createThreadItemId(): string {

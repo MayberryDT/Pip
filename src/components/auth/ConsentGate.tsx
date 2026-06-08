@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { PipAvatar } from "@/components/brand/PipAvatar";
 
 export function ConsentGate({ email }: { email: string }) {
   const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
@@ -39,15 +40,15 @@ export function ConsentGate({ email }: { email: string }) {
   return (
     <main className="grid min-h-screen place-items-center bg-paper px-4 text-ink">
       <section className="w-full max-w-sm">
-        <h1 className="text-4xl font-semibold tracking-normal">Before real data</h1>
+        <PipAvatar size="md" expression="reassuring" ariaLabel="Pip" />
+        <h1 className="font-display mt-5 text-4xl font-normal tracking-normal">Before real data</h1>
         <p className="mt-5 text-sm leading-6 text-ink/[0.66]">
-          Spendable stores normalized financial data, provider tokens on the server, and product
-          events needed to support the product. It never stores bank credentials or moves
-          money.
+          This beta stores normalized financial data, provider tokens on the server, and product events
+          needed to support the product. It never stores bank credentials or moves money.
         </p>
         <p className="mt-4 text-sm leading-6 text-ink/[0.66]">
-          Connecting checking accounts and cards makes Spendable more accurate because card spend
-          can be counted before a payment settles.
+          Connecting checking accounts and cards makes Spendable Cash Today more accurate because
+          card spend can be counted before a payment settles.
         </p>
         <p className="mt-4 text-xs leading-5 text-ink/50">{email}</p>
         <label className="mt-7 block text-sm font-semibold" htmlFor="onboarding-protected-savings">

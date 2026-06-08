@@ -82,8 +82,8 @@ describe("PRD completion check", () => {
         generatedAt: new Date().toISOString(),
         baseUrl: "https://free-cash-mayberrydt.netlify.app",
         latestVerifiedDeployUrl:
-          "https://6a25e955a8c3e5481d38f722--free-cash-mayberrydt.netlify.app",
-        latestVerifiedDeployId: "6a25e955a8c3e5481d38f722",
+          "https://6a265f4336389d2a1930a78b--free-cash-mayberrydt.netlify.app",
+        latestVerifiedDeployId: "6a265f4336389d2a1930a78b",
         storageStatePath: "/tmp/spendable-live-auth.json",
         plaidAutomationRequired: true,
         plaidAutomationEnabled: true,

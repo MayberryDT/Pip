@@ -147,6 +147,11 @@ function createPlaidProvider(): PlaidProvider {
         accounts,
       },
     }),
+    accountsGet: async () => ({
+      data: {
+        accounts,
+      },
+    }),
     transactionsSync: async () => ({
       data: {
         accounts,

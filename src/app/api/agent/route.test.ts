@@ -152,7 +152,7 @@ describe("POST /api/agent", () => {
       responseMode: "show_card",
       usedTools: ["simulate_purchase"],
     });
-    expect(payload.promptChips).toHaveLength(3);
+    expect(payload.promptChips).toEqual([]);
     expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "Can I spend $12?",
@@ -176,6 +176,47 @@ describe("POST /api/agent", () => {
     );
   });
 
+  it("returns silent prompt chip refreshes without recording a chat turn", async () => {
+    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
+      message: "Ready.",
+      promptChips: [
+        {
+          id: "ai-upcoming-bills",
+          label: "Upcoming bills",
+          prompt: "What bills are coming up?",
+        },
+      ],
+    }));
+
+    const response = await POST(
+      jsonRequest({
+        message: "Create prompt chips for the current Pip screen.",
+        requestKind: "prompt_chips",
+        conversationId: "web-test-conversation",
+      }),
+    );
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.promptChips).toEqual([
+      {
+        id: "ai-upcoming-bills",
+        label: "Upcoming bills",
+        prompt: "What bills are coming up?",
+      },
+    ]);
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestKind: "prompt_chips",
+        snapshot: fakeSnapshot,
+      }),
+    );
+    expect(routeMocks.recordAgentChatTurnSafely).not.toHaveBeenCalled();
+    expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalled();
+  });
+
   it("passes conversation state into the agent so duplicate cards can be suppressed", async () => {
     vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
@@ -192,7 +233,7 @@ describe("POST /api/agent", () => {
           shownCards: [
             {
               type: "free_cash_explanation",
-              title: "Why Spendable Cash changed",
+              title: "Why this number changed",
             },
           ],
           lastToolNames: ["get_free_cash_drivers"],
@@ -217,7 +258,7 @@ describe("POST /api/agent", () => {
           shownCards: [
             {
               type: "free_cash_explanation",
-              title: "Why Spendable Cash changed",
+              title: "Why this number changed",
             },
           ],
           lastToolNames: ["get_free_cash_drivers"],
@@ -440,23 +481,7 @@ function createAgentResponse(
   return {
     message: "Model-authored test response.",
     cards: [],
-    promptChips: [
-      {
-        id: "why",
-        label: "Why this number?",
-        prompt: "Why this number?",
-      },
-      {
-        id: "math",
-        label: "Show math",
-        prompt: "Show the math",
-      },
-      {
-        id: "transactions",
-        label: "Recent transactions",
-        prompt: "Show recent transactions",
-      },
-    ],
+    promptChips: [],
     usedTools,
     responseMode: "chat_only",
     ...overrides,

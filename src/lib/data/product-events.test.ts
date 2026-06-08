@@ -43,7 +43,7 @@ describe("agent product event derivation", () => {
       getAgentProductEventNames(
         createAgentResponse({
           type: "missing_card_nudge",
-          title: "Spendable Cash may be missing card spend",
+          title: "Possible missing card",
           detail: "A payment to Capital One appears in checking.",
           issuerName: "Capital One",
         }),

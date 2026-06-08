@@ -12,6 +12,18 @@ export type PlaidSuccessMetadata = {
   };
 };
 
+export type PlaidEventMetadata = {
+  error_code?: string;
+  error_message?: string;
+  exit_status?: string;
+  institution_name?: string;
+  institution_id?: string;
+  link_session_id?: string;
+  request_id?: string;
+  status?: string;
+  view_name?: string;
+};
+
 export type PlaidConnection = {
   publicToken: string | null;
   metadata: PlaidSuccessMetadata;
@@ -32,7 +44,11 @@ declare global {
         token: string;
         receivedRedirectUri?: string;
         onSuccess(publicToken: string | null, metadata: PlaidSuccessMetadata): void;
-        onExit(error: { error_message?: string } | null): void;
+        onExit(
+          error: { error_code?: string; error_message?: string } | null,
+          metadata?: PlaidEventMetadata,
+        ): void;
+        onEvent?(eventName: string, metadata?: PlaidEventMetadata): void;
       }): {
         open(): void;
       };
@@ -45,6 +61,7 @@ export async function openPlaidLink(
   options: {
     receivedRedirectUri?: string;
     persistToken?: boolean;
+    onEvent?: (eventName: string, metadata?: PlaidEventMetadata) => void;
   } = {},
 ): Promise<PlaidConnection> {
   await loadPlaidScript();
@@ -62,13 +79,25 @@ export async function openPlaidLink(
       receivedRedirectUri: options.receivedRedirectUri,
       onSuccess(publicToken, metadata) {
         clearPersistedPlaidLinkToken();
+        options.onEvent?.("SUCCESS", {
+          institution_name: metadata.institution?.name,
+          institution_id: metadata.institution?.institution_id,
+        });
         resolve({
           publicToken,
           metadata,
         });
       },
-      onExit(error) {
+      onExit(error, metadata) {
+        options.onEvent?.("EXIT", {
+          ...metadata,
+          error_code: error?.error_code ?? metadata?.error_code,
+          error_message: error?.error_message ?? metadata?.error_message,
+        });
         reject(new Error(error?.error_message ?? "Plaid Link closed."));
+      },
+      onEvent(eventName, metadata) {
+        options.onEvent?.(eventName, metadata);
       },
     });
 

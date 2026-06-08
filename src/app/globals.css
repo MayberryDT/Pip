@@ -65,6 +65,14 @@ button {
   background: rgba(140, 122, 103, 0.72);
 }
 
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 ::selection {
   background: rgba(180, 151, 105, 0.26);
 }
@@ -93,17 +101,36 @@ button {
   flex-shrink: 0;
   flex-direction: column;
   align-items: center;
-  padding-top: 1.35rem;
+  padding-top: 0.55rem;
   transition:
     padding 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
     opacity 320ms ease;
 }
 
-.spendable-label {
+.pip-brand-title {
+  display: flex;
+  justify-content: center;
+  max-height: 5.25rem;
   margin: 0;
+  overflow: visible;
+  transition:
+    max-height 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    opacity 320ms ease,
+    transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.pip-wordmark-image {
+  display: block;
+  width: min(7.85rem, 39vw);
+  height: auto;
+  user-select: none;
+}
+
+.spendable-label {
+  margin: 0.9rem 0 0;
   color: #6f675f;
   font-family: var(--font-display);
-  font-size: 1.05rem;
+  font-size: 1rem;
   font-weight: 600;
   letter-spacing: 0;
   line-height: 1;
@@ -116,7 +143,7 @@ button {
 }
 
 .spendable-number {
-  margin: 1.25rem 0 0;
+  margin: 1.05rem 0 0;
   color: #2e2d2a;
   font-family: var(--font-display);
   font-size: 7.72rem;
@@ -134,18 +161,25 @@ button {
   padding-top: 0;
 }
 
+.spendable-hero.is-chatting .pip-brand-title {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(-0.72rem) scale(0.96);
+}
+
 .spendable-hero.is-chatting .spendable-label {
   margin-top: 0;
   color: #81766d;
   opacity: 0.72;
-  transform: translateY(-0.08rem);
+  transform: translateY(-0.04rem);
 }
 
 .spendable-hero.is-chatting .spendable-number {
-  margin-top: 0.25rem;
-  font-size: 3.15rem;
+  margin-top: 0.14rem;
+  font-size: 2.62rem;
   opacity: 0.82;
-  transform: translateY(-0.08rem);
+  transform: translateY(-0.04rem);
 }
 
 .glass-panel {
@@ -155,6 +189,61 @@ button {
   box-shadow:
     0 18px 44px rgba(60, 50, 40, 0.07),
     inset 0 1px 0 rgba(255, 255, 255, 0.74);
+  backdrop-filter: blur(14px);
+}
+
+.assistant-intro-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 1rem;
+}
+
+.assistant-intro-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0;
+  padding-top: 0.2rem;
+}
+
+.assistant-intro-character {
+  display: grid;
+  width: min(9.25rem, 36vw);
+  place-items: center;
+  overflow: visible;
+  align-self: flex-start;
+  margin-top: -0.2rem;
+  margin-left: clamp(0.7rem, 5vw, 1.45rem);
+  filter: drop-shadow(0 16px 24px rgba(60, 50, 40, 0.1));
+}
+
+.assistant-intro-character-image {
+  width: 100%;
+  max-width: none;
+  height: auto;
+  object-fit: contain;
+  user-select: none;
+}
+
+.assistant-intro-message {
+  position: relative;
+  width: min(20.25rem, 88%);
+  align-self: flex-end;
+  text-align: left;
+}
+
+.assistant-intro-message::after {
+  position: absolute;
+  bottom: -0.7rem;
+  left: 2.5rem;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-right: 1px solid rgba(232, 221, 209, 0.84);
+  border-bottom: 1px solid rgba(232, 221, 209, 0.84);
+  background: rgba(255, 253, 248, 0.64);
+  content: "";
+  transform: rotate(45deg);
   backdrop-filter: blur(14px);
 }
 
@@ -225,6 +314,7 @@ button {
   .chat-message-in,
   .thinking-dot,
   .spendable-hero,
+  .pip-brand-title,
   .spendable-label,
   .spendable-number {
     animation-duration: 1ms;
@@ -238,11 +328,36 @@ button {
     padding-top: 0.65rem;
   }
 
+  .pip-brand-title {
+    max-height: 4.15rem;
+  }
+
+  .pip-wordmark-image {
+    width: min(7.45rem, 42vw);
+  }
+
   .spendable-number {
     font-size: 6.92rem;
   }
 
   .spendable-hero.is-chatting .spendable-number {
-    font-size: 2.8rem;
+    font-size: 2.42rem;
+  }
+
+  .assistant-intro-stack {
+    padding-top: 0;
+  }
+
+  .assistant-intro-character {
+    width: min(8rem, 34vw);
+    margin-left: 0.8rem;
+  }
+
+  .assistant-intro-message {
+    width: min(19.25rem, 90%);
+  }
+
+  .assistant-intro-message::after {
+    left: 2rem;
   }
 }

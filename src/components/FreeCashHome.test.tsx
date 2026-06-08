@@ -1,22 +1,26 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { FreeCashHome } from "@/components/FreeCashHome";
+import { FreeCashHome, __freeCashHomeTestHooks } from "@/components/FreeCashHome";
+import type { PromptChip } from "@/lib/agent/card-types";
 
 describe("FreeCashHome", () => {
-  it("keeps the themed home surface to one number, insight cards, prompt chips, and the agent input", () => {
+  it("keeps the Pip home surface to one number, assistant intro, and the agent input", () => {
     const markup = renderToStaticMarkup(<FreeCashHome />);
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
     expect(countOccurrences(markup, 'data-testid="free-cash-number"')).toBe(1);
     expect(countOccurrences(markup, 'data-testid="agent-thread"')).toBe(1);
-    expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(1);
+    expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
     expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(1);
-    expect(visibleText).toContain("Spendable Cash");
-    expect(visibleText).not.toContain("Free Cash Today");
+    expect(visibleText).toContain("Pip");
+    expect(visibleText).toContain("Spendable Cash Today");
     expect(visibleText).toContain("$43");
-    expect(visibleText).toContain("Good morning.");
-    expect(visibleText).toContain("Temporary insight");
-    expect(markup).toContain("Ask anything...");
+    expect(visibleText).toContain("Hi, I’m Pip. I’ll show what’s actually spendable today.");
+    expect(markup).toContain("Ask Pip anything...");
+    expect(markup).not.toContain("Why this number?");
+    expect(markup).not.toContain("Can I spend $50?");
+    expect(markup).not.toContain("What changed?");
+    expect(markup).toContain('aria-label="Pip"');
     expect(visibleText).not.toMatch(/\b(balance|dashboard|budget)\b/i);
     expect(markup).not.toMatch(/<nav\b|<table\b|<canvas\b|\brole="(menu|tab|tablist)"/i);
   });
@@ -28,11 +32,12 @@ describe("FreeCashHome", () => {
     expect(markup).toContain("$--");
     expect(markup).not.toContain("$43");
     expect(markup).not.toContain("Can I spend $50?");
+    expect(markup).toContain("Connect data");
     expect(visibleText).not.toContain("Data");
     expect(markup).not.toContain("Data controls");
   });
 
-  it("shows Plaid OAuth completion as a same-screen Spendable message", () => {
+  it("shows Plaid OAuth completion as a same-screen Pip message", () => {
     const markup = renderToStaticMarkup(
       <FreeCashHome
         authState={{ status: "ready", email: "tester@example.com" }}
@@ -47,41 +52,66 @@ describe("FreeCashHome", () => {
     expect(markup).toContain("$--");
   });
 
-  it("keeps guest onboarding inside the Spendable screen without showing fake Spendable Cash", () => {
+  it("keeps guest onboarding inside the Pip screen without showing fake Spendable Cash", () => {
     const markup = renderToStaticMarkup(<FreeCashHome authState={{ status: "guest" }} />);
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
-    expect(visibleText).toContain("Spendable");
-    expect(visibleText).toContain("Spendable Cash");
+    expect(visibleText).toContain("Pip");
+    expect(visibleText).toContain("Spendable Cash Today");
     expect(visibleText).toContain("$--");
-    expect(visibleText).toContain("Your Spendable Cash number starts here.");
-    expect(markup).toContain("Ask or continue with Google...");
+    expect(visibleText).toContain("Hi, I’m Pip. I’ll show what’s actually spendable today.");
+    expect(markup).toContain("Get signed up");
+    expect(markup).toContain("Ask Pip anything...");
     expect(markup).not.toContain("$43");
   });
 
-  it("keeps failed Google auth on the same Spendable screen", () => {
+  it("keeps failed Google auth on the same Pip screen", () => {
     const markup = renderToStaticMarkup(
       <FreeCashHome authNotice="auth-error" authState={{ status: "guest" }} />,
     );
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
     expect(visibleText).toContain("Google sign-in could not finish.");
-    expect(visibleText).toContain("Welcome to Spendable");
-    expect(markup).toContain("Ask or continue with Google...");
+    expect(visibleText).toContain("Hi, I’m Pip.");
+    expect(markup).toContain("Ask Pip anything...");
   });
 
-  it("keeps consent onboarding inside the Spendable screen", () => {
+  it("keeps consent onboarding inside the Pip screen", () => {
     const markup = renderToStaticMarkup(
       <FreeCashHome authState={{ status: "needs-consent", email: "tester@example.com" }} />,
     );
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
-    expect(visibleText).toContain("Spendable");
+    expect(visibleText).toContain("Pip");
     expect(visibleText).toContain("Welcome back.");
     expect(visibleText).toContain("Step 2 is choosing protected savings.");
     expect(visibleText).toContain("Use $200");
     expect(markup).toContain("Protected savings, e.g. 200...");
     expect(markup).not.toContain("$43");
+  });
+
+  it("keeps visible chips when a chat response has no usable prompt chips", () => {
+    const currentChips: PromptChip[] = [
+      {
+        id: "upcoming-bills",
+        label: "Upcoming bills",
+        prompt: "What bills are coming up?",
+      },
+    ];
+    const lastNonEmptyChips: PromptChip[] = [
+      {
+        id: "payday-impact",
+        label: "Payday impact",
+        prompt: "How did payday affect today?",
+      },
+    ];
+
+    expect(
+      __freeCashHomeTestHooks.getNextVisiblePromptChips([], currentChips, lastNonEmptyChips),
+    ).toEqual(currentChips);
+    expect(
+      __freeCashHomeTestHooks.getNextVisiblePromptChips([], [], lastNonEmptyChips),
+    ).toEqual(lastNonEmptyChips);
   });
 });
 

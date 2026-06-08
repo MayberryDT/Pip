@@ -7,7 +7,7 @@ export function summarizeFreeCash(result: FreeCashResult): string {
   const spending = formatMoney(-result.spendingTotalCents);
   const savings = formatMoney(-result.protectedSavingsMonthlyCents);
 
-  return `${freeCash} comes from ${income} income, ${spending} spending, and ${savings} protected savings across the rolling calendar-month window.`;
+  return `Spendable Cash is ${freeCash} today after ${income} income, ${spending} spending, and ${savings} protected savings.`;
 }
 
 export function getPrimaryDriver(result: FreeCashResult): string {
@@ -19,8 +19,8 @@ export function getPrimaryDriver(result: FreeCashResult): string {
   }
 
   if (spendingDriver && Math.abs(spendingDriver.amountCents) > 0) {
-    return "Spending in the current window is the biggest pressure on Spendable Cash.";
+    return "Spending in the current window is the biggest pressure on Spendable Cash Today.";
   }
 
-  return "Income is carrying the current Spendable Cash number.";
+  return "Income is carrying the current Spendable Cash Today number.";
 }

@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 
 const scriptPath = resolve(process.cwd(), "scripts/eval-agent.mjs");
 
-describe("Spendable agent eval harness", () => {
+describe("Pip agent eval harness", () => {
   it("keeps the eval command available as a package script", () => {
     const packageJson = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
       scripts: Record<string, string>;
@@ -40,7 +40,7 @@ describe("Spendable agent eval harness", () => {
     const result = evaluateAgentResponse({
       caseDef: {},
       response: {
-        message: "Your Free Cash dashboard says you can spend $0.21k.",
+        message: "Your Free Cash dashboard says you can afford $0.21k.",
         responseMode: "chat_only",
         usedTools: [],
         cards: [],
@@ -51,8 +51,59 @@ describe("Spendable agent eval harness", () => {
     expect(result.ok).toBe(false);
     expect(result.failures.join("\n")).toContain("Free Cash");
     expect(result.failures.join("\n")).toContain("dashboard");
-    expect(result.failures.join("\n")).toContain("you can spend");
+    expect(result.failures.join("\n")).toContain("you can afford");
     expect(result.failures.join("\n")).toContain("money shorthand");
+  });
+
+  it("fails third-person Pip self-reference in visible replies", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {},
+      response: {
+        message: "Pip turns your account data into Spendable Cash Today.",
+        responseMode: "chat_only",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures.join("\n")).toContain("third-person Pip self-reference");
+  });
+
+  it("fails detached metric openings that do not sound like Pip speaking", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {},
+      response: {
+        message: "Spendable Cash Today is $43.",
+        responseMode: "chat_only",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures.join("\n")).toContain("detached metric opening");
+  });
+
+  it("fails card replies that end with a follow-up question", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {},
+      response: {
+        message: "I found the main drivers. Want to see the math?",
+        responseMode: "show_card",
+        usedTools: ["get_free_cash_drivers"],
+        cards: [{ type: "free_cash_explanation" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures.join("\n")).toContain("follow-up question");
   });
 
   it("fails a fake show promise when no matching card is returned", async () => {
@@ -226,7 +277,7 @@ describe("Spendable agent eval harness", () => {
           {
             id: "how-it-works",
             description: "test case",
-            message: "Tell me how Spendable works",
+            message: "Tell me how Pip works",
             expectNoCards: true,
           },
         ],
@@ -251,7 +302,7 @@ describe("Spendable agent eval harness", () => {
       });
 
       expect(report.status).toBe("passed");
-      expect(messages).toEqual(["hi", "Tell me how Spendable works"]);
+      expect(messages).toEqual(["hi", "Tell me how Pip works"]);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
