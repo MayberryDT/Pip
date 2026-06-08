@@ -5,12 +5,12 @@ import { fakeSnapshot, negativeFreeCashSnapshot } from "@/lib/fake-data";
 import type { FinancialSnapshot } from "@/lib/types";
 
 describe("rolling calendar-month window", () => {
-  it("uses the same prior-month day for the fake prototype date", () => {
+  it("uses a one-calendar-month lookback with an inclusive start day", () => {
     expect(buildRollingCalendarWindow("2026-06-20")).toEqual({
-      startDate: "2026-05-20",
+      startDate: "2026-05-21",
       endDate: "2026-06-20",
-      dayCount: 32,
-      daysElapsed: 32,
+      dayCount: 31,
+      daysElapsed: 31,
       daysRemaining: 0,
     });
   });
@@ -32,8 +32,8 @@ describe("calculateFreeCash", () => {
 
     expect(result.incomeTotalCents).toBe(420000);
     expect(result.spendingTotalCents).toBe(262400);
-    expect(result.protectedSavingsMonthlyCents).toBe(20000);
-    expect(result.rollingNetCents).toBe(137600);
+    expect(result.protectedSavingsMonthlyCents).toBe(24300);
+    expect(result.rollingNetCents).toBe(133300);
     expect(result.freeCashTodayCents).toBe(4300);
   });
 
@@ -370,7 +370,7 @@ describe("calculateFreeCash", () => {
         {
           id: "exited-spend",
           accountId: "checking",
-          date: "2026-05-19",
+          date: "2026-05-20",
           description: "Old spend",
           amountCents: -10000,
           kind: "purchase",
@@ -411,7 +411,7 @@ describe("calculateFreeCash", () => {
         {
           id: "old-rent",
           accountId: "checking",
-          date: "2026-04-30",
+          date: "2026-05-01",
           description: "April rent",
           amountCents: -150000,
           kind: "rent",

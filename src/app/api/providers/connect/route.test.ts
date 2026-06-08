@@ -32,8 +32,22 @@ afterEach(() => {
 });
 
 describe("POST /api/providers/connect", () => {
-  it("requires callers to choose a provider explicitly", async () => {
+  it("requires authentication before validating provider requests", async () => {
     enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient(null));
+
+    const response = await POST(jsonRequest({}));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication required.",
+    });
+    expect(routeMocks.getFinancialDataProvider).not.toHaveBeenCalled();
+  });
+
+  it("requires authenticated callers to choose a provider explicitly", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
 
     const response = await POST(jsonRequest({}));
 
@@ -41,12 +55,12 @@ describe("POST /api/providers/connect", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Invalid provider request.",
     });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
     expect(routeMocks.getFinancialDataProvider).not.toHaveBeenCalled();
   });
 
-  it("rejects invalid providers before touching Supabase", async () => {
+  it("rejects invalid providers after authentication", async () => {
     enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
 
     const response = await POST(jsonRequest({ provider: "bad-provider" }));
 
@@ -54,7 +68,6 @@ describe("POST /api/providers/connect", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Invalid provider request.",
     });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
     expect(routeMocks.getFinancialDataProvider).not.toHaveBeenCalled();
   });
 

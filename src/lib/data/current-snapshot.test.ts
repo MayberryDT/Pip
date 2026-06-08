@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  AuthenticationRequiredError,
   getCurrentFinancialSnapshot,
   getCurrentFreeCashResult,
   NoFinancialDataError,
@@ -43,15 +44,15 @@ describe("getCurrentFreeCashResult", () => {
     expect(mocks.loadFinancialSnapshotForUser).not.toHaveBeenCalled();
   });
 
-  it("uses the requested fake scenario when no authenticated user is present", async () => {
+  it("requires authentication instead of returning fake data when Supabase is configured", async () => {
     const supabase = createSupabaseClient(null);
 
     mocks.isSupabaseConfigured.mockReturnValue(true);
     mocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
-    const result = await getCurrentFreeCashResult({ scenario: "negative" });
-
-    expect(result.freeCashTodayCents).toBeLessThan(0);
+    await expect(getCurrentFreeCashResult({ scenario: "negative" })).rejects.toBeInstanceOf(
+      AuthenticationRequiredError,
+    );
     expect(mocks.loadCachedFreeCashResultForUser).not.toHaveBeenCalled();
     expect(mocks.loadFinancialSnapshotForUser).not.toHaveBeenCalled();
   });
@@ -101,6 +102,18 @@ describe("getCurrentFreeCashResult", () => {
 });
 
 describe("getCurrentFinancialSnapshot", () => {
+  it("requires authentication instead of returning fake transactions when Supabase is configured", async () => {
+    const supabase = createSupabaseClient(null);
+
+    mocks.isSupabaseConfigured.mockReturnValue(true);
+    mocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    await expect(getCurrentFinancialSnapshot({ scenario: "negative" })).rejects.toBeInstanceOf(
+      AuthenticationRequiredError,
+    );
+    expect(mocks.loadFinancialSnapshotForUser).not.toHaveBeenCalled();
+  });
+
   it("does not fall back to fake transactions for authenticated users without financial rows", async () => {
     const supabase = createSupabaseClient({ id: "user-1" });
 

@@ -10,13 +10,6 @@ const preferenceSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null);
-  const parsed = preferenceSchema.safeParse(body);
-
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Issuer name is required." }, { status: 400 });
-  }
-
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
   }
@@ -30,6 +23,13 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const parsed = preferenceSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Issuer name is required." }, { status: 400 });
     }
 
     const issuerName = parsed.data.issuerName;

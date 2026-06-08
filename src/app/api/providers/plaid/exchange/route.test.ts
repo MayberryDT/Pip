@@ -38,14 +38,32 @@ afterEach(() => {
 });
 
 describe("POST /api/providers/plaid/exchange", () => {
-  it("rejects malformed exchange payloads before touching Supabase", async () => {
+  it("requires authentication before validating Plaid exchange payloads", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createServerSupabase(null));
+
+    const response = await POST(jsonRequest({ publicToken: "short" }));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication required.",
+    });
+    expect(routeMocks.createPlaidClient).not.toHaveBeenCalled();
+    expect(routeMocks.storePlaidCredential).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed exchange payloads after authentication", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createServerSupabase({ id: "user-1" }));
+
     const response = await POST(jsonRequest({ publicToken: "short" }));
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "Invalid Plaid exchange request.",
     });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(routeMocks.createPlaidClient).not.toHaveBeenCalled();
+    expect(routeMocks.storePlaidCredential).not.toHaveBeenCalled();
   });
 
   it("returns 503 when Supabase is disabled", async () => {

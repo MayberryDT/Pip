@@ -26,14 +26,32 @@ afterEach(() => {
 });
 
 describe("POST /api/missing-card-preferences", () => {
-  it("rejects blank issuer names before touching Supabase", async () => {
+  it("requires authentication before validating issuer names", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient(null);
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    const response = await POST(jsonRequest({ issuerName: "   " }));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication required.",
+    });
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("rejects blank issuer names after authentication", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
     const response = await POST(jsonRequest({ issuerName: "   " }));
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "Issuer name is required.",
     });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 
   it("requires authentication before suppressing a nudge", async () => {

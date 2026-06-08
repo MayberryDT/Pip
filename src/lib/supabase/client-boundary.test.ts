@@ -28,7 +28,6 @@ describe("Supabase browser boundary", () => {
 
     expect(clientFiles).toEqual(
       expect.arrayContaining([
-        join(process.cwd(), "src/components/DataControls.tsx"),
         join(process.cwd(), "src/components/FreeCashHome.tsx"),
         join(process.cwd(), "src/lib/supabase/client.ts"),
       ]),
@@ -43,8 +42,8 @@ describe("Supabase browser boundary", () => {
     }
   });
 
-  it("keeps long-lived provider token handling out of the data-control browser bundle", () => {
-    const source = readFileSync(join(process.cwd(), "src/components/DataControls.tsx"), "utf8");
+  it("keeps long-lived provider token handling out of the Spendable browser surface", () => {
+    const source = readFileSync(join(process.cwd(), "src/components/FreeCashHome.tsx"), "utf8");
 
     expect(source).not.toContain("TellerConnect");
     expect(source).not.toContain("accessToken");

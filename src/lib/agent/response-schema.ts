@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const agentMessageMaxChars = 220;
+
 const moneyToneSchema = z.enum(["positive", "negative", "neutral", "warning"]);
 const accountKindSchema = z.enum(["checking", "savings", "credit_card", "loan", "other"]);
 const transactionKindSchema = z.enum([
@@ -12,12 +14,36 @@ const transactionKindSchema = z.enum([
   "fee",
   "unknown",
 ]);
-
-const promptChipSchema = z.object({
-  id: z.string(),
-  label: z.string(),
-  prompt: z.string(),
+export const promptChipSchema = z.object({
+  id: z.string().min(1).max(80),
+  label: z.string().min(1).max(36),
+  prompt: z.string().min(1).max(160),
 });
+
+const plaidClientActionConfigSchema = z.object({
+  kind: z.literal("plaid"),
+  linkToken: z.string(),
+  environment: z.enum(["sandbox", "production"]),
+  products: z.array(z.string()),
+  mode: z.enum(["connect", "repair"]),
+});
+
+export const clientActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("oauth_redirect"),
+    url: z.string(),
+  }),
+  z.object({
+    type: z.literal("open_plaid"),
+    plaid: plaidClientActionConfigSchema,
+  }),
+  z.object({
+    type: z.literal("reload"),
+  }),
+  z.object({
+    type: z.literal("none"),
+  }),
+]);
 
 const driverSchema = z.object({
   id: z.string(),
@@ -72,7 +98,43 @@ const transactionSchema = z.object({
     .optional(),
 });
 
-const cardSchema = z.discriminatedUnion("type", [
+const rollingWindowSchema = z.object({
+  startDate: z.string(),
+  endDate: z.string(),
+  dayCount: z.number().int(),
+  daysElapsed: z.number().int(),
+  daysRemaining: z.number().int(),
+});
+
+const spendingBreakdownGroupSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  amountCents: z.number().int(),
+  transactionCount: z.number().int(),
+});
+
+const recurringActivityItemSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  merchantName: z.string().optional(),
+  expectedDate: z.string(),
+  amountCents: z.number().int(),
+  kind: transactionKindSchema,
+  cadence: z.literal("monthly"),
+  confidence: z.enum(["high", "medium", "low"]),
+  sourceTransactionCount: z.number().int(),
+  lastSeenDate: z.string(),
+});
+
+const forecastPointSchema = z.object({
+  date: z.string(),
+  projectedSpendableCashCents: z.number().int(),
+  deltaFromTodayCents: z.number().int(),
+  expectedActivityCents: z.number().int(),
+  rollingNetCents: z.number().int(),
+});
+
+export const cardSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("free_cash_explanation"),
     title: z.string(),
@@ -100,6 +162,41 @@ const cardSchema = z.discriminatedUnion("type", [
     transactions: z.array(transactionSchema),
   }),
   z.object({
+    type: z.literal("spending_breakdown"),
+    title: z.string(),
+    window: rollingWindowSchema,
+    totals: z.object({
+      incomeCents: z.number().int(),
+      spendingCents: z.number().int(),
+      refundCents: z.number().int(),
+      rentCents: z.number().int(),
+      cardPaymentCents: z.number().int(),
+      protectedSavingsMonthlyCents: z.number().int(),
+    }),
+    topCategories: z.array(spendingBreakdownGroupSchema),
+    topMerchants: z.array(spendingBreakdownGroupSchema),
+    incomeSources: z.array(spendingBreakdownGroupSchema),
+  }),
+  z.object({
+    type: z.literal("recurring_activity"),
+    title: z.string(),
+    asOfDate: z.string(),
+    horizonDays: z.number().int(),
+    items: z.array(recurringActivityItemSchema),
+  }),
+  z.object({
+    type: z.literal("spendable_cash_forecast"),
+    title: z.string(),
+    asOfDate: z.string(),
+    horizonDays: z.number().int(),
+    currentSpendableCashCents: z.number().int(),
+    projectedSpendableCashCents: z.number().int(),
+    dailyTrendCents: z.number().int(),
+    disclaimer: z.literal("Forecast only; not guaranteed."),
+    points: z.array(forecastPointSchema),
+    recurringItems: z.array(recurringActivityItemSchema),
+  }),
+  z.object({
     type: z.literal("missing_card_nudge"),
     title: z.string(),
     detail: z.string(),
@@ -121,10 +218,21 @@ const cardSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+export const responseModeSchema = z.enum(["chat_only", "show_card", "update_context", "clarify"]);
+
+export const agentFinalOutputSchema = z.object({
+  message: z.string().min(1).max(agentMessageMaxChars),
+  responseMode: responseModeSchema,
+  promptChips: z.array(promptChipSchema).max(3),
+});
+
 export const agentResponseSchema = z.object({
-  message: z.string(),
+  message: z.string().min(1).max(agentMessageMaxChars),
   cards: z.array(cardSchema),
   promptChips: z.array(promptChipSchema).max(3),
+  usedTools: z.array(z.string()).max(8),
+  responseMode: responseModeSchema,
+  clientAction: clientActionSchema.optional(),
   audit: z.object({
     toolNames: z.array(z.string()),
     usedModel: z.boolean(),

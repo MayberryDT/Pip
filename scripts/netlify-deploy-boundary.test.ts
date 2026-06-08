@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
 
 describe("Netlify deployment secret boundary", () => {
@@ -31,16 +31,34 @@ describe("Netlify deployment secret boundary", () => {
     expect(netlifyIgnore).toContain(".env.*");
   });
 
+  it("ignores generated live browser auth state files", () => {
+    const gitignore = readFileSync(join(process.cwd(), ".gitignore"), "utf8");
+
+    expect(gitignore).toContain("spendable-live-auth*.json");
+    expect(gitignore).toContain("*.storage-state.json");
+  });
+
   it("keeps generated local Netlify function artifacts free of env files when artifacts exist", () => {
     if (!existsSync(join(process.cwd(), ".netlify/functions"))) {
       return;
     }
 
-    expect(() =>
-      execFileSync("node", ["scripts/check-netlify-bundle.mjs"], {
-        cwd: process.cwd(),
-        encoding: "utf8",
-      }),
-    ).not.toThrow();
+    return import(pathToFileURL(join(process.cwd(), "scripts/check-netlify-bundle.mjs")).href).then(
+      (module) => {
+        const runNetlifyBundleCheck = module.runNetlifyBundleCheck as (input: {
+          cwd: string;
+          stdout: (line: string) => void;
+          stderr: (line: string) => void;
+        }) => number;
+
+        expect(
+          runNetlifyBundleCheck({
+            cwd: process.cwd(),
+            stdout: () => undefined,
+            stderr: () => undefined,
+          }),
+        ).toBe(0);
+      },
+    );
   });
 });

@@ -19,8 +19,8 @@ export function getPrimaryDriver(result: FreeCashResult): string {
   }
 
   if (spendingDriver && Math.abs(spendingDriver.amountCents) > 0) {
-    return "Spending in the current window is the biggest pressure on Free Cash.";
+    return "Spending in the current window is the biggest pressure on Spendable Cash.";
   }
 
-  return "Income is carrying the current Free Cash number.";
+  return "Income is carrying the current Spendable Cash number.";
 }

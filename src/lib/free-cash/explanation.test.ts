@@ -4,14 +4,14 @@ import { getPrimaryDriver, summarizeFreeCash } from "@/lib/free-cash/explanation
 import { fakeSnapshot } from "@/lib/fake-data";
 import type { FinancialSnapshot } from "@/lib/types";
 
-describe("Free Cash explanation primitives", () => {
+describe("Spendable Cash explanation primitives", () => {
   it("summarizes bounded aggregate math without exposing raw transaction details", () => {
     const summary = summarizeFreeCash(calculateFreeCash(fakeSnapshot));
 
     expect(summary).toContain("$43");
     expect(summary).toContain("$4,200 income");
     expect(summary).toContain("-$2,624 spending");
-    expect(summary).toContain("-$200 protected savings");
+    expect(summary).toContain("-$243 protected savings");
     expect(summary).toContain("rolling calendar-month window");
     expect(summary).not.toContain("Trailhead Apartments");
     expect(summary).not.toContain("City Market");
@@ -26,10 +26,10 @@ describe("Free Cash explanation primitives", () => {
 
   it("falls back to spending pressure or income depending on the aggregate result", () => {
     expect(getPrimaryDriver(calculateFreeCash(spendingSnapshot))).toBe(
-      "Spending in the current window is the biggest pressure on Free Cash.",
+      "Spending in the current window is the biggest pressure on Spendable Cash.",
     );
     expect(getPrimaryDriver(calculateFreeCash(incomeOnlySnapshot))).toBe(
-      "Income is carrying the current Free Cash number.",
+      "Income is carrying the current Spendable Cash number.",
     );
   });
 });

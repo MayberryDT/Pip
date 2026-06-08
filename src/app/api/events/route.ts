@@ -11,13 +11,6 @@ const eventSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const body = await request.json().catch(() => null);
-  const parsed = eventSchema.safeParse(body);
-
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid event." }, { status: 400 });
-  }
-
   if (!isSupabaseConfigured()) {
     return NextResponse.json({ status: "skipped" });
   }
@@ -31,6 +24,13 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const parsed = eventSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid event." }, { status: 400 });
     }
 
     await recordProductEvent(

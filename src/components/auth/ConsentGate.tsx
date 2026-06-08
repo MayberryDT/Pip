@@ -42,7 +42,7 @@ export function ConsentGate({ email }: { email: string }) {
         <h1 className="text-4xl font-semibold tracking-normal">Before real data</h1>
         <p className="mt-5 text-sm leading-6 text-ink/[0.66]">
           Spendable stores normalized financial data, provider tokens on the server, and product
-          events needed to support the private beta. It never stores bank credentials or moves
+          events needed to support the product. It never stores bank credentials or moves
           money.
         </p>
         <p className="mt-4 text-sm leading-6 text-ink/[0.66]">

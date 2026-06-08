@@ -1,4 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { isValidElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import type { AgentCard } from "@/lib/agent/card-types";
 import { CardRenderer } from "@/components/cards/CardRenderer";
@@ -17,7 +18,48 @@ describe("CardRenderer", () => {
     expect(markup).not.toContain("NaN");
     expect(markup).not.toContain("[object Object]");
   });
+
+  it("wires missing-card suppression to the nudge button", () => {
+    const suppressedIssuers: string[] = [];
+    const element = CardRenderer({
+      card: {
+        type: "missing_card_nudge",
+        title: "Spendable Cash may be missing card spend",
+        detail: "A payment to Capital One appears in checking, but that card is not connected.",
+        issuerName: "Capital One",
+      },
+      onSuppressMissingCard: (issuerName) => suppressedIssuers.push(issuerName),
+    });
+    const button = findElementByType(element, "button");
+
+    expect(button?.props.children).toBeTruthy();
+    button?.props.onClick();
+    expect(suppressedIssuers).toEqual(["Capital One"]);
+  });
 });
+
+function findElementByType(node: ReactNode, type: string): any {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findElementByType(child, type);
+
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
+
+  if (!isValidElement(node)) {
+    return null;
+  }
+
+  if (node.type === type) {
+    return node;
+  }
+
+  return findElementByType(node.props.children, type);
+}
 
 function getRenderableCards(): Array<{
   name: AgentCard["type"];
@@ -29,7 +71,7 @@ function getRenderableCards(): Array<{
       name: "free_cash_explanation",
       card: {
         type: "free_cash_explanation",
-        title: "Why Free Cash changed",
+        title: "Why Spendable Cash changed",
         summary: "$43 comes from income, spending, and protected savings.",
         drivers: [
           {
@@ -43,7 +85,7 @@ function getRenderableCards(): Array<{
         warnings: [
           {
             id: "missing-card",
-            label: "Free Cash may be missing card spend",
+            label: "Spendable Cash may be missing card spend",
             detail: "A payment to Capital One appears in checking.",
             tone: "warning",
             issuerName: "Capital One",
@@ -60,11 +102,14 @@ function getRenderableCards(): Array<{
         ],
       },
       expectedText: [
-        "Why Free Cash changed",
+        "Why Spendable Cash changed",
         "$43 comes from income, spending, and protected savings.",
         "Income in window",
         "$3,200",
+        "Spendable Cash may be missing card spend",
         "A payment to Capital One appears in checking.",
+        "Pending transactions included",
+        "-$25",
         "Pending card purchases are included.",
       ],
     },
@@ -120,15 +165,123 @@ function getRenderableCards(): Array<{
       expectedText: ["Recent transactions", "Copper Cup", "2026-06-05", "-$4.25"],
     },
     {
+      name: "spending_breakdown",
+      card: {
+        type: "spending_breakdown",
+        title: "Spending breakdown",
+        window: {
+          startDate: "2026-05-21",
+          endDate: "2026-06-20",
+          dayCount: 31,
+          daysElapsed: 31,
+          daysRemaining: 0,
+        },
+        totals: {
+          incomeCents: 320000,
+          spendingCents: 122000,
+          refundCents: 4000,
+          rentCents: 80000,
+          cardPaymentCents: 50000,
+          protectedSavingsMonthlyCents: 20000,
+        },
+        topCategories: [
+          {
+            id: "groceries",
+            label: "Groceries",
+            amountCents: -4200,
+            transactionCount: 2,
+          },
+        ],
+        topMerchants: [
+          {
+            id: "city-market",
+            label: "City Market",
+            amountCents: -4200,
+            transactionCount: 2,
+          },
+        ],
+        incomeSources: [
+          {
+            id: "payroll",
+            label: "Payroll",
+            amountCents: 320000,
+            transactionCount: 1,
+          },
+        ],
+      },
+      expectedText: ["Spending breakdown", "Income", "$3,200", "Top categories", "Groceries", "Top merchants", "City Market"],
+    },
+    {
+      name: "recurring_activity",
+      card: {
+        type: "recurring_activity",
+        title: "Likely recurring activity",
+        asOfDate: "2026-06-20",
+        horizonDays: 45,
+        items: [
+          {
+            id: "recurring-youtube-premium",
+            label: "Youtube Premium",
+            merchantName: "Youtube Premium",
+            expectedDate: "2026-07-08",
+            amountCents: -1399,
+            kind: "purchase",
+            cadence: "monthly",
+            confidence: "high",
+            sourceTransactionCount: 2,
+            lastSeenDate: "2026-06-08",
+          },
+        ],
+      },
+      expectedText: ["Likely recurring activity", "Youtube Premium", "2026-07-08", "high confidence", "-$13.99"],
+    },
+    {
+      name: "spendable_cash_forecast",
+      card: {
+        type: "spendable_cash_forecast",
+        title: "7-day forecast",
+        asOfDate: "2026-06-20",
+        horizonDays: 7,
+        currentSpendableCashCents: 4300,
+        projectedSpendableCashCents: 3800,
+        dailyTrendCents: -500,
+        disclaimer: "Forecast only; not guaranteed.",
+        points: [
+          {
+            date: "2026-06-21",
+            projectedSpendableCashCents: 4200,
+            deltaFromTodayCents: -100,
+            expectedActivityCents: -500,
+            rollingNetCents: 130200,
+          },
+        ],
+        recurringItems: [
+          {
+            id: "recurring-youtube-premium",
+            label: "Youtube Premium",
+            merchantName: "Youtube Premium",
+            expectedDate: "2026-07-08",
+            amountCents: -1399,
+            kind: "purchase",
+            cadence: "monthly",
+            confidence: "high",
+            sourceTransactionCount: 2,
+            lastSeenDate: "2026-06-08",
+          },
+        ],
+      },
+      expectedText: ["7-day forecast", "Now", "7 days", "$43", "$38", "2026-06-21", "Forecast only; not guaranteed."],
+    },
+    {
       name: "missing_card_nudge",
       card: {
         type: "missing_card_nudge",
-        title: "Free Cash may be missing card spend",
+        title: "Spendable Cash may be missing card spend",
         detail: "A payment to Capital One appears in checking, but that card is not connected.",
         issuerName: "Capital One",
       },
       expectedText: [
-        "Free Cash may be missing card spend",
+        "Spendable Cash may be missing card spend",
         "A payment to Capital One appears in checking",
         "Hide nudge",
       ],
@@ -158,11 +311,11 @@ function getRenderableCards(): Array<{
       card: {
         type: "connect_account",
         title: "Connect or repair data",
-        detail: "Use the data control to connect Plaid or repair a stale bank connection.",
+        detail: "Ask me in chat to connect Plaid or repair a stale bank connection.",
       },
       expectedText: [
         "Connect or repair data",
-        "Use the data control to connect Plaid or repair a stale bank connection.",
+        "Ask me in chat to connect Plaid or repair a stale bank connection.",
       ],
     },
   ];

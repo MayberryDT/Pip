@@ -34,6 +34,7 @@ PLAID_ENV=sandbox
 
     expect(result.status).toBe(1);
     expect(output).toContain("Deployment env check failed for beta mode.");
+    expect(output).toContain("- NEXT_PUBLIC_SITE_URL");
     expect(output).toContain("- SUPABASE_SERVICE_ROLE_KEY");
     expect(output).toContain(
       "- OPENAI_API_KEY, OPENAI_BASE_URL, or NETLIFY_AI_GATEWAY_BASE_URL plus NETLIFY_AI_GATEWAY_KEY",
@@ -46,6 +47,7 @@ PLAID_ENV=sandbox
   it("allows Netlify AI Gateway base URL instead of a direct OpenAI key", async () => {
     const cwd = createTempProject(`
 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SITE_URL=https://free-cash-mayberrydt.netlify.app
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
 FREE_CASH_OPERATOR_TOKEN=operator-token
@@ -65,6 +67,7 @@ OPENAI_BASE_URL=https://free-cash.netlify.app/.netlify/ai
   it("allows Netlify AI Gateway explicit injected variables without a direct OpenAI key", async () => {
     const cwd = createTempProject(`
 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SITE_URL=https://free-cash-mayberrydt.netlify.app
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
 FREE_CASH_OPERATOR_TOKEN=operator-token
@@ -80,6 +83,54 @@ NETLIFY_AI_GATEWAY_KEY=netlify-gateway-key
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Deployment env check passed for beta mode.");
+  });
+
+  it("fails beta mode when the canonical app or Plaid redirect URL points to localhost", async () => {
+    const cwd = createTempProject(`
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+SUPABASE_SERVICE_ROLE_KEY=service-role-key
+FREE_CASH_OPERATOR_TOKEN=operator-token
+FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=token-key
+PLAID_CLIENT_ID=plaid-client-id
+PLAID_SECRET=plaid-secret
+PLAID_ENV=production
+PLAID_REDIRECT_URI=http://localhost:3000/plaid/oauth
+OPENAI_BASE_URL=https://free-cash.netlify.app/.netlify/ai
+`);
+
+    const result = await runCheck(cwd, "--mode=beta");
+    const output = result.stderr + result.stdout + result.warnings;
+
+    expect(result.status).toBe(1);
+    expect(output).toContain(
+      "- NEXT_PUBLIC_SITE_URL must be the production Netlify origin, not localhost.",
+    );
+    expect(output).toContain("- PLAID_REDIRECT_URI must not point to localhost in beta mode.");
+  });
+
+  it("warns when an explicit Plaid redirect origin differs from the canonical site origin", async () => {
+    const cwd = createTempProject(`
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
+NEXT_PUBLIC_SITE_URL=https://free-cash-mayberrydt.netlify.app
+SUPABASE_SERVICE_ROLE_KEY=service-role-key
+FREE_CASH_OPERATOR_TOKEN=operator-token
+FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=token-key
+PLAID_CLIENT_ID=plaid-client-id
+PLAID_SECRET=plaid-secret
+PLAID_ENV=production
+PLAID_REDIRECT_URI=https://preview--free-cash-mayberrydt.netlify.app/plaid/oauth
+OPENAI_BASE_URL=https://free-cash.netlify.app/.netlify/ai
+`);
+
+    const result = await runCheck(cwd, "--mode=beta");
+
+    expect(result.status).toBe(0);
+    expect(result.warnings).toContain(
+      "PLAID_REDIRECT_URI does not share the NEXT_PUBLIC_SITE_URL origin.",
+    );
   });
 });
 

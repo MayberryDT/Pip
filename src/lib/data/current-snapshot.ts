@@ -10,9 +10,16 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export class NoFinancialDataError extends Error {
-  constructor(message = "Connect financial data before using live Free Cash.") {
+  constructor(message = "Connect financial data before using live Spendable Cash.") {
     super(message);
     this.name = "NoFinancialDataError";
+  }
+}
+
+export class AuthenticationRequiredError extends Error {
+  constructor(message = "Authentication required.") {
+    super(message);
+    this.name = "AuthenticationRequiredError";
   }
 }
 
@@ -30,7 +37,7 @@ export async function getCurrentFinancialSnapshot(input: {
   } = await supabase.auth.getUser();
 
   if (error || !user) {
-    return getFakeSnapshot(input.scenario);
+    throw new AuthenticationRequiredError();
   }
 
   const realSnapshot = await loadFinancialSnapshotForUser(supabase, user.id);
@@ -56,7 +63,7 @@ export async function getCurrentFreeCashResult(input: {
   } = await supabase.auth.getUser();
 
   if (error || !user) {
-    return calculateFreeCash(getFakeSnapshot(input.scenario));
+    throw new AuthenticationRequiredError();
   }
 
   const cachedResult = await loadCachedFreeCashResultForUser(supabase, user.id);

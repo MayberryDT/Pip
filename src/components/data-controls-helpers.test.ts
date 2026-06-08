@@ -49,7 +49,7 @@ describe("data control helpers", () => {
       institutionId: "institution_plaid_1",
     });
     expect(getConnectionStatusMessage(status)).toBe(
-      "Test Bank needs repair. Use Repair connection before relying on refreshed Free Cash.",
+      "Test Bank needs repair. Use Repair connection before relying on refreshed Spendable Cash.",
     );
   });
 
@@ -72,7 +72,7 @@ describe("data control helpers", () => {
     expect(getRefreshLabel(status)).toBe("Refresh data");
     expect(getPlaidConnectRequest(status)).toEqual({ mode: "connect" });
     expect(getConnectionStatusMessage(status)).toBe(
-      "Plaid Bank data is stale. Refresh before relying on Free Cash.",
+      "Plaid Bank data is stale. Refresh before relying on Spendable Cash.",
     );
   });
 
@@ -94,7 +94,7 @@ describe("data control helpers", () => {
     });
 
     expect(getConnectionStatusMessage(status)).toBe(
-      "2 connections have stale data. Refresh before relying on Free Cash.",
+      "2 connections have stale data. Refresh before relying on Spendable Cash.",
     );
   });
 

@@ -1,6 +1,6 @@
 # Spendable
 
-Mobile-first, agent-first Spendable app with fake-data mode, invite-gated Supabase beta flows, Plaid connection support, and OpenAI Responses API tooling. The core daily metric is still Free Cash Today.
+Mobile-first, agent-first Spendable app with fake-data mode, Google OAuth Supabase flows, Plaid connection support, and OpenAI Agents SDK tooling. The user-facing daily metric is Spendable Cash.
 
 ## Development
 
@@ -16,22 +16,30 @@ Open http://localhost:3000.
 The project is linked to `free-cash-mayberrydt` on Netlify.
 
 - Site URL: https://free-cash-mayberrydt.netlify.app
-- Latest verified production deploy: https://6a23b36aba8dd5f81ab2e822--free-cash-mayberrydt.netlify.app
+- Latest verified production deploy: https://6a25e955a8c3e5481d38f722--free-cash-mayberrydt.netlify.app
 - Latest verified draft deploy: https://6a23aec6c0e9cfd227824f80--free-cash-mayberrydt.netlify.app
 - Netlify is configured for real beta mode with Supabase, Netlify AI Gateway/OpenAI, and Plaid sandbox env. Fake-data preview deploys remain available with `FREE_CASH_DEPLOY_MODE=fake npm run deploy:netlify`.
 - `npm run deploy:netlify` hides local `.env*` files during the local Netlify build, skips stale function cache reuse, and checks generated function bundles for accidental env-file inclusion.
 
 ## AI Agent
 
-`/api/agent` uses the official OpenAI SDK with the Responses API. The model routes user messages to exactly one deterministic app tool, then writes the final chat reply with a JSON Schema structured output. The Free Cash engine still owns all money math.
+`/api/agent` uses the official OpenAI Agents SDK on top of the Responses API. The Spendable agent can answer conversationally without a tool, call deterministic app tools when it needs setup state or financial facts, and decide whether to show a card, update context, or ask a clarification. The Free Cash engine still owns all money math.
+
+Agent tools return deterministic financial facts and available typed cards. The model may choose when to call tools and how to explain the result, but it does not emit card selectors or card payloads in final structured output. The server derives final cards only from tool-produced card objects before returning them to the UI. Conversation state is bounded to recent messages, recent shown card types/titles, and recent tool names so the agent can avoid repeating the same card.
+
+Guest onboarding, protected-savings consent, Plaid connect/repair, manual refresh, and delete-data confirmation also go through `/api/agent`. The model writes the visible chat reply, while server tools perform deterministic side effects and may return a typed `clientAction` such as `oauth_redirect`, `open_plaid`, or `reload` for the browser to execute. The React app should not add a parallel regex/canned-response chat path.
+
+Explicit prompt-chip actions such as "Why this number?", "Show the math", "Show recent transactions", true/real balance requests, and specific purchase tests force the matching SDK tool call so the card is reliable, then the model writes the visible reply. Visible financial-agent replies are capped at 220 characters and 35 words, with instructions for fifth-grade reading level. If the SDK rejects the final structured assistant response, the response is too long, or the response violates Spendable language rules, `/api/agent` asks the model for one stricter repair attempt. If that repair also fails, the route returns an error rather than substituting canned chat text.
+
+The agent also generates the next prompt chips in its structured output. The server trims, dedupes, and validates those chips before returning them, and only permits protected setup chip ids such as `get-signed-up`, `connect-data`, `use-default-savings`, and `set-250-savings` when the current onboarding state makes that action valid. Initial and invalid-chip states may still fall back to contextual defaults, but normal post-response chips should be model-authored.
 
 Local direct OpenAI calls default to `gpt-5-nano`. In Netlify runtime, the app prefers the injected `NETLIFY_AI_GATEWAY_BASE_URL` and `NETLIFY_AI_GATEWAY_KEY` values over direct provider keys, so deployed AI routes through Netlify AI Gateway. `OPENAI_BASE_URL` is treated as Netlify AI Gateway by default; set `FREE_CASH_AI_TRANSPORT=custom-openai-compatible` only when intentionally pointing at a non-Netlify gateway.
 
 Local behavior:
 
-- With Netlify AI Gateway env, `OPENAI_API_KEY`, or `OPENAI_BASE_URL`, `/api/agent` uses the OpenAI SDK Responses API.
+- With Netlify AI Gateway env, `OPENAI_API_KEY`, or `OPENAI_BASE_URL`, `/api/agent` uses the OpenAI Agents SDK in Responses API mode.
 - Without OpenAI configuration, `/api/agent` returns an error instead of faking a response.
-- For tests and local smoke checks, `FREE_CASH_AI_MODE=mock-model` or the dev-only `x-free-cash-ai-mode: mock-model` request header uses a local mock model client that still exercises the Responses API adapter/tool-call path.
+- Tests can inject local stubs or mock runtimes directly, but `/api/agent` itself has no request header or environment mode that swaps the real agent for canned responses.
 
 Optional override:
 
@@ -41,7 +49,7 @@ FREE_CASH_AI_MODEL=gpt-5-nano
 
 ## Data Foundation
 
-The app runs without Supabase credentials by using fake scenarios. When Supabase is configured, server routes can load authenticated user financial rows and fall back to fake data only when no user or real data exists.
+The app runs without Supabase credentials by using fake scenarios. When Supabase is configured for beta mode, authenticated routes require a signed-in user and do not fall back to fake financial data. Authenticated users without cached or synced rows get the connect-data state instead.
 
 Use this switch when you want the local prototype to ignore configured Supabase credentials and show the fake one-number flow:
 
@@ -60,16 +68,16 @@ FREE_CASH_OPERATOR_TOKEN=
 
 The first database migration lives at `supabase/migrations/20260605000000_free_cash_foundation.sql`. It creates user-scoped financial tables, RLS policies, a private provider-credentials table, sync/event tables, and the authenticated delete-data function.
 
-Private beta flow:
+Google signup flow:
 
-- Add invited emails to `public.beta_invites`.
-- `/api/auth/sign-in` checks the invite table before sending a Supabase magic link.
-- `/auth/callback` exchanges the auth code and records invite acceptance.
-- Authenticated users must accept the real-data consent gate and can keep or change the default protected-savings amount before seeing Free Cash.
-- The shield control exposes manual refresh, protected-savings settings, sign-out, and delete-data.
+- `/api/auth/oauth/google` starts the primary Google OAuth flow through Supabase Auth.
+- `/api/auth/sign-in` remains a magic-link fallback route, but it is not the default onboarding path.
+- `/auth/callback` exchanges the auth code or OTP and returns signed-in users to the same Spendable screen. Any Google account can sign up.
+- Authenticated users must accept the real-data consent step and can keep or change the default protected-savings amount before seeing Free Cash.
+- Chat owns setup and account actions. Manual refresh, protected-savings settings, provider repair, sign-out, and delete-data should be reached through Spendable rather than a separate settings/dashboard surface.
 - `/api/sync/manual` runs server-side provider sync, rate limits manual refreshes, records sync logs, and stores a Free Cash snapshot. Plaid syncs every stored Item and can return a `partial` result when at least one institution refreshed but another needs repair.
-- `/api/sync/status` reports last refresh, stale connection state, and latest sync failure details for the shield drawer.
-- `/api/providers/connect` creates the authenticated Plaid Link session used by the chat connect/repair action.
+- `/api/sync/status` reports last refresh, stale connection state, and latest sync failure details for chat-owned refresh and repair prompts.
+- `/api/agent` creates the Plaid Link session for chat connect/repair through an agent tool; `/api/providers/connect` remains the lower-level provider connect route.
 - `/api/providers/plaid/exchange` exchanges Plaid Link public tokens server-side and stores encrypted Plaid access tokens.
 - `/api/providers/teller/health` reports whether Teller Connect, mTLS, and token encryption are configured.
 - `/api/providers/teller/enrollment` stores a Teller Connect enrollment token server-side after the connect nonce matches.
@@ -77,6 +85,7 @@ Private beta flow:
 - `/api/events` records authenticated beta product events such as Free Cash views and prompt-chip taps.
 - `/api/agent` records server-derived beta events for agent questions, follow-ups, purchase simulations, true-balance reveals, missing-card nudges, and negative Free Cash follow-ups.
 - `/api/operator/overview` is a bearer-token-protected server route for beta operations. It summarizes stale connections, partial/failed syncs, and product-proof event counts without adding an in-app dashboard.
+- `/api/operator/agent-chats` is a bearer-token-protected review route for recent agent turns. Supabase-backed beta runs read `agent_chat_turns`; local development without Supabase reads `/tmp/spendable-agent-chat-turns.jsonl`.
 - The authenticated home screen reads `/api/free-cash` so the top number follows stored Supabase data after a manual sync.
 - Authenticated users without cached or synced financial rows get a connect-data state; fake `$43` prototype data is only used for unauthenticated or Supabase-disabled prototype flows.
 - `/api/missing-card-preferences` suppresses repeated missing-card nudges for an issuer the user intentionally omits.
@@ -132,9 +141,41 @@ npm run build
 npm run check:deployment
 npm run check:netlify-bundle
 npm audit --omit=dev
+# Requires SPENDABLE_LIVE_STORAGE_STATE from a Google session.
+npm run test:e2e:live:final
+npm run check:prd-complete
+# Opens capture first, then runs the final live smoke and completion gate.
+npm run prove:prd
 ```
 
 The E2E test starts a local Next.js server on port 3000 and drives the core AI agent loop through the browser.
+
+Live authenticated onboarding smoke uses the deployed Netlify site and a saved Playwright browser state for a Google user. Do not commit the generated state file.
+
+```bash
+npm run capture:live-auth
+SPENDABLE_LIVE_STORAGE_STATE=/tmp/spendable-live-auth.json npm run check:live-smoke
+SPENDABLE_LIVE_STORAGE_STATE=/tmp/spendable-live-auth.json npm run test:e2e:live
+```
+
+`npm run capture:live-auth` opens Playwright against production and saves to `/tmp/spendable-live-auth.json` by default. Override the target or file path with `-- --base-url=https://... --storage-state=/tmp/other-state.json` when needed.
+
+That smoke expects the Google user to complete OAuth, consent, Plaid sandbox connection, manual sync, and return to the same Spendable screen with a real Free Cash number. It fails if the saved session is still at the guest, consent, or connect-data stage. When Plaid automation is enabled, it also requires successful `/api/providers/plaid/exchange` and `/api/sync/manual` responses, then verifies `/api/sync/status` shows a connected Plaid institution, a succeeded Plaid sync run, and nonzero synced account and transaction counts before asking the AI why the number changed.
+
+To let the smoke attempt the Plaid Sandbox Link step itself after Google OAuth, save storage state after signing in with a Google user and run:
+
+```bash
+SPENDABLE_LIVE_STORAGE_STATE=/tmp/spendable-live-auth.json \
+npm run test:e2e:live:final
+```
+
+When the final command passes, it writes a proof summary to `/tmp/spendable-live-proof.json` by default. Override with `SPENDABLE_LIVE_PROOF_REPORT=/tmp/other-proof.json` if needed. The report records the production URL, latest verified deploy URL/id from this README, storage-state path, Plaid automation requirement, and pass timestamp without storing cookies or provider tokens.
+
+`npm run check:prd-complete` is intentionally the last gate. It fails until the proof report exists and confirms the production `npm run test:e2e:live:final` run passed against the latest verified deploy with Plaid automation required and enabled.
+
+The Plaid automation defaults to the official Sandbox credentials `user_good` / `pass_good` and institution `First Platypus Bank`. Override with `SPENDABLE_LIVE_PLAID_INSTITUTION`, `SPENDABLE_LIVE_PLAID_USERNAME`, or `SPENDABLE_LIVE_PLAID_PASSWORD` if Plaid changes the sandbox UI or the configured products need another institution.
+
+For the shortest final proof path, run `npm run prove:prd`. It opens the auth capture browser, then runs live-smoke preflight, `npm run test:e2e:live:final`, and `npm run check:prd-complete` in order. If `/tmp/spendable-live-auth.json` already exists, use `npm run prove:prd -- --skip-capture`.
 
 `npm run check:deployment` validates the required non-public and public environment variable names for a real beta deploy without printing secret values. Use `npm run check:deployment -- --mode=fake` only for fake-data preview deploys.
 

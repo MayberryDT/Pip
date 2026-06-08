@@ -54,13 +54,6 @@ export async function GET() {
 }
 
 export async function PUT(request: Request) {
-  const body = await request.json().catch(() => null);
-  const parsed = settingsSchema.safeParse(body);
-
-  if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid settings." }, { status: 400 });
-  }
-
   if (!isSupabaseConfigured()) {
     return NextResponse.json(
       {
@@ -79,6 +72,13 @@ export async function PUT(request: Request) {
 
     if (userError || !user) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const parsed = settingsSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid settings." }, { status: 400 });
     }
 
     const settings = await upsertUserSettings(supabase, user.id, parsed.data);

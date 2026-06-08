@@ -3,8 +3,12 @@ import type { AgentResponse } from "@/lib/agent/card-types";
 import { getSuggestedPrompts } from "@/lib/agent/suggested-prompts";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
 import { summarizeFreeCash } from "@/lib/free-cash/explanation";
+import {
+  buildRecurringActivity,
+  buildSpendableCashForecast,
+  buildSpendingBreakdown,
+} from "@/lib/free-cash/insights";
 import { fakeSnapshot } from "@/lib/fake-data";
-import { formatMoney } from "@/lib/money";
 import type { FinancialSnapshot } from "@/lib/types";
 
 export const agentToolNames = [
@@ -12,6 +16,10 @@ export const agentToolNames = [
   "simulate_purchase",
   "show_true_balances",
   "show_recent_transactions",
+  "show_spending_breakdown",
+  "show_recurring_activity",
+  "show_spendable_cash_forecast",
+  "define_spendable_cash",
   "detect_missing_card",
   "show_math",
   "answer_unrelated",
@@ -25,6 +33,9 @@ const simulatePurchaseArgsSchema = z.object({
 
 const recentTransactionsArgsSchema = z.object({
   limit: z.number().int().min(1).max(12).default(6),
+});
+const forecastArgsSchema = z.object({
+  horizon_days: z.number().int().min(1).max(14).default(14),
 });
 
 const emptyArgsSchema = z.object({}).passthrough();
@@ -48,6 +59,19 @@ export function runAgentTool(
       const args = recentTransactionsArgsSchema.parse(rawArgs ?? {});
       return showRecentTransactions(args.limit, snapshot);
     }
+    case "show_spending_breakdown":
+      emptyArgsSchema.parse(rawArgs ?? {});
+      return showSpendingBreakdown(snapshot);
+    case "show_recurring_activity":
+      emptyArgsSchema.parse(rawArgs ?? {});
+      return showRecurringActivity(snapshot);
+    case "show_spendable_cash_forecast": {
+      const args = forecastArgsSchema.parse(rawArgs ?? {});
+      return showSpendableCashForecast(args.horizon_days, snapshot);
+    }
+    case "define_spendable_cash":
+      emptyArgsSchema.parse(rawArgs ?? {});
+      return defineSpendableCash(snapshot);
     case "detect_missing_card":
       emptyArgsSchema.parse(rawArgs ?? {});
       return detectMissingCard(snapshot);
@@ -71,24 +95,34 @@ function baseAudit(toolName: AgentToolName) {
   };
 }
 
+function baseResponse(toolName: AgentToolName, cards: AgentResponse["cards"]): Pick<AgentResponse, "usedTools" | "responseMode" | "audit"> {
+  return {
+    usedTools: [toolName],
+    responseMode: cards.length > 0 ? "show_card" : "chat_only",
+    audit: baseAudit(toolName),
+  };
+}
+
 function explainFreeCash(snapshot: FinancialSnapshot): AgentResponse {
   const result = calculateFreeCash(snapshot);
   const summary = summarizeFreeCash(result);
 
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "free_cash_explanation",
+      title: "Why Spendable Cash changed",
+      summary,
+      drivers: result.drivers,
+      warnings: result.warnings,
+      dataStates: result.dataStates,
+    },
+  ];
+
   return {
-    message: summary,
-    cards: [
-      {
-        type: "free_cash_explanation",
-        title: "Why Free Cash changed",
-        summary,
-        drivers: result.drivers,
-        warnings: result.warnings,
-        dataStates: result.dataStates,
-      },
-    ],
+    message: "",
+    cards,
     promptChips: getSuggestedPrompts(result),
-    audit: baseAudit("explain_free_cash"),
+    ...baseResponse("explain_free_cash", cards),
   };
 }
 
@@ -99,37 +133,41 @@ function simulatePurchase(amountCents: number, snapshot: FinancialSnapshot): Age
     (result.rollingNetCents - amountCents) / result.window.dayCount,
   );
 
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "purchase_simulation",
+      title: "Purchase simulation",
+      amountCents,
+      beforeCents: result.freeCashTodayCents,
+      afterTodayCents,
+      monthlyAverageAfterCents,
+    },
+  ];
+
   return {
-    message: `That would move Free Cash from ${formatMoney(result.freeCashTodayCents)} to ${formatMoney(afterTodayCents)} today.`,
-    cards: [
-      {
-        type: "purchase_simulation",
-        title: "Purchase simulation",
-        amountCents,
-        beforeCents: result.freeCashTodayCents,
-        afterTodayCents,
-        monthlyAverageAfterCents,
-      },
-    ],
+    message: "",
+    cards,
     promptChips: getSuggestedPrompts(result),
-    audit: baseAudit("simulate_purchase"),
+    ...baseResponse("simulate_purchase", cards),
   };
 }
 
 function showTrueBalances(snapshot: FinancialSnapshot): AgentResponse {
   const result = calculateFreeCash(snapshot);
 
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "true_balances",
+      title: "True balances",
+      balances: result.trueBalances,
+    },
+  ];
+
   return {
-    message: "Actual balance is not the same as Free Cash.",
-    cards: [
-      {
-        type: "true_balances",
-        title: "True balances",
-        balances: result.trueBalances,
-      },
-    ],
+    message: "",
+    cards,
     promptChips: getSuggestedPrompts(result),
-    audit: baseAudit("show_true_balances"),
+    ...baseResponse("show_true_balances", cards),
   };
 }
 
@@ -140,17 +178,105 @@ function showRecentTransactions(limit: number, snapshot: FinancialSnapshot): Age
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, limit);
 
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "recent_transactions",
+      title: "Recent transactions",
+      transactions: recentTransactions,
+    },
+  ];
+
   return {
-    message: "Here are the recent transactions affecting the current window.",
-    cards: [
-      {
-        type: "recent_transactions",
-        title: "Recent transactions",
-        transactions: recentTransactions,
-      },
-    ],
+    message: "",
+    cards,
     promptChips: getSuggestedPrompts(result),
-    audit: baseAudit("show_recent_transactions"),
+    ...baseResponse("show_recent_transactions", cards),
+  };
+}
+
+function showSpendingBreakdown(snapshot: FinancialSnapshot): AgentResponse {
+  const result = calculateFreeCash(snapshot);
+  const breakdown = buildSpendingBreakdown(snapshot);
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "spending_breakdown",
+      title: "Spending breakdown",
+      window: breakdown.window,
+      totals: breakdown.totals,
+      topCategories: breakdown.topCategories,
+      topMerchants: breakdown.topMerchants,
+      incomeSources: breakdown.incomeSources,
+    },
+  ];
+
+  return {
+    message: "",
+    cards,
+    promptChips: getSuggestedPrompts(result),
+    ...baseResponse("show_spending_breakdown", cards),
+  };
+}
+
+function showRecurringActivity(snapshot: FinancialSnapshot): AgentResponse {
+  const result = calculateFreeCash(snapshot);
+  const recurringActivity = buildRecurringActivity(snapshot);
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "recurring_activity",
+      title: "Likely recurring activity",
+      asOfDate: recurringActivity.asOfDate,
+      horizonDays: recurringActivity.horizonDays,
+      items: recurringActivity.items,
+    },
+  ];
+
+  return {
+    message: "",
+    cards,
+    promptChips: getSuggestedPrompts(result),
+    ...baseResponse("show_recurring_activity", cards),
+  };
+}
+
+function showSpendableCashForecast(
+  horizonDays: number,
+  snapshot: FinancialSnapshot,
+): AgentResponse {
+  const result = calculateFreeCash(snapshot);
+  const forecast = buildSpendableCashForecast(snapshot, {
+    horizonDays,
+  });
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "spendable_cash_forecast",
+      title: `${forecast.horizonDays}-day forecast`,
+      asOfDate: forecast.asOfDate,
+      horizonDays: forecast.horizonDays,
+      currentSpendableCashCents: forecast.currentSpendableCashCents,
+      projectedSpendableCashCents: forecast.projectedSpendableCashCents,
+      dailyTrendCents: forecast.dailyTrendCents,
+      disclaimer: forecast.disclaimer,
+      points: forecast.points,
+      recurringItems: forecast.recurringItems,
+    },
+  ];
+
+  return {
+    message: "",
+    cards,
+    promptChips: getSuggestedPrompts(result),
+    ...baseResponse("show_spendable_cash_forecast", cards),
+  };
+}
+
+function defineSpendableCash(snapshot: FinancialSnapshot): AgentResponse {
+  const result = calculateFreeCash(snapshot);
+
+  return {
+    message: "",
+    cards: [],
+    promptChips: getSuggestedPrompts(result),
+    ...baseResponse("define_spendable_cash", []),
   };
 }
 
@@ -158,48 +284,50 @@ function detectMissingCard(snapshot: FinancialSnapshot): AgentResponse {
   const result = calculateFreeCash(snapshot);
   const warning = result.warnings.find((item) => item.id === "missing-card");
 
+  const cards: AgentResponse["cards"] = [
+    warning
+      ? {
+          type: "missing_card_nudge",
+          title: warning.label,
+          detail: warning.detail,
+          issuerName: warning.issuerName,
+        }
+      : {
+          type: "connect_account",
+          title: "Connect or repair data",
+          detail:
+            "Ask me in chat to connect Plaid, repair a stale bank connection, or add the card that is missing from Spendable Cash.",
+        },
+  ];
+
   return {
-    message: warning
-      ? "If you spend on that card, connecting it will make Free Cash more accurate."
-      : "Mock data is already connected for this prototype.",
-    cards: [
-      warning
-        ? {
-            type: "missing_card_nudge",
-            title: warning.label,
-            detail: warning.detail,
-            issuerName: warning.issuerName,
-          }
-        : {
-            type: "connect_account",
-            title: "Connect or repair data",
-            detail:
-              "Use the data control to connect Plaid, repair a stale bank connection, or add the card that is missing from Free Cash.",
-          },
-    ],
+    message: "",
+    cards,
     promptChips: getSuggestedPrompts(result),
-    audit: baseAudit("detect_missing_card"),
+    ...baseResponse("detect_missing_card", cards),
   };
 }
 
 function showMath(snapshot: FinancialSnapshot): AgentResponse {
   const result = calculateFreeCash(snapshot);
 
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "math_breakdown",
+      title: "Math breakdown",
+      incomeTotalCents: result.incomeTotalCents,
+      spendingTotalCents: result.spendingTotalCents,
+      protectedSavingsMonthlyCents: result.protectedSavingsMonthlyCents,
+      rollingNetCents: result.rollingNetCents,
+      dayCount: result.window.dayCount,
+    },
+  ];
+
   return {
-    message: "Here is the deterministic math behind Free Cash.",
-    cards: [
-      {
-        type: "math_breakdown",
-        title: "Math breakdown",
-        incomeTotalCents: result.incomeTotalCents,
-        spendingTotalCents: result.spendingTotalCents,
-        protectedSavingsMonthlyCents: result.protectedSavingsMonthlyCents,
-        rollingNetCents: result.rollingNetCents,
-        dayCount: result.window.dayCount,
-      },
-    ],
+    message: "",
+    cards,
     promptChips: getSuggestedPrompts(result),
-    audit: baseAudit("show_math"),
+    ...baseResponse("show_math", cards),
   };
 }
 
@@ -207,10 +335,9 @@ function answerUnrelated(snapshot: FinancialSnapshot): AgentResponse {
   const result = calculateFreeCash(snapshot);
 
   return {
-    message:
-      "I can help with Spendable questions about spending, balances, transactions, missing cards, or the current Free Cash number.",
+    message: "",
     cards: [],
     promptChips: getSuggestedPrompts(result),
-    audit: baseAudit("answer_unrelated"),
+    ...baseResponse("answer_unrelated", []),
   };
 }

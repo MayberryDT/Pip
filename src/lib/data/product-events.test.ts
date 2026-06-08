@@ -43,7 +43,7 @@ describe("agent product event derivation", () => {
       getAgentProductEventNames(
         createAgentResponse({
           type: "missing_card_nudge",
-          title: "Free Cash may be missing card spend",
+          title: "Spendable Cash may be missing card spend",
           detail: "A payment to Capital One appears in checking.",
           issuerName: "Capital One",
         }),
@@ -88,6 +88,8 @@ function createAgentResponse(card: AgentResponse["cards"][number]): AgentRespons
     message: "Here you go.",
     cards: [card],
     promptChips: [],
+    usedTools: [],
+    responseMode: "show_card",
     audit: {
       toolNames: [],
       usedModel: false,

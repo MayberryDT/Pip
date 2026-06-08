@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { assertInvitedEmail, InviteRequiredError, normalizeEmail } from "@/lib/auth/beta-invites";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -21,8 +20,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const email = normalizeEmail(parsed.data.email);
-    await assertInvitedEmail(email);
+    const email = parsed.data.email.trim().toLowerCase();
 
     const supabase = await createSupabaseServerClient();
 
@@ -43,10 +41,6 @@ export async function POST(request: Request) {
       status: "sent",
     });
   } catch (error) {
-    if (error instanceof InviteRequiredError) {
-      return NextResponse.json({ error: error.message }, { status: 403 });
-    }
-
     return NextResponse.json(toErrorBody(error), { status: 500 });
   }
 }

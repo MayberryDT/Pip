@@ -34,16 +34,29 @@ export function runDeploymentEnvCheck({
       );
     }
 
-    if (effectiveEnv.FREE_CASH_AI_MODE === "mock-model") {
-      warnings.push("FREE_CASH_AI_MODE=mock-model is set; unset it for a real beta deploy.");
-    }
-
     if (effectiveEnv.FREE_CASH_SUPABASE_MODE === "off") {
       warnings.push("FREE_CASH_SUPABASE_MODE=off disables real Supabase data.");
     }
 
     if (effectiveEnv.PLAID_ENV === "sandbox") {
       warnings.push("PLAID_ENV=sandbox uses Plaid sandbox data, not real bank data.");
+    }
+
+    const siteOrigin = normalizeOrigin(effectiveEnv.NEXT_PUBLIC_SITE_URL);
+    const plaidRedirectUri = normalizeAbsoluteUrl(effectiveEnv.PLAID_REDIRECT_URI);
+
+    if (!siteOrigin) {
+      addUnique(missing, "NEXT_PUBLIC_SITE_URL");
+    } else if (isLocalhostUrl(siteOrigin)) {
+      addUnique(missing, "NEXT_PUBLIC_SITE_URL must be the production Netlify origin, not localhost.");
+    }
+
+    if (plaidRedirectUri && isLocalhostUrl(plaidRedirectUri)) {
+      addUnique(missing, "PLAID_REDIRECT_URI must not point to localhost in beta mode.");
+    }
+
+    if (plaidRedirectUri && siteOrigin && new URL(plaidRedirectUri).origin !== siteOrigin) {
+      warnings.push("PLAID_REDIRECT_URI does not share the NEXT_PUBLIC_SITE_URL origin.");
     }
   }
 
@@ -65,6 +78,7 @@ export function runDeploymentEnvCheck({
 const requiredByMode = {
   fake: ["FREE_CASH_SUPABASE_MODE"],
   beta: [
+    "NEXT_PUBLIC_SITE_URL",
     "NEXT_PUBLIC_SUPABASE_URL",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     "SUPABASE_SERVICE_ROLE_KEY",
@@ -135,12 +149,56 @@ function hasValue(value) {
   return Boolean(value && value.trim());
 }
 
+function addUnique(values, value) {
+  if (!values.includes(value)) {
+    values.push(value);
+  }
+}
+
 function hasAiConfiguration(env) {
   return (
     hasValue(env.OPENAI_API_KEY) ||
     hasValue(env.OPENAI_BASE_URL) ||
     (hasValue(env.NETLIFY_AI_GATEWAY_BASE_URL) && hasValue(env.NETLIFY_AI_GATEWAY_KEY))
   );
+}
+
+function normalizeOrigin(rawUrl) {
+  const absoluteUrl = normalizeAbsoluteUrl(rawUrl);
+
+  if (!absoluteUrl) {
+    return null;
+  }
+
+  return new URL(absoluteUrl).origin;
+}
+
+function normalizeAbsoluteUrl(rawUrl) {
+  if (!rawUrl?.trim()) {
+    return null;
+  }
+
+  const trimmedUrl = rawUrl.trim();
+  const urlWithProtocol =
+    trimmedUrl.startsWith("http://") || trimmedUrl.startsWith("https://")
+      ? trimmedUrl
+      : `https://${trimmedUrl}`;
+
+  try {
+    return new URL(urlWithProtocol).toString();
+  } catch {
+    return null;
+  }
+}
+
+function isLocalhostUrl(rawUrl) {
+  try {
+    const url = new URL(rawUrl);
+
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
+  } catch {
+    return false;
+  }
 }
 
 function printWarnings(warnings, warn) {

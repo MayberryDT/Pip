@@ -129,7 +129,7 @@ function buildDrivers(input: {
     {
       id: "protected-savings",
       label: "Protected savings",
-      detail: "Savings held back before Free Cash is calculated.",
+      detail: "Savings held back before Spendable Cash is calculated.",
       amountCents: -input.protectedSavingsMonthlyCents,
       tone: "neutral",
     },
@@ -169,7 +169,7 @@ function buildDrivers(input: {
     drivers.push({
       id: "pending-card-spend",
       label: "Pending card spend included",
-      detail: "Pending card purchases are included so Free Cash does not look too high.",
+      detail: "Pending card purchases are included so Spendable Cash does not look too high.",
       amountCents: -pendingCardSpendCents,
       tone: "warning",
     });
@@ -208,7 +208,7 @@ function buildWindowMovementDrivers(
     drivers.push({
       id: "exited-window",
       label: "Left the window",
-      detail: `Transactions dated ${exitedDate} no longer count in Free Cash.`,
+      detail: `Transactions dated ${exitedDate} no longer count in Spendable Cash.`,
       amountCents: exitedDeltaCents,
       tone: toneForAmount(exitedDeltaCents),
     });
@@ -241,7 +241,7 @@ function buildWarnings(
   return [
     {
       id: "missing-card",
-      label: "Free Cash may be missing card spend",
+      label: "Spendable Cash may be missing card spend",
       detail: `A payment to ${issuers.join(", ")} appears in checking, but that card is not connected.`,
       tone: "warning",
       issuerName: issuers.join(", "),
@@ -267,7 +267,7 @@ function buildDataStates(
     {
       id: "pending-transactions" as const,
       label: "Pending transactions included",
-      detail: "Pending card purchases are already counted in Free Cash and may settle differently.",
+      detail: "Pending card purchases are already counted in Spendable Cash and may settle differently.",
       amountCents: -pendingCardSpendCents,
       tone: "warning" as const,
     },

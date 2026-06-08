@@ -3,6 +3,8 @@ node_modules/
 out/
 test-results/
 playwright-report/
+spendable-live-auth*.json
+*.storage-state.json
 tsconfig.tsbuildinfo
 .env*
 !.env.example

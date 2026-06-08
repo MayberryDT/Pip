@@ -83,7 +83,7 @@ export function isWithinInclusiveWindow(date: string, window: RollingWindow): bo
 }
 
 export function buildRollingCalendarWindow(asOfDate: string): RollingWindow {
-  const startDate = subtractOneCalendarMonth(asOfDate);
+  const startDate = addDays(subtractOneCalendarMonth(asOfDate), 1);
   const dayCount = inclusiveDayCount(startDate, asOfDate);
 
   return {

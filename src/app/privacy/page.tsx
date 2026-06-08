@@ -4,8 +4,8 @@ export default function PrivacyPage() {
   return (
     <LegalShell title="Privacy">
       <p>
-        Spendable is a private beta. It stores normalized financial data, account metadata, sync
-        logs, user settings, and product events needed to calculate Free Cash and support beta
+        Spendable is an experimental app. It stores normalized financial data, account metadata, sync
+        logs, user settings, and product events needed to calculate Spendable Cash and support beta
         testing.
       </p>
       <p>
@@ -14,7 +14,7 @@ export default function PrivacyPage() {
         minimal and used for troubleshooting or normalization.
       </p>
       <p>
-        You can delete stored financial data from the data control in the app. Deletion removes
+        You can ask Spendable to delete stored financial data in the chat. Deletion removes
         financial rows, sync logs, product events, connected institutions, missing-card preferences,
         provider tokens, and settings for your account.
       </p>

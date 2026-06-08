@@ -78,8 +78,24 @@ describe("POST /api/auth/consent", () => {
     });
   });
 
-  it("rejects invalid onboarding protected-savings amounts before touching Supabase", async () => {
+  it("requires authentication before validating onboarding protected-savings amounts", async () => {
     enableSupabaseEnv();
+    const supabase = createSupabaseClient(null);
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    const response = await POST(jsonRequest({ protectedSavingsMonthlyCents: -1 }));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication required.",
+    });
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid onboarding protected-savings amounts after authentication", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
     const response = await POST(jsonRequest({ protectedSavingsMonthlyCents: -1 }));
 
@@ -87,7 +103,7 @@ describe("POST /api/auth/consent", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Invalid consent settings.",
     });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 });
 

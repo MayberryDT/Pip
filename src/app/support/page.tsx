@@ -4,8 +4,8 @@ export default function SupportPage() {
   return (
     <LegalShell title="Support">
       <p>
-        For the private beta, support is handled directly by Tyler. If the Free Cash number looks
-        wrong, start by using the data control to refresh or repair the connection.
+        For this beta, support is handled directly by Tyler. If the Spendable Cash number looks
+        wrong, ask Spendable in the chat to refresh data or repair the connection.
       </p>
       <p>
         If a credit-card payment appears but the card is intentionally not connected, hide that
@@ -13,7 +13,7 @@ export default function SupportPage() {
         share the institution name and the last refresh time.
       </p>
       <p>
-        Use the delete-data control before leaving the beta or when you want stored financial data
+        Ask Spendable to delete data before leaving the beta or when you want stored financial data
         cleared from the app.
       </p>
     </LegalShell>

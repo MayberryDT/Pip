@@ -1,16 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const routeMocks = vi.hoisted(() => ({
-  createSupabaseServerClient: vi.fn(),
-  acceptCurrentUserInvite: vi.fn(),
-}));
+const routeMocks = vi.hoisted(() => {
+  return {
+    createSupabaseServerClient: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: routeMocks.createSupabaseServerClient,
-}));
-
-vi.mock("@/lib/auth/beta-invites", () => ({
-  acceptCurrentUserInvite: routeMocks.acceptCurrentUserInvite,
 }));
 
 import { GET } from "@/app/auth/callback/route";
@@ -40,11 +37,10 @@ describe("GET /auth/callback", () => {
     expect(response.headers.get("location")).toBe("http://localhost/");
   });
 
-  it("exchanges the code, accepts the invite, and respects a same-origin next path", async () => {
+  it("exchanges the code and respects a same-origin next path", async () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ error: null });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
-    routeMocks.acceptCurrentUserInvite.mockResolvedValue(undefined);
 
     const response = await GET(
       new Request("http://localhost/auth/callback?code=abc123&next=/welcome"),
@@ -53,17 +49,13 @@ describe("GET /auth/callback", () => {
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("http://localhost/welcome");
     expect(supabase.auth.exchangeCodeForSession).toHaveBeenCalledWith("abc123");
-    expect(routeMocks.acceptCurrentUserInvite).toHaveBeenCalledWith({
-      id: "user-1",
-      email: "mayberrydt@gmail.com",
-    });
+    expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
 
-  it("verifies an email OTP token, accepts the invite, and respects next", async () => {
+  it("verifies an email OTP token and respects next", async () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ error: null });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
-    routeMocks.acceptCurrentUserInvite.mockResolvedValue(undefined);
 
     const response = await GET(
       new Request(
@@ -78,17 +70,13 @@ describe("GET /auth/callback", () => {
       token: "123456",
       type: "magiclink",
     });
-    expect(routeMocks.acceptCurrentUserInvite).toHaveBeenCalledWith({
-      id: "user-1",
-      email: "mayberrydt@gmail.com",
-    });
+    expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
 
   it("verifies a token hash callback", async () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ error: null });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
-    routeMocks.acceptCurrentUserInvite.mockResolvedValue(undefined);
 
     const response = await GET(
       new Request("http://localhost/auth/callback?token_hash=hashed-token&type=email"),
@@ -106,7 +94,6 @@ describe("GET /auth/callback", () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ error: null });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
-    routeMocks.acceptCurrentUserInvite.mockResolvedValue(undefined);
 
     const absoluteResponse = await GET(
       new Request("http://localhost/auth/callback?code=abc123&next=https://evil.example"),
@@ -119,7 +106,7 @@ describe("GET /auth/callback", () => {
     expect(protocolRelativeResponse.headers.get("location")).toBe("http://localhost/");
   });
 
-  it("does not accept the invite if code exchange fails", async () => {
+  it("redirects to an auth error if code exchange fails", async () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ error: new Error("bad code") });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
@@ -127,11 +114,11 @@ describe("GET /auth/callback", () => {
     const response = await GET(new Request("http://localhost/auth/callback?code=bad"));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/");
-    expect(routeMocks.acceptCurrentUserInvite).not.toHaveBeenCalled();
+    expect(response.headers.get("location")).toBe("http://localhost/?auth=callback-failed");
+    expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
 
-  it("does not accept the invite if OTP verification fails", async () => {
+  it("redirects to an auth error if OTP verification fails", async () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ error: new Error("bad token") });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
@@ -141,8 +128,8 @@ describe("GET /auth/callback", () => {
     );
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/");
-    expect(routeMocks.acceptCurrentUserInvite).not.toHaveBeenCalled();
+    expect(response.headers.get("location")).toBe("http://localhost/?auth=callback-failed");
+    expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
 });
 
@@ -176,6 +163,9 @@ function createSupabaseClient(input: { error: Error | null }) {
               },
         },
         error: input.error,
+      }),
+      signOut: vi.fn().mockResolvedValue({
+        error: null,
       }),
     },
   };

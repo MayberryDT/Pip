@@ -1,25 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const routeMocks = vi.hoisted(() => {
-  class MockInviteRequiredError extends Error {
-    constructor() {
-      super("This private beta is invite-only.");
-      this.name = "InviteRequiredError";
-    }
-  }
-
   return {
-    assertInvitedEmail: vi.fn(),
     createSupabaseServerClient: vi.fn(),
-    InviteRequiredError: MockInviteRequiredError,
   };
 });
-
-vi.mock("@/lib/auth/beta-invites", () => ({
-  assertInvitedEmail: routeMocks.assertInvitedEmail,
-  InviteRequiredError: routeMocks.InviteRequiredError,
-  normalizeEmail: (email: string) => email.trim().toLowerCase(),
-}));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: routeMocks.createSupabaseServerClient,
@@ -54,28 +39,11 @@ describe("POST /api/auth/sign-in", () => {
     });
   });
 
-  it("keeps sign-in invite-gated before sending an OTP", async () => {
-    enableSupabaseEnv();
-    const supabase = createSupabaseClient();
-    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
-    routeMocks.assertInvitedEmail.mockRejectedValue(new routeMocks.InviteRequiredError());
-
-    const response = await POST(jsonRequest({ email: "outsider@example.com" }));
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
-      error: "This private beta is invite-only.",
-    });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
-    expect(supabase.auth.signInWithOtp).not.toHaveBeenCalled();
-  });
-
-  it("normalizes invited emails and sends the magic link to the callback route", async () => {
+  it("normalizes any valid email and sends the magic link to the callback route", async () => {
     enableSupabaseEnv();
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
     const supabase = createSupabaseClient();
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
-    routeMocks.assertInvitedEmail.mockResolvedValue(undefined);
 
     const response = await POST(jsonRequest({ email: " MayberryDT@gmail.COM " }));
 
@@ -83,7 +51,6 @@ describe("POST /api/auth/sign-in", () => {
     await expect(response.json()).resolves.toEqual({
       status: "sent",
     });
-    expect(routeMocks.assertInvitedEmail).toHaveBeenCalledWith("mayberrydt@gmail.com");
     expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
       email: "mayberrydt@gmail.com",
       options: {
@@ -97,7 +64,6 @@ describe("POST /api/auth/sign-in", () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient();
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
-    routeMocks.assertInvitedEmail.mockResolvedValue(undefined);
 
     const response = await POST(
       jsonRequest(

@@ -8,12 +8,20 @@
     "start": "next start",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:live": "playwright test --config playwright.live.config.ts",
+    "test:e2e:live:final": "node scripts/run-live-smoke.mjs --require-plaid --complete-plaid",
+    "capture:live-auth": "node scripts/capture-live-auth-state.mjs",
+    "prove:prd": "node scripts/prove-prd-complete.mjs",
     "test:watch": "vitest",
     "check:deployment": "node scripts/check-deployment-env.mjs",
+    "check:live-smoke": "node scripts/check-live-smoke-env.mjs",
     "check:netlify-bundle": "node scripts/check-netlify-bundle.mjs",
-    "deploy:netlify": "node scripts/safe-netlify-deploy.mjs"
+    "check:prd-complete": "node scripts/check-prd-complete.mjs",
+    "deploy:netlify": "node scripts/safe-netlify-deploy.mjs",
+    "eval:agent": "node scripts/eval-agent.mjs"
   },
   "dependencies": {
+    "@openai/agents": "^0.11.6",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "lucide-react": "^0.468.0",
@@ -22,7 +30,7 @@
     "plaid": "^42.2.0",
     "react": "latest",
     "react-dom": "latest",
-    "zod": "^3.24.1"
+    "zod": "^4.4.3"
   },
   "overrides": {
     "postcss": "^8.5.10"

@@ -36,14 +36,30 @@ afterEach(() => {
 });
 
 describe("POST /api/providers/teller/enrollment", () => {
-  it("rejects malformed enrollment payloads before touching Supabase", async () => {
+  it("requires authentication before validating Teller enrollment payloads", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createServerSupabase(null));
+
+    const response = await POST(jsonRequest({ accessToken: "short" }));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication required.",
+    });
+    expect(routeMocks.storeTellerCredential).not.toHaveBeenCalled();
+  });
+
+  it("rejects malformed enrollment payloads after authentication", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createServerSupabase({ id: "user-1" }));
+
     const response = await POST(jsonRequest({ accessToken: "short" }));
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "Invalid Teller enrollment.",
     });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(routeMocks.storeTellerCredential).not.toHaveBeenCalled();
   });
 
   it("returns 503 when Supabase is disabled", async () => {

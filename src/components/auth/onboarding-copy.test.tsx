@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import { ConsentGate } from "@/components/auth/ConsentGate";
 import { LoginPanel } from "@/components/auth/LoginPanel";
 
-describe("private-beta onboarding copy", () => {
+describe("onboarding copy", () => {
   it("keeps sign-in focused on Spendable accuracy without exposing balances by default", () => {
     const markup = renderToStaticMarkup(<LoginPanel />);
 
     expect(markup).toContain("Connect checking and cards");
     expect(markup).toContain("without making balances the default number");
-    expect(markup).toContain("Private beta access is invite-only");
-    expect(markup).toContain("email sign-in link");
+    expect(markup).toContain("Sign in with Google to set up Spendable");
+    expect(markup).toContain("Continue with Google");
   });
 
   it("explains consent, server-side provider tokens, no money movement, and protected savings", () => {

@@ -1,6 +1,60 @@
 import type { PromptChip } from "@/lib/agent/card-types";
 import type { FreeCashResult } from "@/lib/types";
 
+export const guestOnboardingPromptChips: PromptChip[] = [
+  {
+    id: "how-spendable-works",
+    label: "How it works",
+    prompt: "Tell me how Spendable works",
+  },
+  {
+    id: "get-signed-up",
+    label: "Get signed up",
+    prompt: "Get me signed up",
+  },
+  {
+    id: "connect-data",
+    label: "Connect data",
+    prompt: "Let's connect my data",
+  },
+];
+
+export const consentOnboardingPromptChips: PromptChip[] = [
+  {
+    id: "use-default-savings",
+    label: "Use $200",
+    prompt: "continue",
+  },
+  {
+    id: "set-250-savings",
+    label: "Use $250",
+    prompt: "$250",
+  },
+  {
+    id: "why-protected-savings",
+    label: "Why this step?",
+    prompt: "Why do you need protected savings?",
+  },
+];
+
+export const dataOnboardingPromptChips: PromptChip[] = [
+  {
+    id: "how-spendable-works",
+    label: "How it works",
+    prompt: "Tell me how Spendable works",
+  },
+  {
+    id: "connect-data",
+    label: "Connect data",
+    prompt: "Connect my data",
+  },
+  {
+    id: "set-protected-savings",
+    label: "Protected savings",
+    prompt: "Set protected savings",
+  },
+];
+
 export function getSuggestedPrompts(result: FreeCashResult): PromptChip[] {
   const base: PromptChip[] = [
     {
@@ -14,9 +68,9 @@ export function getSuggestedPrompts(result: FreeCashResult): PromptChip[] {
       prompt: "Can I spend $50?",
     },
     {
-      id: "changed",
-      label: "What changed?",
-      prompt: "What changed?",
+      id: "forecast",
+      label: "Show forecast",
+      prompt: "Show my Spendable Cash forecast",
     },
   ];
 
@@ -33,12 +87,47 @@ export function getSuggestedPrompts(result: FreeCashResult): PromptChip[] {
         prompt: "Show the math",
       },
       {
-        id: "transactions",
-        label: "Recent transactions",
-        prompt: "Show recent transactions",
+        id: "breakdown",
+        label: "Show breakdown",
+        prompt: "Show my spending breakdown",
       },
     ];
   }
 
   return base;
+}
+
+export function getOnboardingPromptChips(input: {
+  status: "guest" | "needs-consent" | "ready";
+  hasFinancialData?: boolean;
+}): PromptChip[] {
+  if (input.status === "guest") {
+    return guestOnboardingPromptChips;
+  }
+
+  if (input.status === "needs-consent") {
+    return consentOnboardingPromptChips;
+  }
+
+  if (!input.hasFinancialData) {
+    return dataOnboardingPromptChips;
+  }
+
+  return [];
+}
+
+export function selectPromptChipsFromAllowlist(
+  selectedIds: string[],
+  allowlist: PromptChip[],
+): PromptChip[] {
+  const chipsById = new Map(allowlist.map((chip) => [chip.id, chip]));
+  const selected = selectedIds
+    .map((id) => chipsById.get(id))
+    .filter((chip): chip is PromptChip => Boolean(chip));
+
+  if (selected.length > 0) {
+    return selected.slice(0, 3);
+  }
+
+  return allowlist.slice(0, 3);
 }

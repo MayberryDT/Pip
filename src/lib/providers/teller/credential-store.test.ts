@@ -26,6 +26,8 @@ describe("Teller credential store", () => {
         user_id: "user-1",
         provider: "teller",
         teller_enrollment_id: "enrollment-1",
+        plaid_item_id: null,
+        refresh_token_ciphertext: null,
         certificate_ref: "env:TELLER_CERTIFICATE_PEM",
         metadata: {
           institutionName: "Northstar Bank",
@@ -33,6 +35,7 @@ describe("Teller credential store", () => {
         },
       }),
     ]);
+    expect(supabase.upsertOptions).toEqual([{ onConflict: "institution_id" }]);
     expect(supabase.upserts[0]?.access_token_ciphertext).not.toContain("teller-token-secret");
     expect(JSON.stringify(supabase.upserts[0])).not.toContain("teller-token-secret");
     expect(JSON.stringify(supabase.upserts[0])).not.toContain("BEGIN CERTIFICATE");
@@ -42,15 +45,20 @@ describe("Teller credential store", () => {
 
 function createPrivateCredentialClient() {
   const upserts: Record<string, unknown>[] = [];
+  const upsertOptions: Record<string, unknown>[] = [];
   const query = {
-    upsert(row: Record<string, unknown>) {
+    upsert(row: Record<string, unknown>, options?: Record<string, unknown>) {
       upserts.push(row);
+      if (options) {
+        upsertOptions.push(options);
+      }
       return Promise.resolve({ error: null });
     },
   };
 
   return {
     upserts,
+    upsertOptions,
     client: {
       schema(schemaName: string) {
         expect(schemaName).toBe("private");

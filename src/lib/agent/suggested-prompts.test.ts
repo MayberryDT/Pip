@@ -12,7 +12,7 @@ describe("getSuggestedPrompts", () => {
     expect(getSuggestedPrompts(calculateFreeCash(fakeSnapshot)).map((chip) => chip.id)).toEqual([
       "why",
       "spend-50",
-      "changed",
+      "forecast",
     ]);
   });
 
@@ -28,7 +28,7 @@ describe("getSuggestedPrompts", () => {
     expect(getSuggestedPrompts(result).map((chip) => chip.id)).toEqual([
       "why",
       "spend-50",
-      "changed",
+      "forecast",
     ]);
   });
 
@@ -38,7 +38,7 @@ describe("getSuggestedPrompts", () => {
     expect(getSuggestedPrompts(result).map((chip) => chip.id)).toEqual([
       "why",
       "math",
-      "transactions",
+      "breakdown",
     ]);
   });
 });

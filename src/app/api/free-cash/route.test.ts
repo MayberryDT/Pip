@@ -16,14 +16,17 @@ vi.mock("@/lib/data/current-snapshot", async (importOriginal) => {
 });
 
 import { GET } from "@/app/api/free-cash/route";
-import { NoFinancialDataError } from "@/lib/data/current-snapshot";
+import {
+  AuthenticationRequiredError,
+  NoFinancialDataError,
+} from "@/lib/data/current-snapshot";
 
 afterEach(() => {
   vi.clearAllMocks();
 });
 
 describe("GET /api/free-cash", () => {
-  it("returns the default fake Free Cash result for unauthenticated prototype access", async () => {
+  it("returns the default fake Spendable Cash result for explicit prototype access", async () => {
     routeMocks.getCurrentFreeCashResult.mockResolvedValue(calculateFreeCash(fakeSnapshot));
 
     const response = await GET(new Request("http://localhost/api/free-cash"));
@@ -33,6 +36,17 @@ describe("GET /api/free-cash", () => {
     expect(payload.freeCashTodayCents).toBe(4300);
     expect(payload.trueBalances).toEqual(expect.any(Array));
     expect(routeMocks.getCurrentFreeCashResult).toHaveBeenCalledWith({ scenario: undefined });
+  });
+
+  it("returns 401 instead of fake data when live beta auth is missing", async () => {
+    routeMocks.getCurrentFreeCashResult.mockRejectedValue(new AuthenticationRequiredError());
+
+    const response = await GET(new Request("http://localhost/api/free-cash"));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication required.",
+    });
   });
 
   it("supports the negative fake scenario for stress-state testing", async () => {
@@ -55,7 +69,7 @@ describe("GET /api/free-cash", () => {
     expect(response.status).toBe(409);
     await expect(response.json()).resolves.toEqual({
       code: "no-financial-data",
-      error: "Connect financial data before using live Free Cash.",
+      error: "Connect financial data before using live Spendable Cash.",
     });
   });
 });

@@ -23,19 +23,29 @@ export async function storePlaidCredential(input: {
   environment: string;
 }) {
   const supabase = input.supabase ?? createSupabaseAdminClient();
-  const { error } = await supabase.schema("private").from("provider_credentials").upsert({
-    institution_id: input.institutionId,
-    user_id: input.userId,
-    provider: "plaid",
-    plaid_item_id: input.itemId,
-    access_token_ciphertext: encryptProviderToken(input.accessToken),
-    certificate_ref: null,
-    metadata: {
-      institutionName: input.institutionName,
-      environment: input.environment,
-    } satisfies Json,
-    updated_at: new Date().toISOString(),
-  });
+  const { error } = await supabase
+    .schema("private")
+    .from("provider_credentials")
+    .upsert(
+      {
+        institution_id: input.institutionId,
+        user_id: input.userId,
+        provider: "plaid",
+        teller_enrollment_id: null,
+        plaid_item_id: input.itemId,
+        access_token_ciphertext: encryptProviderToken(input.accessToken),
+        refresh_token_ciphertext: null,
+        certificate_ref: null,
+        metadata: {
+          institutionName: input.institutionName,
+          environment: input.environment,
+        } satisfies Json,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "institution_id",
+      },
+    );
 
   if (error) {
     throw error;

@@ -28,7 +28,9 @@ describe("Plaid credential store", () => {
         institution_id: "institution-1",
         user_id: "user-1",
         provider: "plaid",
+        teller_enrollment_id: null,
         plaid_item_id: "item-1",
+        refresh_token_ciphertext: null,
         certificate_ref: null,
         metadata: {
           institutionName: "Northstar Bank",
@@ -36,7 +38,7 @@ describe("Plaid credential store", () => {
         },
       }),
     ]);
-    expect(supabase.upserts[0]).not.toHaveProperty("refresh_token_ciphertext");
+    expect(supabase.upsertOptions).toEqual([{ onConflict: "institution_id" }]);
     expect(supabase.upserts[0]?.access_token_ciphertext).not.toContain("access-token-secret");
     expect(JSON.stringify(supabase.upserts[0])).not.toContain("access-token-secret");
   });
@@ -75,11 +77,15 @@ function createPrivateCredentialClient(
   input: { existingMetadata?: Record<string, unknown> } = {},
 ) {
   const upserts: Record<string, unknown>[] = [];
+  const upsertOptions: Record<string, unknown>[] = [];
   const updates: Record<string, unknown>[] = [];
 
   const query = {
-    upsert(row: Record<string, unknown>) {
+    upsert(row: Record<string, unknown>, options?: Record<string, unknown>) {
       upserts.push(row);
+      if (options) {
+        upsertOptions.push(options);
+      }
       return Promise.resolve({ error: null });
     },
     select() {
@@ -107,6 +113,7 @@ function createPrivateCredentialClient(
 
   return {
     upserts,
+    upsertOptions,
     updates,
     client: {
       schema(schemaName: string) {

@@ -367,6 +367,44 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      agent_chat_turns: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          conversation_id: string;
+          user_message: string;
+          assistant_message: string | null;
+          error_message: string | null;
+          response_mode: string | null;
+          used_tools: string[];
+          card_types: string[];
+          prompt_chips: Json;
+          client_action: string | null;
+          model: string | null;
+          transport: string | null;
+          request_metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          conversation_id: string;
+          user_message: string;
+          assistant_message?: string | null;
+          error_message?: string | null;
+          response_mode?: string | null;
+          used_tools?: string[];
+          card_types?: string[];
+          prompt_chips?: Json;
+          client_action?: string | null;
+          model?: string | null;
+          transport?: string | null;
+          request_metadata?: Json;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

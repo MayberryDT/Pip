@@ -1,19 +1,26 @@
+import { Agent, OpenAIProvider, Runner, tool, type AgentInputItem } from "@openai/agents";
 import OpenAI from "openai";
-import type {
-  FunctionTool,
-  Response,
-  ResponseCreateParamsNonStreaming,
-  ResponseFunctionToolCall,
-  ResponseInputItem,
-} from "openai/resources/responses/responses";
 import { z } from "zod";
-import type { AgentCard, AgentResponse } from "@/lib/agent/card-types";
-import { agentResponseSchema } from "@/lib/agent/response-schema";
+import type {
+  AgentCard,
+  AgentClientAction,
+  AgentResponse,
+  PromptChip,
+} from "@/lib/agent/card-types";
 import {
-  type AgentToolName,
-  isAgentToolName,
-  runAgentTool,
-} from "@/lib/agent/tool-runner";
+  agentFinalOutputSchema,
+  agentMessageMaxChars,
+  agentResponseSchema,
+} from "@/lib/agent/response-schema";
+import {
+  getOnboardingPromptChips,
+  getSuggestedPrompts,
+} from "@/lib/agent/suggested-prompts";
+import { runAgentTool } from "@/lib/agent/tool-runner";
+import type { SyncStatus } from "@/lib/data/sync-status";
+import { fakeSnapshot } from "@/lib/fake-data";
+import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { summarizeFreeCash } from "@/lib/free-cash/explanation";
 import { formatMoney, formatMoneyWithCents } from "@/lib/money";
 import type { FinancialSnapshot } from "@/lib/types";
 
@@ -21,6 +28,7 @@ export const FREE_CASH_AI_MODEL = "gpt-5-nano";
 export const NETLIFY_AI_GATEWAY_MODEL = "gpt-5-nano";
 
 type AiTransport = NonNullable<AgentResponse["audit"]["transport"]>;
+type AgentFinalOutput = z.infer<typeof agentFinalOutputSchema>;
 
 type OpenAIClientConfig = {
   apiKey?: string;
@@ -28,22 +36,124 @@ type OpenAIClientConfig = {
   transport: AiTransport;
 };
 
-export type RunAiAgentInput = {
-  message: string;
-  snapshot?: FinancialSnapshot;
-  history?: AgentHistoryItem[];
-};
-
 export type AgentHistoryItem = {
   role: "user" | "assistant";
   content: string;
 };
 
-export type OpenAIResponsesClient = {
-  responses: {
-    create: (params: ResponseCreateParamsNonStreaming) => Promise<Response>;
-  };
+export type AgentConversationState = {
+  shownCards?: Array<{
+    type: AgentCard["type"] | string;
+    title?: string;
+  }>;
+  lastToolNames?: string[];
 };
+
+export type SpendableAgentOnboardingState = {
+  status: "guest" | "needs-consent" | "ready";
+  email?: string;
+  hasFinancialData: boolean;
+  syncStatusSummary?: string | null;
+};
+
+export type SpendableAgentActionResult = {
+  ok: boolean;
+  status: string;
+  message?: string;
+  protectedSavingsMonthlyCents?: number;
+  freeCashTodayCents?: number;
+  clientActionType?: AgentClientAction["type"];
+  clientAction?: AgentClientAction;
+};
+
+export type SpendableAgentActions = {
+  saveProtectedSavings?: (input: {
+    amountCents: number;
+  }) => Promise<SpendableAgentActionResult>;
+  startPlaidLink?: () => Promise<SpendableAgentActionResult>;
+  refreshFinancialData?: () => Promise<SpendableAgentActionResult>;
+  deleteUserData?: () => Promise<SpendableAgentActionResult>;
+};
+
+export type RunAiAgentInput = {
+  message: string;
+  snapshot?: FinancialSnapshot;
+  history?: AgentHistoryItem[];
+  conversationState?: AgentConversationState;
+  syncStatus?: SyncStatus | null;
+  onboardingState?: SpendableAgentOnboardingState;
+  selectedPromptChipId?: string;
+  actions?: SpendableAgentActions;
+};
+
+export type AgentRuntime = {
+  run: (input: RunAiAgentInput) => Promise<AgentResponse>;
+};
+
+// Kept as a compatibility alias for older tests/imports while the app migrates
+// from the hand-rolled Responses router to the Agents SDK runtime.
+export type OpenAIResponsesClient = AgentRuntime;
+
+type SpendableAgentContext = {
+  inputMessage: string;
+  snapshot?: FinancialSnapshot;
+  syncStatus?: SyncStatus | null;
+  onboardingState: SpendableAgentOnboardingState;
+  actions?: SpendableAgentActions;
+  conversationState: Required<AgentConversationState>;
+  forcedTool?: ForcedAgentTool;
+  repair?: AgentResponseRepair;
+  usedTools: string[];
+  availableCards: AgentCard[];
+  availablePromptChips: PromptChip[];
+  clientAction?: AgentClientAction;
+};
+
+type DeterministicAgentToolName =
+  | "get_onboarding_state"
+  | "start_google_oauth"
+  | "save_protected_savings"
+  | "start_plaid_link"
+  | "refresh_financial_data"
+  | "request_delete_data_confirmation"
+  | "delete_user_data"
+  | "get_free_cash_snapshot"
+  | "get_free_cash_drivers"
+  | "get_spendable_cash_definition"
+  | "get_spending_breakdown"
+  | "get_recurring_activity"
+  | "forecast_spendable_cash"
+  | "simulate_purchase"
+  | "get_recent_transactions"
+  | "get_true_balances"
+  | "get_data_quality"
+  | "get_sync_status"
+  | "get_free_cash_math";
+
+type ForcedAgentTool = {
+  toolName: DeterministicAgentToolName;
+  args: unknown;
+  requireCard: boolean;
+};
+
+type AgentResponseRepair = {
+  reason: "invalid_final_output" | "disallowed_language" | "unsupported_promise";
+  detail?: string;
+};
+
+const emptyToolParameters = z.object({});
+const saveProtectedSavingsParameters = z.object({
+  amount_cents: z.number().int().min(0).max(10_000_000),
+});
+const simulatePurchaseParameters = z.object({
+  amount_cents: z.number().int().positive().max(1000000),
+});
+const recentTransactionsParameters = z.object({
+  limit: z.number().int().min(1).max(12).default(6),
+});
+const forecastParameters = z.object({
+  horizon_days: z.number().int().min(1).max(14).default(14),
+});
 
 export class AgentUnavailableError extends Error {
   code: string;
@@ -73,123 +183,15 @@ export type AgentErrorPayload = {
   status: number;
 };
 
-const freeCashTools: FunctionTool[] = [
-  {
-    type: "function",
-    name: "explain_free_cash",
-    description:
-      "Explain the current Free Cash number using deterministic app results. Use when the user asks why, what changed, or what the number means.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    type: "function",
-    name: "simulate_purchase",
-    description:
-      "Simulate the consequence of a user spending a specific amount. Use when the user asks if they can buy, spend, order, or afford something.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        amount_cents: {
-          type: "integer",
-          minimum: 1,
-          maximum: 1000000,
-          description: "The purchase amount in cents. Infer it from the user's message.",
-        },
-      },
-      required: ["amount_cents"],
-    },
-  },
-  {
-    type: "function",
-    name: "show_true_balances",
-    description:
-      "Show actual account balances. Use only when the user explicitly asks for real balances or account balances.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    type: "function",
-    name: "show_recent_transactions",
-    description:
-      "Show recent transactions affecting the current rolling window. Use when the user asks for recent transactions, charges, purchases, or activity.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {
-        limit: {
-          type: "integer",
-          minimum: 1,
-          maximum: 12,
-          description: "Maximum number of transactions to return.",
-        },
-      },
-      required: ["limit"],
-    },
-  },
-  {
-    type: "function",
-    name: "detect_missing_card",
-    description:
-      "Explain a likely unconnected credit-card payment or missing card nudge. Use when the user asks about missing cards, connecting cards, or accuracy.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    type: "function",
-    name: "show_math",
-    description:
-      "Show the deterministic math breakdown. Use only when the user explicitly asks for math, formula, or calculation details.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-      required: [],
-    },
-  },
-  {
-    type: "function",
-    name: "answer_unrelated",
-    description:
-      "Respond when the user input is unrelated, ambiguous, a greeting, nonsense, or not answerable by the Spendable app tools.",
-    strict: true,
-    parameters: {
-      type: "object",
-      additionalProperties: false,
-      properties: {},
-      required: [],
-    },
-  },
-];
-
-const finalMessageSchema = z.object({
-  message: z.string().min(1).max(420),
-});
-
 export async function runAIAgent(
   input: RunAiAgentInput,
-  client?: OpenAIResponsesClient,
+  runtime?: AgentRuntime,
 ): Promise<AgentResponse> {
-  if (!client && !shouldUseModel()) {
+  if (runtime) {
+    return runtime.run(input);
+  }
+
+  if (!shouldUseModel()) {
     throw new AgentUnavailableError({
       code: "missing-openai-config",
       message: "AI is not configured.",
@@ -197,175 +199,944 @@ export async function runAIAgent(
     });
   }
 
-  try {
-    const openAIClient = client ?? createOpenAIClient();
-    const transport = client ? undefined : getOpenAIClientConfig().transport;
-    const response = await openAIClient.responses.create({
-      model: getFreeCashAiModel(),
-      instructions: [
-        "You route Spendable app messages to exactly one deterministic tool.",
-        "Never calculate money yourself.",
-        "Never invent balances, transactions, safety advice, or financial-advisor language.",
-        "If the user asks if they can spend or buy something, call simulate_purchase.",
-        "If a spending question does not include or imply a specific amount, call answer_unrelated.",
-        "Use recent conversation to resolve short follow-ups like 'what about $20 instead' as purchase simulations when they follow a spending question.",
-        "If the user asks for account balances, call show_true_balances.",
-        "If the user asks for math or formula details, call show_math.",
-        "If the user asks about missing cards or accuracy, call detect_missing_card.",
-        "If the user asks for transaction activity, call show_recent_transactions.",
-        "If the user asks what the Free Cash number means or why it changed, call explain_free_cash.",
-        "If the user input is unrelated, ambiguous, a greeting, nonsense, or not answerable by these tools, call answer_unrelated.",
-      ].join(" "),
-      input: [
-        ...formatHistoryForModel(input.history),
-        {
-          role: "user",
-          content: input.message,
-        },
-      ],
-      tools: freeCashTools,
-      tool_choice: "required",
-      parallel_tool_calls: false,
-      store: false,
-    });
+  let repair: AgentResponseRepair | undefined;
+  let lastError: AgentUnavailableError | undefined;
 
-    const toolCall = getSingleFunctionToolCall(response);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const context = createSpendableContext(input, repair);
 
-    if (!toolCall) {
-      throw new AgentUnavailableError({
-        code: "model-returned-no-tool-call",
-        message: "AI did not return an app action.",
-        status: 502,
-        detail: "The model response did not include a supported Spendable tool call.",
+    try {
+      const agent = createSpendableAgent(context);
+      const runner = createSpendableRunner();
+      const result = await runner.run(agent, createAgentInput(input, context), {
+        context,
+        maxTurns: 5,
       });
-    }
 
-    const toolName = toolCall.name;
-
-    if (!isAgentToolName(toolName)) {
-      throw new AgentUnavailableError({
-        code: "model-returned-unknown-tool",
-        message: "AI returned an unsupported app action.",
-        status: 502,
-        detail: `Unsupported tool: ${sanitizeErrorDetail(toolName)}`,
-      });
-    }
-
-    const args = groundToolArguments(toolName, parseToolArguments(toolName, toolCall.arguments), input.message);
-    const toolResponse = runAgentToolSafely(toolName, args, input.snapshot);
-    const finalMessage = await generateFinalMessage(openAIClient, {
-      userMessage: input.message,
-      history: input.history,
-      toolName,
-      toolResponse,
-    });
-
-    return agentResponseSchema.parse({
-      ...toolResponse,
-      message: finalMessage.message,
-      audit: {
-        ...toolResponse.audit,
-        toolNames: [toolName],
+      return buildAgentResponse(result.finalOutput, context, input, {
         usedModel: true,
-        model: finalMessage.model,
-        transport,
-      },
-    });
-  } catch (error) {
-    if (error instanceof AgentUnavailableError) {
-      throw error;
-    }
+        model: getFreeCashAiModel(),
+        transport: getOpenAIClientConfig().transport,
+      });
+    } catch (error) {
+      const agentError = toAgentUnavailableError(error);
 
-    throw new AgentUnavailableError({
-      code: "openai-request-failed",
-      message: "AI request failed.",
-      detail: getErrorDetail(error),
-      cause: error,
-    });
+      if (!repair && shouldRetryFinalOutput(agentError)) {
+        repair = createAgentResponseRepair(agentError);
+        lastError = agentError;
+        continue;
+      }
+
+      throw agentError;
+    }
   }
+
+  throw lastError ?? new AgentUnavailableError({
+    code: "openai-request-failed",
+    message: "AI request failed.",
+  });
 }
 
-async function generateFinalMessage(
-  client: OpenAIResponsesClient,
-  input: {
-    userMessage: string;
-    history?: AgentHistoryItem[];
-    toolName: AgentToolName;
-    toolResponse: AgentResponse;
-  },
-): Promise<{ message: string; model: string }> {
-  const response = await client.responses.create({
-    model: getFreeCashAiModel(),
-    instructions: [
-      "You write the final visible chat reply for Spendable.",
-      "Return JSON that matches the supplied schema.",
-      "Use the app_result as the only source of financial facts.",
-      "Do not invent accounts, transactions, balances, dates, or safety advice.",
-      "Spendable is a single-screen chat app with a top Free Cash number, temporary cards, prompt chips, and this chat input.",
-      "There is no dashboard, dashboard page, budget page, transaction page, tab view, or separate area to send the user to.",
-      "If a card is returned, say it is shown below or in this reply, never somewhere else.",
-      "Never say safe to spend, afford, recommend, or tell the user what they should buy.",
-      "Do not mention tools, JSON, routing, or deterministic systems.",
-      "Do not sound templated; respond to the user's exact wording.",
-      "Keep it to one or two short sentences.",
-      "If route_tool is answer_unrelated, briefly redirect to the current Free Cash number, spending tests, balances, transactions, or data accuracy.",
-      "Do not mention generic budgeting, expense tracking, dashboards, pages, tabs, or financial planning.",
-    ].join(" "),
-    input: [
-      {
-        role: "user",
-        content: JSON.stringify({
-          user_message: input.userMessage,
-          recent_conversation: formatHistoryForGrounding(input.history),
-          route_tool: input.toolName,
-          app_result: createModelGrounding(input.toolResponse),
-        }),
+function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined {
+  const message = input.message.trim();
+  const normalized = normalizePrompt(message);
+  const amountCents = extractExplicitPurchaseAmountCents(message);
+  const promptChipTool = getForcedPromptChipTool(input.selectedPromptChipId, input.onboardingState);
+
+  if (promptChipTool) {
+    return promptChipTool;
+  }
+
+  if (!normalized) {
+    return undefined;
+  }
+
+  if (isGeneralSpendingQuestion(normalized) && isSpendingPrompt(normalized)) {
+    return {
+      toolName: "get_free_cash_snapshot",
+      args: {},
+      requireCard: false,
+    };
+  }
+
+  if (isSpendableCashDefinitionPrompt(normalized)) {
+    return {
+      toolName: "get_spendable_cash_definition",
+      args: {},
+      requireCard: false,
+    };
+  }
+
+  if (isExplicitMathPrompt(normalized)) {
+    return {
+      toolName: "get_free_cash_math",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (isExplicitForecastPrompt(normalized)) {
+    return {
+      toolName: "forecast_spendable_cash",
+      args: {
+        horizon_days: extractForecastHorizonDays(normalized),
       },
-    ],
-    text: {
-      format: {
-        type: "json_schema",
-        name: "free_cash_final_message",
-        strict: true,
-        schema: {
-          type: "object",
-          additionalProperties: false,
-          properties: {
-            message: {
-              type: "string",
-              minLength: 1,
-              maxLength: 420,
-            },
-          },
-          required: ["message"],
-        },
+      requireCard: true,
+    };
+  }
+
+  if (isAffirmativeFollowUpToForecast(normalized, input.history)) {
+    return {
+      toolName: "forecast_spendable_cash",
+      args: {
+        horizon_days: 14,
+      },
+      requireCard: true,
+    };
+  }
+
+  if (isExplicitRecurringPrompt(normalized)) {
+    return {
+      toolName: "get_recurring_activity",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (isExplicitSpendingBreakdownPrompt(normalized)) {
+    return {
+      toolName: "get_spending_breakdown",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (isExplicitFreeCashDriversPrompt(normalized)) {
+    return {
+      toolName: "get_free_cash_drivers",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (isExplicitTransactionsPrompt(normalized)) {
+    return {
+      toolName: "get_recent_transactions",
+      args: {
+        limit: 6,
+      },
+      requireCard: true,
+    };
+  }
+
+  if (isExplicitBalancesPrompt(normalized)) {
+    return {
+      toolName: "get_true_balances",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (isSpecificSpendSimulationPrompt(normalized) && amountCents !== null) {
+    return {
+      toolName: "simulate_purchase",
+      args: {
+        amount_cents: amountCents,
+      },
+      requireCard: true,
+    };
+  }
+
+  if (isShortPurchaseFollowUp(normalized, input.history) && amountCents !== null) {
+    return {
+      toolName: "simulate_purchase",
+      args: {
+        amount_cents: amountCents,
+      },
+      requireCard: true,
+    };
+  }
+
+  return undefined;
+}
+
+function getForcedPromptChipTool(
+  selectedPromptChipId: string | undefined,
+  onboardingState: SpendableAgentOnboardingState | undefined,
+): ForcedAgentTool | undefined {
+  if (!selectedPromptChipId) {
+    return undefined;
+  }
+
+  if (selectedPromptChipId === "get-signed-up") {
+    return {
+      toolName: "start_google_oauth",
+      args: {},
+      requireCard: false,
+    };
+  }
+
+  if (selectedPromptChipId === "connect-data") {
+    if (onboardingState?.status === "guest") {
+      return {
+        toolName: "start_google_oauth",
+        args: {},
+        requireCard: false,
+      };
+    }
+
+    return {
+      toolName: "start_plaid_link",
+      args: {},
+      requireCard: false,
+    };
+  }
+
+  if (selectedPromptChipId === "use-default-savings") {
+    return {
+      toolName: "save_protected_savings",
+      args: {
+        amount_cents: 20000,
+      },
+      requireCard: false,
+    };
+  }
+
+  if (selectedPromptChipId === "set-250-savings") {
+    return {
+      toolName: "save_protected_savings",
+      args: {
+        amount_cents: 25000,
+      },
+      requireCard: false,
+    };
+  }
+
+  return undefined;
+}
+
+function createSpendableAgent(context: SpendableAgentContext) {
+  return new Agent<SpendableAgentContext, typeof agentFinalOutputSchema>({
+    name: "SpendableAgent",
+    instructions: createSpendableInstructions,
+    model: getFreeCashAiModel(),
+    modelSettings: {
+      toolChoice: context.forcedTool?.toolName ?? "auto",
+      parallelToolCalls: false,
+      store: false,
+      maxTokens: 900,
+      reasoning: {
+        effort: "minimal",
+      },
+      text: {
+        verbosity: "low",
       },
     },
-    store: false,
+    tools: createSpendableTools(),
+    outputType: agentFinalOutputSchema,
+    toolUseBehavior: "run_llm_again",
   });
-
-  const rawContent = getResponseOutputText(response);
-
-  if (!rawContent) {
-    throw new AgentUnavailableError({
-      code: "model-returned-empty-final-message",
-      message: "AI did not write a final response.",
-      status: 502,
-      detail: "The model returned an empty final message.",
-    });
-  }
-
-  return {
-    message: guardVisibleFinalMessage(parseFinalMessage(rawContent), input.toolResponse),
-    model: response.model,
-  };
 }
 
-function formatHistoryForModel(history: AgentHistoryItem[] | undefined): ResponseInputItem[] {
+function createSpendableRunner() {
+  const config = getOpenAIClientConfig();
+  const provider = new OpenAIProvider({
+    openAIClient: createOpenAIClient(config),
+    useResponses: true,
+    cacheResponsesWebSocketModels: false,
+  });
+
+  return new Runner({
+    modelProvider: provider,
+    tracingDisabled: false,
+    traceIncludeSensitiveData: false,
+    workflowName: "Spendable agent",
+    reasoningItemIdPolicy: "omit",
+    modelSettings: {
+      toolChoice: "auto",
+      parallelToolCalls: false,
+      store: false,
+    },
+    toolExecution: {
+      maxFunctionToolConcurrency: 1,
+    },
+  });
+}
+
+function createSpendableTools() {
+  return [
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_onboarding_state",
+      description:
+        "Read the user's current Spendable setup state, including whether they are signed in, need protected savings, need connected data, or already have financial data.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_onboarding_state");
+
+        return {
+          ...context.onboardingState,
+          syncStatus: formatSyncStatus(context.syncStatus),
+          availablePromptChips: context.availablePromptChips,
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "start_google_oauth",
+      description:
+        "Start Google sign-in when a guest wants to sign up, continue setup, or connect data before signing in.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "start_google_oauth");
+
+        if (context.onboardingState.status !== "guest") {
+          return {
+            ok: false,
+            status: "already_signed_in",
+            message: "The user is already signed in.",
+          };
+        }
+
+        return setClientAction(context, {
+          type: "oauth_redirect",
+          url: "/api/auth/oauth/google",
+        });
+      },
+    }),
+    tool<typeof saveProtectedSavingsParameters, SpendableAgentContext>({
+      name: "save_protected_savings",
+      description:
+        "Save the monthly protected savings amount. Use when the user gives a dollar amount for protected savings or chooses the default protected savings step.",
+      parameters: saveProtectedSavingsParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "save_protected_savings", input, saveProtectedSavingsParameters);
+        recordTool(context, "save_protected_savings");
+
+        if (!context.actions?.saveProtectedSavings) {
+          return {
+            ok: false,
+            status: "sign_in_required",
+            message: "The user must sign in before protected savings can be saved.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.saveProtectedSavings({
+          amountCents: toolInput.amount_cents,
+        }));
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "start_plaid_link",
+      description:
+        "Create a Plaid Link session for connecting or repairing account data. Use when a signed-in user wants to connect bank/card data.",
+      parameters: emptyToolParameters,
+      strict: true,
+      async execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "start_plaid_link");
+
+        if (context.onboardingState.status === "guest") {
+          return {
+            ok: false,
+            status: "sign_in_required",
+            message: "The user must sign in with Google before Plaid can open.",
+          };
+        }
+
+        if (context.onboardingState.status === "needs-consent") {
+          return {
+            ok: false,
+            status: "protected_savings_required",
+            message: "The user must choose protected savings before Plaid can open.",
+          };
+        }
+
+        if (!context.actions?.startPlaidLink) {
+          return {
+            ok: false,
+            status: "plaid_unavailable",
+            message: "Plaid is not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.startPlaidLink());
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "refresh_financial_data",
+      description:
+        "Refresh already connected financial data. Use when the user asks to refresh, sync, update, or reload their account data.",
+      parameters: emptyToolParameters,
+      strict: true,
+      async execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "refresh_financial_data");
+
+        if (!context.actions?.refreshFinancialData) {
+          return {
+            ok: false,
+            status: "connect_data_first",
+            message: "No refreshable provider is connected yet.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.refreshFinancialData());
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "request_delete_data_confirmation",
+      description:
+        "Explain the exact confirmation needed before deleting stored financial data. Use when the user asks about deleting, erasing, or removing data but has not typed DELETE DATA exactly.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "request_delete_data_confirmation");
+
+        return {
+          ok: true,
+          status: "confirmation_required",
+          exactConfirmation: "DELETE DATA",
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "delete_user_data",
+      description:
+        "Delete stored financial data only when the user's latest message is exactly DELETE DATA.",
+      parameters: emptyToolParameters,
+      strict: true,
+      async execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "delete_user_data");
+
+        if (context.inputMessage.trim() !== "DELETE DATA") {
+          return {
+            ok: false,
+            status: "confirmation_required",
+            exactConfirmation: "DELETE DATA",
+          };
+        }
+
+        if (!context.actions?.deleteUserData) {
+          return {
+            ok: false,
+            status: "sign_in_required",
+            message: "The user must be signed in before stored data can be deleted.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.deleteUserData());
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_free_cash_snapshot",
+      description:
+        "Read the current deterministic Spendable Cash snapshot. Use for financial facts when a card is not necessarily needed.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_free_cash_snapshot");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const result = calculateFreeCash(snapshot);
+
+        return {
+          metricName: "Spendable Cash",
+          freeCashToday: formatMoney(result.freeCashTodayCents),
+          freeCashTodayCents: result.freeCashTodayCents,
+          rollingNet: formatMoney(result.rollingNetCents),
+          rollingNetCents: result.rollingNetCents,
+          window: result.window,
+          warningCount: result.warnings.length,
+          dataStateCount: result.dataStates.length,
+          suggestedPrompts: getSuggestedPrompts(result),
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_free_cash_drivers",
+      description:
+        "Get the deterministic drivers behind Spendable Cash and make the explanation card available. Use when the user asks why, what changed, or what is behind the number.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_free_cash_drivers");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("explain_free_cash", {}, snapshot);
+        const result = calculateFreeCash(snapshot);
+        addAvailableCards(context, response.cards);
+
+        return {
+          metricName: "Spendable Cash",
+          freeCashToday: formatMoney(result.freeCashTodayCents),
+          summary: summarizeFreeCash(result),
+          drivers: response.cards[0]?.type === "free_cash_explanation" ? response.cards[0].drivers : [],
+          warnings: result.warnings,
+          dataStates: result.dataStates,
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_spendable_cash_definition",
+      description:
+        "Read the deterministic explanation of what Spendable Cash means and what makes it rise or fall. Use when the user asks how Spendable works or what Spendable Cash is.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_spendable_cash_definition");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const result = calculateFreeCash(snapshot);
+
+        return {
+          metricName: "Spendable Cash",
+          currentValue: formatMoney(result.freeCashTodayCents),
+          definition:
+            "Spendable Cash is the daily amount left after recent income, recent spending, refunds, and protected savings are counted.",
+          risesWhen: [
+            "income or refunds enter the rolling month",
+            "old spending leaves the rolling month",
+            "protected savings goes down",
+          ],
+          fallsWhen: [
+            "spending or bills enter the rolling month",
+            "old income leaves the rolling month",
+            "protected savings goes up",
+          ],
+          suggestedPrompts: getSuggestedPrompts(result),
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_spending_breakdown",
+      description:
+        "Get grouped rolling-window income, spending, refunds, rent, card payments, top categories, and top merchants, and make the breakdown card available.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_spending_breakdown");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("show_spending_breakdown", {}, snapshot);
+        const card = response.cards[0];
+        addAvailableCards(context, response.cards);
+
+        return {
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+          breakdown:
+            card?.type === "spending_breakdown"
+              ? {
+                  totals: card.totals,
+                  topCategoryCount: card.topCategories.length,
+                  topMerchantCount: card.topMerchants.length,
+                  incomeSourceCount: card.incomeSources.length,
+                }
+              : null,
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_recurring_activity",
+      description:
+        "Detect likely repeated bills, subscriptions, paychecks, or monthly activity and make the recurring activity card available.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_recurring_activity");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("show_recurring_activity", {}, snapshot);
+        const card = response.cards[0];
+        addAvailableCards(context, response.cards);
+
+        return {
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+          recurring:
+            card?.type === "recurring_activity"
+              ? {
+                  itemCount: card.items.length,
+                  nextItems: card.items.slice(0, 3).map((item) => ({
+                    label: item.label,
+                    expectedDate: item.expectedDate,
+                    amount: formatMoneyWithCents(item.amountCents),
+                    confidence: item.confidence,
+                  })),
+                }
+              : null,
+        };
+      },
+    }),
+    tool<typeof forecastParameters, SpendableAgentContext>({
+      name: "forecast_spendable_cash",
+      description:
+        "Forecast Spendable Cash for the next 1 to 14 days using recurring activity plus recent daily spend trend, and make the forecast card available.",
+      parameters: forecastParameters,
+      strict: true,
+      execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "forecast_spendable_cash", input, forecastParameters);
+        recordTool(context, "forecast_spendable_cash");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool(
+          "show_spendable_cash_forecast",
+          { horizon_days: toolInput.horizon_days },
+          snapshot,
+        );
+        const card = response.cards[0];
+        addAvailableCards(context, response.cards);
+
+        return {
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+          forecast:
+            card?.type === "spendable_cash_forecast"
+              ? {
+                  horizonDays: card.horizonDays,
+                  current: formatMoney(card.currentSpendableCashCents),
+                  projected: formatMoney(card.projectedSpendableCashCents),
+                  dailyTrend: formatMoney(card.dailyTrendCents),
+                  recurringItemCount: card.recurringItems.length,
+                  disclaimer: card.disclaimer,
+                }
+              : null,
+        };
+      },
+    }),
+    tool<typeof simulatePurchaseParameters, SpendableAgentContext>({
+      name: "simulate_purchase",
+      description:
+        "Simulate the consequence of a specific purchase amount. Use when the user asks whether a purchase or spend amount fits.",
+      parameters: simulatePurchaseParameters,
+      strict: true,
+      execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "simulate_purchase", input, simulatePurchaseParameters);
+        recordTool(context, "simulate_purchase");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("simulate_purchase", toolInput, snapshot);
+        const card = response.cards[0];
+        addAvailableCards(context, response.cards);
+
+        return {
+          amountCents: toolInput.amount_cents,
+          amount: formatMoney(toolInput.amount_cents),
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+          simulation:
+            card?.type === "purchase_simulation"
+              ? {
+                  before: formatMoney(card.beforeCents),
+                  afterToday: formatMoney(card.afterTodayCents),
+                  monthlyAverageAfter: formatMoney(card.monthlyAverageAfterCents),
+                }
+              : null,
+        };
+      },
+    }),
+    tool<typeof recentTransactionsParameters, SpendableAgentContext>({
+      name: "get_recent_transactions",
+      description:
+        "Get recent transactions for the current rolling window and make the recent transactions card available. Use only when the user asks for recent transactions, charges, purchases, or activity.",
+      parameters: recentTransactionsParameters,
+      strict: true,
+      execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "get_recent_transactions", input, recentTransactionsParameters);
+        recordTool(context, "get_recent_transactions");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("show_recent_transactions", toolInput, snapshot);
+        const card = response.cards[0];
+        addAvailableCards(context, response.cards);
+
+        return {
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+          transactionSummary:
+            card?.type === "recent_transactions"
+              ? {
+                  count: card.transactions.length,
+                  total: formatMoneyWithCents(sumTransactionAmounts(card.transactions)),
+                  pendingCount: card.transactions.filter((transaction) => transaction.pending).length,
+                  dateRange: getTransactionDateRange(card.transactions),
+                }
+              : null,
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_true_balances",
+      description:
+        "Get actual account balances and make the balances card available. Use only when the user asks for true balances, actual balances, or account balances.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_true_balances");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("show_true_balances", {}, snapshot);
+        addAvailableCards(context, response.cards);
+
+        return {
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+          balanceCount:
+            response.cards[0]?.type === "true_balances" ? response.cards[0].balances.length : 0,
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_data_quality",
+      description:
+        "Check connected-data quality, missing cards, stale institutions, or repair status and make the relevant data-quality card available.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_data_quality");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("detect_missing_card", {}, snapshot);
+        const result = calculateFreeCash(snapshot);
+        addAvailableCards(context, response.cards);
+
+        return {
+          warningCount: result.warnings.length,
+          warnings: result.warnings,
+          dataStates: result.dataStates,
+          accountCount: snapshot.accounts.length,
+          transactionCount: snapshot.transactions.length,
+          syncStatus: formatSyncStatus(context.syncStatus),
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_sync_status",
+      description:
+        "Read connection and sync status. Use when the user asks whether data is connected, stale, repaired, refreshed, or still syncing.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_sync_status");
+
+        return formatSyncStatus(context.syncStatus);
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_free_cash_math",
+      description:
+        "Get the deterministic math breakdown behind Spendable Cash. Use only when the user explicitly asks for math, formula, or calculation details.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_free_cash_math");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("show_math", {}, snapshot);
+        addAvailableCards(context, response.cards);
+
+        return {
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+        };
+      },
+    }),
+  ];
+}
+
+function createSpendableInstructions(runContext: {
+  context: SpendableAgentContext;
+}): string {
+  const recentCardTypes = uniqueStrings(
+    runContext.context.conversationState.shownCards.map((card) => card.type),
+  );
+  const lastToolNames = uniqueStrings(runContext.context.conversationState.lastToolNames);
+  const repairInstruction = runContext.context.repair
+    ? [
+        "Your previous final response failed Spendable's final checks.",
+        `Failure reason: ${runContext.context.repair.reason}.`,
+        runContext.context.repair.detail ? `Failure detail: ${runContext.context.repair.detail}` : "",
+        "Fix the final structured answer. Do not apologize. Do not add extra detail.",
+      ].filter(Boolean).join("\n")
+    : "";
+
+  return [
+    "You are Spendable's conversational agent.",
+    "Spendable is a single-screen chat app with a top Spendable Cash number, temporary cards, prompt chips, and this chat input.",
+    "Use Spendable Cash as the user-facing metric name. Do not say Free Cash in visible replies.",
+    "There is no dashboard, dashboard page, budget page, transaction page, tab view, or separate area to send the user to.",
+    "Do not mention dashboards, pages, tabs, sections, navigation, budgeting apps, expense tracking, or financial planning.",
+    "Never calculate money yourself. Use tools for any current financial fact, balance, transaction, driver, data-quality status, or purchase simulation.",
+    "Use tools for setup and account actions. Do not pretend an action happened unless the matching tool returned ok.",
+    "For greetings, do not mention forecasts, cards, views, breakdowns, transactions, or app features. Just invite one simple next question.",
+    "Use get_onboarding_state when the user's setup state matters or when you are unsure what step they are on.",
+    "If a guest wants to sign up, continue, start, or connect data, call start_google_oauth.",
+    "If the user needs consent and gives a protected-savings amount, call save_protected_savings. If they say continue/default/yes/ok at that step, use 20000 cents.",
+    "If a signed-in consented user wants to connect data, call start_plaid_link.",
+    "If the user asks to refresh, sync, update, or reload connected data, call refresh_financial_data.",
+    "If the user asks to delete stored data, call request_delete_data_confirmation unless their latest message is exactly DELETE DATA. Only then call delete_user_data.",
+    "You may answer without tools for greetings, thanks, reactions, nonsense, duplicate follow-ups, or things already answered by the recent conversation.",
+    "If forced_tool_name is not none, call that exact tool first. After the tool returns, write a fresh conversational response in your own words.",
+    "If there is no financial snapshot yet, do not answer with fake amounts. Guide the user to the next setup step.",
+    "If the user asks why the number changed, why this number, what drives Spendable Cash, or asks for drivers, call get_free_cash_drivers directly.",
+    "Do not ask whether they want drivers, math, or a summary when they already asked why or asked for drivers.",
+    "If the user asks what Spendable Cash means or what makes it rise or fall, call get_spendable_cash_definition.",
+    "If the user asks for a trend, forecast, projection, or next-days view, call forecast_spendable_cash.",
+    "If the user asks about recurring bills, subscriptions, monthly charges, or likely upcoming repeats, call get_recurring_activity.",
+    "If the user asks for a complete, item, category, merchant, income, spending, refund, or card-payment breakdown, call get_spending_breakdown.",
+    "Only ask for an amount when the user is clearly asking you to simulate or test a specific purchase but did not provide the amount.",
+    "For general spend questions without an amount, call get_free_cash_snapshot. Explain what the number signals, but do not give a max spend limit.",
+    "For purchase simulations, state the before/after result. Do not say the user can or cannot spend, buy, afford, or purchase.",
+    "If the user asks generally whether negative Spendable Cash means they cannot spend money, use get_free_cash_snapshot and explain the signal conversationally without treating it as a purchase simulation.",
+    "Negative Spendable Cash is a warning about the current rolling-window pattern; it does not literally mean every dollar of spending is impossible.",
+    "Only call get_recent_transactions when the user plainly asks to show, list, or identify transactions, charges, purchases, or recent activity.",
+    "Do not call get_recent_transactions for general why, math, negative Spendable Cash, or can-I-spend questions.",
+    "Cards are optional. Prefer conversational explanation after the first card.",
+    "Do not repeat a card whose type is listed in recent_card_types unless the user clearly asks to see that card, details, or breakdown again.",
+    "Tools create any cards. You do not emit card data or card selectors in the final answer.",
+    "Only say show, list, pull, view, card, trend view, forecast, or breakdown when a matching tool returned a card in this same turn.",
+    "For broad finance topics without a matching Spendable card, say we can talk through it or discuss it. Do not promise to show data.",
+    "Forecasts are pattern guesses only. If mentioning a forecast caveat, use one short sentence: Forecast only; not guaranteed.",
+    "Do not use guarantee language except the exact forecast caveat phrase: not guaranteed.",
+    "Use at most one card unless the user explicitly asks for multiple details.",
+    "Never use guaranteed-spending language, affordability claims, recommendations, or tell the user what they should buy.",
+    `Never say ${["safe", "to", "spend"].join(" ")}, safe to buy, you can spend, you cannot spend, you can afford, I recommend, financial advice, or financial advisor.`,
+    "Do not use stock template phrasing like 'Here is...' as the whole reply. Respond to the user's exact wording and current conversation.",
+    "Write at a fifth-grade reading level.",
+    "Keep visible replies to one short sentence when possible, two short sentences max.",
+    "The message must be 35 words or fewer and 220 characters or fewer.",
+    "Use common words. Avoid formal phrases like deterministic, rolling-window pattern, liquidity, optimal, analyze, or sufficient.",
+    "Never use k shorthand for money. Say $210, not $0.21k.",
+    "For card answers, let the card carry the detail. The message should only tell the user what the card is showing.",
+    "Generate up to 3 fresh promptChips that fit the current state and conversation.",
+    "Prompt chip labels should be 2 to 5 simple words. Prompt text should sound like a natural next user message.",
+    "Do not return the exact same chip set every time. Avoid generic repeats when the user just asked a specific question.",
+    "Use protected setup chip ids only when the chip clearly starts that exact setup step: get-signed-up, connect-data, use-default-savings, set-250-savings.",
+    "For normal suggested questions, use ids that start with ai-.",
+    "Return only structured output matching the schema, including promptChips.",
+    repairInstruction,
+    `forced_tool_name: ${runContext.context.forcedTool?.toolName ?? "none"}`,
+    `onboarding_status: ${runContext.context.onboardingState.status}`,
+    `has_financial_snapshot: ${Boolean(runContext.context.snapshot)}`,
+    `available_prompt_chip_ids: ${runContext.context.availablePromptChips.map((chip) => chip.id).join(", ") || "none"}`,
+    `recent_card_types: ${recentCardTypes.length ? recentCardTypes.join(", ") : "none"}`,
+    `last_tool_names: ${lastToolNames.length ? lastToolNames.join(", ") : "none"}`,
+  ].join("\n");
+}
+
+function createAgentInput(
+  input: RunAiAgentInput,
+  context: SpendableAgentContext,
+): AgentInputItem[] {
+  return [
+    ...formatHistoryForModel(input.history),
+    {
+      role: "user",
+      content: [
+        {
+          type: "input_text",
+          text: JSON.stringify({
+            user_message: input.message,
+            interface_context:
+              "Single Spendable screen only. No dashboard, tabs, budget page, transaction page, or separate navigation.",
+            recent_card_types: context.conversationState.shownCards.map((card) => card.type).slice(-8),
+            recent_card_titles: context.conversationState.shownCards
+              .map((card) => card.title)
+              .filter(Boolean)
+              .slice(-8),
+            last_tool_names: context.conversationState.lastToolNames.slice(-8),
+            forced_tool_name: context.forcedTool?.toolName ?? null,
+            forced_tool_args: context.forcedTool?.args ?? null,
+            onboarding_state: context.onboardingState,
+            has_financial_snapshot: Boolean(context.snapshot),
+            prompt_chip_examples: context.availablePromptChips,
+            response_style:
+              `Answer at a fifth-grade reading level. Use 35 words or fewer and ${agentMessageMaxChars} characters or fewer.`,
+            repair: context.repair ?? null,
+          }),
+        },
+      ],
+    },
+  ];
+}
+
+function formatHistoryForModel(history: AgentHistoryItem[] | undefined): AgentInputItem[] {
   return formatHistoryForGrounding(history).map((item) => ({
     role: item.role,
-    content: item.content,
-  }));
+    content: [
+      {
+        type: item.role === "assistant" ? "output_text" : "input_text",
+        text: item.content,
+      },
+    ],
+  })) as AgentInputItem[];
 }
 
 function formatHistoryForGrounding(history: AgentHistoryItem[] | undefined): AgentHistoryItem[] {
@@ -375,49 +1146,708 @@ function formatHistoryForGrounding(history: AgentHistoryItem[] | undefined): Age
   }));
 }
 
-function getSingleFunctionToolCall(response: Response): ResponseFunctionToolCall | undefined {
-  const functionCalls = response.output.filter(
-    (item): item is ResponseFunctionToolCall => item.type === "function_call",
+function createSpendableContext(
+  input: RunAiAgentInput,
+  repair?: AgentResponseRepair,
+): SpendableAgentContext {
+  const snapshot = input.snapshot ?? (input.onboardingState ? undefined : fakeSnapshot);
+  const hasFinancialData = Boolean(snapshot);
+  const onboardingState = input.onboardingState ?? {
+    status: "ready" as const,
+    hasFinancialData,
+  };
+
+  return {
+    inputMessage: input.message,
+    snapshot,
+    syncStatus: input.syncStatus ?? null,
+    onboardingState: {
+      ...onboardingState,
+      hasFinancialData: Boolean(snapshot),
+    },
+    actions: input.actions,
+    conversationState: {
+      shownCards: (input.conversationState?.shownCards ?? []).slice(-8),
+      lastToolNames: (input.conversationState?.lastToolNames ?? []).slice(-8),
+    },
+    forcedTool: getForcedAgentTool(input),
+    repair,
+    usedTools: [],
+    availableCards: [],
+    availablePromptChips: getAvailablePromptChips({
+      snapshot,
+      onboardingState: {
+        ...onboardingState,
+        hasFinancialData: Boolean(snapshot),
+      },
+    }),
+  };
+}
+
+function getToolContext(runContext?: { context?: SpendableAgentContext }): SpendableAgentContext {
+  if (!runContext?.context) {
+    throw new Error("Spendable agent context is missing.");
+  }
+
+  return runContext.context;
+}
+
+function recordTool(context: SpendableAgentContext, toolName: string) {
+  context.usedTools.push(toolName);
+}
+
+function addAvailableCards(context: SpendableAgentContext, cards: AgentCard[]) {
+  context.availableCards.push(...cards);
+}
+
+function setClientAction(
+  context: SpendableAgentContext,
+  clientAction: AgentClientAction,
+): SpendableAgentActionResult {
+  context.clientAction = clientAction;
+
+  return {
+    ok: true,
+    status: clientAction.type,
+    clientActionType: clientAction.type,
+  };
+}
+
+function applyActionResult(
+  context: SpendableAgentContext,
+  result: SpendableAgentActionResult,
+): SpendableAgentActionResult {
+  const { clientAction, ...safeResult } = result;
+
+  if (clientAction && clientAction.type !== "none") {
+    context.clientAction = clientAction;
+  }
+
+  return {
+    ...safeResult,
+    clientActionType: clientAction?.type ?? result.clientActionType,
+  };
+}
+
+function noFinancialDataToolResult(context: SpendableAgentContext) {
+  return {
+    ok: false,
+    status: "no_financial_data",
+    onboardingState: context.onboardingState,
+    message: "Financial data is not connected yet.",
+  };
+}
+
+function getToolInput<T extends z.ZodTypeAny>(
+  context: SpendableAgentContext,
+  toolName: DeterministicAgentToolName,
+  input: z.infer<T>,
+  schema: T,
+): z.infer<T> {
+  if (context.forcedTool?.toolName !== toolName) {
+    return input;
+  }
+
+  return schema.parse(context.forcedTool.args);
+}
+
+function buildAgentResponse(
+  finalOutput: unknown,
+  context: SpendableAgentContext,
+  input: RunAiAgentInput,
+  audit: {
+    usedModel: boolean;
+    model?: string;
+    transport?: AiTransport;
+  },
+): AgentResponse {
+  const parsed = parseAgentFinalOutput(finalOutput);
+  const usedTools = uniqueStrings(context.usedTools);
+  const cards = selectDeterministicCards(parsed, context, input);
+  const result = context.snapshot ? calculateFreeCash(context.snapshot) : null;
+  const promptChips = selectPromptChips(parsed, context, result);
+  const responseMode = cards.length === 0 && parsed.responseMode === "show_card"
+    ? usedTools.length > 0
+      ? "update_context"
+      : "chat_only"
+    : cards.length > 0 && context.forcedTool?.requireCard
+      ? "show_card"
+      : parsed.responseMode;
+  const guardedMessage = guardVisibleFinalMessage(parsed.message, cards);
+
+  return agentResponseSchema.parse({
+    message: guardedMessage,
+    cards,
+    promptChips,
+    usedTools,
+    responseMode,
+    ...(context.clientAction && context.clientAction.type !== "none"
+      ? { clientAction: context.clientAction }
+      : {}),
+    audit: {
+      toolNames: usedTools,
+      usedModel: audit.usedModel,
+      model: audit.model,
+      transport: audit.transport,
+    },
+  });
+}
+
+function parseAgentFinalOutput(finalOutput: unknown): AgentFinalOutput {
+  try {
+    return agentFinalOutputSchema.parse(finalOutput);
+  } catch (error) {
+    throw new AgentUnavailableError({
+      code: "model-returned-invalid-final-output",
+      message: "AI returned an invalid final response.",
+      status: 502,
+      detail: getErrorDetail(error),
+      cause: error,
+    });
+  }
+}
+
+function selectDeterministicCards(
+  parsed: AgentFinalOutput,
+  context: SpendableAgentContext,
+  input: RunAiAgentInput,
+): AgentCard[] {
+  const wantsMultipleCards = explicitlyRequestsMultipleCards(input.message);
+  const forcedCards =
+    context.forcedTool?.requireCard && context.availableCards.length > 0
+      ? wantsMultipleCards
+        ? context.availableCards
+        : context.availableCards.slice(-1)
+      : [];
+  const fallbackCards =
+    parsed.responseMode === "show_card" && context.availableCards.length > 0
+      ? wantsMultipleCards
+        ? context.availableCards
+        : context.availableCards.slice(-1)
+      : [];
+  const selected = uniqueCardsByType([...forcedCards, ...fallbackCards]);
+  const suppressExplanation =
+    wasCardRecentlyShown(input.conversationState, "free_cash_explanation") &&
+    !explicitlyRequestsRepeatedCard(input.message);
+  const suppressTransactions = !explicitlyRequestsTransactions(input.message);
+
+  return selected
+    .filter((card) => !(suppressExplanation && card.type === "free_cash_explanation"))
+    .filter((card) => !(suppressTransactions && card.type === "recent_transactions"))
+    .slice(0, wantsMultipleCards ? 3 : 1);
+}
+
+function selectPromptChips(
+  parsed: AgentFinalOutput,
+  context: SpendableAgentContext,
+  result: ReturnType<typeof calculateFreeCash> | null,
+) : PromptChip[] {
+  const fallback = result
+    ? getSuggestedPrompts(result)
+    : getOnboardingPromptChips(context.onboardingState);
+  const generated = sanitizeGeneratedPromptChips(parsed.promptChips, context);
+
+  return generated.length > 0 ? generated : fallback.slice(0, 3);
+}
+
+function sanitizeGeneratedPromptChips(
+  chips: PromptChip[],
+  context: SpendableAgentContext,
+): PromptChip[] {
+  const seenIds = new Set<string>();
+  const seenPrompts = new Set<string>();
+  const sanitized: PromptChip[] = [];
+
+  chips.forEach((chip, index) => {
+    const next = sanitizeGeneratedPromptChip(chip, context, index);
+
+    if (!next) {
+      return;
+    }
+
+    const promptKey = normalizePrompt(next.prompt);
+    let id = next.id;
+
+    if (seenPrompts.has(promptKey)) {
+      return;
+    }
+
+    if (seenIds.has(id)) {
+      id = withPromptChipIdSuffix(id, index);
+    }
+
+    seenIds.add(id);
+    seenPrompts.add(promptKey);
+    sanitized.push({
+      ...next,
+      id,
+    });
+  });
+
+  return sanitized.slice(0, 3);
+}
+
+function sanitizeGeneratedPromptChip(
+  chip: PromptChip,
+  context: SpendableAgentContext,
+  index: number,
+): PromptChip | null {
+  const label = cleanPromptChipText(chip.label, 36);
+  const prompt = cleanPromptChipText(chip.prompt, 160);
+
+  if (!label || !prompt) {
+    return null;
+  }
+
+  if (containsDisallowedFinalLanguage(`${label} ${prompt}`)) {
+    return null;
+  }
+
+  const capabilitySafeChip = sanitizePromptChipCapability({ label, prompt }, context);
+
+  if (!capabilitySafeChip) {
+    return null;
+  }
+
+  const requestedId = normalizePromptChipId(chip.id);
+  const privilegedId = getPermittedPrivilegedPromptChipId(
+    requestedId,
+    context,
+    `${capabilitySafeChip.label} ${capabilitySafeChip.prompt}`,
+  );
+  const id = privilegedId ?? createGeneratedPromptChipId(
+    requestedId,
+    capabilitySafeChip.label,
+    capabilitySafeChip.prompt,
+    index,
   );
 
-  if (functionCalls.length > 1) {
+  return {
+    id,
+    label: capabilitySafeChip.label,
+    prompt: capabilitySafeChip.prompt,
+  };
+}
+
+function sanitizePromptChipCapability(
+  chip: Pick<PromptChip, "label" | "prompt">,
+  context: SpendableAgentContext,
+): Pick<PromptChip, "label" | "prompt"> | null {
+  const text = normalizePrompt(`${chip.label} ${chip.prompt}`);
+
+  if (!hasPromptChipDisplayVerb(text)) {
+    return chip;
+  }
+
+  if (!context.snapshot) {
+    return null;
+  }
+
+  if (isSupportedCardPrompt(text)) {
+    return chip;
+  }
+
+  return downgradePromptChipToDiscussion(chip);
+}
+
+function hasPromptChipDisplayVerb(normalized: string): boolean {
+  return /\b(show|see|list|pull|view|forecast|breakdown|trend view|cards?)\b/.test(normalized);
+}
+
+function isSupportedCardPrompt(normalized: string): boolean {
+  return (
+    isExplicitForecastPrompt(normalized) ||
+    isExplicitRecurringPrompt(normalized) ||
+    isExplicitSpendingBreakdownPrompt(normalized) ||
+    isExplicitTransactionsPrompt(normalized) ||
+    isExplicitBalancesPrompt(normalized) ||
+    isExplicitMathPrompt(normalized) ||
+    isExplicitFreeCashDriversPrompt(normalized) ||
+    (isSpecificSpendSimulationPrompt(normalized) && extractExplicitPurchaseAmountCents(normalized) !== null)
+  );
+}
+
+function downgradePromptChipToDiscussion(
+  chip: Pick<PromptChip, "label" | "prompt">,
+): Pick<PromptChip, "label" | "prompt"> {
+  const subject = chip.label
+    .replace(/^(show|see|list|pull|view|forecast|break down|breakdown)\s+/i, "")
+    .replace(/\b(cards?|view)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const discussionSubject = /^compare$/i.test(subject) ? "credit card options" : subject;
+  const label = cleanPromptChipText(`Discuss ${discussionSubject || "this"}`, 36);
+  const promptBase = chip.prompt
+    .replace(/^(show|see|list|pull|view|forecast|break down|breakdown)\s+(me\s+)?/i, "Let's discuss ")
+    .replace(/\bcard options\b/gi, "credit card options")
+    .replace(/\bcard use\b/gi, "credit card use")
+    .replace(/\bcard usage\b/gi, "credit card usage")
+    .replace(/\bcards\b/gi, "credit cards");
+  const prompt = cleanPromptChipText(promptBase, 160);
+
+  return {
+    label,
+    prompt: /^let'?s discuss/i.test(prompt) ? prompt : `Let's discuss ${prompt}`,
+  };
+}
+
+function getPermittedPrivilegedPromptChipId(
+  id: string,
+  context: SpendableAgentContext,
+  visibleText: string,
+): string | null {
+  const normalized = visibleText.toLowerCase();
+
+  if (id === "get-signed-up") {
+    return context.onboardingState.status === "guest" &&
+      /\b(sign|signed|google|start|continue)\b/.test(normalized)
+      ? id
+      : null;
+  }
+
+  if (id === "connect-data") {
+    return !context.snapshot &&
+      context.onboardingState.status !== "needs-consent" &&
+      /\b(connect|data|account|plaid)\b/.test(normalized)
+      ? id
+      : null;
+  }
+
+  if (id === "use-default-savings") {
+    return context.onboardingState.status === "needs-consent" &&
+      /\b(200|default|continue|ok|yes)\b/.test(normalized)
+      ? id
+      : null;
+  }
+
+  if (id === "set-250-savings") {
+    return context.onboardingState.status === "needs-consent" && /\b250\b/.test(normalized)
+      ? id
+      : null;
+  }
+
+  return null;
+}
+
+function cleanPromptChipText(text: string, maxLength: number): string {
+  return text.replace(/\s+/g, " ").trim().slice(0, maxLength).trim();
+}
+
+function normalizePromptChipId(id: string): string {
+  return id
+    .toLowerCase()
+    .replace(/[^a-z0-9._:-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+function createGeneratedPromptChipId(
+  requestedId: string,
+  label: string,
+  prompt: string,
+  index: number,
+): string {
+  if (requestedId.startsWith("ai-")) {
+    return requestedId;
+  }
+
+  const slug = normalizePromptChipId(`${label}-${prompt}`).replace(/^ai-/, "").slice(0, 60);
+
+  return `ai-${slug || `suggestion-${index + 1}`}`.slice(0, 80);
+}
+
+function withPromptChipIdSuffix(id: string, index: number): string {
+  const suffix = `-${index + 1}`;
+  return `${id.slice(0, 80 - suffix.length)}${suffix}`;
+}
+
+function getAvailablePromptChips(input: {
+  snapshot?: FinancialSnapshot;
+  onboardingState: SpendableAgentOnboardingState;
+}): PromptChip[] {
+  if (input.snapshot) {
+    return getSuggestedPrompts(calculateFreeCash(input.snapshot));
+  }
+
+  return getOnboardingPromptChips(input.onboardingState);
+}
+
+function guardVisibleFinalMessage(message: string, cards: AgentCard[] = []): string {
+  if (countWords(message) > 35) {
     throw new AgentUnavailableError({
-      code: "model-returned-multiple-tool-calls",
-      message: "AI returned more than one app action.",
+      code: "model-returned-too-long-final-message",
+      message: "AI returned a response that was too long for Spendable.",
       status: 502,
-      detail: "The model response included multiple Spendable tool calls.",
+      detail: "Visible replies must be 35 words or fewer.",
     });
   }
 
-  return functionCalls[0];
-}
+  const disallowedLanguage = getDisallowedFinalLanguageDetail(message);
 
-function getResponseOutputText(response: Response): string | undefined {
-  if (response.output_text) {
-    return response.output_text;
+  if (disallowedLanguage) {
+    throw new AgentUnavailableError({
+      code: "model-returned-disallowed-final-message",
+      message: "AI returned a response that violates Spendable language rules.",
+      status: 502,
+      detail: disallowedLanguage,
+    });
   }
 
-  for (const item of response.output) {
-    if (item.type !== "message") {
-      continue;
+  const unsupportedPromise = getUnsupportedCardPromise(message, cards);
+
+  if (unsupportedPromise) {
+    const repairedMessage = repairUnsupportedCardPromiseText(message, unsupportedPromise);
+
+    if (
+      repairedMessage &&
+      countWords(repairedMessage) <= 35 &&
+      !getDisallowedFinalLanguageDetail(repairedMessage) &&
+      !getUnsupportedCardPromise(repairedMessage, cards)
+    ) {
+      return repairedMessage;
     }
 
-    const outputText = item.content.find((content) => content.type === "output_text");
-    if (outputText?.type === "output_text" && outputText.text) {
-      return outputText.text;
+    throw new AgentUnavailableError({
+      code: "model-promised-unsupported-card",
+      message: "AI promised a card or view that Spendable did not return.",
+      status: 502,
+      detail: unsupportedPromise,
+    });
+  }
+
+  return message;
+}
+
+function repairUnsupportedCardPromiseText(message: string, detail: string): string | null {
+  if (detail === "forecast promised without forecast card") {
+    const repaired = message
+      .replace(/\b(want me to|should i|can i) forecast\b/gi, "$1 talk through")
+      .replace(/\bi can forecast\b/gi, "I can talk through")
+      .replace(/\bshow( me)? (a )?forecast\b/gi, "talk through a possible pattern")
+      .replace(/\bforecast\b/gi, "possible pattern")
+      .replace(/\btrend view\b/gi, "trend")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return repaired === message ? null : repaired;
+  }
+
+  if (detail === "breakdown promised without breakdown card") {
+    const repaired = message
+      .replace(/\bbreak down\b/gi, "talk through")
+      .replace(/\bbreakdown\b/gi, "summary")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return repaired === message ? null : repaired;
+  }
+
+  if (detail !== "card promised without card") {
+    return null;
+  }
+
+  const repaired = message
+    .replace(/\bshow( me)? (your )?credit card options\b/gi, "talk through credit card options")
+    .replace(/\bshow( me)? (your )?card options\b/gi, "talk through card options")
+    .replace(/\bshow( me)? (some )?credit cards\b/gi, "talk through credit cards")
+    .replace(/\bshow( me)? (some )?cards\b/gi, "talk through cards")
+    .replace(/\bview (your )?credit card options\b/gi, "talk through credit card options")
+    .replace(/\bview (your )?card options\b/gi, "talk through card options")
+    .replace(/\b(show|view|pull|list)( me)? (your )?card (options|choices|types|ideas|offers|details|use|usage)\b/gi, "talk through credit card $4")
+    .replace(/\b(show|view|pull|list)( me)? (your )?cards\b/gi, "talk through credit cards")
+    .replace(/\bcard (options|choices|types|ideas|offers|details|use|usage)\b/gi, "credit card $1")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return repaired === message ? null : repaired;
+}
+
+function getUnsupportedCardPromise(message: string, cards: AgentCard[]): string | null {
+  const normalized = message.toLowerCase().replace(/[\u2018\u2019]/g, "'");
+
+  if (!containsDisplayPromise(normalized)) {
+    return null;
+  }
+
+  if (isNoDataCardRefusal(normalized)) {
+    return null;
+  }
+
+  if (/\b(forecast|project(?:ion)?|trend|trend view|next \d+\s*days?)\b/.test(normalized)) {
+    return hasCard(cards, "spendable_cash_forecast") ? null : "forecast promised without forecast card";
+  }
+
+  if (/\b(recurring|repeating|subscription|subscriptions|monthly charges?|bills? coming up|upcoming bills?)\b/.test(normalized)) {
+    return hasAnyCard(cards, ["recurring_activity", "spendable_cash_forecast"])
+      ? null
+      : "recurring activity promised without recurring card";
+  }
+
+  if (/\b(breakdown|categories|merchants|card payments?)\b/.test(normalized)) {
+    return hasAnyCard(cards, ["spending_breakdown", "free_cash_explanation", "math_breakdown"])
+      ? null
+      : "breakdown promised without breakdown card";
+  }
+
+  if (/\b(transactions?|charges?|purchases?|activity)\b/.test(normalized)) {
+    return hasAnyCard(cards, ["recent_transactions", "spending_breakdown"])
+      ? null
+      : "transactions promised without transaction card";
+  }
+
+  if (/\bbalances?\b/.test(normalized)) {
+    return hasCard(cards, "true_balances") ? null : "balances promised without balances card";
+  }
+
+  if (/\b(math|formula|calculation)\b/.test(normalized)) {
+    return hasCard(cards, "math_breakdown") ? null : "math promised without math card";
+  }
+
+  const normalizedWithoutCreditCardTopic = normalized.replace(/\b(?:credit|debit) cards?\b/g, "");
+  const appCardPromisePattern =
+    /\b(?:this|the) cards?\b|\bcards?\s+(?:view|options|details|data)\b|\b(?:show|view|pull|list)\b.{0,40}\bcards?\b|\bcards?\b.{0,20}\b(?:shown|below)\b/;
+
+  if (appCardPromisePattern.test(normalizedWithoutCreditCardTopic)) {
+    return cards.length > 0 ? null : "card promised without card";
+  }
+
+  if (/\b(showing|shown|showed|this card|the card|the view|trend view)\b/.test(normalized)) {
+    return cards.length > 0 ? null : "display promised without card";
+  }
+
+  return null;
+}
+
+function isNoDataCardRefusal(normalized: string): boolean {
+  const noDataContext =
+    /\b(no data|no financial data|not connected|haven't connected|have not connected|data isn't connected|data is not connected|without connected data|until .*connect(?:ed)? data)\b/.test(normalized);
+  const refusalVerb =
+    /\b(can'?t|cannot|unable|not able|don't|do not|won't|will not)\b.{0,90}\b(show|list|pull|view|forecast|break ?down|see|simulate|check)\b/.test(normalized);
+  const displaySubject =
+    /\b(forecast|breakdown|transactions?|subscriptions?|recurring|activity|charges?|purchases?|math|balances?|drivers?|card payments?)\b/.test(normalized);
+
+  return displaySubject && (noDataContext || refusalVerb);
+}
+
+function containsDisplayPromise(normalized: string): boolean {
+  return /\b(show|showing|shown|showed|list|listed|pull|pulled|view|card|cards|here is|here are)\b/.test(normalized) ||
+    /\btrend view\b/.test(normalized) ||
+    (
+      /\b(breakdown|forecast|projection|projected)\b/.test(normalized) &&
+      /\b(show|showing|shown|showed|list|listed|pull|pulled|view|card|cards|here is|here are)\b/.test(normalized)
+    );
+}
+
+function hasCard(cards: AgentCard[], cardType: AgentCard["type"]): boolean {
+  return cards.some((card) => card.type === cardType);
+}
+
+function hasAnyCard(cards: AgentCard[], cardTypes: AgentCard["type"][]): boolean {
+  return cardTypes.some((cardType) => hasCard(cards, cardType));
+}
+
+function containsDisallowedFinalLanguage(message: string): boolean {
+  return Boolean(getDisallowedFinalLanguageDetail(message));
+}
+
+function getDisallowedFinalLanguageDetail(message: string): string | null {
+  const normalized = message.toLowerCase();
+  const guaranteedSpendingPhrase = ["safe", "to", "spend"].join(" ");
+  const disallowedPatterns: Array<[RegExp, string]> = [
+    [new RegExp(`\\b${guaranteedSpendingPhrase}\\b`), guaranteedSpendingPhrase],
+    [/\bsafe to buy\b/, "safe to buy"],
+    [/\byou can afford\b/, "you can afford"],
+    [/\byou can (?:buy|spend|purchase|order)\b/, "you can spend"],
+    [/\byou can'?t (?:buy|spend|purchase|order)\b/, "you can't spend"],
+    [/\bi recommend\b/, "i recommend"],
+    [/\bmy recommendation\b/, "my recommendation"],
+    [/\bfinancial advice\b/, "financial advice"],
+    [/\bfinancial advisor\b/, "financial advisor"],
+    [/\byou should (?:buy|spend|purchase|order)\b/, "you should spend"],
+    [/\byou shouldn'?t (?:buy|spend|purchase|order)\b/, "you shouldn't spend"],
+    [/\bdashboard\b/, "dashboard"],
+    [/\bfree cash\b/, "free cash"],
+    [/\bbudget(?:ing)?\b/, "budget"],
+    [/\bexpense tracking\b/, "expense tracking"],
+    [/\bfinancial planning\b/, "financial planning"],
+    [/\bdeterministic\b/, "deterministic"],
+    [/-?\$\d+(?:\.\d+)?k\b|\$-?\d+(?:\.\d+)?k\b/i, "money k shorthand"],
+    [/\brolling-window pattern\b/, "rolling-window pattern"],
+    [/\bliquidity\b/, "liquidity"],
+    [/\boptimal\b/, "optimal"],
+    [/\bsufficient\b/, "sufficient"],
+    [/\b(?:page|tab|section|area)\s+(?:for|with)\b/, "page/tab/section"],
+    [/\breview (?:them|it|transactions?|balances?) there\b/, "review it there"],
+  ];
+
+  for (const [pattern, detail] of disallowedPatterns) {
+    if (pattern.test(normalized)) {
+      return detail;
     }
   }
 
-  return undefined;
-}
-
-export function createOpenAIClient(): OpenAIResponsesClient {
-  if (process.env.FREE_CASH_AI_MODE === "mock-model") {
-    return createMockModelClient();
+  if (hasDisallowedGuaranteeLanguage(normalized)) {
+    return "guarantee";
   }
 
-  const config = getOpenAIClientConfig();
+  return null;
+}
 
+function hasDisallowedGuaranteeLanguage(normalized: string): boolean {
+  if (!/\bguarantee(?:d|s)?\b/.test(normalized)) {
+    return false;
+  }
+
+  return !/\b(?:not guaranteed|no guarantee|not a guarantee)\b/.test(normalized);
+}
+
+function countWords(message: string): number {
+  return message.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function toAgentUnavailableError(error: unknown): AgentUnavailableError {
+  if (error instanceof AgentUnavailableError) {
+    return error;
+  }
+
+  return new AgentUnavailableError({
+    code: "openai-request-failed",
+    message: "AI request failed.",
+    detail: getErrorDetail(error),
+    cause: error,
+  });
+}
+
+function shouldRetryFinalOutput(error: AgentUnavailableError): boolean {
+  if (
+    error.code === "model-returned-invalid-final-output" ||
+    error.code === "model-returned-disallowed-final-message" ||
+    error.code === "model-promised-unsupported-card" ||
+    error.code === "model-returned-too-long-final-message"
+  ) {
+    return true;
+  }
+
+  const detail = `${error.message} ${error.detail ?? ""}`;
+
+  return /invalid output type|schema validation|expected schema|too (?:big|long)|invalid final response/i.test(
+    detail,
+  );
+}
+
+function createAgentResponseRepair(error: AgentUnavailableError): AgentResponseRepair {
+  return {
+    reason:
+      error.code === "model-returned-disallowed-final-message"
+        ? "disallowed_language"
+        : error.code === "model-promised-unsupported-card"
+          ? "unsupported_promise"
+        : "invalid_final_output",
+    detail: error.detail ? sanitizeErrorDetail(error.detail) : sanitizeErrorDetail(error.message),
+  };
+}
+
+export function createOpenAIClient(config: OpenAIClientConfig = getOpenAIClientConfig()): OpenAI {
   return new OpenAI({
     apiKey: config.apiKey,
     baseURL: config.baseURL,
@@ -426,7 +1856,6 @@ export function createOpenAIClient(): OpenAIResponsesClient {
 
 export function shouldUseModel(): boolean {
   return (
-    process.env.FREE_CASH_AI_MODE === "mock-model" ||
     Boolean(process.env.NETLIFY_AI_GATEWAY_BASE_URL && process.env.NETLIFY_AI_GATEWAY_KEY) ||
     Boolean(process.env.OPENAI_API_KEY) ||
     Boolean(process.env.OPENAI_BASE_URL)
@@ -487,64 +1916,127 @@ export function getFreeCashAiTransport(
   return getOpenAIClientConfig(env).transport;
 }
 
-function runAgentToolSafely(
-  toolName: AgentToolName,
-  args: unknown,
-  snapshot: FinancialSnapshot | undefined,
-): AgentResponse {
-  try {
-    return runAgentTool(toolName, args, snapshot);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      throw new AgentUnavailableError({
-        code: "model-returned-invalid-tool-arguments",
-        message: "AI returned invalid app action arguments.",
-        status: 502,
-        detail: getErrorDetail(error),
-        cause: error,
-      });
-    }
-
-    throw error;
-  }
+function normalizePrompt(message: string): string {
+  return message
+    .toLowerCase()
+    .replace(/[?!.]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
-function parseToolArguments(toolName: AgentToolName, argumentJson: string): unknown {
-  if (!argumentJson) {
-    return {};
-  }
-
-  try {
-    return JSON.parse(argumentJson);
-  } catch {
-    throw new AgentUnavailableError({
-      code: "model-returned-invalid-tool-arguments",
-      message: "AI returned invalid app action arguments.",
-      status: 502,
-      detail: `Invalid arguments for ${sanitizeErrorDetail(toolName)}.`,
-    });
-  }
+function isExplicitFreeCashDriversPrompt(normalized: string): boolean {
+  return (
+    normalized === "why this number" ||
+    normalized === "what changed" ||
+    /^(show( me)? )?(the )?(free cash )?drivers( behind (this|the) number)?$/.test(normalized) ||
+    /^(show( me)? )?(the )?(spendable cash|free cash )?drivers?$/.test(normalized)
+  );
 }
 
-function groundToolArguments(
-  toolName: AgentToolName,
-  args: unknown,
-  userMessage: string,
-): unknown {
-  if (toolName !== "simulate_purchase") {
-    return args;
+function isSpendableCashDefinitionPrompt(normalized: string): boolean {
+  return (
+    /\bwhat is spendable cash\b/.test(normalized) ||
+    /\bhow does spendable work\b/.test(normalized) ||
+    /\bhow spendable works\b/.test(normalized) ||
+    /\bhow does spendable cash work\b/.test(normalized) ||
+    /\bwhat makes (it|spendable cash|the number) (go up|rise|increase|go down|fall|decrease)\b/.test(normalized)
+  );
+}
+
+function isExplicitMathPrompt(normalized: string): boolean {
+  return /^(show( me)? )?(the )?(math|math breakdown|formula|calculation|calculation details)$/.test(
+    normalized,
+  );
+}
+
+function isExplicitForecastPrompt(normalized: string): boolean {
+  return (
+    /\b(forecast|project|projection|trend|trends|tomorrow|next day|next week|next \d+\s*days?|coming days?)\b/.test(normalized) &&
+    !/\bspend\s*\$?\d|\bspend \d+\b/.test(normalized) &&
+    !/\bif i (?:only )?spend\b/.test(normalized) &&
+    !isExplicitRecurringPrompt(normalized)
+  );
+}
+
+function isExplicitRecurringPrompt(normalized: string): boolean {
+  return (
+    /\b(recurring|repeating|repeat|subscription|subscriptions|bills? coming up|monthly charges?|upcoming bills?)\b/.test(normalized) ||
+    /\b(youtube|premium|netflix|spotify|hulu|stream|membership|gym|phone bill|utilities?)\b.*\b(coming|upcoming|repeat|again|next|recurring)\b/.test(normalized) ||
+    /\b(coming|upcoming|repeat|again|next|recurring)\b.*\b(youtube|premium|netflix|spotify|hulu|stream|membership|gym|phone bill|utilities?)\b/.test(normalized)
+  );
+}
+
+function isExplicitSpendingBreakdownPrompt(normalized: string): boolean {
+  return (
+    /\b(complete|full|item|category|merchant|spending|spend|income|refund|card payment|payments?)\b.*\bbreakdown\b/.test(normalized) ||
+    /\bbreakdown\b.*\b(complete|full|item|category|merchant|spending|spend|income|refund|card payment|payments?)\b/.test(normalized) ||
+    /\bwhat did i spend (on|money on)\b/.test(normalized) ||
+    /\bshow (me )?(my )?(categories|merchants|card payments?|income sources?)\b/.test(normalized) ||
+    /\btransaction history breakdown\b/.test(normalized)
+  );
+}
+
+function extractForecastHorizonDays(normalized: string): number {
+  const match = normalized.match(/\b(\d{1,2})\s*-?\s*days?\b/);
+
+  if (!match) {
+    return 14;
   }
 
-  const explicitAmountCents = extractExplicitPurchaseAmountCents(userMessage);
+  return Math.min(Math.max(Number(match[1]), 1), 14);
+}
 
-  if (explicitAmountCents === null) {
-    return args;
+function isAffirmativeFollowUpToForecast(
+  normalized: string,
+  history: AgentHistoryItem[] | undefined,
+): boolean {
+  if (!/^(yes|yeah|yep|ok|okay|sure|do that|yes do that|show me|please do|that)$/.test(normalized)) {
+    return false;
   }
 
-  return {
-    ...(isRecord(args) ? args : {}),
-    amount_cents: explicitAmountCents,
-  };
+  return (history ?? []).slice(-4).some((item) => {
+    const content = normalizePrompt(item.content);
+
+    return isExplicitForecastPrompt(content) || /\b(trend line|daily amounts|forecast|next week|7 days|14 days)\b/.test(content);
+  });
+}
+
+function isExplicitTransactionsPrompt(normalized: string): boolean {
+  return /^(show( me| my)? )?(recent )?(transactions?|activity|charges?|purchases?)$/.test(
+    normalized,
+  );
+}
+
+function isExplicitBalancesPrompt(normalized: string): boolean {
+  return (
+    /^(show( me| my)? )?((true|real|actual|account) )?balances?$/.test(normalized) ||
+    /^what are my (true|real|actual|account) balances?$/.test(normalized)
+  );
+}
+
+function isSpendingPrompt(normalized: string): boolean {
+  return /\b(spend|buy|purchase|order|afford|pay|cost)\b/.test(normalized);
+}
+
+function isSpecificSpendSimulationPrompt(normalized: string): boolean {
+  return (
+    isSpendingPrompt(normalized) &&
+    !/\b(any|anything|money|in general|overall|at all)\b/.test(normalized)
+  );
+}
+
+function isGeneralSpendingQuestion(normalized: string): boolean {
+  return /\b(any|anything|money|in general|overall|at all)\b/.test(normalized);
+}
+
+function isShortPurchaseFollowUp(normalized: string, history: AgentHistoryItem[] | undefined): boolean {
+  if (!/\b(what about|how about|instead|rather|that one|\$\s*\d|\d+\s*(dollars?|bucks?))\b/.test(normalized)) {
+    return false;
+  }
+
+  return (history ?? [])
+    .slice(-4)
+    .some((item) => item.role === "user" && isSpendingPrompt(item.content.toLowerCase()));
 }
 
 function extractExplicitPurchaseAmountCents(message: string): number | null {
@@ -612,151 +2104,96 @@ function scorePurchaseAmountCandidate(message: string, index: number): number {
   return score;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function wasCardRecentlyShown(
+  conversationState: AgentConversationState | undefined,
+  cardType: AgentCard["type"],
+): boolean {
+  return Boolean(conversationState?.shownCards?.some((card) => card.type === cardType));
 }
 
-function parseFinalMessage(rawContent: string): string {
-  try {
-    return finalMessageSchema.parse(JSON.parse(rawContent)).message;
-  } catch (error) {
-    throw new AgentUnavailableError({
-      code: "model-returned-invalid-final-message",
-      message: "AI returned an invalid final response.",
-      status: 502,
-      detail: getErrorDetail(error),
-      cause: error,
-    });
-  }
+function explicitlyRequestsRepeatedCard(message: string): boolean {
+  return /\b(again|show|resurface|breakdown|details?|card|why this number|what changed)\b/i.test(message);
 }
 
-function guardVisibleFinalMessage(message: string, toolResponse: AgentResponse): string {
-  if (!containsDisallowedFinalLanguage(message)) {
-    return message;
-  }
-
-  return toolResponse.message;
+function explicitlyRequestsMultipleCards(message: string): boolean {
+  return /\b(all|everything|cards|details|breakdown)\b/i.test(message);
 }
 
-function containsDisallowedFinalLanguage(message: string): boolean {
+function explicitlyRequestsTransactions(message: string): boolean {
   const normalized = message.toLowerCase();
-  const disallowedPatterns = [
-    /\bsafe to spend\b/,
-    /\bsafe to buy\b/,
-    /\byou can afford\b/,
-    /\bi recommend\b/,
-    /\bmy recommendation\b/,
-    /\bfinancial advice\b/,
-    /\bfinancial advisor\b/,
-    /\bguarantee(?:d|s)?\b/,
-    /\byou should (?:buy|spend|purchase|order)\b/,
-    /\byou shouldn'?t (?:buy|spend|purchase|order)\b/,
-    /\bdashboard\b/,
-    /\bbudget(?:ing)?\b/,
-    /\bexpense tracking\b/,
-    /\bfinancial planning\b/,
-    /\b(?:page|tab|section|area)\s+(?:for|with)\b/,
-    /\breview (?:them|it|transactions?|balances?) there\b/,
-  ];
 
-  return disallowedPatterns.some((pattern) => pattern.test(normalized));
+  return (
+    /\b(transactions?|charges?|activity)\b/.test(normalized) ||
+    /\b(recent|latest|show|list)\b.*\b(purchases?|spending|spend)\b/.test(normalized) ||
+    /\bwhat did i spend (on|money on)\b/.test(normalized) ||
+    /\bwhich purchases?\b/.test(normalized)
+  );
 }
 
-function createModelGrounding(response: AgentResponse) {
-  return {
-    interface_context:
-      "Single Spendable screen only. No dashboard, tabs, budget page, transaction page, or separate navigation.",
-    cards: response.cards.map(formatCardForModel),
-    suggested_prompts: response.promptChips.map((chip) => chip.label),
-  };
-}
+function uniqueCardsByType(cards: AgentCard[]): AgentCard[] {
+  const seen = new Set<string>();
+  const unique: AgentCard[] = [];
 
-function formatCardForModel(card: AgentCard): Record<string, unknown> {
-  switch (card.type) {
-    case "free_cash_explanation":
-      return {
-        type: card.type,
-        title: card.title,
-        drivers: card.drivers.map((driver) => ({
-          label: driver.label,
-          detail: driver.detail,
-          amount: driver.amountCents === 0 ? "OK" : formatMoney(driver.amountCents),
-          tone: driver.tone,
-        })),
-        warnings: card.warnings.map((warning) => ({
-          label: warning.label,
-          detail: warning.detail,
-        })),
-        data_states: card.dataStates.map((state) => ({
-          label: state.label,
-          detail: state.detail,
-          amount: formatMoney(state.amountCents),
-        })),
-      };
-    case "purchase_simulation":
-      return {
-        type: card.type,
-        title: card.title,
-        purchase_amount: formatMoney(card.amountCents),
-        free_cash_before: formatMoney(card.beforeCents),
-        free_cash_after_today: formatMoney(card.afterTodayCents),
-        rolling_window_average_after: formatMoney(card.monthlyAverageAfterCents),
-      };
-    case "true_balances":
-      return {
-        type: card.type,
-        title: card.title,
-        balances: card.balances.map((balance) => ({
-          name: balance.name,
-          institution: balance.institutionName,
-          kind: balance.kind,
-          last_four: balance.lastFour,
-          balance: formatMoneyWithCents(balance.balanceCents),
-          available_balance:
-            balance.availableBalanceCents === undefined
-              ? undefined
-              : formatMoneyWithCents(balance.availableBalanceCents),
-        })),
-      };
-    case "recent_transactions":
-      return {
-        type: card.type,
-        title: card.title,
-        transaction_count: card.transactions.length,
-        total_amount: formatMoneyWithCents(sumTransactionAmounts(card.transactions)),
-        pending_transaction_count: card.transactions.filter((transaction) => transaction.pending).length,
-      };
-    case "missing_card_nudge":
-      return {
-        type: card.type,
-        title: card.title,
-        detail: card.detail,
-        issuer: card.issuerName,
-      };
-    case "math_breakdown":
-      return {
-        type: card.type,
-        title: card.title,
-        income: formatMoney(card.incomeTotalCents),
-        spending: formatMoney(-card.spendingTotalCents),
-        protected_savings: formatMoney(-card.protectedSavingsMonthlyCents),
-        rolling_net: formatMoney(card.rollingNetCents),
-        day_count: card.dayCount,
-        daily_average: formatMoney(Math.round(card.rollingNetCents / card.dayCount)),
-      };
-    case "connect_account":
-      return {
-        type: card.type,
-        title: card.title,
-        detail: card.detail,
-      };
+  for (const card of cards) {
+    if (seen.has(card.type)) {
+      continue;
+    }
+
+    seen.add(card.type);
+    unique.push(card);
   }
+
+  return unique;
+}
+
+function uniqueStrings(values: Array<string | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
 }
 
 function sumTransactionAmounts(
   transactions: Extract<AgentCard, { type: "recent_transactions" }>["transactions"],
 ): number {
   return transactions.reduce((total, transaction) => total + transaction.amountCents, 0);
+}
+
+function getTransactionDateRange(
+  transactions: Extract<AgentCard, { type: "recent_transactions" }>["transactions"],
+) {
+  if (!transactions.length) {
+    return null;
+  }
+
+  const dates = transactions.map((transaction) => transaction.date).sort();
+
+  return {
+    startDate: dates[0],
+    endDate: dates[dates.length - 1],
+  };
+}
+
+function formatSyncStatus(syncStatus: SyncStatus | null | undefined) {
+  if (!syncStatus) {
+    return {
+      available: false,
+      institutionCount: 0,
+      hasStaleInstitution: false,
+      latestSyncRun: null,
+    };
+  }
+
+  return {
+    available: true,
+    institutionCount: syncStatus.institutions.length,
+    institutions: syncStatus.institutions.map((institution) => ({
+      provider: institution.provider,
+      status: institution.status,
+      isStale: institution.isStale,
+      lastSuccessfulSyncAt: institution.lastSuccessfulSyncAt,
+      errorMessage: institution.errorMessage,
+    })),
+    hasStaleInstitution: syncStatus.hasStaleInstitution,
+    latestSyncRun: syncStatus.latestSyncRun,
+  };
 }
 
 export function toAgentErrorPayload(error: unknown): AgentErrorPayload {
@@ -787,199 +2224,4 @@ function getErrorDetail(error: unknown): string {
 
 function sanitizeErrorDetail(detail: string): string {
   return detail.replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 180);
-}
-
-export function createMockModelClient(): OpenAIResponsesClient {
-  return {
-    responses: {
-      async create(params) {
-        if (!params.tools) {
-          return createMockFinalMessageResponse(params);
-        }
-
-        const tool = chooseMockTool(getLastInputText(params.input));
-
-        return createResponse({
-          outputText: "",
-          output: [
-            {
-              type: "function_call",
-              id: "mock-tool-call",
-              call_id: "mock-tool-call",
-              name: tool.name,
-              arguments: JSON.stringify(tool.arguments),
-              status: "completed",
-            },
-          ],
-        });
-      },
-    },
-  };
-}
-
-function createMockFinalMessageResponse(params: ResponseCreateParamsNonStreaming): Response {
-  const content = getLastInputText(params.input);
-  const outputText = JSON.stringify({
-    message: createMockFinalMessage(content),
-  });
-
-  return createResponse({
-    outputText,
-    output: [
-      {
-        id: "mock-final-message",
-        type: "message",
-        role: "assistant",
-        status: "completed",
-        content: [
-          {
-            type: "output_text",
-            text: outputText,
-            annotations: [],
-          },
-        ],
-      },
-    ],
-  });
-}
-
-function createResponse(input: {
-  outputText: string;
-  output: Response["output"];
-}): Response {
-  return {
-    id: "mock-free-cash-response",
-    object: "response",
-    created_at: Math.floor(Date.now() / 1000),
-    model: getFreeCashAiModel(),
-    output_text: input.outputText,
-    output: input.output,
-    error: null,
-    incomplete_details: null,
-    instructions: null,
-    metadata: null,
-    parallel_tool_calls: false,
-    temperature: null,
-    tool_choice: "auto",
-    tools: [],
-    top_p: null,
-  } as Response;
-}
-
-function getLastInputText(input: ResponseCreateParamsNonStreaming["input"]): string {
-  if (typeof input === "string") {
-    return input;
-  }
-
-  if (!Array.isArray(input)) {
-    return "";
-  }
-
-  for (const item of [...input].reverse()) {
-    if (!("role" in item) || item.role !== "user") {
-      continue;
-    }
-
-    if (typeof item.content === "string") {
-      return item.content;
-    }
-  }
-
-  return "";
-}
-
-function createMockFinalMessage(content: string): string {
-  const parsed = parseMockFinalMessageInput(content);
-  const card = parsed.app_result.cards[0];
-
-  if (parsed.route_tool === "answer_unrelated") {
-    return "That does not look like a Spendable question yet. Ask me about spending, balances, transactions, or why the number is what it is.";
-  }
-
-  if (parsed.route_tool === "simulate_purchase" && card?.type === "purchase_simulation") {
-    return `That ${card.purchase_amount} test spend would put today's Free Cash at ${card.free_cash_after_today}.`;
-  }
-
-  if (parsed.route_tool === "show_true_balances") {
-    return "Free Cash is the spendable number; the account card shows the raw balances behind it.";
-  }
-
-  if (parsed.route_tool === "show_recent_transactions") {
-    return "Here are the recent items currently shaping the Free Cash number.";
-  }
-
-  return "Here is what is driving the Free Cash number right now.";
-}
-
-function parseMockFinalMessageInput(content: string): {
-  route_tool: AgentToolName;
-  app_result: {
-    cards: Array<Record<string, string>>;
-  };
-} {
-  try {
-    return JSON.parse(content);
-  } catch {
-    return {
-      route_tool: "answer_unrelated",
-      app_result: {
-        cards: [],
-      },
-    };
-  }
-}
-
-function chooseMockTool(message: string): { name: AgentToolName; arguments: Record<string, unknown> } {
-  const normalized = message.toLowerCase();
-
-  if (normalized.includes("balance")) {
-    return { name: "show_true_balances", arguments: {} };
-  }
-
-  if (normalized.includes("transaction") || normalized.includes("recent")) {
-    return { name: "show_recent_transactions", arguments: { limit: 6 } };
-  }
-
-  if (normalized.includes("math") || normalized.includes("formula")) {
-    return { name: "show_math", arguments: {} };
-  }
-
-  if (normalized.includes("missing") || normalized.includes("connect")) {
-    return { name: "detect_missing_card", arguments: {} };
-  }
-
-  const amount = normalized.match(/\$?\s*(\d+(?:\.\d{1,2})?)/);
-
-  if (amount && /\b(?:what about|how about|instead|rather|that one)\b/.test(normalized)) {
-    return {
-      name: "simulate_purchase",
-      arguments: {
-        amount_cents: Math.round(Number(amount[1]) * 100),
-      },
-    };
-  }
-
-  if (normalized.includes("spend") || normalized.includes("buy") || normalized.includes("purchase")) {
-    if (!amount) {
-      return { name: "answer_unrelated", arguments: {} };
-    }
-
-    return {
-      name: "simulate_purchase",
-      arguments: {
-        amount_cents: Math.round(Number(amount[1]) * 100),
-      },
-    };
-  }
-
-  if (
-    normalized.includes("why") ||
-    normalized.includes("changed") ||
-    normalized.includes("free cash") ||
-    normalized.includes("number")
-  ) {
-    return { name: "explain_free_cash", arguments: {} };
-  }
-
-  return { name: "answer_unrelated", arguments: {} };
 }

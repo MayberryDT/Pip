@@ -5,7 +5,7 @@ export type FakeDataScenario = "default" | "negative";
 export const fakeSnapshot: FinancialSnapshot = {
   settings: {
     asOfDate: "2026-06-20",
-    protectedSavingsMonthlyCents: 20000,
+    protectedSavingsMonthlyCents: 24300,
   },
   accounts: [
     {

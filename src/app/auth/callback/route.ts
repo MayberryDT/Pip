@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { acceptCurrentUserInvite } from "@/lib/auth/beta-invites";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -33,8 +32,8 @@ export async function GET(request: Request) {
             type: authParams.type,
           });
 
-  if (!error && data.user) {
-    await acceptCurrentUserInvite(data.user).catch(() => null);
+  if (error || !data.user) {
+    return NextResponse.redirect(new URL("/?auth=callback-failed", requestUrl.origin));
   }
 
   return NextResponse.redirect(new URL(next, requestUrl.origin));

@@ -11,8 +11,8 @@ describe("FreeCashHome", () => {
     expect(countOccurrences(markup, 'data-testid="agent-thread"')).toBe(1);
     expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(1);
     expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(1);
-    expect(visibleText).toContain("Spendable");
-    expect(visibleText).toContain("Free Cash Today");
+    expect(visibleText).toContain("Spendable Cash");
+    expect(visibleText).not.toContain("Free Cash Today");
     expect(visibleText).toContain("$43");
     expect(visibleText).toContain("Good morning.");
     expect(visibleText).toContain("Temporary insight");
@@ -32,16 +32,42 @@ describe("FreeCashHome", () => {
     expect(markup).not.toContain("Data controls");
   });
 
-  it("keeps guest onboarding inside the Spendable screen without showing fake Free Cash", () => {
+  it("shows Plaid OAuth completion as a same-screen Spendable message", () => {
+    const markup = renderToStaticMarkup(
+      <FreeCashHome
+        authState={{ status: "ready", email: "tester@example.com" }}
+        connectionNotice="plaid-connected"
+        enableAccountControls
+      />,
+    );
+    const visibleText = markup.replace(/<[^>]*>/g, " ");
+
+    expect(visibleText).toContain("Plaid connected");
+    expect(visibleText).toContain("Your account data connected successfully.");
+    expect(markup).toContain("$--");
+  });
+
+  it("keeps guest onboarding inside the Spendable screen without showing fake Spendable Cash", () => {
     const markup = renderToStaticMarkup(<FreeCashHome authState={{ status: "guest" }} />);
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
     expect(visibleText).toContain("Spendable");
-    expect(visibleText).toContain("Free Cash Today");
+    expect(visibleText).toContain("Spendable Cash");
     expect(visibleText).toContain("$--");
-    expect(visibleText).toContain("Your Free Cash number starts here.");
-    expect(markup).toContain("Enter your email...");
+    expect(visibleText).toContain("Your Spendable Cash number starts here.");
+    expect(markup).toContain("Ask or continue with Google...");
     expect(markup).not.toContain("$43");
+  });
+
+  it("keeps failed Google auth on the same Spendable screen", () => {
+    const markup = renderToStaticMarkup(
+      <FreeCashHome authNotice="auth-error" authState={{ status: "guest" }} />,
+    );
+    const visibleText = markup.replace(/<[^>]*>/g, " ");
+
+    expect(visibleText).toContain("Google sign-in could not finish.");
+    expect(visibleText).toContain("Welcome to Spendable");
+    expect(markup).toContain("Ask or continue with Google...");
   });
 
   it("keeps consent onboarding inside the Spendable screen", () => {

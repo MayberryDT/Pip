@@ -32,28 +32,14 @@ export function PlaidOAuthResume() {
       }
 
       try {
-        const connection = await openPlaidLink(
-          {
-            linkToken: session.linkToken,
-            mode: session.mode,
-          },
-          {
-            receivedRedirectUri: window.location.href,
-            persistToken: false,
-          },
-        );
-
-        if (session.mode === "repair") {
-          await refreshPlaidData("repair");
-        } else {
-          await exchangePlaidConnection(connection);
-          await refreshPlaidData("manual");
-        }
-
-        clearPersistedPlaidLinkToken();
+        await resumePlaidOAuthConnection({
+          linkToken: session.linkToken,
+          mode: session.mode,
+          receivedRedirectUri: window.location.href,
+        });
         setState("success");
-        setMessage("Connected. I am loading your Free Cash number now.");
-        window.setTimeout(() => window.location.replace("/"), 650);
+        setMessage("Connected. I’m taking you back to Spendable now.");
+        window.setTimeout(() => window.location.replace("/?plaid=connected"), 650);
       } catch (error) {
         setState("error");
         setMessage(error instanceof Error ? error.message : "Plaid could not finish connecting.");
@@ -91,6 +77,32 @@ export function PlaidOAuthResume() {
       </section>
     </main>
   );
+}
+
+export async function resumePlaidOAuthConnection(input: {
+  linkToken: string;
+  mode?: "connect" | "repair";
+  receivedRedirectUri: string;
+}) {
+  const connection = await openPlaidLink(
+    {
+      linkToken: input.linkToken,
+      mode: input.mode,
+    },
+    {
+      receivedRedirectUri: input.receivedRedirectUri,
+      persistToken: false,
+    },
+  );
+
+  if (input.mode === "repair") {
+    await refreshPlaidData("repair");
+  } else {
+    await exchangePlaidConnection(connection);
+    await refreshPlaidData("manual");
+  }
+
+  clearPersistedPlaidLinkToken();
 }
 
 async function exchangePlaidConnection(connection: PlaidConnection) {

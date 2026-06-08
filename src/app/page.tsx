@@ -5,14 +5,16 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 export default async function Home({
   searchParams,
 }: {
-  searchParams?: Promise<{ onboarding?: string }>;
+  searchParams?: Promise<{ auth?: string; onboarding?: string; plaid?: string }>;
 }) {
   const params = await searchParams;
   const devOnboardingState =
     process.env.NODE_ENV !== "production" ? params?.onboarding : undefined;
+  const authNotice = getAuthNotice(params?.auth);
+  const connectionNotice = getConnectionNotice(params?.plaid);
 
   if (devOnboardingState === "guest") {
-    return <FreeCashHome authState={{ status: "guest" }} />;
+    return <FreeCashHome authState={{ status: "guest" }} authNotice={authNotice} />;
   }
 
   if (devOnboardingState === "consent") {
@@ -20,7 +22,13 @@ export default async function Home({
   }
 
   if (devOnboardingState === "ready") {
-    return <FreeCashHome authState={{ status: "ready", email: "tester@example.com" }} enableAccountControls />;
+    return (
+      <FreeCashHome
+        authState={{ status: "ready", email: "tester@example.com" }}
+        connectionNotice={connectionNotice}
+        enableAccountControls
+      />
+    );
   }
 
   if (!isSupabaseConfigured()) {
@@ -44,12 +52,30 @@ export default async function Home({
   }
 
   if (!user) {
-    return <FreeCashHome authState={{ status: "guest" }} />;
+    return <FreeCashHome authState={{ status: "guest" }} authNotice={authNotice} />;
   }
 
   if (!hasConsented) {
     return <FreeCashHome authState={{ status: "needs-consent", email: user.email ?? "" }} />;
   }
 
-  return <FreeCashHome authState={{ status: "ready", email: user.email ?? "" }} enableAccountControls />;
+  return (
+    <FreeCashHome
+      authState={{ status: "ready", email: user.email ?? "" }}
+      connectionNotice={connectionNotice}
+      enableAccountControls
+    />
+  );
+}
+
+function getAuthNotice(auth: string | undefined): "auth-error" | undefined {
+  if (auth === "callback-failed" || auth === "oauth-start-failed" || auth === "unconfigured") {
+    return "auth-error";
+  }
+
+  return undefined;
+}
+
+function getConnectionNotice(plaid: string | undefined): "plaid-connected" | undefined {
+  return plaid === "connected" ? "plaid-connected" : undefined;
 }

@@ -3,10 +3,13 @@ import {
   ArrowDownRight,
   ArrowRight,
   Calculator,
+  CalendarClock,
   CreditCard,
   EyeOff,
   Landmark,
   ListChecks,
+  Repeat,
+  TrendingUp,
 } from "lucide-react";
 import type { AgentCard } from "@/lib/agent/card-types";
 import { formatMoney, formatMoneyWithCents } from "@/lib/money";
@@ -37,10 +40,15 @@ export function CardRenderer({
             ))}
           </div>
           {card.warnings.map((warning) => (
-            <WarningBlock key={warning.id} detail={warning.detail} />
+            <WarningBlock key={warning.id} detail={warning.detail} label={warning.label} />
           ))}
           {card.dataStates.map((state) => (
-            <WarningBlock key={state.id} detail={state.detail} />
+            <WarningBlock
+              key={state.id}
+              amountCents={state.amountCents}
+              detail={state.detail}
+              label={state.label}
+            />
           ))}
         </CardShell>
       );
@@ -54,7 +62,7 @@ export function CardRenderer({
             <MoneyBlock label="After" value={formatMoney(card.afterTodayCents)} danger={card.afterTodayCents < 0} />
           </div>
           <p className="mt-4 text-sm leading-6 text-ink/[0.62]">
-            A {formatMoney(card.amountCents)} purchase would leave today's Free Cash at{" "}
+            A {formatMoney(card.amountCents)} purchase would leave Spendable Cash at{" "}
             <strong className={card.afterTodayCents < 0 ? "text-coral" : "text-moss"}>
               {formatMoney(card.afterTodayCents)}
             </strong>
@@ -105,10 +113,87 @@ export function CardRenderer({
         </CardShell>
       );
 
+    case "spending_breakdown":
+      return (
+        <CardShell icon={<Calculator aria-hidden="true" size={18} />} title={card.title}>
+          <div className="space-y-2 text-sm">
+            <FormulaRow label="Income" value={card.totals.incomeCents} />
+            <FormulaRow label="Spending" value={-card.totals.spendingCents} />
+            <FormulaRow label="Refunds" value={card.totals.refundCents} />
+            <FormulaRow label="Card payments" value={-card.totals.cardPaymentCents} />
+          </div>
+          <GroupedMoneyList title="Top categories" groups={card.topCategories} />
+          <GroupedMoneyList title="Top merchants" groups={card.topMerchants} />
+        </CardShell>
+      );
+
+    case "recurring_activity":
+      return (
+        <CardShell icon={<Repeat aria-hidden="true" size={18} />} title={card.title}>
+          {card.items.length > 0 ? (
+            <div className="space-y-2">
+              {card.items.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-3 rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-ink">{item.label}</p>
+                    <p className="text-xs text-ink/[0.52]">
+                      {item.expectedDate} · {item.confidence} confidence
+                    </p>
+                  </div>
+                  <p className={item.amountCents < 0 ? "text-sm font-semibold text-coral" : "text-sm font-semibold text-moss"}>
+                    {formatMoneyWithCents(item.amountCents)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm leading-6 text-ink/[0.66]">
+              I do not see a clear repeating charge in the connected data yet.
+            </p>
+          )}
+        </CardShell>
+      );
+
+    case "spendable_cash_forecast":
+      return (
+        <CardShell icon={<TrendingUp aria-hidden="true" size={18} />} title={card.title}>
+          <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3">
+            <MoneyBlock label="Now" value={formatMoney(card.currentSpendableCashCents)} />
+            <ArrowRight aria-hidden="true" className="text-ink/[0.36]" size={20} />
+            <MoneyBlock
+              label={`${card.horizonDays} days`}
+              value={formatMoney(card.projectedSpendableCashCents)}
+              danger={card.projectedSpendableCashCents < 0}
+            />
+          </div>
+          <div className="mt-4 space-y-2">
+            {card.points.slice(0, 5).map((point) => (
+              <div key={point.date} className="flex items-center justify-between gap-3 rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <CalendarClock aria-hidden="true" className="text-taupe" size={15} />
+                  <span className="text-sm font-semibold text-ink">{point.date}</span>
+                </div>
+                <span className={point.projectedSpendableCashCents < 0 ? "text-sm font-semibold text-coral" : "text-sm font-semibold text-moss"}>
+                  {formatMoney(point.projectedSpendableCashCents)}
+                </span>
+              </div>
+            ))}
+          </div>
+          {card.recurringItems.length > 0 ? (
+            <p className="mt-4 text-sm leading-6 text-ink/[0.62]">
+              Includes {card.recurringItems.slice(0, 2).map((item) => item.label).join(", ")} if those repeat.
+            </p>
+          ) : null}
+          <p className="mt-3 text-xs font-semibold uppercase tracking-normal text-taupe">
+            {card.disclaimer}
+          </p>
+        </CardShell>
+      );
+
     case "missing_card_nudge":
       return (
         <CardShell icon={<CreditCard aria-hidden="true" size={18} />} title={card.title}>
-          <WarningBlock detail={card.detail} />
+          <WarningBlock detail={card.detail} label={card.title} />
           {card.issuerName && onSuppressMissingCard ? (
             <button
               type="button"
@@ -167,11 +252,27 @@ function CardShell({
   );
 }
 
-function WarningBlock({ detail }: { detail: string }) {
+function WarningBlock({
+  amountCents,
+  detail,
+  label,
+}: {
+  amountCents?: number;
+  detail: string;
+  label?: string;
+}) {
   return (
     <div className="mt-3 flex gap-3 rounded-[1rem] border border-gold/15 bg-gold/[0.08] px-3 py-3 text-sm leading-6 text-ink/[0.68]">
       <AlertTriangle aria-hidden="true" className="mt-1 shrink-0 text-gold" size={17} />
-      <p>{detail}</p>
+      <div>
+        {label ? (
+          <p className="font-semibold text-ink">
+            {label}
+            {typeof amountCents === "number" ? ` ${formatMoney(amountCents)}` : ""}
+          </p>
+        ) : null}
+        <p>{detail}</p>
+      </div>
     </div>
   );
 }
@@ -210,6 +311,44 @@ function FormulaRow({
       <span className={strong ? "font-semibold text-ink" : value < 0 ? "font-semibold text-coral" : "font-semibold text-moss"}>
         {formatMoney(value)}
       </span>
+    </div>
+  );
+}
+
+function GroupedMoneyList({
+  title,
+  groups,
+}: {
+  title: string;
+  groups: Array<{
+    id: string;
+    label: string;
+    amountCents: number;
+    transactionCount: number;
+  }>;
+}) {
+  if (groups.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4">
+      <p className="mb-2 text-xs font-bold uppercase tracking-normal text-taupe">{title}</p>
+      <div className="space-y-2">
+        {groups.map((group) => (
+          <div key={group.id} className="flex items-center justify-between gap-3 rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-ink">{group.label}</p>
+              <p className="text-xs text-ink/[0.52]">
+                {group.transactionCount} {group.transactionCount === 1 ? "item" : "items"}
+              </p>
+            </div>
+            <p className={group.amountCents < 0 ? "text-sm font-semibold text-coral" : "text-sm font-semibold text-moss"}>
+              {formatMoneyWithCents(group.amountCents)}
+            </p>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

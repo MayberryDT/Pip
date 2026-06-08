@@ -93,7 +93,6 @@ function getModeEnv() {
   }
 
   return {
-    FREE_CASH_AI_MODE: process.env.FREE_CASH_AI_MODE || "mock-model",
     FREE_CASH_SUPABASE_MODE: process.env.FREE_CASH_SUPABASE_MODE || "off",
   };
 }

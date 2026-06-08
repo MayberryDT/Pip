@@ -7,10 +7,10 @@ import {
 
 describe("buildRollingCalendarWindow", () => {
   it.each([
-    ["2026-03-28", "2026-02-28", 29],
-    ["2024-03-29", "2024-02-29", 30],
-    ["2026-05-30", "2026-04-30", 31],
-    ["2026-05-31", "2026-04-30", 32],
+    ["2026-03-28", "2026-03-01", 28],
+    ["2024-03-29", "2024-03-01", 29],
+    ["2026-05-30", "2026-05-01", 30],
+    ["2026-05-31", "2026-05-01", 31],
   ])("uses calendar-month windows for %s", (asOfDate, startDate, dayCount) => {
     expect(buildRollingCalendarWindow(asOfDate)).toEqual({
       startDate,
@@ -27,7 +27,7 @@ describe("buildRollingCalendarWindow", () => {
   });
 
   it("counts inclusive month-boundary windows", () => {
-    expect(inclusiveDayCount("2026-05-20", "2026-06-20")).toBe(32);
+    expect(inclusiveDayCount("2026-05-21", "2026-06-20")).toBe(31);
     expect(inclusiveDayCount("2026-06-01", "2026-06-01")).toBe(1);
   });
 });

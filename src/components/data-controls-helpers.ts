@@ -92,17 +92,17 @@ export function getConnectionStatusMessage(syncStatus: SyncStatusResponse | null
   const repairInstitution = getRepairablePlaidInstitution(syncStatus);
 
   if (repairInstitution) {
-    return `${repairInstitution.institutionName} needs repair. Use Repair connection before relying on refreshed Free Cash.`;
+    return `${repairInstitution.institutionName} needs repair. Use Repair connection before relying on refreshed Spendable Cash.`;
   }
 
   const staleInstitutions = syncStatus.institutions.filter((institution) => institution.isStale);
 
   if (staleInstitutions.length === 1) {
-    return `${staleInstitutions[0].institutionName} data is stale. Refresh before relying on Free Cash.`;
+    return `${staleInstitutions[0].institutionName} data is stale. Refresh before relying on Spendable Cash.`;
   }
 
   if (staleInstitutions.length > 1) {
-    return `${staleInstitutions.length} connections have stale data. Refresh before relying on Free Cash.`;
+    return `${staleInstitutions.length} connections have stale data. Refresh before relying on Spendable Cash.`;
   }
 
   return null;

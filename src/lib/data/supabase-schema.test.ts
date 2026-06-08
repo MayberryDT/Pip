@@ -102,7 +102,7 @@ describe("Supabase financial-data schema", () => {
     );
   });
 
-  it("keeps beta access invite-only", () => {
+  it("keeps legacy beta invite data private while runtime signup stays open", () => {
     expect(migration).toContain("create table public.beta_invites");
     expect(migration).toContain("email text not null unique");
     expect(migration).toContain("accepted_by_user_id uuid references auth.users(id) on delete set null");

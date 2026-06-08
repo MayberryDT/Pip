@@ -41,8 +41,22 @@ afterEach(() => {
 });
 
 describe("POST /api/sync/manual", () => {
-  it("requires callers to choose a provider explicitly", async () => {
+  it("requires authentication before validating sync requests", async () => {
     enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient(null));
+
+    const response = await POST(jsonRequest({}));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication required.",
+    });
+    expect(routeMocks.runManualSync).not.toHaveBeenCalled();
+  });
+
+  it("requires authenticated callers to choose a provider explicitly", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
 
     const response = await POST(jsonRequest({}));
 
@@ -50,12 +64,12 @@ describe("POST /api/sync/manual", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Invalid sync request.",
     });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
     expect(routeMocks.runManualSync).not.toHaveBeenCalled();
   });
 
-  it("rejects invalid providers with a structured 400 response", async () => {
+  it("rejects invalid providers with a structured 400 response after authentication", async () => {
     enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
 
     const response = await POST(jsonRequest({ provider: "bad-provider" }));
 

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { getCurrentFreeCashResult, NoFinancialDataError } from "@/lib/data/current-snapshot";
+import {
+  AuthenticationRequiredError,
+  getCurrentFreeCashResult,
+  NoFinancialDataError,
+} from "@/lib/data/current-snapshot";
 import { isFakeDataScenario } from "@/lib/fake-data";
 
 export async function GET(request: Request) {
@@ -9,6 +13,10 @@ export async function GET(request: Request) {
   try {
     return NextResponse.json(await getCurrentFreeCashResult({ scenario }));
   } catch (error) {
+    if (error instanceof AuthenticationRequiredError) {
+      return NextResponse.json({ error: error.message }, { status: 401 });
+    }
+
     if (error instanceof NoFinancialDataError) {
       return NextResponse.json(
         {

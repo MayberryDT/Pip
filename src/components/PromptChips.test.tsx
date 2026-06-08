@@ -15,6 +15,8 @@ describe("PromptChips", () => {
     expect(markup).toContain("Show true balances");
     expect(markup).not.toContain("Show recent transactions");
     expect(markup).not.toContain("Show the math");
+    expect(markup).toContain("overflow-x-auto");
+    expect(markup).toContain("whitespace-nowrap");
     expect(markup).not.toContain("role=&quot;menu&quot;");
   });
 });

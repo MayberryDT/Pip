@@ -69,14 +69,36 @@ describe("/api/settings", () => {
     });
   });
 
-  it("rejects invalid protected-savings updates before touching Supabase", async () => {
+  it("requires authentication before validating protected-savings updates", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient(null);
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    const response = await PUT(jsonRequest({ protectedSavingsMonthlyCents: -1 }));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication required.",
+    });
+    expect(routeMocks.upsertUserSettings).not.toHaveBeenCalled();
+    expect(routeMocks.markFreeCashSnapshotsStaleForUser).not.toHaveBeenCalled();
+    expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid protected-savings updates after authentication", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
     const response = await PUT(jsonRequest({ protectedSavingsMonthlyCents: -1 }));
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "Invalid settings.",
     });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(routeMocks.upsertUserSettings).not.toHaveBeenCalled();
+    expect(routeMocks.markFreeCashSnapshotsStaleForUser).not.toHaveBeenCalled();
+    expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalled();
   });
 
   it("returns 503 on valid updates when Supabase is disabled", async () => {

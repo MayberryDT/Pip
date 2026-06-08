@@ -13,9 +13,10 @@ describe("private-beta legal pages", () => {
     expect(privacy).toContain("does not store bank usernames or passwords");
     expect(privacy).toContain("Provider tokens and credentials are handled server-side only");
     expect(privacy).toContain("provider tokens");
+    expect(privacy).toContain("ask Spendable to delete stored financial data in the chat");
     expect(terms).toContain("not financial, tax, investment, credit, or legal advice");
     expect(terms).toContain("does not initiate payments");
-    expect(support).toContain("refresh or repair the connection");
-    expect(support).toContain("delete-data control");
+    expect(support).toContain("ask Spendable in the chat to refresh data or repair the connection");
+    expect(support).toContain("Ask Spendable to delete data");
   });
 });

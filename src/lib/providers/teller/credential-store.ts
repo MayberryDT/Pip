@@ -22,19 +22,29 @@ export async function storeTellerCredential(input: {
   environment: string;
 }) {
   const supabase = input.supabase ?? createSupabaseAdminClient();
-  const { error } = await supabase.schema("private").from("provider_credentials").upsert({
-    institution_id: input.institutionId,
-    user_id: input.userId,
-    provider: "teller",
-    teller_enrollment_id: input.enrollmentId,
-    access_token_ciphertext: encryptProviderToken(input.accessToken),
-    certificate_ref: "env:TELLER_CERTIFICATE_PEM",
-    metadata: {
-      institutionName: input.institutionName,
-      environment: input.environment,
-    } satisfies Json,
-    updated_at: new Date().toISOString(),
-  });
+  const { error } = await supabase
+    .schema("private")
+    .from("provider_credentials")
+    .upsert(
+      {
+        institution_id: input.institutionId,
+        user_id: input.userId,
+        provider: "teller",
+        teller_enrollment_id: input.enrollmentId,
+        plaid_item_id: null,
+        access_token_ciphertext: encryptProviderToken(input.accessToken),
+        refresh_token_ciphertext: null,
+        certificate_ref: "env:TELLER_CERTIFICATE_PEM",
+        metadata: {
+          institutionName: input.institutionName,
+          environment: input.environment,
+        } satisfies Json,
+        updated_at: new Date().toISOString(),
+      },
+      {
+        onConflict: "institution_id",
+      },
+    );
 
   if (error) {
     throw error;

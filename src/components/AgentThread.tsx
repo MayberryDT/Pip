@@ -55,7 +55,7 @@ export function AgentThread({
           className="space-y-4"
           ref={itemIndex === thread.length - 1 ? latestItemRef : null}
         >
-          <div className="chat-message-in ml-auto w-fit max-w-[86%] rounded-[1.25rem] border border-line bg-porcelain/60 px-4 py-3 text-sm font-medium text-ink/[0.82] shadow-[0_8px_18px_rgba(60,50,40,0.04)]">
+          <div className="chat-message-in ml-auto w-fit max-w-[86%] whitespace-pre-wrap break-words rounded-[1.25rem] border border-line bg-porcelain/60 px-4 py-3 text-sm font-medium text-ink/[0.82] shadow-[0_8px_18px_rgba(60,50,40,0.04)]">
             {item.userText}
           </div>
           {item.response ? (

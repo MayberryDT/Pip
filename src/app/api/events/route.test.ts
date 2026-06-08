@@ -26,24 +26,42 @@ afterEach(() => {
 });
 
 describe("POST /api/events", () => {
-  it("rejects invalid events before touching Supabase", async () => {
+  it("requires authentication before validating browser events", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient(null));
+
+    const response = await POST(jsonRequest({ eventName: "made_up_event" }));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({
+      error: "Authentication required.",
+    });
+    expect(routeMocks.recordProductEvent).not.toHaveBeenCalled();
+  });
+
+  it("rejects invalid events after authentication", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
+
     const response = await POST(jsonRequest({ eventName: "made_up_event" }));
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "Invalid event.",
     });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(routeMocks.recordProductEvent).not.toHaveBeenCalled();
   });
 
-  it("rejects server-derived product events from the browser endpoint", async () => {
+  it("rejects server-derived product events from the browser endpoint after authentication", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
+
     const response = await POST(jsonRequest({ eventName: "true_balances_revealed" }));
 
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "Invalid event.",
     });
-    expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
     expect(routeMocks.recordProductEvent).not.toHaveBeenCalled();
   });
 
