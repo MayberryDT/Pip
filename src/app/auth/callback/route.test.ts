@@ -52,6 +52,39 @@ describe("GET /auth/callback", () => {
     expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
 
+  it("redirects successful OAuth callbacks to the canonical public site origin", async () => {
+    enableSupabaseEnv();
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
+    const supabase = createSupabaseClient({ error: null });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    const response = await GET(
+      new Request(
+        "https://main--free-cash-mayberrydt.netlify.app/auth/callback?code=abc123&next=/welcome",
+      ),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe("https://free-cash-mayberrydt.netlify.app/welcome");
+    expect(supabase.auth.exchangeCodeForSession).toHaveBeenCalledWith("abc123");
+  });
+
+  it("redirects failed OAuth callbacks to the canonical public site origin", async () => {
+    enableSupabaseEnv();
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
+    const supabase = createSupabaseClient({ error: new Error("bad code") });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    const response = await GET(
+      new Request("https://main--free-cash-mayberrydt.netlify.app/auth/callback?code=bad"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://free-cash-mayberrydt.netlify.app/?auth=callback-failed",
+    );
+  });
+
   it("verifies an email OTP token and respects next", async () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ error: null });

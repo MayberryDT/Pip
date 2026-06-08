@@ -84,6 +84,32 @@ describe("POST /api/auth/sign-in", () => {
       },
     });
   });
+
+  it("uses forwarded production headers before a Netlify deploy-prime URL", async () => {
+    enableSupabaseEnv();
+    vi.stubEnv("DEPLOY_PRIME_URL", "https://main--free-cash-mayberrydt.netlify.app");
+    const supabase = createSupabaseClient();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    const response = await POST(
+      jsonRequest(
+        { email: "mayberrydt@gmail.com" },
+        {
+          "x-forwarded-host": "free-cash-mayberrydt.netlify.app",
+          "x-forwarded-proto": "https",
+        },
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
+      email: "mayberrydt@gmail.com",
+      options: {
+        emailRedirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback",
+        shouldCreateUser: true,
+      },
+    });
+  });
 });
 
 function enableSupabaseEnv() {

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { buildAppUrl } from "@/lib/url/app-origin";
 
 type EmailOtpCallbackType = "signup" | "invite" | "magiclink" | "recovery" | "email_change" | "email";
 
@@ -9,12 +10,12 @@ export async function GET(request: Request) {
   const next = getSafeNextPath(requestUrl.searchParams.get("next"));
 
   if (!isSupabaseConfigured()) {
-    return NextResponse.redirect(new URL("/", requestUrl.origin));
+    return NextResponse.redirect(buildAppUrl("/", request));
   }
 
   const authParams = getAuthCallbackParams(requestUrl.searchParams);
   if (!authParams) {
-    return NextResponse.redirect(new URL("/", requestUrl.origin));
+    return NextResponse.redirect(buildAppUrl("/", request));
   }
 
   const supabase = await createSupabaseServerClient();
@@ -33,10 +34,10 @@ export async function GET(request: Request) {
           });
 
   if (error || !data.user) {
-    return NextResponse.redirect(new URL("/?auth=callback-failed", requestUrl.origin));
+    return NextResponse.redirect(buildAppUrl("/?auth=callback-failed", request));
   }
 
-  return NextResponse.redirect(new URL(next, requestUrl.origin));
+  return NextResponse.redirect(buildAppUrl(next, request));
 }
 
 function getSafeNextPath(next: string | null): string {

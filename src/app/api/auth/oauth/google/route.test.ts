@@ -61,6 +61,31 @@ describe("GET /api/auth/oauth/google", () => {
     });
   });
 
+  it("uses forwarded production headers before a Netlify deploy-prime URL", async () => {
+    enableSupabaseEnv();
+    vi.stubEnv("DEPLOY_PRIME_URL", "https://main--free-cash-mayberrydt.netlify.app");
+    const supabase = createSupabaseClient("https://supabase.example/auth/v1/authorize?provider=google");
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    const response = await GET(
+      new Request("https://main--free-cash-mayberrydt.netlify.app/api/auth/oauth/google", {
+        headers: {
+          "x-forwarded-host": "free-cash-mayberrydt.netlify.app",
+          "x-forwarded-proto": "https",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(307);
+    expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback",
+        skipBrowserRedirect: true,
+      },
+    });
+  });
+
   it("keeps next redirects inside the app", async () => {
     enableSupabaseEnv();
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
@@ -76,6 +101,31 @@ describe("GET /api/auth/oauth/google", () => {
         skipBrowserRedirect: true,
       },
     });
+  });
+
+  it("keeps auth-start failure redirects on the canonical site origin", async () => {
+    enableSupabaseEnv();
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
+    const supabase = {
+      auth: {
+        signInWithOAuth: vi.fn().mockResolvedValue({
+          data: {
+            url: null,
+          },
+          error: new Error("oauth failed"),
+        }),
+      },
+    };
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    const response = await GET(
+      new Request("https://main--free-cash-mayberrydt.netlify.app/api/auth/oauth/google"),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://free-cash-mayberrydt.netlify.app/?auth=oauth-start-failed",
+    );
   });
 });
 
