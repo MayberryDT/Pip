@@ -62,6 +62,7 @@ describe("PWA manifest", () => {
   it("registers a privacy-safe service worker with an offline fallback", () => {
     const serviceWorkerPath = join(process.cwd(), "public/sw.js");
     const offlinePath = join(process.cwd(), "public/offline.html");
+    const registrationPath = join(process.cwd(), "src/components/PwaServiceWorkerRegistration.tsx");
 
     expect(existsSync(serviceWorkerPath)).toBe(true);
     expect(existsSync(offlinePath)).toBe(true);
@@ -77,6 +78,12 @@ describe("PWA manifest", () => {
     expect(source).toContain('url.pathname.includes("/agent")');
     expect(source).toContain('url.pathname.includes("/events")');
     expect(source).toContain('url.pathname.includes("/free-cash")');
+
+    const registrationSource = readFileSync(registrationPath, "utf8");
+
+    expect(registrationSource).toContain('process.env.NODE_ENV === "development"');
+    expect(registrationSource).toContain("getRegistrations");
+    expect(registrationSource).toContain("cacheName.startsWith(\"pip-\")");
   });
 });
 

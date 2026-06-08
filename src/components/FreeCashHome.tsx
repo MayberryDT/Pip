@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import type {
   AgentClientAction,
   AgentResponse,
@@ -24,7 +23,8 @@ import { formatMoney } from "@/lib/money";
 import type { FreeCashResult } from "@/lib/types";
 import { AgentInput } from "@/components/AgentInput";
 import { AgentThread } from "@/components/AgentThread";
-import { PipAvatar } from "@/components/brand/PipAvatar";
+import { PipIntroScene } from "@/components/onboarding/PipIntroScene";
+import { ProtectedSavingsPicker } from "@/components/onboarding/ProtectedSavingsPicker";
 import { PromptChips } from "@/components/PromptChips";
 import { openPlaidLink } from "@/lib/providers/plaid/link-browser";
 import type { PlaidEventMetadata } from "@/lib/providers/plaid/link-browser";
@@ -54,32 +54,50 @@ export function FreeCashHome({
   authNotice,
   connectionNotice,
   authState,
+  devOnboardingFlow = false,
   enableAccountControls = false,
 }: {
   authNotice?: "auth-error";
   connectionNotice?: "plaid-connected";
   authState?: SpendableAuthState;
+  devOnboardingFlow?: boolean;
   enableAccountControls?: boolean;
 }) {
   const [scenario, setScenario] = useState<FakeDataScenario>("default");
   const snapshot = useMemo(() => getFakeSnapshot(scenario), [scenario]);
   const localResult = useMemo(() => calculateFreeCash(snapshot), [snapshot]);
+  const [devAuthState, setDevAuthState] = useState<SpendableAuthState>({
+    status: "guest",
+  });
+  const [devHasConnectedData, setDevHasConnectedData] = useState(false);
+  const activeAuthState = devOnboardingFlow ? devAuthState : authState;
+  const liveAccountControlsEnabled = !devOnboardingFlow && enableAccountControls;
+  const onboardingPromptControlsEnabled = liveAccountControlsEnabled || devOnboardingFlow;
   const [serverResult, setServerResult] = useState<FreeCashResult | null>(null);
   const [serverErrorText, setServerErrorText] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatusResponse | null>(null);
   const [hasLoadedServerState, setHasLoadedServerState] = useState(false);
   const [backendReloadKey, setBackendReloadKey] = useState(0);
   const [hasAttemptedDailyRefresh, setHasAttemptedDailyRefresh] = useState(false);
-  const isOnboarding = authState?.status === "guest" || authState?.status === "needs-consent";
-  const result = isOnboarding ? null : enableAccountControls ? serverResult : localResult;
+  const isOnboarding =
+    activeAuthState?.status === "guest" || activeAuthState?.status === "needs-consent";
+  const result = isOnboarding
+    ? null
+    : devOnboardingFlow
+      ? devHasConnectedData
+        ? localResult
+        : null
+      : liveAccountControlsEnabled
+        ? serverResult
+        : localResult;
   const hasLoadedServerResult = Boolean(result);
   const freeCashTodayCents = result?.freeCashTodayCents;
   const [thread, setThread] = useState<ThreadItem[]>([]);
   const [chips, setChips] = useState<PromptChip[]>(() =>
-    getDefaultPromptChips(authState, enableAccountControls, null),
+    getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, null),
   );
   const [chipHistory, setChipHistory] = useState<PromptChip[]>(() =>
-    getDefaultPromptChips(authState, enableAccountControls, null),
+    getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, null),
   );
   const promptChipRequestKeyRef = useRef<string | null>(null);
   const lastNonEmptyChipsRef = useRef<PromptChip[]>(chips);
@@ -88,9 +106,17 @@ export function FreeCashHome({
   const [conversationId, setConversationId] = useState<string | null>(null);
   const hasConversation = thread.length > 0;
   const isReadyWithoutData =
-    enableAccountControls && authState?.status === "ready" && hasLoadedServerState && !result;
+    devOnboardingFlow && activeAuthState?.status === "ready"
+      ? !devHasConnectedData
+      : liveAccountControlsEnabled && activeAuthState?.status === "ready" && hasLoadedServerState && !result;
   const isCheckingLiveData =
-    enableAccountControls && authState?.status === "ready" && !hasLoadedServerState && !result;
+    !devOnboardingFlow &&
+    liveAccountControlsEnabled &&
+    activeAuthState?.status === "ready" &&
+    !hasLoadedServerState &&
+    !result;
+  const showAgentInput = activeAuthState?.status !== "needs-consent" || thread.length > 0;
+  const showPromptChips = activeAuthState?.status !== "needs-consent" || thread.length > 0;
 
   useEffect(() => {
     const urlScenario = new URLSearchParams(window.location.search).get("scenario");
@@ -105,7 +131,7 @@ export function FreeCashHome({
   }, []);
 
   useEffect(() => {
-    if (!enableAccountControls) {
+    if (!liveAccountControlsEnabled) {
       setServerResult(null);
       setSyncStatus(null);
       setHasLoadedServerState(false);
@@ -158,12 +184,12 @@ export function FreeCashHome({
     return () => {
       ignore = true;
     };
-  }, [backendReloadKey, enableAccountControls, scenario]);
+  }, [backendReloadKey, liveAccountControlsEnabled, scenario]);
 
   useEffect(() => {
     if (
-      !enableAccountControls ||
-      authState?.status !== "ready" ||
+      !liveAccountControlsEnabled ||
+      activeAuthState?.status !== "ready" ||
       !syncStatus ||
       hasAttemptedDailyRefresh ||
       !shouldRefreshConnectedDataForToday(syncStatus)
@@ -185,22 +211,33 @@ export function FreeCashHome({
       .catch(() => {
         setBackendReloadKey((current) => current + 1);
       });
-  }, [authState?.status, enableAccountControls, hasAttemptedDailyRefresh, syncStatus]);
+  }, [activeAuthState?.status, hasAttemptedDailyRefresh, liveAccountControlsEnabled, syncStatus]);
 
   useEffect(() => {
     if (hasConversation) {
       return;
     }
 
-    const defaultChips = getDefaultPromptChips(authState, enableAccountControls, result);
+    const defaultChips = getDefaultPromptChips(
+      activeAuthState,
+      onboardingPromptControlsEnabled,
+      result,
+    );
 
     setChips(defaultChips);
     setChipHistory(defaultChips);
 
-    if (!enableAccountControls) {
+    if (!liveAccountControlsEnabled) {
       setThread([]);
     }
-  }, [authState, enableAccountControls, hasConversation, localResult, result]);
+  }, [
+    activeAuthState,
+    hasConversation,
+    liveAccountControlsEnabled,
+    localResult,
+    onboardingPromptControlsEnabled,
+    result,
+  ]);
 
   useEffect(() => {
     if (chips.length > 0) {
@@ -229,8 +266,8 @@ export function FreeCashHome({
       : "home";
 
     const requestKey = [
-      authState?.status ?? "demo",
-      enableAccountControls ? "live" : "demo",
+      activeAuthState?.status ?? "demo",
+      liveAccountControlsEnabled ? "live" : devOnboardingFlow ? "dev-onboarding" : "demo",
       scenario,
       result.window.endDate,
       result.freeCashTodayCents,
@@ -270,13 +307,14 @@ export function FreeCashHome({
       ignore = true;
     };
   }, [
-    authState?.status,
+    activeAuthState?.status,
     chipHistory,
     chips,
     conversationId,
-    enableAccountControls,
+    devOnboardingFlow,
     isOnboarding,
     isSending,
+    liveAccountControlsEnabled,
     promptChipRefreshSequence,
     result,
     scenario,
@@ -359,7 +397,7 @@ export function FreeCashHome({
   }
 
   function selectPromptChip(chip: PromptChip) {
-    if (enableAccountControls) {
+    if (liveAccountControlsEnabled) {
       void trackProductEvent("prompt_chip_selected", {
         chipId: chip.id,
         label: chip.label,
@@ -370,7 +408,7 @@ export function FreeCashHome({
   }
 
   async function suppressMissingCardNudge(issuerName: string) {
-    if (!enableAccountControls) {
+    if (!liveAccountControlsEnabled) {
       return;
     }
 
@@ -415,7 +453,7 @@ export function FreeCashHome({
   }
 
   useEffect(() => {
-    if (!enableAccountControls || !hasLoadedServerResult || freeCashTodayCents === undefined) {
+    if (!liveAccountControlsEnabled || !hasLoadedServerResult || freeCashTodayCents === undefined) {
       return;
     }
 
@@ -424,7 +462,7 @@ export function FreeCashHome({
       freeCashTodayCents,
       negative: freeCashTodayCents < 0,
     });
-  }, [enableAccountControls, freeCashTodayCents, hasLoadedServerResult, scenario]);
+  }, [freeCashTodayCents, hasLoadedServerResult, liveAccountControlsEnabled, scenario]);
 
   return (
     <main className="free-cash-app-shell h-[100dvh] overflow-hidden px-5 py-5 text-ink sm:px-6">
@@ -451,25 +489,36 @@ export function FreeCashHome({
 
         <section className={hasConversation ? "mt-3 flex min-h-0 flex-1 flex-col" : "mt-6 flex min-h-0 flex-1 flex-col max-[380px]:mt-5"}>
           {isOnboarding && thread.length === 0 ? (
-            <OnboardingIntro authNotice={authNotice} authState={authState} />
+            <OnboardingIntro
+              authNotice={authNotice}
+              authState={activeAuthState ?? { status: "guest" }}
+              onStartDevSignIn={devOnboardingFlow ? startDevOnboardingSignIn : undefined}
+              onSaveProtectedSavings={saveProtectedSavingsChoice}
+            />
           ) : isCheckingLiveData && thread.length === 0 ? (
             <ReadyIntro connectionNotice={connectionNotice} variant="checking" />
           ) : isReadyWithoutData && thread.length === 0 ? (
-            <ReadyIntro connectionNotice={connectionNotice} variant="needs-data" />
+            <ReadyIntro
+              connectionNotice={connectionNotice}
+              onConnectData={startConnectData}
+              variant="needs-data"
+            />
           ) : thread.length === 0 ? (
             <DefaultAssistantIntro connectionNotice={connectionNotice} result={result} />
           ) : (
             <AgentThread
               thread={thread}
-              onSuppressMissingCard={enableAccountControls ? suppressMissingCardNudge : undefined}
+              onSuppressMissingCard={liveAccountControlsEnabled ? suppressMissingCardNudge : undefined}
             />
           )}
-          <PromptChips chips={chips} onSelect={selectPromptChip} />
-          <AgentInput
-            busy={isSending}
-            onSubmit={submitPrompt}
-            placeholder={getInputPlaceholder(authState)}
-          />
+          {showPromptChips ? <PromptChips chips={chips} onSelect={selectPromptChip} /> : null}
+          {showAgentInput ? (
+            <AgentInput
+              busy={isSending}
+              onSubmit={submitPrompt}
+              placeholder={getInputPlaceholder(activeAuthState)}
+            />
+          ) : null}
         </section>
       </div>
     </main>
@@ -496,6 +545,64 @@ export function FreeCashHome({
       await completePlaidClientAction(action.plaid);
       window.setTimeout(() => window.location.reload(), 650);
     }
+  }
+
+  function startDevOnboardingSignIn() {
+    setThread([]);
+    setDevHasConnectedData(false);
+    setDevAuthState({
+      status: "needs-consent",
+      email: "pip-test@example.com",
+    });
+  }
+
+  function startConnectData() {
+    if (devOnboardingFlow) {
+      setThread([]);
+      setDevHasConnectedData(true);
+      return;
+    }
+
+    selectPromptChip({
+      id: "connect-data",
+      label: "Connect data",
+      prompt: "Connect my data",
+    });
+  }
+
+  async function saveProtectedSavingsChoice(amountCents: number) {
+    if (devOnboardingFlow) {
+      setThread([]);
+      setDevAuthState({
+        status: "ready",
+        email: "pip-test@example.com",
+      });
+      setDevHasConnectedData(false);
+      return;
+    }
+
+    if (liveAccountControlsEnabled) {
+      void trackProductEvent("protected_savings_selected", {
+        protectedSavingsMonthlyCents: amountCents,
+      });
+    }
+
+    const response = await fetch("/api/auth/consent", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        protectedSavingsMonthlyCents: amountCents,
+      }),
+    });
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(getErrorMessage(payload, "I couldn’t save that cushion yet. Please try again."));
+    }
+
+    window.setTimeout(() => window.location.reload(), 650);
   }
 
   async function completePlaidClientAction(plaid: PlaidClientActionConfig) {
@@ -625,45 +732,64 @@ export function FreeCashHome({
 function OnboardingIntro({
   authNotice,
   authState,
+  onStartDevSignIn,
+  onSaveProtectedSavings,
 }: {
   authNotice?: "auth-error";
   authState: SpendableAuthState;
+  onStartDevSignIn?: () => void;
+  onSaveProtectedSavings: (amountCents: number) => Promise<void>;
 }) {
   if (authState.status === "needs-consent") {
     return (
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
-        <section className="glass-panel px-6 py-4">
-          <div className="mb-4">
-            <PipAvatar size="sm" expression="reassuring" ariaLabel="Pip" />
+        <PipIntroScene
+          priority
+          title="Let’s set aside a little cushion first."
+          className="onboarding-setup-scene"
+          messageClassName="onboarding-intro-message"
+        >
+          <p>
+            This is money I’ll keep protected before I answer spending questions.
+          </p>
+          <div className="mt-5">
+            <ProtectedSavingsPicker onSave={onSaveProtectedSavings} />
           </div>
-          <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
-            Welcome back. Step 2 is choosing protected savings.
-          </p>
-          <p className="mt-3 text-sm leading-6 text-ink/[0.66]">
-            This is money I keep out of Spendable Cash Today before answering spending questions. Choose a
-            monthly amount now, or tap Use $200 to keep going.
-          </p>
-        </section>
+        </PipIntroScene>
       </div>
     );
   }
 
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
-      <section className="glass-panel px-6 py-4">
-        {authNotice ? <AuthNotice /> : null}
-        <div className="flex items-start gap-4">
-          <PipAvatar size="sm" expression="happy" ariaLabel="Pip" />
-          <div>
-            <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
-              Hi, I’m Pip. I’ll show what’s actually spendable today.
-            </p>
-            <p className="mt-3 text-sm leading-6 text-ink/[0.66]">
-              Sign in, choose protected savings, and connect account data here in chat.
-            </p>
-          </div>
-        </div>
-      </section>
+      <PipIntroScene
+        priority
+        notice={authNotice ? <AuthNotice /> : null}
+        title="Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today."
+        actions={
+          onStartDevSignIn ? (
+            <button
+              type="button"
+              className="focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
+              onClick={onStartDevSignIn}
+            >
+              Continue with Google
+            </button>
+          ) : (
+            <a
+              className="focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
+              href="/api/auth/oauth/google"
+            >
+              Continue with Google
+            </a>
+          )
+        }
+        messageClassName="onboarding-intro-message"
+      >
+        <p>
+          First we’ll sign in, choose a gentle savings cushion, then connect the account data Pip needs.
+        </p>
+      </PipIntroScene>
     </div>
   );
 }
@@ -678,46 +804,49 @@ function AuthNotice() {
 
 function ReadyIntro({
   connectionNotice,
+  onConnectData,
   variant,
 }: {
   connectionNotice?: "plaid-connected";
+  onConnectData?: () => void;
   variant: "checking" | "needs-data";
 }) {
   if (variant === "checking") {
     return (
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
         {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
-        <section className="glass-panel px-6 py-4">
-          <div className="mb-4">
-            <PipAvatar size="sm" expression="neutral" ariaLabel="Pip" />
-          </div>
-          <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
-            I’m checking for connected data.
-          </p>
-          <p className="mt-3 text-sm leading-6 text-ink/[0.66]">
-            If nothing is connected yet, I’ll start the next step here in chat.
-          </p>
-        </section>
+        <PipIntroScene
+          priority
+          title="I’m checking for connected data."
+          messageClassName="onboarding-intro-message"
+        >
+          <p>If nothing is connected yet, I’ll start the next step here.</p>
+        </PipIntroScene>
       </div>
     );
   }
 
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
-      <section className="glass-panel px-6 py-4">
-        {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
-        <div className="flex items-start gap-4">
-          <PipAvatar size="sm" expression="happy" ariaLabel="Pip" />
-          <div>
-            <p className="font-display text-[1.42rem] leading-[1.28] text-ink max-[380px]:text-[1.28rem]">
-              Connect your data and I’ll calculate Spendable Cash Today.
-            </p>
-            <p className="mt-3 text-sm leading-6 text-ink/[0.66]">
-              Tap Connect data and I’ll open Plaid. Then you can ask why the number changed or whether a purchase fits.
-            </p>
-          </div>
-        </div>
-      </section>
+      {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
+      <PipIntroScene
+        priority
+        title="Almost there. Connect your account data and I’ll start showing your spendable cash."
+        actions={
+          <button
+            type="button"
+            className="focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
+            onClick={onConnectData}
+          >
+            Connect data
+          </button>
+        }
+        messageClassName="onboarding-intro-message"
+      >
+        <p>
+          I’ll open Plaid, then you can ask what changed or whether a purchase fits.
+        </p>
+      </PipIntroScene>
     </div>
   );
 }
@@ -735,28 +864,14 @@ function DefaultAssistantIntro({
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
       {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
-      <div className="assistant-intro-stack">
-        <section className="glass-panel assistant-intro-message px-5 py-4">
-          <p className="font-display text-[1.28rem] leading-[1.32] text-ink max-[380px]:text-[1.16rem]">
-            {isNegative
-              ? `You’re ${overAmount} over today. Ask why to see what caused it.`
-              : "Hi, I’m Pip. I’ll show what’s actually spendable today."}
-          </p>
-        </section>
-        <div className="assistant-intro-character" role="img" aria-label="Pip">
-          <Image
-            src="/brand/pip-waving.png"
-            alt=""
-            aria-hidden="true"
-            width={416}
-            height={484}
-            sizes="160px"
-            className="assistant-intro-character-image"
-            draggable={false}
-            priority
-          />
-        </div>
-      </div>
+      <PipIntroScene
+        priority
+        title={
+          isNegative
+            ? `You’re ${overAmount} over today. Ask why to see what caused it.`
+            : "Hi, I’m Pip. I’ll show what’s actually spendable today."
+        }
+      />
     </div>
   );
 }
@@ -778,7 +893,7 @@ function getInputPlaceholder(authState: SpendableAuthState | undefined): string 
   }
 
   if (authState?.status === "needs-consent") {
-    return "Protected savings, e.g. 200...";
+    return "Ask Pip anything...";
   }
 
   return "Ask Pip anything...";

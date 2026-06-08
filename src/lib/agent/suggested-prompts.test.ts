@@ -15,12 +15,14 @@ describe("prompt chips", () => {
   it("keeps onboarding chips available", () => {
     expect(getOnboardingPromptChips({ status: "guest", hasFinancialData: false }).map((chip) => chip.id)).toEqual([
       "how-pip-works",
-      "get-signed-up",
-      "connect-data",
+      "what-will-connect",
     ]);
     expect(
+      getOnboardingPromptChips({ status: "needs-consent", hasFinancialData: false }).map((chip) => chip.id),
+    ).toEqual(["why-savings-cushion"]);
+    expect(
       getOnboardingPromptChips({ status: "ready", hasFinancialData: false }).map((chip) => chip.id),
-    ).toEqual(["how-pip-works", "connect-data", "set-protected-savings"]);
+    ).toEqual(["what-data-used", "why-connect-accounts"]);
   });
 
   it("marks the retired ready-state defaults so generated chips cannot reintroduce them", () => {

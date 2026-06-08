@@ -71,22 +71,20 @@ async function assertAuthenticatedSession(page: Page) {
 }
 
 async function completeConsentIfNeeded(page: Page) {
-  if (!(await page.getByText("Welcome back.").isVisible().catch(() => false))) {
+  if (!(await page.getByText("Let’s set aside a little cushion first.").isVisible().catch(() => false))) {
     return;
   }
 
-  await page.getByLabel("Ask Pip").fill("200");
   const consentResponse = page.waitForResponse((response) => {
     return response.url().includes("/api/auth/consent") && response.request().method() === "POST";
   });
-  await page.getByRole("button", { name: "Send" }).click();
+  await page.getByRole("button", { name: "Use $200 cushion" }).click();
   await expect((await consentResponse).ok()).toBe(true);
-  await expect(page.getByText("You’re set. I’m loading Spendable Cash Today")).toBeVisible();
   await page.waitForLoadState("domcontentloaded");
 }
 
 async function completePlaidIfNeeded(page: Page) {
-  const connectStep = page.getByText("Connect your data and I’ll calculate Spendable Cash Today.");
+  const connectStep = page.getByText("Almost there. Connect your account data and I’ll start showing your spendable cash.");
 
   if (!(await connectStep.isVisible().catch(() => false))) {
     await assertConnectedSyncStatus(page);

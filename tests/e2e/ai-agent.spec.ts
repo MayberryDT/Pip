@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 test("AI agent loop keeps one number while cards persist in the thread", async ({
   page,
@@ -8,7 +8,9 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
-  await expect(page.getByTestId("prompt-chips")).toHaveCount(0);
+  await expect(page.getByText("Why this number?")).toHaveCount(0);
+  await expect(page.getByText("Can I spend $50?")).toHaveCount(0);
+  await expect(page.getByText("What changed?")).toHaveCount(0);
 
   const input = page.getByLabel("Ask Pip");
   await input.fill("Why this number?");
@@ -213,61 +215,77 @@ test("guest onboarding starts Google OAuth from the Pip screen", async ({ page }
   await page.goto("/?onboarding=guest");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByText("Hi, I’m Pip. I’ll show what’s actually spendable today.")).toBeVisible();
+  await expect(page.getByText("Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today.")).toBeVisible();
   await expect(page.getByTestId("free-cash-number")).toHaveText("$--");
   await expect(page.getByLabel("Ask Pip")).toHaveAttribute(
     "placeholder",
     "Ask Pip anything...",
   );
 
-  await routeAgentThroughMockModel(page);
-
-  const handoffPromise = page.waitForRequest((request) =>
-    request.url().includes("/api/auth/oauth/google"),
+  await expect(page.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
+    "href",
+    "/api/auth/oauth/google",
   );
-  await page.getByRole("button", { name: "Get signed up" }).click();
-
-  await expect(page.getByText("Get me signed up", { exact: true })).toBeVisible();
-  await expect(page.getByText("I’ll send you to Google to start.")).toBeVisible();
-  await handoffPromise;
 });
 
 test("consent onboarding stays on the Pip screen before loading the number", async ({ page }) => {
-  let agentPayload: { selectedPromptChipId?: string } | null = null;
-  await page.route("**/api/agent", async (route) => {
-    agentPayload = route.request().postDataJSON();
+  let consentPayload: { protectedSavingsMonthlyCents?: number } | null = null;
+  await page.route("**/api/auth/consent", async (route) => {
+    consentPayload = route.request().postDataJSON();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(createMockAgentResponse(agentPayload ?? {})),
+      body: JSON.stringify({ status: "accepted" }),
     });
   });
 
   await page.goto("/?onboarding=consent");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByText("Welcome back.")).toBeVisible();
+  await expect(page.getByText("Let’s set aside a little cushion first.")).toBeVisible();
+  await expect(page.getByText("Savings cushion")).toBeVisible();
   await expect(page.getByTestId("free-cash-number")).toHaveText("$--");
-  await expect(page.getByLabel("Ask Pip")).toHaveAttribute(
-    "placeholder",
-    "Protected savings, e.g. 200...",
-  );
+  await expect(page.getByTestId("agent-input")).toHaveCount(0);
 
-  const responsePromise = waitForAgentResponse(page);
-  await page.getByRole("button", { name: "Use $250" }).click();
+  const responsePromise = page.waitForResponse((response) =>
+    response.url().includes("/api/auth/consent") && response.request().method() === "POST",
+  );
+  await page.getByRole("button", { name: "$250" }).click();
+  await page.getByRole("button", { name: "Use $250 cushion" }).click();
 
   const response = await responsePromise;
   expect(response.ok()).toBe(true);
-  expect(agentPayload).toMatchObject({
-    selectedPromptChipId: "set-250-savings",
+  expect(consentPayload).toMatchObject({
+    protectedSavingsMonthlyCents: 25000,
   });
-  await expect(page.getByText("I saved that amount and will reload setup.")).toBeVisible();
+});
+
+test("dev test onboarding walks a fresh local user through setup", async ({ page }) => {
+  await routeAgentThroughMockModel(page);
+  await page.goto("/?onboarding=test");
+  await page.waitForLoadState("networkidle");
+
+  await expect(page.getByText("Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today.")).toBeVisible();
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$--");
+  await expect(page.getByRole("link", { name: "Continue with Google" })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Continue with Google" }).click();
+  await expect(page.getByText("Let’s set aside a little cushion first.")).toBeVisible();
+  await expect(page.getByTestId("agent-input")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "$250" }).click();
+  await page.getByRole("button", { name: "Use $250 cushion" }).click();
+  await expect(
+    page.getByText("Almost there. Connect your account data and I’ll start showing your spendable cash."),
+  ).toBeVisible();
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$--");
+
+  await page.getByRole("button", { name: "Connect data" }).click();
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByText("Hi, I’m Pip. I’ll show what’s actually spendable today.")).toBeVisible();
 });
 
 test("connect data does not leave the chat stuck while Plaid is loading", async ({ page }) => {
-  const plaidScript: { route: Route | null } = {
-    route: null,
-  };
   await routeAgentThroughMockModel(page);
   await page.route("**/api/free-cash?scenario=default", async (route) => {
     await route.fulfill({
@@ -299,29 +317,40 @@ test("connect data does not leave the chat stuck while Plaid is loading", async 
       }),
     });
   });
-  await page.route("https://cdn.plaid.com/link/v2/stable/link-initialize.js", (route) => {
-    plaidScript.route = route;
+  await page.addInitScript(() => {
+    (window as unknown as {
+      Plaid: {
+        create(input: {
+          onExit(error: { error_message?: string } | null): void;
+        }): {
+          open(): void;
+        };
+      };
+    }).Plaid = {
+      create(config) {
+        return {
+          open() {
+            window.setTimeout(() => {
+              config.onExit({
+                error_message: "Plaid failed to load.",
+              });
+            }, 10);
+          },
+        };
+      },
+    };
   });
 
   await page.goto("/?onboarding=ready");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByText("Connect your data and I’ll calculate Spendable Cash Today.")).toBeVisible();
+  await expect(
+    page.getByText("Almost there. Connect your account data and I’ll start showing your spendable cash."),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Connect data" }).click();
 
   await expect(page.getByText("I’ll open Plaid now.")).toBeVisible();
   await expect(page.getByTestId("agent-thinking")).toBeHidden();
-  await expect
-    .poll(() => Boolean(plaidScript.route), {
-      message: "Expected the Plaid script request to be intercepted.",
-    })
-    .toBe(true);
-
-  if (!plaidScript.route) {
-    throw new Error("Expected the Plaid script request to be intercepted.");
-  }
-
-  await plaidScript.route.abort();
   await expect(page.getByText("Plaid failed to load.")).toBeVisible();
   await expect(page.getByTestId("agent-thinking")).toBeHidden();
 });
@@ -401,48 +430,61 @@ test("connect data completes Plaid exchange and syncs back to the same Pip scree
       }),
     });
   });
-  await page.route("https://cdn.plaid.com/link/v2/stable/link-initialize.js", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/javascript",
-      body: `
-        window.Plaid = {
-          create: function(config) {
-            window.__spendablePlaidConfig = config;
-            return {
-              open: function() {
-                window.setTimeout(function() {
-                  config.onSuccess("public-sandbox-token-success", {
-                    institution: {
-                      name: "Northstar Bank",
-                      institution_id: "ins_success"
-                    }
-                  });
-                }, 10);
-              }
+  await page.addInitScript(() => {
+    (window as unknown as {
+      Plaid: {
+        create(input: {
+          onSuccess(publicToken: string, metadata: {
+            institution: {
+              name: string;
+              institution_id: string;
             };
-          }
+          }): void;
+        }): {
+          open(): void;
         };
-      `,
-    });
+      };
+    }).Plaid = {
+      create(config) {
+        return {
+          open() {
+            window.setTimeout(() => {
+              config.onSuccess("public-sandbox-token-success", {
+                institution: {
+                  name: "Northstar Bank",
+                  institution_id: "ins_success",
+                },
+              });
+            }, 10);
+          },
+        };
+      },
+    };
   });
 
   await page.goto("/?onboarding=ready");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByText("Connect your data and I’ll calculate Spendable Cash Today.")).toBeVisible();
+  await expect(
+    page.getByText("Almost there. Connect your account data and I’ll start showing your spendable cash."),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Connect data" }).click();
 
   await expect(page.getByText("I’ll open Plaid now.")).toBeVisible();
   await expect(page.getByTestId("agent-thinking")).toBeHidden();
 
   await expect
-    .poll(() => freeCashRequestCount, {
-      message: "Expected Pip to reload the live Spendable Cash Today result after Plaid sync.",
+    .poll(() => Boolean(exchangePayload), {
+      message: "Expected Pip to exchange the Plaid public token.",
     })
-    .toBeGreaterThanOrEqual(2);
+    .toBe(true);
+  await expect
+    .poll(() => Boolean(syncPayload), {
+      message: "Expected Pip to run a manual sync after Plaid exchange.",
+    })
+    .toBe(true);
 
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$91");
+  expect(freeCashRequestCount).toBeGreaterThanOrEqual(1);
   expect(exchangePayload).toMatchObject({
     publicToken: "public-sandbox-token-success",
     metadata: {

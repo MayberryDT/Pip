@@ -247,6 +247,14 @@ button {
   backdrop-filter: blur(14px);
 }
 
+.onboarding-intro-message {
+  width: min(22.75rem, 92%);
+}
+
+.onboarding-setup-scene .assistant-intro-character {
+  margin-top: -3.75rem;
+}
+
 .chat-thread-in {
   animation: chat-thread-in 180ms ease-out both;
 }
@@ -359,5 +367,9 @@ button {
 
   .assistant-intro-message::after {
     left: 2rem;
+  }
+
+  .onboarding-intro-message {
+    width: min(20.5rem, 94%);
   }
 }

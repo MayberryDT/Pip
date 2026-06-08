@@ -1,22 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
-import { PipAvatar } from "@/components/brand/PipAvatar";
+import { PipIntroScene } from "@/components/onboarding/PipIntroScene";
+import { ProtectedSavingsPicker } from "@/components/onboarding/ProtectedSavingsPicker";
 
 export function ConsentGate({ email }: { email: string }) {
-  const [status, setStatus] = useState<"idle" | "saving" | "error">("idle");
-  const [error, setError] = useState("");
-  const [protectedSavings, setProtectedSavings] = useState("200");
-
-  async function acceptConsent() {
-    setStatus("saving");
-    setError("");
-    const protectedSavingsMonthlyCents = Math.max(
-      0,
-      Math.round(Number(protectedSavings || "0") * 100),
-    );
-
+  async function acceptConsent(protectedSavingsMonthlyCents: number) {
     const response = await fetch("/api/auth/consent", {
       method: "POST",
       headers: {
@@ -29,50 +18,33 @@ export function ConsentGate({ email }: { email: string }) {
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
-      setStatus("error");
-      setError(payload?.error ?? "Consent failed.");
-      return;
+      throw new Error(payload?.error ?? "I couldn’t save that cushion yet. Please try again.");
     }
 
     window.location.reload();
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-paper px-4 text-ink">
+    <main className="free-cash-app-shell grid min-h-screen place-items-center px-4 py-8 text-ink">
       <section className="w-full max-w-sm">
-        <PipAvatar size="md" expression="reassuring" ariaLabel="Pip" />
-        <h1 className="font-display mt-5 text-4xl font-normal tracking-normal">Before real data</h1>
-        <p className="mt-5 text-sm leading-6 text-ink/[0.66]">
-          This beta stores normalized financial data, provider tokens on the server, and product events
-          needed to support the product. It never stores bank credentials or moves money.
-        </p>
-        <p className="mt-4 text-sm leading-6 text-ink/[0.66]">
-          Connecting checking accounts and cards makes Spendable Cash Today more accurate because
-          card spend can be counted before a payment settles.
-        </p>
-        <p className="mt-4 text-xs leading-5 text-ink/50">{email}</p>
-        <label className="mt-7 block text-sm font-semibold" htmlFor="onboarding-protected-savings">
-          Protected savings
-        </label>
-        <div className="mt-3 flex min-h-14 items-center gap-2 rounded-full border border-ink/12 bg-white px-5 shadow-[0_12px_34px_rgba(23,26,31,0.08)]">
-          <span className="text-base font-semibold text-ink/46">$</span>
-          <input
-            id="onboarding-protected-savings"
-            className="min-w-0 flex-1 bg-transparent text-base text-ink outline-none"
-            inputMode="numeric"
-            value={protectedSavings}
-            disabled={status === "saving"}
-            onChange={(event) => setProtectedSavings(event.target.value.replace(/[^\d]/g, ""))}
-          />
-        </div>
-        <button
-          type="button"
-          className="focus-ring mt-8 min-h-14 w-full rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)] disabled:bg-ink/30"
-          disabled={status === "saving"}
-          onClick={acceptConsent}
+        <PipIntroScene
+          priority
+          title="Let’s set aside a little cushion first."
+          messageClassName="onboarding-intro-message"
         >
-          {status === "saving" ? "Saving" : "Accept and continue"}
-        </button>
+          <p>
+            This beta stores normalized financial data, provider tokens on the server, and product events
+            needed to support the product. It never stores bank credentials or moves money.
+          </p>
+          <p className="mt-3">
+            Connecting checking accounts and cards makes Spendable Cash Today more accurate because
+            card spend can be counted before a payment settles.
+          </p>
+          <p className="mt-3 text-xs leading-5 text-ink/50">{email}</p>
+          <div className="mt-5">
+            <ProtectedSavingsPicker idPrefix="fallback-onboarding" onSave={acceptConsent} />
+          </div>
+        </PipIntroScene>
         <div className="mt-8 flex gap-4 text-xs font-semibold text-ink/[0.45]">
           <Link className="hover:text-ink" href="/privacy">
             Privacy
@@ -84,7 +56,6 @@ export function ConsentGate({ email }: { email: string }) {
             Support
           </Link>
         </div>
-        {error ? <p className="mt-4 text-sm leading-6 text-red-700">{error}</p> : null}
       </section>
     </main>
   );

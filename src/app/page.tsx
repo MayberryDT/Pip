@@ -17,6 +17,10 @@ export default async function Home({
     return <FreeCashHome authState={{ status: "guest" }} authNotice={authNotice} />;
   }
 
+  if (devOnboardingState === "test") {
+    return <FreeCashHome authState={{ status: "guest" }} authNotice={authNotice} devOnboardingFlow />;
+  }
+
   if (devOnboardingState === "consent") {
     return <FreeCashHome authState={{ status: "needs-consent", email: "tester@example.com" }} />;
   }

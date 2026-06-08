@@ -4,54 +4,34 @@ import type { FreeCashResult } from "@/lib/types";
 export const guestOnboardingPromptChips: PromptChip[] = [
   {
     id: "how-pip-works",
-    label: "How it works",
+    label: "How does Pip work?",
     prompt: "Tell me how Pip works",
   },
   {
-    id: "get-signed-up",
-    label: "Get signed up",
-    prompt: "Get me signed up",
-  },
-  {
-    id: "connect-data",
-    label: "Connect data",
-    prompt: "Let's connect my data",
+    id: "what-will-connect",
+    label: "What will I connect?",
+    prompt: "What account data will I connect?",
   },
 ];
 
 export const consentOnboardingPromptChips: PromptChip[] = [
   {
-    id: "use-default-savings",
-    label: "Use $200",
-    prompt: "continue",
-  },
-  {
-    id: "set-250-savings",
-    label: "Use $250",
-    prompt: "$250",
-  },
-  {
-    id: "why-protected-savings",
-    label: "Why this step?",
-    prompt: "Why do you need protected savings?",
+    id: "why-savings-cushion",
+    label: "Why this cushion?",
+    prompt: "Why does Pip need a savings cushion?",
   },
 ];
 
 export const dataOnboardingPromptChips: PromptChip[] = [
   {
-    id: "how-pip-works",
-    label: "How it works",
-    prompt: "Tell me how Pip works",
+    id: "what-data-used",
+    label: "What data do you use?",
+    prompt: "What data does Pip use?",
   },
   {
-    id: "connect-data",
-    label: "Connect data",
-    prompt: "Connect my data",
-  },
-  {
-    id: "set-protected-savings",
-    label: "Protected savings",
-    prompt: "Set protected savings",
+    id: "why-connect-accounts",
+    label: "Why connect accounts?",
+    prompt: "Why should I connect accounts?",
   },
 ];
 

@@ -32,8 +32,8 @@ describe("FreeCashHome", () => {
     expect(markup).toContain("$--");
     expect(markup).not.toContain("$43");
     expect(markup).not.toContain("Can I spend $50?");
-    expect(markup).toContain("Connect data");
-    expect(visibleText).not.toContain("Data");
+    expect(markup).toContain("What data do you use?");
+    expect(visibleText).not.toContain("Data controls");
     expect(markup).not.toContain("Data controls");
   });
 
@@ -59,9 +59,12 @@ describe("FreeCashHome", () => {
     expect(visibleText).toContain("Pip");
     expect(visibleText).toContain("Spendable Cash Today");
     expect(visibleText).toContain("$--");
-    expect(visibleText).toContain("Hi, I’m Pip. I’ll show what’s actually spendable today.");
-    expect(markup).toContain("Get signed up");
+    expect(visibleText).toContain("Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today.");
+    expect(markup).toContain("Continue with Google");
+    expect(markup).toContain("How does Pip work?");
+    expect(markup).toContain("What will I connect?");
     expect(markup).toContain("Ask Pip anything...");
+    expect(markup).toContain("pip-waving.png");
     expect(markup).not.toContain("$43");
   });
 
@@ -83,10 +86,14 @@ describe("FreeCashHome", () => {
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
     expect(visibleText).toContain("Pip");
-    expect(visibleText).toContain("Welcome back.");
-    expect(visibleText).toContain("Step 2 is choosing protected savings.");
-    expect(visibleText).toContain("Use $200");
-    expect(markup).toContain("Protected savings, e.g. 200...");
+    expect(visibleText).toContain("Let’s set aside a little cushion first.");
+    expect(visibleText).toContain("Savings cushion");
+    expect(visibleText).toContain("Use $200 cushion");
+    expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
+    expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(0);
+    expect(markup).toContain("pip-waving.png");
+    expect(visibleText).not.toContain("Step 2");
+    expect(markup).not.toContain("Protected savings, e.g. 200...");
     expect(markup).not.toContain("$43");
   });
 
