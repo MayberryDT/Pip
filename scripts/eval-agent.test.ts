@@ -145,6 +145,39 @@ describe("Pip agent eval harness", () => {
     expect(result.failures).toContain("expected card not returned: spending_breakdown");
   });
 
+  it("fails repeated assistant messages, repeated chip sets, and adjacent tool loops", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const repeatedChips = [
+      {
+        id: "ai-recent-charges",
+        label: "Recent charges",
+        prompt: "Show my recent charges",
+      },
+    ];
+    const result = evaluateAgentResponse({
+      caseDef: {
+        previousAssistantMessage: "I found these recent items.",
+        previousPromptChips: repeatedChips,
+        recentToolNames: ["get_recent_transactions"],
+        forbiddenAdjacentSameTools: ["get_recent_transactions"],
+        expectNoRepeatedAssistantMessage: true,
+        expectNoRepeatedChipSet: true,
+      },
+      response: {
+        message: "I found these recent items.",
+        responseMode: "show_card",
+        usedTools: ["get_recent_transactions"],
+        cards: [{ type: "recent_transactions" }],
+        promptChips: repeatedChips,
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures.join("\n")).toContain("assistant message repeats");
+    expect(result.failures.join("\n")).toContain("prompt chips repeat");
+    expect(result.failures.join("\n")).toContain("adjacent same-tool loop");
+  });
+
   it("runs cases through fetch and writes a JSON report", async () => {
     const { runAgentEval } = await loadEvalHarness();
     const tempDir = mkdtempSync(join(tmpdir(), "spendable-agent-eval-"));
@@ -198,6 +231,7 @@ describe("Pip agent eval harness", () => {
           conversationState: {
             shownCards: [],
             lastToolNames: [],
+            promptChips: [],
           },
         },
       });

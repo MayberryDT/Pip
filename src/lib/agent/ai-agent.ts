@@ -14,14 +14,26 @@ import {
 } from "@/lib/agent/response-schema";
 import {
   getOnboardingPromptChips,
+  getReadyPromptChipExamples,
   getSuggestedPrompts,
   isRetiredDefaultPromptChip,
 } from "@/lib/agent/suggested-prompts";
+import {
+  composeAgentVisibleAnswer,
+} from "@/lib/agent/answer-composer";
+import {
+  planPromptChips,
+  type PromptChipPlan,
+} from "@/lib/agent/prompt-chip-planner";
 import { runAgentTool } from "@/lib/agent/tool-runner";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import { fakeSnapshot } from "@/lib/fake-data";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
 import { summarizeFreeCash } from "@/lib/free-cash/explanation";
+import {
+  getDisplayedSpendableCashTodayCents,
+  getSpendableCashTodayState,
+} from "@/lib/free-cash/spendable-cash-today";
 import { formatMoney, formatMoneyWithCents } from "@/lib/money";
 import type { FinancialSnapshot } from "@/lib/types";
 
@@ -124,6 +136,8 @@ type DeterministicAgentToolName =
   | "get_free_cash_snapshot"
   | "get_free_cash_drivers"
   | "get_spendable_cash_definition"
+  | "get_pattern_assumptions"
+  | "get_recent_spending_pressure"
   | "get_spending_breakdown"
   | "get_recurring_activity"
   | "forecast_spendable_cash"
@@ -279,6 +293,22 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     };
   }
 
+  if (isPatternAssumptionsPrompt(normalized)) {
+    return {
+      toolName: "get_pattern_assumptions",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (isRecentSpendingPressurePrompt(normalized)) {
+    return {
+      toolName: "get_recent_spending_pressure",
+      args: {},
+      requireCard: true,
+    };
+  }
+
   if (isExplicitMathPrompt(normalized)) {
     return {
       toolName: "get_free_cash_math",
@@ -297,14 +327,10 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     };
   }
 
-  if (isAffirmativeFollowUpToForecast(normalized, input.history)) {
-    return {
-      toolName: "forecast_spendable_cash",
-      args: {
-        horizon_days: 14,
-      },
-      requireCard: true,
-    };
+  const affirmativeFollowUpTool = getAffirmativeFollowUpTool(normalized, input.history);
+
+  if (affirmativeFollowUpTool) {
+    return affirmativeFollowUpTool;
   }
 
   if (isExplicitRecurringPrompt(normalized)) {
@@ -462,6 +488,22 @@ function getForcedPromptChipTool(
         amount_cents: 25000,
       },
       requireCard: false,
+    };
+  }
+
+  if (selectedPromptChipId === "ai-pattern-assumptions") {
+    return {
+      toolName: "get_pattern_assumptions",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (selectedPromptChipId === "ai-spending-pressure") {
+    return {
+      toolName: "get_recent_spending_pressure",
+      args: {},
+      requireCard: true,
     };
   }
 
@@ -703,11 +745,24 @@ function createSpendableTools() {
         }
 
         const result = calculateFreeCash(snapshot);
+        const metric = result.spendableCashToday;
+        const spendableCashTodayCents = getDisplayedSpendableCashTodayCents(result);
 
         return {
           metricName: "Spendable Cash Today",
-          freeCashToday: formatMoney(result.freeCashTodayCents),
-          freeCashTodayCents: result.freeCashTodayCents,
+          freeCashToday: formatMoney(spendableCashTodayCents),
+          freeCashTodayCents: spendableCashTodayCents,
+          metricVersion: metric?.metricVersion ?? "legacy",
+          state: getSpendableCashTodayState(result),
+          confidence: metric?.confidence,
+          shortfall: metric ? formatMoney(metric.shortfallCents) : undefined,
+          shortfallCents: metric?.shortfallCents,
+          baselineDailyAllowance: metric ? formatMoney(metric.baselineDailyAllowanceCents) : undefined,
+          baselineDailyAllowanceCents: metric?.baselineDailyAllowanceCents,
+          behaviorAdjustment: metric ? formatMoney(metric.behaviorAdjustmentCents) : undefined,
+          behaviorAdjustmentCents: metric?.behaviorAdjustmentCents,
+          cashRealityAdjustment: metric ? formatMoney(metric.cashRealityAdjustmentCents) : undefined,
+          cashRealityAdjustmentCents: metric?.cashRealityAdjustmentCents,
           rollingNet: formatMoney(result.rollingNetCents),
           rollingNetCents: result.rollingNetCents,
           window: result.window,
@@ -734,15 +789,19 @@ function createSpendableTools() {
 
         const response = runAgentTool("explain_free_cash", {}, snapshot);
         const result = calculateFreeCash(snapshot);
+        const metric = result.spendableCashToday;
         addAvailableCards(context, response.cards);
 
         return {
           metricName: "Spendable Cash Today",
-          freeCashToday: formatMoney(result.freeCashTodayCents),
+          freeCashToday: formatMoney(getDisplayedSpendableCashTodayCents(result)),
+          metricVersion: metric?.metricVersion ?? "legacy",
+          state: getSpendableCashTodayState(result),
+          confidence: metric?.confidence,
           summary: summarizeFreeCash(result),
           drivers: response.cards[0]?.type === "free_cash_explanation" ? response.cards[0].drivers : [],
-          warnings: result.warnings,
-          dataStates: result.dataStates,
+          warnings: metric?.warnings ?? result.warnings,
+          dataStates: metric?.dataStates ?? result.dataStates,
           availableCards: response.cards,
           suggestedPrompts: response.promptChips,
         };
@@ -792,23 +851,80 @@ function createSpendableTools() {
         }
 
         const result = calculateFreeCash(snapshot);
+        const metric = result.spendableCashToday;
 
         return {
           metricName: "Spendable Cash Today",
-          currentValue: formatMoney(result.freeCashTodayCents),
+          currentValue: formatMoney(getDisplayedSpendableCashTodayCents(result)),
+          metricVersion: metric?.metricVersion ?? "legacy",
+          state: getSpendableCashTodayState(result),
+          confidence: metric?.confidence,
           definition:
-            "Spendable Cash Today is the daily amount left after recent income, recent spending, refunds, and protected savings are counted.",
+            "Spendable Cash Today is the amount I estimate is okay to use today from your normal money pattern, recurring obligations, protected savings, recent spending pace, and available cash.",
           risesWhen: [
-            "income or refunds enter the rolling month",
-            "old spending leaves the rolling month",
-            "protected savings goes down",
+            "your normal income pattern leaves more room after bills and savings",
+            "recent everyday spending runs lighter than pace",
+            "available cash stops capping the pattern-based number",
           ],
           fallsWhen: [
-            "spending or bills enter the rolling month",
-            "old income leaves the rolling month",
-            "protected savings goes up",
+            "recurring obligations or protected savings take more of the monthly pattern",
+            "recent everyday spending runs ahead of pace",
+            "available cash caps the pattern-based number",
+          ],
+          notUsedAs: [
+            "a category budget",
+            "an exact paycheck forecast",
+            "a guarantee that a purchase is safe",
           ],
           suggestedPrompts: getSuggestedPrompts(result),
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_pattern_assumptions",
+      description:
+        "Show the deterministic assumptions behind the V2 pattern-based Spendable Cash Today metric, including income, bills, everyday context, and confidence.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_pattern_assumptions");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("show_pattern_assumptions", {}, snapshot);
+        addAvailableCards(context, response.cards);
+
+        return {
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_recent_spending_pressure",
+      description:
+        "Show how current-month everyday spending pace changes today's V2 Spendable Cash number.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_recent_spending_pressure");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("show_recent_spending_pressure", {}, snapshot);
+        addAvailableCards(context, response.cards);
+
+        return {
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
         };
       },
     }),
@@ -953,7 +1069,11 @@ function createSpendableTools() {
             card?.type === "purchase_simulation"
               ? {
                   before: formatMoney(card.beforeCents),
+                  todayRemaining: formatMoney(card.todayRemainingCents),
+                  todayOverage: formatMoney(card.todayOverageCents),
                   afterToday: formatMoney(card.afterTodayCents),
+                  dailyEffect: card.dailyEffectCents === undefined ? undefined : formatMoney(card.dailyEffectCents),
+                  shortfall: card.shortfallCents === undefined ? undefined : formatMoney(card.shortfallCents),
                   monthlyAverageAfter: formatMoney(card.monthlyAverageAfterCents),
                 }
               : null,
@@ -1038,12 +1158,13 @@ function createSpendableTools() {
 
         const response = runAgentTool("detect_missing_card", {}, snapshot);
         const result = calculateFreeCash(snapshot);
+        const metric = result.spendableCashToday;
         addAvailableCards(context, response.cards);
 
         return {
-          warningCount: result.warnings.length,
-          warnings: result.warnings,
-          dataStates: result.dataStates,
+          warningCount: (metric?.warnings ?? result.warnings).length,
+          warnings: metric?.warnings ?? result.warnings,
+          dataStates: metric?.dataStates ?? result.dataStates,
           accountCount: snapshot.accounts.length,
           transactionCount: snapshot.transactions.length,
           syncStatus: formatSyncStatus(context.syncStatus),
@@ -1115,9 +1236,9 @@ function createSpendableInstructions(runContext: {
         "This turn is a silent prompt-chip refresh for the current screen.",
         "Do not call tools. Do not create cards. Do not answer the user.",
         "Return message exactly: Ready.",
-        "Generate exactly 3 fresh promptChips based on onboarding state, financial context, recent cards, recent tools, and recent prompt chips.",
+        "The app will plan deterministic prompt chips. You may add up to 3 specific supplemental promptChips if they fit the current state.",
         "Use concrete, varied next-step ideas. Avoid generic repeats.",
-        "For chip labels, prefer short nouns like Upcoming bills, Missing card, Next few days, Payday impact, or Show trend.",
+        "For chip labels, prefer clear short questions like What bills are coming up? or What is cash flow?",
         "Do not use chip labels that start with Discuss. Do not suggest snapshot or view chips.",
         "For chip prompts, write a direct user request. Do not start with Let's discuss unless there is no matching Pip card.",
       ].join("\n")
@@ -1149,18 +1270,20 @@ function createSpendableInstructions(runContext: {
     "If there is no financial snapshot yet, do not answer with fake amounts. Guide the user to the next setup step.",
     "If the user asks why the number changed, why this number, what drives Spendable Cash Today, or asks for drivers, call get_free_cash_drivers directly.",
     "Do not ask whether they want drivers, math, or a summary when they already asked why or asked for drivers.",
-    "For why or what-changed answers, use a short first-person sentence like: I found $X for today. The biggest factors are income, spending, protected savings, rent, and refunds.",
+    "For why or what-changed answers, use a short first-person sentence like: I found $X for today. Your normal room is $Y, with recent spending and cash reality already reflected.",
     "For medium-complex explanations like payday impact, paycheck impact, deposit impact, or factors affecting today's number, call compose_insight_card and let the card carry the detail.",
     "The compose_insight_card tool is the only way to create insight cards. Do not invent card rows or UI in the final answer.",
     "If the user asks what Spendable Cash Today means, how Pip works, or what makes the number rise or fall, call get_spendable_cash_definition.",
+    "If the user asks what pattern, assumptions, confidence, or baseline I am using, call get_pattern_assumptions.",
+    "If the user asks how recent spending affects today's number, pace, over/under pattern, or spending pressure, call get_recent_spending_pressure.",
     "If the user asks for a trend, forecast, projection, or next-days view, call forecast_spendable_cash.",
     "If the user asks about recurring bills, subscriptions, monthly charges, or likely upcoming repeats, call get_recurring_activity.",
     "If the user asks for a complete, item, category, merchant, income, spending, refund, or card-payment breakdown, call get_spending_breakdown.",
     "Only ask for an amount when the user is clearly asking you to simulate or test a specific purchase but did not provide the amount.",
     "For general spend questions without an amount, call get_free_cash_snapshot. Explain what the number signals, but do not give a max spend limit.",
-    "For purchase simulations, answer directly from the tool result. If afterToday is negative, say 'You can, but it would put you $X over today.' If afterToday is not negative, say what would be left today.",
-    "If the user asks generally whether negative Spendable Cash Today means they cannot spend money, use get_free_cash_snapshot and explain the signal conversationally without treating it as a purchase simulation.",
-    "Negative Spendable Cash Today is a warning about today's signal; it does not literally mean every dollar of spending is impossible.",
+    "For purchase simulations, answer directly from the tool result. Explain today's remaining room, the recomputed V2 daily room, and the daily effect over the recovery period. If there is a shortfall, say it adds to the shortfall; do not describe the number as a bank balance.",
+    "If the user asks generally whether $0 or a shortfall means they cannot spend money, use get_free_cash_snapshot and explain the signal conversationally without treating it as a purchase simulation.",
+    "Spendable Cash Today floors at $0 in shortfall states. That is a warning about today's pattern and cash reality; it does not literally mean every dollar of spending is impossible.",
     "Only call get_recent_transactions when the user plainly asks to show, list, or identify transactions, charges, purchases, or recent activity.",
     "Do not call get_recent_transactions for general why, math, negative Spendable Cash Today, or can-I-spend questions.",
     "Prefer a short answer plus a structured card. For card answers, keep your sentence short and let the card carry the detail.",
@@ -1170,7 +1293,7 @@ function createSpendableInstructions(runContext: {
     "Tools create any cards. You do not emit card data or card selectors in the final answer.",
     "Do not invent card data, rows, balances, merchants, dates, or transaction details.",
     "Only say show, list, pull, view, card, trend view, forecast, or breakdown when a matching tool returned a card in this same turn.",
-    "For broad finance topics without a matching Pip card, say we can talk through it or discuss it. Do not promise to show data.",
+    "For broad personal-finance basics without a matching Pip card, teach one simple concept conversationally. Do not promise to show data.",
     "Forecasts are pattern guesses only. If mentioning a forecast caveat, use one short sentence: Forecast only; not guaranteed.",
     "Do not use guarantee language except the exact forecast caveat phrase: not guaranteed.",
     "Use at most one card unless the user explicitly asks for multiple details.",
@@ -1181,14 +1304,15 @@ function createSpendableInstructions(runContext: {
     "Do not use stock template phrasing like 'Here is...' as the whole reply. Respond to the user's exact wording and current conversation.",
     "Write at a fifth-grade reading level.",
     "Keep visible replies to one short sentence when possible, two short sentences max.",
-    "The message must be 35 words or fewer and 220 characters or fewer.",
+    "The visible message must be 45 words or fewer and 260 characters or fewer.",
+    "Use message for the direct lead sentence. Use support only when one short extra sentence adds useful context.",
     "Use common words. Avoid formal phrases like deterministic, rolling-window pattern, liquidity, optimal, analyze, or sufficient.",
     "Never use k shorthand for money. Say $210, not $0.21k.",
     "For card answers, let the card carry the detail. The message should only tell the user what the card is showing.",
     "Do not end card answers with a follow-up question. Prompt chips handle next steps.",
-    "Generate up to 3 fresh promptChips that fit the current state and conversation.",
-    "Do not use these retired default prompt chips: Why this number?, Can I spend $50?, What changed?",
-    "Prompt chip labels should be 2 to 5 simple words. Prompt text should sound like a natural next user message.",
+    "Prompt chips are mostly planned by the app. Return [] unless you have a specific supplemental next step that fits this exact turn.",
+    "Do not use these retired prompt chip labels: Missing card, Why today?, Test purchase, Why this number?, Can I spend $50?, What changed?",
+    "Prompt chip labels can be short natural questions up to 56 characters. Prompt text should sound like a normal next user message.",
     "Do not return the exact same chip set every time. Avoid generic repeats when the user just asked a specific question.",
     "Use protected setup chip ids only when the chip clearly starts that exact setup step: get-signed-up, connect-data, use-default-savings, set-250-savings.",
     "For normal suggested questions, use ids that start with ai-.",
@@ -1235,7 +1359,7 @@ function createAgentInput(
             financial_context_for_prompt_chips: createPromptChipFinancialContext(context.snapshot),
             prompt_chip_examples: context.availablePromptChips,
             response_style:
-              `Answer at a fifth-grade reading level. Use 35 words or fewer and ${agentMessageMaxChars} characters or fewer.`,
+              `Answer at a fifth-grade reading level. Use 45 words or fewer and ${agentMessageMaxChars} characters or fewer.`,
             repair: context.repair ?? null,
           }),
         },
@@ -1309,13 +1433,16 @@ function createPromptChipFinancialContext(snapshot: FinancialSnapshot | undefine
   }
 
   const result = calculateFreeCash(snapshot);
+  const metric = result.spendableCashToday;
 
   return {
-    spendableCashToday: formatMoney(result.freeCashTodayCents),
-    isNegative: result.freeCashTodayCents < 0,
-    topDrivers: result.drivers.slice(0, 4).map((driver) => driver.label),
-    warningLabels: result.warnings.map((warning) => warning.label),
-    hasMissingCardWarning: result.warnings.some((warning) => warning.id === "missing-card"),
+    spendableCashToday: formatMoney(getDisplayedSpendableCashTodayCents(result)),
+    isNegative: getSpendableCashTodayState(result) === "shortfall",
+    state: getSpendableCashTodayState(result),
+    confidence: metric?.confidence,
+    topDrivers: (metric?.drivers ?? result.drivers).slice(0, 4).map((driver) => driver.label),
+    warningLabels: (metric?.warnings ?? result.warnings).map((warning) => warning.label),
+    hasMissingCardWarning: (metric?.warnings ?? result.warnings).some((warning) => warning.id === "missing-card"),
     windowEndDate: result.window.endDate,
   };
 }
@@ -1398,10 +1525,16 @@ function buildAgentResponse(
   },
 ): AgentResponse {
   const parsed = parseAgentFinalOutput(finalOutput);
-  const usedTools = uniqueStrings(context.usedTools);
+  const rawUsedTools = uniqueStrings(context.usedTools);
   const cards = input.requestKind === "prompt_chips" ? [] : selectDeterministicCards(parsed, context, input);
+  const usedTools = suppressVisibleRepeatedTools(rawUsedTools, cards, input);
   const result = context.snapshot ? calculateFreeCash(context.snapshot) : null;
-  const promptChips = selectPromptChips(parsed, context, result);
+  const promptChipPlan = selectPromptChips(parsed, context, result, {
+    input,
+    cards,
+    usedTools,
+  });
+  const promptChips = promptChipPlan.chips;
   const responseMode =
     input.requestKind === "prompt_chips"
       ? "chat_only"
@@ -1422,7 +1555,23 @@ function buildAgentResponse(
     });
   }
 
-  const guardedMessage = guardVisibleFinalMessage(parsed.message, cards);
+  const visibleAnswer = composeAgentVisibleAnswer({
+    modelOutput: parsed,
+    userMessage: input.message,
+    history: input.history,
+    conversationState: {
+      ...context.conversationState,
+      result,
+      syncStatus: context.syncStatus,
+      onboardingState: context.onboardingState,
+    },
+    cards,
+    usedTools,
+    selectedPromptChipId: input.selectedPromptChipId,
+    maxChars: agentMessageMaxChars,
+    maxWords: 45,
+  });
+  const guardedMessage = guardVisibleFinalMessage(visibleAnswer.message, cards);
 
   return agentResponseSchema.parse({
     message: guardedMessage,
@@ -1438,6 +1587,17 @@ function buildAgentResponse(
       usedModel: audit.usedModel,
       model: audit.model,
       transport: audit.transport,
+      quality: {
+        conversationJob: promptChipPlan.conversationJob,
+        answerPatternId: visibleAnswer.answerPatternId,
+        chipFamilyIds: promptChipPlan.familyIds,
+        repeatedJob: promptChipPlan.repeatedJob,
+        repeatedTool: promptChipPlan.repeatedTool,
+        repeatedCard: promptChipPlan.repeatedCard,
+        repeatedMessage: visibleAnswer.repeatedMessage,
+        repetitionAdjusted: visibleAnswer.repetitionAdjusted,
+        chipFallbackReason: promptChipPlan.fallbackReason,
+      },
     },
   });
 }
@@ -1490,11 +1650,42 @@ function selectPromptChips(
   parsed: AgentFinalOutput,
   context: SpendableAgentContext,
   result: ReturnType<typeof calculateFreeCash> | null,
-) : PromptChip[] {
-  const fallback = result ? [] : getOnboardingPromptChips(context.onboardingState);
+  options: {
+    input: RunAiAgentInput;
+    cards: AgentCard[];
+    usedTools: string[];
+  },
+) : PromptChipPlan {
   const generated = sanitizeGeneratedPromptChips(parsed.promptChips, context);
+  const fallback = result ? [] : getOnboardingPromptChips(context.onboardingState);
 
-  return mergeGeneratedPromptChips(generated, fallback);
+  if (!result) {
+    return {
+      chips: mergeGeneratedPromptChips(generated, fallback),
+      conversationJob: "setup",
+      familyIds: [],
+      repeatedJob: false,
+      repeatedTool: false,
+      repeatedCard: false,
+      fallbackReason: generated.length > 0 ? "generated-supplement" : "none",
+    };
+  }
+
+  return planPromptChips({
+    result,
+    message: options.input.message,
+    history: options.input.history,
+    shownCards: context.conversationState.shownCards,
+    lastToolNames: context.conversationState.lastToolNames,
+    promptChips: context.conversationState.promptChips,
+    responseCards: options.cards,
+    responseToolNames: options.usedTools,
+    selectedPromptChipId: options.input.selectedPromptChipId,
+    syncStatus: context.syncStatus,
+    assistantMessage: [parsed.message, parsed.support].filter(Boolean).join(" "),
+    onboardingState: context.onboardingState,
+    generatedChips: generated,
+  });
 }
 
 function mergeGeneratedPromptChips(
@@ -1582,7 +1773,7 @@ function sanitizeGeneratedPromptChip(
   context: SpendableAgentContext,
   index: number,
 ): PromptChip | null {
-  const label = cleanPromptChipText(chip.label, 36);
+  const label = cleanPromptChipText(chip.label, 56);
   const prompt = cleanPromptChipText(chip.prompt, 160);
 
   if (!label || !prompt) {
@@ -1769,19 +1960,19 @@ function getAvailablePromptChips(input: {
   onboardingState: SpendableAgentOnboardingState;
 }): PromptChip[] {
   if (input.snapshot) {
-    return [];
+    return getReadyPromptChipExamples();
   }
 
   return getOnboardingPromptChips(input.onboardingState);
 }
 
 function guardVisibleFinalMessage(message: string, cards: AgentCard[] = []): string {
-  if (countWords(message) > 35) {
+  if (countWords(message) > 45) {
     throw new AgentUnavailableError({
       code: "model-returned-too-long-final-message",
       message: "AI returned a response that was too long for Pip.",
       status: 502,
-      detail: "Visible replies must be 35 words or fewer.",
+      detail: "Visible replies must be 45 words or fewer.",
     });
   }
 
@@ -1792,7 +1983,7 @@ function guardVisibleFinalMessage(message: string, cards: AgentCard[] = []): str
 
     if (
       repairedMessage &&
-      countWords(repairedMessage) <= 35 &&
+      countWords(repairedMessage) <= 45 &&
       !getDisallowedFinalLanguageDetail(repairedMessage) &&
       !getUnsupportedCardPromise(repairedMessage, cards)
     ) {
@@ -1814,7 +2005,7 @@ function guardVisibleFinalMessage(message: string, cards: AgentCard[] = []): str
 
     if (
       repairedMessage &&
-      countWords(repairedMessage) <= 35 &&
+      countWords(repairedMessage) <= 45 &&
       !getDisallowedFinalLanguageDetail(repairedMessage) &&
       !getUnsupportedCardPromise(repairedMessage, cards)
     ) {
@@ -1834,7 +2025,7 @@ function guardVisibleFinalMessage(message: string, cards: AgentCard[] = []): str
 
     if (
       repairedMessage &&
-      countWords(repairedMessage) <= 35 &&
+      countWords(repairedMessage) <= 45 &&
       !getDisallowedFinalLanguageDetail(repairedMessage) &&
       !getUnsupportedCardPromise(repairedMessage, cards)
     ) {
@@ -1853,6 +2044,17 @@ function guardVisibleFinalMessage(message: string, cards: AgentCard[] = []): str
 }
 
 function repairDisallowedFinalLanguageText(message: string, detail: string): string | null {
+  if (detail === "guarantee") {
+    const repaired = message
+      .replace(/\bguaranteed\b/gi, "promised")
+      .replace(/\bguarantees\b/gi, "promises")
+      .replace(/\bguarantee\b/gi, "promise")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return repaired === message ? null : repaired;
+  }
+
   if (detail !== "detached metric opening") {
     return null;
   }
@@ -1899,6 +2101,7 @@ function repairUnsupportedCardPromiseText(message: string, detail: string): stri
     const repaired = message
       .replace(/\bhere (is|are)\b.{0,24}\b(recurring|repeating|subscriptions?|monthly charges?|upcoming bills?|bills? coming up)\b/gi, "I can talk through likely repeats")
       .replace(/\b(show|showing|shown|showed|list|listed|pull|pulled|view)( me)?\b.{0,28}\b(recurring|repeating|subscriptions?|monthly charges?|upcoming bills?|bills? coming up)\b/gi, "talk through likely repeats")
+      .replace(/\b(show|showing|shown|showed|list|listed|pull|pulled|view)( me)?\b/gi, "talk through")
       .replace(/\brecurring activity\b/gi, "likely repeats")
       .replace(/\brecurring\b/gi, "repeating")
       .replace(/\bsubscriptions?\b/gi, "repeat charges")
@@ -1912,20 +2115,45 @@ function repairUnsupportedCardPromiseText(message: string, detail: string): stri
     return repaired === message ? null : repaired;
   }
 
+  if (detail === "transactions promised without transaction card") {
+    const repaired = message
+      .replace(/\b(show|showing|shown|showed|list|listed|pull|pulled|view)( me)?\b.{0,28}\b(transactions?|charges?|purchases?|activity)\b/gi, "talk through recent activity")
+      .replace(/\btransactions?\b/gi, "activity")
+      .replace(/\bcharges?\b/gi, "activity")
+      .replace(/\bpurchases?\b/gi, "spending")
+      .replace(/\bactivity I found:/gi, "activity:")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return repaired === message ? null : repaired;
+  }
+
   if (detail !== "card promised without card") {
     return null;
   }
 
   const repaired = message
+    .replace(/\bfuller view\b/gi, "fuller picture")
+    .replace(/\b(the )?view\b/gi, "$1picture")
+    .replace(/\bmissing cards?\b/gi, "missing data source")
+    .replace(/\bcards? (are|is|were|was) connected\b/gi, "data sources $1 connected")
+    .replace(/\bconnect(?:ed)? (the )?missing cards?\b/gi, "connect $1missing data source")
     .replace(/\bshow( me)? (your )?credit card options\b/gi, "talk through credit card options")
     .replace(/\bshow( me)? (your )?card options\b/gi, "talk through card options")
     .replace(/\bshow( me)? (some )?credit cards\b/gi, "talk through credit cards")
     .replace(/\bshow( me)? (some )?cards\b/gi, "talk through cards")
+    .replace(/\bshow( me)? (the )?full summary\b/gi, "talk through the full summary")
+    .replace(/\bshow( me)? (more )?(details?|detail)\b/gi, "talk through more detail")
     .replace(/\bview (your )?credit card options\b/gi, "talk through credit card options")
     .replace(/\bview (your )?card options\b/gi, "talk through card options")
     .replace(/\b(show|view|pull|list)( me)? (your )?card (options|choices|types|ideas|offers|details|use|usage)\b/gi, "talk through credit card $4")
     .replace(/\b(show|view|pull|list)( me)? (your )?cards\b/gi, "talk through credit cards")
     .replace(/\bcard (options|choices|types|ideas|offers|details|use|usage)\b/gi, "credit card $1")
+    .replace(/\bdata cards?\b/gi, "data source")
+    .replace(/\bdetails? cards?\b/gi, "details")
+    .replace(/\bquick chart\b/gi, "quick summary")
+    .replace(/\b(want to|would you like to|if you want,? i can) see\b/gi, "$1 talk through")
+    .replace(/\b(show|showing|shown|showed|list|listed|pull|pulled|view)( me)?\b/gi, "talk through")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -1943,7 +2171,7 @@ function getUnsupportedCardPromise(message: string, cards: AgentCard[]): string 
     return null;
   }
 
-  if (isSuggestionMenuResponse(normalized)) {
+  if (isSuggestionMenuResponse(normalized) && !hasSpecificDisplayCapabilityPromise(normalized)) {
     return null;
   }
 
@@ -1951,7 +2179,7 @@ function getUnsupportedCardPromise(message: string, cards: AgentCard[]): string 
     return hasCard(cards, "spendable_cash_forecast") ? null : "forecast promised without forecast card";
   }
 
-  if (/\b(recurring|repeating|subscription|subscriptions|monthly charges?|bills? coming up|upcoming bills?)\b/.test(normalized)) {
+  if (/\b(recurring|repeating|subscription|subscriptions|monthly charges?|bills? (are )?coming up|upcoming bills?)\b/.test(normalized)) {
     return hasAnyCard(cards, ["recurring_activity", "spendable_cash_forecast"])
       ? null
       : "recurring activity promised without recurring card";
@@ -1979,14 +2207,21 @@ function getUnsupportedCardPromise(message: string, cards: AgentCard[]): string 
 
   const normalizedWithoutCreditCardTopic = normalized.replace(/\b(?:credit|debit) cards?\b/g, "");
   const appCardPromisePattern =
-    /\b(?:this|the) cards?\b|\bcards?\s+(?:view|options|details|data)\b|\b(?:show|view|pull|list)\b.{0,40}\bcards?\b|\bcards?\b.{0,20}\b(?:shown|below)\b/;
+    /\b(?:this|the) cards?\b|\b(?:data|details?) cards?\b|\bcards?\s+(?:view|options|details|data)\b|\b(?:show|view|pull|list)\b.{0,40}\b(?:cards?|full summary|details?)\b|\bcards?\b.{0,20}\b(?:shown|below)\b/;
 
   if (appCardPromisePattern.test(normalizedWithoutCreditCardTopic)) {
     return cards.length > 0 ? null : "card promised without card";
   }
 
-  if (/\b(showing|shown|showed|this card|the card|the view|trend view)\b/.test(normalized)) {
-    return cards.length > 0 ? null : "display promised without card";
+  if (
+    /\b(showing|shown|showed|this card|the card|the view|trend view|fuller view)\b/.test(normalized) ||
+    (cards.length === 0 && /\b(missing cards?|cards? (?:are|is|were|was) connected)\b/.test(normalizedWithoutCreditCardTopic))
+  ) {
+    return cards.length > 0 ? null : "card promised without card";
+  }
+
+  if (cards.length === 0 && /\b(show|view|pull|list)( me| you| up)?\b/.test(normalized)) {
+    return "card promised without card";
   }
 
   return null;
@@ -2005,6 +2240,10 @@ function isNoDataCardRefusal(normalized: string): boolean {
 
 function isSuggestionMenuResponse(normalized: string): boolean {
   return /\b(you can ask|you could ask|try asking|ask me about|want to ask|if you want|pick a chip|choose a chip|tap a chip|tell me a dollar amount)\b/.test(normalized);
+}
+
+function hasSpecificDisplayCapabilityPromise(normalized: string): boolean {
+  return /\b(forecast|project(?:ion)?|trend|trend view|breakdown|transactions?|charges?|purchases?|activity|recurring|repeating|subscriptions?|monthly charges?|upcoming bills?|bills? coming up|balances?|math|formula|calculation|cards?)\b/.test(normalized);
 }
 
 function containsDisplayPromise(normalized: string): boolean {
@@ -2117,6 +2356,30 @@ function shouldRetryFinalOutput(error: AgentUnavailableError): boolean {
 
   return /invalid output type|schema validation|expected schema|too (?:big|long)|invalid final response/i.test(
     detail,
+  );
+}
+
+function suppressVisibleRepeatedTools(
+  usedTools: string[],
+  cards: AgentCard[],
+  input: RunAiAgentInput,
+): string[] {
+  if (cards.length > 0 || !isVagueFollowUp(input.message)) {
+    return usedTools;
+  }
+
+  const previousTool = input.conversationState?.lastToolNames?.at(-1);
+
+  if (!previousTool) {
+    return usedTools;
+  }
+
+  return usedTools.filter((toolName) => toolName !== previousTool);
+}
+
+function isVagueFollowUp(message: string): boolean {
+  return /^(why|why\?|how|how\?|what do you mean|tell me more|more|explain|explain that|go on)$/i.test(
+    message.trim(),
   );
 }
 
@@ -2236,12 +2499,27 @@ function isSpendableFactorsInsightPrompt(normalized: string): boolean {
   return (
     /\b(factors?|affect|affects|affected|impact|impacts?|influence|influences)\b/.test(normalized) &&
     /\b(today|number|spendable cash today|spendable cash|money)\b/.test(normalized) &&
+    !isRecentSpendingPressurePrompt(normalized) &&
     !isPaydayImpactPrompt(normalized)
   );
 }
 
+function isPatternAssumptionsPrompt(normalized: string): boolean {
+  return (
+    /\b(pattern|assumptions?|baseline|confidence|normal room|learn(?:ing)? my pattern)\b/.test(normalized) &&
+    /\b(number|spendable cash today|spendable cash|today|using|behind)\b/.test(normalized)
+  );
+}
+
+function isRecentSpendingPressurePrompt(normalized: string): boolean {
+  return (
+    /\b(recent spending|spending pressure|pace|over pattern|under pattern|ahead of pace|behind pace|lowered today|affect(?:ing)? this)\b/.test(normalized) &&
+    /\b(today|number|spendable cash|room|pattern|pace|spending)\b/.test(normalized)
+  );
+}
+
 function isDataQualityPrompt(normalized: string): boolean {
-  return /\b(missing card|missing data|data missing|connect(ed)? data|repair data|stale data|data quality)\b/.test(
+  return /\b(missing card|card missing|missing data|data missing|connect(ed)? data|repair data|stale data|data quality|pending transactions?|pending items?)\b/.test(
     normalized,
   );
 }
@@ -2250,6 +2528,7 @@ function isSpendableCashDefinitionPrompt(normalized: string): boolean {
   return (
     /\bwhat is spendable cash\b/.test(normalized) ||
     /\bwhat is spendable cash today\b/.test(normalized) ||
+    /\bwhat does (my )?spendable cash( today)? (number )?mean\b/.test(normalized) ||
     /\bhow does pip work\b/.test(normalized) ||
     /\bhow pip works\b/.test(normalized) ||
     /\bhow does spendable work\b/.test(normalized) ||
@@ -2276,7 +2555,7 @@ function isExplicitForecastPrompt(normalized: string): boolean {
 
 function isExplicitRecurringPrompt(normalized: string): boolean {
   return (
-    /\b(recurring|repeating|repeat|subscription|subscriptions|bills? coming up|monthly charges?|upcoming bills?)\b/.test(normalized) ||
+    /\b(recurring|repeating|repeat|subscription|subscriptions|bills? (are )?coming up|monthly charges?|upcoming bills?)\b/.test(normalized) ||
     /\b(youtube|premium|netflix|spotify|hulu|stream|membership|gym|phone bill|utilities?)\b.*\b(coming|upcoming|repeat|again|next|recurring)\b/.test(normalized) ||
     /\b(coming|upcoming|repeat|again|next|recurring)\b.*\b(youtube|premium|netflix|spotify|hulu|stream|membership|gym|phone bill|utilities?)\b/.test(normalized)
   );
@@ -2302,19 +2581,69 @@ function extractForecastHorizonDays(normalized: string): number {
   return Math.min(Math.max(Number(match[1]), 1), 14);
 }
 
-function isAffirmativeFollowUpToForecast(
+function getAffirmativeFollowUpTool(
   normalized: string,
   history: AgentHistoryItem[] | undefined,
-): boolean {
-  if (!/^(yes|yeah|yep|ok|okay|sure|do that|yes do that|show me|please do|that)$/.test(normalized)) {
-    return false;
+): ForcedAgentTool | undefined {
+  if (!isAffirmativeFollowUp(normalized)) {
+    return undefined;
   }
 
-  return (history ?? []).slice(-4).some((item) => {
+  const recentHistory = [...(history ?? []).slice(-4)].reverse();
+
+  for (const item of recentHistory) {
     const content = normalizePrompt(item.content);
 
-    return isExplicitForecastPrompt(content) || /\b(trend line|daily amounts|forecast|next week|7 days|14 days)\b/.test(content);
-  });
+    if (isExplicitForecastPrompt(content) || /\b(trend line|daily amounts|forecast|next week|7 days|14 days)\b/.test(content)) {
+      return {
+        toolName: "forecast_spendable_cash",
+        args: {
+          horizon_days: 14,
+        },
+        requireCard: true,
+      };
+    }
+
+    if (isExplicitRecurringPrompt(content) || /\b(recurring|repeat(?:ing)? items?|subscriptions?|upcoming bills?|bills? coming up)\b/.test(content)) {
+      return {
+        toolName: "get_recurring_activity",
+        args: {},
+        requireCard: true,
+      };
+    }
+
+    if (isExplicitSpendingBreakdownPrompt(content) || /\b(spending breakdown|breakdown|categories|merchants|card payments?|income sources?)\b/.test(content)) {
+      return {
+        toolName: "get_spending_breakdown",
+        args: {},
+        requireCard: true,
+      };
+    }
+
+    if (isExplicitTransactionsPrompt(content) || /\b(recent charges?|recent transactions?|recent purchases?|recent activity)\b/.test(content)) {
+      return {
+        toolName: "get_recent_transactions",
+        args: {
+          limit: 6,
+        },
+        requireCard: true,
+      };
+    }
+
+    if (isExplicitMathPrompt(content) || /\b(show math|math breakdown|calculation|formula)\b/.test(content)) {
+      return {
+        toolName: "get_free_cash_math",
+        args: {},
+        requireCard: true,
+      };
+    }
+  }
+
+  return undefined;
+}
+
+function isAffirmativeFollowUp(normalized: string): boolean {
+  return /^(yes|yeah|yep|ok|okay|sure|do that|yes do that|show me|please do|that)$/.test(normalized);
 }
 
 function isExplicitTransactionsPrompt(normalized: string): boolean {

@@ -8,6 +8,9 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByRole("button", { name: "What does my $43 mean?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Why is it $43 today?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Teach me a money basic" })).toBeVisible();
   await expect(page.getByText("Why this number?")).toHaveCount(0);
   await expect(page.getByText("Can I spend $50?")).toHaveCount(0);
   await expect(page.getByText("What changed?")).toHaveCount(0);
@@ -22,6 +25,22 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
 
   expect(whyJson.audit.toolNames).toEqual(["get_free_cash_drivers"]);
   await expect(page.getByRole("heading", { name: "Why this number changed" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show recent charges" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "What bills are coming up?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show how the math works" })).toBeVisible();
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+
+  const [recentChargeChipResponse] = await Promise.all([
+    waitForAgentResponse(page),
+    page.getByRole("button", { name: "Show recent charges" }).click(),
+  ]);
+  const recentChargeChipJson = await recentChargeChipResponse.json();
+
+  expect(recentChargeChipJson.audit.toolNames).toEqual(["get_recent_transactions"]);
+  await expect(page.getByRole("heading", { name: "Recent transactions" })).toBeVisible();
+  await expect(page.getByText("Basecamp Market")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show the biggest drivers" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show my spending breakdown" })).toBeVisible();
   await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
 
   await input.fill("Can I spend $50?");
@@ -50,7 +69,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
     type: "purchase_simulation",
     amountCents: 2000,
   });
-  await expect(page.getByText("That would leave $23 for today.")).toBeVisible();
+  await expect(page.getByText("That leaves $23 of today's room. Your V2 daily room stays about $43.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Purchase simulation" })).toHaveCount(2);
   await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
 
@@ -75,8 +94,8 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   const transactionsJson = await transactionsResponse.json();
 
   expect(transactionsJson.audit.toolNames).toEqual(["get_recent_transactions"]);
-  await expect(page.getByRole("heading", { name: "Recent transactions" })).toBeVisible();
-  await expect(page.getByText("Basecamp Market")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent transactions" })).toHaveCount(2);
+  await expect(page.getByText("Basecamp Market")).toHaveCount(2);
   await expect(page.getByRole("heading", { name: "True balances" })).toBeVisible();
   await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
 
@@ -90,7 +109,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   expect(mathJson.audit.toolNames).toEqual(["get_free_cash_math"]);
   await expect(page.getByRole("heading", { name: "Math breakdown" })).toBeVisible();
   await expect(page.getByText("Rolling net")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Recent transactions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Recent transactions" })).toHaveCount(2);
   await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
 
   await input.fill("Is a card missing?");
@@ -596,12 +615,71 @@ async function routeAgentThroughMockModel(page: Page) {
 }
 
 function createMockAgentResponse(
-  body: { message?: string; selectedPromptChipId?: string; requestKind?: string } = {},
+  body: {
+    message?: string;
+    selectedPromptChipId?: string;
+    requestKind?: string;
+    conversationState?: {
+      lastToolNames?: string[];
+    };
+  } = {},
 ) {
   const userMessage = body.message ?? "";
   const normalized = userMessage.toLowerCase();
 
   if (body.requestKind === "prompt_chips") {
+    if (body.conversationState?.lastToolNames?.at(-1) === "get_free_cash_drivers") {
+      return baseAgentResponse({
+        message: "Ready.",
+        usedTools: [],
+        responseMode: "chat_only",
+        cards: [],
+        promptChips: [
+          {
+            id: "ai-recent-charges",
+            label: "Show recent charges",
+            prompt: "Show my recent charges",
+          },
+          {
+            id: "ai-upcoming-bills",
+            label: "What bills are coming up?",
+            prompt: "What bills are coming up?",
+          },
+          {
+            id: "ai-show-math",
+            label: "Show how the math works",
+            prompt: "Show the math",
+          },
+        ],
+      });
+    }
+
+    if (body.conversationState?.lastToolNames?.at(-1) === "get_recent_transactions") {
+      return baseAgentResponse({
+        message: "Ready.",
+        usedTools: [],
+        responseMode: "chat_only",
+        cards: [],
+        promptChips: [
+          {
+            id: "ai-biggest-drivers",
+            label: "Show the biggest drivers",
+            prompt: "Show the biggest drivers behind today's number",
+          },
+          {
+            id: "ai-spending-breakdown",
+            label: "Show my spending breakdown",
+            prompt: "Show my spending breakdown",
+          },
+          {
+            id: "ai-next-few-days",
+            label: "What happens in the next few days?",
+            prompt: "Show my Spendable Cash forecast",
+          },
+        ],
+      });
+    }
+
     return baseAgentResponse({
       message: "Ready.",
       usedTools: [],
@@ -609,19 +687,19 @@ function createMockAgentResponse(
       cards: [],
       promptChips: [
         {
-          id: "ai-upcoming-bills",
-          label: "Upcoming bills",
-          prompt: "What bills are coming up?",
+          id: "ai-what-number-means",
+          label: "What does my $43 mean?",
+          prompt: "What does my Spendable Cash Today number mean?",
         },
         {
-          id: "ai-payday-impact",
-          label: "Payday impact",
-          prompt: "How did payday affect today?",
+          id: "ai-why-today",
+          label: "Why is it $43 today?",
+          prompt: "Show the biggest drivers behind today's number",
         },
         {
-          id: "ai-show-trend",
-          label: "Show my trend",
-          prompt: "Show my Spendable Cash Today trend",
+          id: "ai-teach-money-basic",
+          label: "Teach me a money basic",
+          prompt: "Teach me one useful money basic",
         },
       ],
     });
@@ -730,7 +808,7 @@ function createMockAgentResponse(
     });
   }
 
-  if (normalized.includes("recent transaction")) {
+  if (normalized.includes("recent transaction") || normalized.includes("recent charges")) {
     return baseAgentResponse({
       message: "I found these recent items.",
       usedTools: ["get_recent_transactions"],
@@ -794,12 +872,14 @@ function createMockAgentResponse(
   const amountMatch = userMessage.match(/\$(\d+)/);
   if (amountMatch) {
     const amountCents = Number(amountMatch[1]) * 100;
-    const afterTodayCents = 4300 - amountCents;
+    const afterTodayCents = 4300;
+    const todayRemainingCents = 4300 - amountCents;
+    const todayOverageCents = Math.max(0, amountCents - 4300);
 
     return baseAgentResponse({
-      message: afterTodayCents < 0
-        ? `You can, but it would put you ${formatTestMoney(Math.abs(afterTodayCents))} over today.`
-        : `That would leave ${formatTestMoney(afterTodayCents)} for today.`,
+      message: todayOverageCents > 0
+        ? `That is ${formatTestMoney(todayOverageCents)} over today's room. The V2 daily room after would be ${formatTestMoney(afterTodayCents)}.`
+        : `That leaves ${formatTestMoney(todayRemainingCents)} of today's room. Your V2 daily room stays about ${formatTestMoney(4300)}.`,
       usedTools: ["simulate_purchase"],
       responseMode: "show_card",
       cards: [
@@ -808,6 +888,8 @@ function createMockAgentResponse(
           title: "Purchase simulation",
           amountCents,
           beforeCents: 4300,
+          todayRemainingCents,
+          todayOverageCents,
           afterTodayCents,
           monthlyAverageAfterCents: Math.round(afterTodayCents / 31),
         },

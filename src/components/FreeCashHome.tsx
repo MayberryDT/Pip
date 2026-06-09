@@ -9,6 +9,7 @@ import type {
 } from "@/lib/agent/card-types";
 import {
   getOnboardingPromptChips,
+  getSuggestedPrompts,
 } from "@/lib/agent/suggested-prompts";
 import {
   canRefreshData,
@@ -19,6 +20,11 @@ import {
 } from "@/components/data-controls-helpers";
 import { type FakeDataScenario, getFakeSnapshot, isFakeDataScenario } from "@/lib/fake-data";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
+import {
+  getDisplayedSpendableCashTodayCents,
+  getSpendableCashTodaySubtitle,
+  getSpendableCashTodayState,
+} from "@/lib/free-cash/spendable-cash-today";
 import { formatMoney } from "@/lib/money";
 import type { FreeCashResult } from "@/lib/types";
 import { AgentInput } from "@/components/AgentInput";
@@ -91,13 +97,13 @@ export function FreeCashHome({
         ? serverResult
         : localResult;
   const hasLoadedServerResult = Boolean(result);
-  const freeCashTodayCents = result?.freeCashTodayCents;
+  const freeCashTodayCents = result ? getDisplayedSpendableCashTodayCents(result) : undefined;
   const [thread, setThread] = useState<ThreadItem[]>([]);
   const [chips, setChips] = useState<PromptChip[]>(() =>
-    getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, null),
+    getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, result),
   );
   const [chipHistory, setChipHistory] = useState<PromptChip[]>(() =>
-    getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, null),
+    getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, result),
   );
   const promptChipRequestKeyRef = useRef<string | null>(null);
   const lastNonEmptyChipsRef = useRef<PromptChip[]>(chips);
@@ -453,16 +459,24 @@ export function FreeCashHome({
   }
 
   useEffect(() => {
-    if (!liveAccountControlsEnabled || !hasLoadedServerResult || freeCashTodayCents === undefined) {
+    if (!liveAccountControlsEnabled || !hasLoadedServerResult || !result || freeCashTodayCents === undefined) {
       return;
     }
 
     void trackProductEvent("free_cash_viewed", {
       scenario,
       freeCashTodayCents,
-      negative: freeCashTodayCents < 0,
+      negative: getSpendableCashTodayState(result) === "shortfall",
+      metricVersion: result.spendableCashToday?.metricVersion ?? "legacy",
+      state: result.spendableCashToday?.state ?? null,
+      confidence: result.spendableCashToday?.confidence ?? null,
+      baselineDailyAllowanceCents: result.spendableCashToday?.baselineDailyAllowanceCents ?? null,
+      behaviorAdjustmentCents: result.spendableCashToday?.behaviorAdjustmentCents ?? null,
+      cashRealityAdjustmentCents: result.spendableCashToday?.cashRealityAdjustmentCents ?? null,
+      shortfallCents: result.spendableCashToday?.shortfallCents ?? null,
+      currentMonthVarianceCents: result.spendableCashToday?.currentMonthVarianceCents ?? null,
     });
-  }, [freeCashTodayCents, hasLoadedServerResult, liveAccountControlsEnabled, scenario]);
+  }, [freeCashTodayCents, hasLoadedServerResult, liveAccountControlsEnabled, result, scenario]);
 
   return (
     <main className="free-cash-app-shell h-[100dvh] overflow-hidden px-5 py-5 text-ink sm:px-6">
@@ -483,8 +497,9 @@ export function FreeCashHome({
             className="spendable-number"
             data-testid="free-cash-number"
           >
-            {result ? formatMoney(result.freeCashTodayCents) : "$--"}
+            {result ? formatMoney(getDisplayedSpendableCashTodayCents(result)) : "$--"}
           </div>
+          <p className="spendable-subtitle">{getSpendableCashTodaySubtitle(result)}</p>
         </section>
 
         <section className={hasConversation ? "mt-3 flex min-h-0 flex-1 flex-col" : "mt-6 flex min-h-0 flex-1 flex-col max-[380px]:mt-5"}>
@@ -918,7 +933,7 @@ function getDefaultPromptChips(
     });
   }
 
-  return [];
+  return result ? getSuggestedPrompts(result) : [];
 }
 
 function getErrorMessage(payload: unknown, fallback: string): string {

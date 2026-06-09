@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-export const agentMessageMaxChars = 220;
+export const agentMessageMaxChars = 260;
+export const agentModelMessageMaxChars = 1000;
 
 const moneyToneSchema = z.enum(["positive", "negative", "neutral", "warning"]);
 const accountKindSchema = z.enum(["checking", "savings", "credit_card", "loan", "other"]);
@@ -16,7 +17,7 @@ const transactionKindSchema = z.enum([
 ]);
 export const promptChipSchema = z.object({
   id: z.string().min(1).max(80),
-  label: z.string().min(1).max(36),
+  label: z.string().min(1).max(56),
   prompt: z.string().min(1).max(160),
 });
 
@@ -62,7 +63,7 @@ const warningSchema = z.object({
 });
 
 const dataStateSchema = z.object({
-  id: z.literal("pending-transactions"),
+  id: z.enum(["pending-transactions", "low-confidence", "missing-data"]),
   label: z.string(),
   detail: z.string(),
   amountCents: z.number().int(),
@@ -157,8 +158,12 @@ export const cardSchema = z.discriminatedUnion("type", [
     title: z.string(),
     amountCents: z.number().int(),
     beforeCents: z.number().int(),
+    todayRemainingCents: z.number().int(),
+    todayOverageCents: z.number().int(),
     afterTodayCents: z.number().int(),
     monthlyAverageAfterCents: z.number().int(),
+    dailyEffectCents: z.number().int().optional(),
+    shortfallCents: z.number().int().optional(),
   }),
   z.object({
     type: z.literal("true_balances"),
@@ -219,6 +224,11 @@ export const cardSchema = z.discriminatedUnion("type", [
     protectedSavingsMonthlyCents: z.number().int(),
     rollingNetCents: z.number().int(),
     dayCount: z.number().int(),
+    spendableCashTodayCents: z.number().int().optional(),
+    baselineDailyAllowanceCents: z.number().int().optional(),
+    behaviorAdjustmentCents: z.number().int().optional(),
+    cashRealityAdjustmentCents: z.number().int().optional(),
+    legacyRollingDailySurplusCents: z.number().int().optional(),
   }),
   z.object({
     type: z.literal("insight_card"),
@@ -237,9 +247,10 @@ export const cardSchema = z.discriminatedUnion("type", [
 export const responseModeSchema = z.enum(["chat_only", "show_card", "update_context", "clarify"]);
 
 export const agentFinalOutputSchema = z.object({
-  message: z.string().min(1).max(agentMessageMaxChars),
+  message: z.string().min(1).max(agentModelMessageMaxChars),
+  support: z.string().min(1).max(500).optional(),
   responseMode: responseModeSchema,
-  promptChips: z.array(promptChipSchema).max(3),
+  promptChips: z.array(promptChipSchema).max(8),
 });
 
 export const agentResponseSchema = z.object({
@@ -255,6 +266,19 @@ export const agentResponseSchema = z.object({
     model: z.string().optional(),
     transport: z
       .enum(["netlify-ai-gateway", "openai-direct", "custom-openai-compatible"])
+      .optional(),
+    quality: z
+      .object({
+        conversationJob: z.string(),
+        answerPatternId: z.string(),
+        chipFamilyIds: z.array(z.string()).max(3),
+        repeatedJob: z.boolean(),
+        repeatedTool: z.boolean(),
+        repeatedCard: z.boolean(),
+        repeatedMessage: z.boolean(),
+        repetitionAdjusted: z.boolean(),
+        chipFallbackReason: z.string(),
+      })
       .optional(),
   }),
 });

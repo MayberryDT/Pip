@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentAppDate } from "@/lib/date/app-date";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { getDisplayedSpendableCashTodayCents } from "@/lib/free-cash/spendable-cash-today";
 import { loadFinancialSnapshotForUser } from "@/lib/data/financial-repository";
 import { recordProductEvent } from "@/lib/data/product-events";
 import type {
@@ -126,6 +127,8 @@ export async function runManualSync(
       settings,
     };
     const result = calculateFreeCash(snapshot);
+    const spendableCashTodayCents = getDisplayedSpendableCashTodayCents(result);
+    const v2Metric = result.spendableCashToday;
     const syncFailures = await Promise.all(
       failures.map((failure) =>
         recordProviderFailure(supabase, {
@@ -168,7 +171,16 @@ export async function runManualSync(
       accountCount,
       transactionCount,
       failedInstitutionCount: syncFailures.length,
-      freeCashTodayCents: result.freeCashTodayCents,
+      freeCashTodayCents: spendableCashTodayCents,
+      metricVersion: v2Metric?.metricVersion ?? "legacy",
+      spendableCashTodayCents,
+      baselineDailyAllowanceCents: v2Metric?.baselineDailyAllowanceCents,
+      behaviorAdjustmentCents: v2Metric?.behaviorAdjustmentCents,
+      cashRealityAdjustmentCents: v2Metric?.cashRealityAdjustmentCents,
+      state: v2Metric?.state,
+      confidence: v2Metric?.confidence,
+      shortfallCents: v2Metric?.shortfallCents,
+      currentMonthVarianceCents: v2Metric?.currentMonthVarianceCents,
     });
 
     return {
@@ -180,7 +192,7 @@ export async function runManualSync(
       accountCount,
       transactionCount,
       balanceCount,
-      freeCashTodayCents: result.freeCashTodayCents,
+      freeCashTodayCents: spendableCashTodayCents,
       failedInstitutionCount: syncFailures.length,
       failures: syncFailures.map(toManualSyncFailure),
     };

@@ -8,8 +8,24 @@ import { calculateFreeCash } from "@/lib/free-cash/engine";
 import { fakeSnapshot } from "@/lib/fake-data";
 
 describe("prompt chips", () => {
-  it("does not provide deterministic ready-state defaults", () => {
-    expect(getSuggestedPrompts(calculateFreeCash(fakeSnapshot))).toEqual([]);
+  it("provides deterministic ready-state financial next steps", () => {
+    expect(getSuggestedPrompts(calculateFreeCash(fakeSnapshot))).toEqual([
+      {
+        id: "ai-what-number-means",
+        label: "What does my $104 mean?",
+        prompt: "What does my Spendable Cash Today number mean?",
+      },
+      {
+        id: "ai-why-today",
+        label: "Why is it $104 today?",
+        prompt: "Show the biggest drivers behind today's number",
+      },
+      {
+        id: "ai-teach-money-basic",
+        label: "Teach me a money basic",
+        prompt: "Teach me one useful money basic",
+      },
+    ]);
   });
 
   it("keeps onboarding chips available", () => {
@@ -29,6 +45,9 @@ describe("prompt chips", () => {
     expect(isRetiredDefaultPromptChip({ label: "Why this number?", prompt: "Why this number?" })).toBe(true);
     expect(isRetiredDefaultPromptChip({ label: "Can I spend $50?", prompt: "Can I spend $50?" })).toBe(true);
     expect(isRetiredDefaultPromptChip({ label: "What changed?", prompt: "What changed?" })).toBe(true);
+    expect(isRetiredDefaultPromptChip({ label: "Missing card", prompt: "Missing card" })).toBe(true);
+    expect(isRetiredDefaultPromptChip({ label: "Why today?", prompt: "Why today?" })).toBe(true);
+    expect(isRetiredDefaultPromptChip({ label: "Test purchase", prompt: "Test purchase" })).toBe(true);
     expect(isRetiredDefaultPromptChip({ label: "Upcoming bills", prompt: "What bills are coming up?" })).toBe(false);
   });
 });

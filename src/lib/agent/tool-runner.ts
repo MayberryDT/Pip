@@ -4,6 +4,10 @@ import { getSuggestedPrompts } from "@/lib/agent/suggested-prompts";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
 import { summarizeFreeCash } from "@/lib/free-cash/explanation";
 import {
+  getDisplayedSpendableCashTodayCents,
+  simulateSpendablePurchase,
+} from "@/lib/free-cash/spendable-cash-today";
+import {
   buildRecurringActivity,
   buildSpendableCashForecast,
   buildSpendingBreakdown,
@@ -21,6 +25,8 @@ export const agentToolNames = [
   "show_recurring_activity",
   "show_spendable_cash_forecast",
   "define_spendable_cash",
+  "show_pattern_assumptions",
+  "show_recent_spending_pressure",
   "detect_missing_card",
   "show_math",
   "compose_insight_card",
@@ -77,6 +83,12 @@ export function runAgentTool(
     case "define_spendable_cash":
       emptyArgsSchema.parse(rawArgs ?? {});
       return defineSpendableCash(snapshot);
+    case "show_pattern_assumptions":
+      emptyArgsSchema.parse(rawArgs ?? {});
+      return showPatternAssumptions(snapshot);
+    case "show_recent_spending_pressure":
+      emptyArgsSchema.parse(rawArgs ?? {});
+      return showRecentSpendingPressure(snapshot);
     case "detect_missing_card":
       emptyArgsSchema.parse(rawArgs ?? {});
       return detectMissingCard(snapshot);
@@ -119,11 +131,11 @@ function explainFreeCash(snapshot: FinancialSnapshot): AgentResponse {
   const cards: AgentResponse["cards"] = [
     {
       type: "free_cash_explanation",
-      title: "Why this number changed",
+      title: "Spendable Cash Today",
       summary,
-      drivers: result.drivers,
-      warnings: result.warnings,
-      dataStates: result.dataStates,
+      drivers: result.spendableCashToday?.drivers ?? result.drivers,
+      warnings: result.spendableCashToday?.warnings ?? result.warnings,
+      dataStates: result.spendableCashToday?.dataStates ?? result.dataStates,
     },
   ];
 
@@ -137,19 +149,26 @@ function explainFreeCash(snapshot: FinancialSnapshot): AgentResponse {
 
 function simulatePurchase(amountCents: number, snapshot: FinancialSnapshot): AgentResponse {
   const result = calculateFreeCash(snapshot);
-  const afterTodayCents = result.freeCashTodayCents - amountCents;
-  const monthlyAverageAfterCents = Math.round(
-    (result.rollingNetCents - amountCents) / result.window.dayCount,
-  );
+  const simulation = simulateSpendablePurchase(amountCents, snapshot, {
+    before: result.spendableCashToday,
+    warnings: result.warnings,
+    dataStates: result.dataStates,
+    legacyRollingDailySurplusCents: result.freeCashTodayCents,
+    legacyRollingNetCents: result.rollingNetCents,
+  });
 
   const cards: AgentResponse["cards"] = [
     {
       type: "purchase_simulation",
       title: "Purchase simulation",
       amountCents,
-      beforeCents: result.freeCashTodayCents,
-      afterTodayCents,
-      monthlyAverageAfterCents,
+      beforeCents: simulation.beforeCents,
+      todayRemainingCents: simulation.todayRemainingCents,
+      todayOverageCents: simulation.todayOverageCents,
+      afterTodayCents: simulation.afterTodayCents,
+      monthlyAverageAfterCents: simulation.after.legacyRollingDailySurplusCents,
+      dailyEffectCents: simulation.dailyEffectCents,
+      shortfallCents: simulation.shortfallCents,
     },
   ];
 
@@ -280,9 +299,12 @@ function showSpendableCashForecast(
 
 function defineSpendableCash(snapshot: FinancialSnapshot): AgentResponse {
   const result = calculateFreeCash(snapshot);
+  const metric = result.spendableCashToday;
 
   return {
-    message: "",
+    message: metric
+      ? `Spendable Cash Today is ${formatMoney(metric.spendableCashTodayCents)} today based on your normal money pattern, protected savings, recurring bills, recent spending pace, and available cash.`
+      : "",
     cards: [],
     promptChips: getSuggestedPrompts(result),
     ...baseResponse("define_spendable_cash", []),
@@ -319,6 +341,7 @@ function detectMissingCard(snapshot: FinancialSnapshot): AgentResponse {
 
 function showMath(snapshot: FinancialSnapshot): AgentResponse {
   const result = calculateFreeCash(snapshot);
+  const metric = result.spendableCashToday;
 
   const cards: AgentResponse["cards"] = [
     {
@@ -329,6 +352,11 @@ function showMath(snapshot: FinancialSnapshot): AgentResponse {
       protectedSavingsMonthlyCents: result.protectedSavingsMonthlyCents,
       rollingNetCents: result.rollingNetCents,
       dayCount: result.window.dayCount,
+      spendableCashTodayCents: metric?.spendableCashTodayCents,
+      baselineDailyAllowanceCents: metric?.baselineDailyAllowanceCents,
+      behaviorAdjustmentCents: metric?.behaviorAdjustmentCents,
+      cashRealityAdjustmentCents: metric?.cashRealityAdjustmentCents,
+      legacyRollingDailySurplusCents: metric?.legacyRollingDailySurplusCents,
     },
   ];
 
@@ -359,6 +387,48 @@ function composeInsightCard(
 }
 
 function buildPaydayImpactCard(result: ReturnType<typeof calculateFreeCash>): Extract<AgentResponse["cards"][number], { type: "insight_card" }> {
+  const metric = result.spendableCashToday;
+
+  if (metric) {
+    return {
+      type: "insight_card",
+      title: "Payday impact",
+      summary:
+        `Income averages ${formatMoney(metric.averageMonthlyIncomeCents)} per month before bills, protected savings, and the cushion are held back.`,
+      rows: [
+        {
+          id: "income-average",
+          label: "Income pattern",
+          amountCents: metric.averageMonthlyIncomeCents,
+          detail: "Completed-month income average.",
+          tone: metric.averageMonthlyIncomeCents > 0 ? "positive" : "neutral",
+        },
+        {
+          id: "bills",
+          label: "Bills held back",
+          amountCents: -metric.averageMonthlyRecurringObligationsCents,
+          detail: "Likely recurring obligations.",
+          tone: metric.averageMonthlyRecurringObligationsCents > 0 ? "negative" : "neutral",
+        },
+        {
+          id: "savings",
+          label: "Protected savings",
+          amountCents: -metric.protectedSavingsMonthlyCents,
+          detail: "Held back before today exists.",
+          tone: "neutral",
+        },
+        {
+          id: "today",
+          label: "Today",
+          amountCents: metric.spendableCashTodayCents,
+          detail: "Pattern-based room after recent spending and cash reality.",
+          tone: metric.spendableCashTodayCents > 0 ? "positive" : "warning",
+        },
+      ],
+      footer: "I do not rely on exact upcoming paycheck dates for this number.",
+    };
+  }
+
   const dailyIncomeCents = Math.round(result.incomeTotalCents / result.window.dayCount);
 
   return {
@@ -412,7 +482,7 @@ function buildSpendableFactorsCard(result: ReturnType<typeof calculateFreeCash>)
     type: "insight_card",
     title: "What affects today",
     summary: summarizeFreeCash(result),
-    rows: result.drivers.slice(0, 6).map((driver) => ({
+    rows: (result.spendableCashToday?.drivers ?? result.drivers).slice(0, 6).map((driver) => ({
       id: driver.id,
       label: driver.label,
       amountCents: driver.amountCents,
@@ -420,6 +490,115 @@ function buildSpendableFactorsCard(result: ReturnType<typeof calculateFreeCash>)
       tone: driver.tone,
     })),
     footer: "Positive rows lift the number; negative rows pull it down.",
+  };
+}
+
+function showPatternAssumptions(snapshot: FinancialSnapshot): AgentResponse {
+  const result = calculateFreeCash(snapshot);
+  const metric = result.spendableCashToday;
+  const rows = metric
+    ? [
+        {
+          id: "income",
+          label: "Income pattern",
+          amountCents: metric.averageMonthlyIncomeCents,
+          detail: `${metric.completedMonthCount} completed month${metric.completedMonthCount === 1 ? "" : "s"} in the baseline.`,
+          tone: metric.averageMonthlyIncomeCents > 0 ? "positive" as const : "neutral" as const,
+        },
+        {
+          id: "obligations",
+          label: "Bills held back",
+          amountCents: -metric.averageMonthlyRecurringObligationsCents,
+          detail: "Recurring obligations detected from merchants, categories, and cadence.",
+          tone: metric.averageMonthlyRecurringObligationsCents > 0 ? "negative" as const : "neutral" as const,
+        },
+        {
+          id: "everyday",
+          label: "Everyday context",
+          amountCents: -metric.averageMonthlyEverydaySpendCents,
+          detail: "Used for context, not subtracted from the daily room.",
+          tone: metric.averageMonthlyEverydaySpendCents > 0 ? "negative" as const : "neutral" as const,
+        },
+        {
+          id: "confidence",
+          label: "Confidence",
+          valueText: metric.confidence,
+          detail: "Lower confidence means the number is more conservative.",
+          tone: metric.confidence === "low" ? "warning" as const : "neutral" as const,
+        },
+      ]
+    : [];
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "insight_card",
+      title: "Pattern assumptions",
+      summary: metric
+        ? "I use completed months for the baseline and current-month spending only as an adjustment."
+        : "I need a current Spendable Cash result before I can show assumptions.",
+      rows,
+      footer: "This is pattern-based, not a category budget.",
+    },
+  ];
+
+  return {
+    message: "",
+    cards,
+    promptChips: getSuggestedPrompts(result),
+    ...baseResponse("show_pattern_assumptions", cards),
+  };
+}
+
+function showRecentSpendingPressure(snapshot: FinancialSnapshot): AgentResponse {
+  const result = calculateFreeCash(snapshot);
+  const metric = result.spendableCashToday;
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "insight_card",
+      title: "Recent spending pressure",
+      summary: metric
+        ? summarizeFreeCash(result)
+        : "I need a current Spendable Cash result before I can compare recent spending pace.",
+      rows: metric
+        ? [
+            {
+              id: "allowed",
+              label: "Allowed so far",
+              amountCents: metric.allowedSoFarThisMonthCents,
+              detail: "Normal room multiplied by elapsed days this month.",
+              tone: "positive",
+            },
+            {
+              id: "actual",
+              label: "Spent so far",
+              amountCents: -metric.actualEverydaySpendSoFarCents,
+              detail: "Everyday spending after refunds.",
+              tone: metric.actualEverydaySpendSoFarCents > 0 ? "negative" : "neutral",
+            },
+            {
+              id: "variance",
+              label: "Pace difference",
+              amountCents: metric.currentMonthVarianceCents,
+              detail: "Positive means lighter than pace; negative means ahead of pace.",
+              tone: toneForAmount(metric.currentMonthVarianceCents),
+            },
+            {
+              id: "daily",
+              label: "Daily adjustment",
+              amountCents: metric.behaviorAdjustmentCents,
+              detail: `Spread across ${metric.recoveryDays} days.`,
+              tone: toneForAmount(metric.behaviorAdjustmentCents),
+            },
+          ]
+        : [],
+      footer: "Recent spending changes the next days; it does not rewrite the whole baseline.",
+    },
+  ];
+
+  return {
+    message: "",
+    cards,
+    promptChips: getSuggestedPrompts(result),
+    ...baseResponse("show_recent_spending_pressure", cards),
   };
 }
 

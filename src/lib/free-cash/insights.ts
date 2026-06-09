@@ -8,10 +8,10 @@ import {
 } from "@/lib/free-cash/date-window";
 import {
   annotateCreditCardPaymentMatches,
-  isDedupedCreditCardPayment,
 } from "@/lib/free-cash/dedupe-credit-card-payments";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
 import type {
+  Account,
   FinancialSnapshot,
   RollingWindow,
   Transaction,
@@ -154,65 +154,190 @@ export function buildSpendableCashForecast(
 ): SpendableCashForecast {
   const horizonDays = clampForecastHorizon(input.horizonDays);
   const result = calculateFreeCash(snapshot);
-  const transactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts);
+  const metric = result.spendableCashToday;
+  const currentSpendableCashCents =
+    metric?.spendableCashTodayCents ?? Math.max(0, result.freeCashTodayCents);
   const recurringActivity = buildRecurringActivity(snapshot, {
     horizonDays,
   });
-  const recurringLabels = new Set(
-    buildRecurringActivity(snapshot).items.map((item) => normalizeText(item.label)),
-  );
-  const windowTransactions = transactions.filter((transaction) =>
-    isWithinInclusiveWindow(transaction.date, result.window),
-  );
-  const nonRecurringSpendCents = windowTransactions
-    .filter((transaction) => {
-      const kind = classifyTransaction(transaction);
-
-      return (
-        (kind === "purchase" || kind === "rent" || kind === "fee") &&
-        !recurringLabels.has(normalizeText(getTransactionLabel(transaction)))
-      );
-    })
-    .reduce((total, transaction) => total + Math.max(0, -transaction.amountCents), 0);
-  const dailyTrendCents = -Math.round(nonRecurringSpendCents / result.window.dayCount);
+  const expectedEverydaySpendCents = metric
+    ? estimateExpectedEverydaySpendCents(metric.actualEverydaySpendSoFarCents, metric.currentMonthElapsedDays)
+    : estimateLegacyEverydaySpendCents(snapshot, result.window);
   const points: SpendableCashForecastPoint[] = [];
-  let rollingNetCents = result.rollingNetCents;
+  const projectedTransactions: Transaction[] = [];
+  let projectedCashDeltaCents = 0;
 
   for (let day = 1; day <= horizonDays; day += 1) {
-    const date = addDays(result.window.endDate, day);
-    const exitingDate = addDays(result.window.startDate, day - 1);
-    const exitingContributionCents = sumRollingNetContributions(
-      transactions.filter((transaction) => transaction.date === exitingDate),
+    const date = addDays(snapshot.settings.asOfDate, day);
+    const dailyTransactions = buildForecastTransactionsForDate({
+      date,
+      day,
+      expectedEverydaySpendCents,
+      recurringItems: recurringActivity.items.filter((item) => item.expectedDate === date),
+      accounts: snapshot.accounts,
+    });
+    const expectedActivityCents = dailyTransactions.reduce(
+      (total, transaction) => total + transaction.amountCents,
+      0,
     );
-    const recurringContributionCents = recurringActivity.items
-      .filter((item) => item.expectedDate === date)
-      .reduce((total, item) => total + getRecurringContribution(item), 0);
-    const expectedActivityCents = dailyTrendCents + recurringContributionCents;
 
-    rollingNetCents = rollingNetCents - exitingContributionCents + expectedActivityCents;
+    projectedTransactions.push(...dailyTransactions);
+    projectedCashDeltaCents += expectedActivityCents;
 
-    const projectedSpendableCashCents = Math.round(rollingNetCents / result.window.dayCount);
+    const projectedSnapshot: FinancialSnapshot = {
+      ...snapshot,
+      settings: {
+        ...snapshot.settings,
+        asOfDate: date,
+      },
+      accounts: applyProjectedCashDelta(snapshot.accounts, projectedCashDeltaCents),
+      transactions: [...snapshot.transactions, ...projectedTransactions],
+    };
+    const projectedResult = calculateFreeCash(projectedSnapshot);
+    const projectedMetric = projectedResult.spendableCashToday;
+    const projectedSpendableCashCents =
+      projectedMetric?.spendableCashTodayCents ?? Math.max(0, projectedResult.freeCashTodayCents);
 
     points.push({
       date,
       projectedSpendableCashCents,
-      deltaFromTodayCents: projectedSpendableCashCents - result.freeCashTodayCents,
+      deltaFromTodayCents: projectedSpendableCashCents - currentSpendableCashCents,
       expectedActivityCents,
-      rollingNetCents,
+      rollingNetCents: projectedMetric?.legacyRollingNetCents ?? projectedResult.rollingNetCents,
     });
   }
 
+  const projectedSpendableCashCents =
+    points.at(-1)?.projectedSpendableCashCents ?? currentSpendableCashCents;
+
   return {
-    asOfDate: result.window.endDate,
+    asOfDate: snapshot.settings.asOfDate,
     horizonDays,
-    currentSpendableCashCents: result.freeCashTodayCents,
-    projectedSpendableCashCents:
-      points.at(-1)?.projectedSpendableCashCents ?? result.freeCashTodayCents,
-    dailyTrendCents,
+    currentSpendableCashCents,
+    projectedSpendableCashCents,
+    dailyTrendCents:
+      points.length > 0
+        ? Math.round((projectedSpendableCashCents - currentSpendableCashCents) / points.length)
+        : 0,
     disclaimer: "Forecast only; not guaranteed.",
     points,
     recurringItems: recurringActivity.items,
   };
+}
+
+function estimateExpectedEverydaySpendCents(
+  actualEverydaySpendSoFarCents: number,
+  elapsedDays: number,
+): number {
+  if (actualEverydaySpendSoFarCents <= 0 || elapsedDays <= 0) {
+    return 0;
+  }
+
+  return Math.round(actualEverydaySpendSoFarCents / elapsedDays);
+}
+
+function estimateLegacyEverydaySpendCents(
+  snapshot: FinancialSnapshot,
+  window: RollingWindow,
+): number {
+  const transactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts);
+  const windowTransactions = transactions.filter((transaction) =>
+    isWithinInclusiveWindow(transaction.date, window),
+  );
+  const spendCents = windowTransactions
+    .filter((transaction) => {
+      const kind = classifyTransaction(transaction);
+
+      return kind === "purchase" || kind === "rent" || kind === "fee";
+    })
+    .reduce((total, transaction) => total + Math.max(0, -transaction.amountCents), 0);
+
+  return Math.round(spendCents / window.dayCount);
+}
+
+function buildForecastTransactionsForDate(input: {
+  date: string;
+  day: number;
+  expectedEverydaySpendCents: number;
+  recurringItems: RecurringActivityItem[];
+  accounts: Account[];
+}): Transaction[] {
+  const accountId = getForecastAccountId(input.accounts);
+  const transactions: Transaction[] = [];
+
+  if (input.expectedEverydaySpendCents > 0) {
+    transactions.push({
+      id: `forecast-everyday-${input.date}`,
+      accountId,
+      date: input.date,
+      description: "Projected everyday spending",
+      merchantName: "Projected everyday spending",
+      amountCents: -input.expectedEverydaySpendCents,
+      category: "projected spending",
+      kind: "purchase",
+    });
+  }
+
+  input.recurringItems.forEach((item, index) => {
+    transactions.push({
+      id: `forecast-recurring-${input.day}-${index}-${item.id}`,
+      accountId,
+      date: input.date,
+      description: item.label,
+      merchantName: item.merchantName,
+      amountCents: item.amountCents,
+      category: "recurring",
+      kind: item.kind,
+    });
+  });
+
+  return transactions;
+}
+
+function getForecastAccountId(accounts: Account[]): string {
+  return (
+    accounts.find((account) => !account.isProtectedSavings && account.kind === "checking")?.id ??
+    accounts.find((account) =>
+      !account.isProtectedSavings && (account.kind === "checking" || account.kind === "savings")
+    )?.id ??
+    accounts.find((account) => !account.isProtectedSavings)?.id ??
+    "forecast"
+  );
+}
+
+function applyProjectedCashDelta(accounts: Account[], projectedCashDeltaCents: number): Account[] {
+  if (projectedCashDeltaCents === 0) {
+    return accounts;
+  }
+
+  const accountId = getForecastCashAccountId(accounts);
+
+  if (!accountId) {
+    return accounts;
+  }
+
+  return accounts.map((account) => {
+    if (account.id !== accountId) {
+      return account;
+    }
+
+    return {
+      ...account,
+      balanceCents: account.balanceCents + projectedCashDeltaCents,
+      availableBalanceCents:
+        account.availableBalanceCents === undefined
+          ? undefined
+          : account.availableBalanceCents + projectedCashDeltaCents,
+    };
+  });
+}
+
+function getForecastCashAccountId(accounts: Account[]): string | null {
+  return (
+    accounts.find((account) => !account.isProtectedSavings && account.kind === "checking")?.id ??
+    accounts.find((account) => !account.isProtectedSavings && account.kind === "savings")?.id ??
+    null
+  );
 }
 
 function aggregateSpendingGroups(
@@ -397,40 +522,6 @@ function recurringGroupKey(transaction: Transaction): string {
     normalizeText(getTransactionLabel(transaction)),
     classifyTransaction(transaction),
   ].join(":");
-}
-
-function getRecurringContribution(item: RecurringActivityItem): number {
-  if (item.kind === "income") {
-    return Math.max(0, item.amountCents);
-  }
-
-  if (item.kind === "purchase" || item.kind === "rent" || item.kind === "fee") {
-    return -Math.max(0, -item.amountCents);
-  }
-
-  return 0;
-}
-
-function sumRollingNetContributions(transactions: Transaction[]): number {
-  return transactions.reduce((total, transaction) => total + getRollingNetContribution(transaction), 0);
-}
-
-function getRollingNetContribution(transaction: Transaction): number {
-  const kind = classifyTransaction(transaction);
-
-  if (kind === "income" || kind === "refund") {
-    return Math.max(0, transaction.amountCents);
-  }
-
-  if (kind === "purchase" || kind === "rent" || kind === "fee") {
-    return -Math.max(0, -transaction.amountCents);
-  }
-
-  if (kind === "credit_card_payment" && isDedupedCreditCardPayment(transaction)) {
-    return 0;
-  }
-
-  return 0;
 }
 
 function clampForecastHorizon(horizonDays: number | undefined): number {

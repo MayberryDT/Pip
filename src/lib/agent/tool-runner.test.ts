@@ -10,13 +10,15 @@ describe("agent tool runner", () => {
 
     expect(runAgentTool("explain_free_cash", {}, fakeSnapshot).cards[0]).toMatchObject({
       type: "free_cash_explanation",
-      title: "Why this number changed",
+      title: "Spendable Cash Today",
     });
     expect(runAgentTool("simulate_purchase", { amount_cents: 5000 }, fakeSnapshot).cards[0]).toMatchObject({
       type: "purchase_simulation",
       amountCents: 5000,
-      beforeCents: result.freeCashTodayCents,
-      afterTodayCents: result.freeCashTodayCents - 5000,
+      beforeCents: result.spendableCashToday?.spendableCashTodayCents,
+      todayRemainingCents: (result.spendableCashToday?.spendableCashTodayCents ?? 0) - 5000,
+      todayOverageCents: Math.max(0, 5000 - (result.spendableCashToday?.spendableCashTodayCents ?? 0)),
+      dailyEffectCents: expect.any(Number),
     });
     expect(runAgentTool("show_true_balances", {}, fakeSnapshot).cards[0]).toMatchObject({
       type: "true_balances",
@@ -35,12 +37,12 @@ describe("agent tool runner", () => {
       title: "Payday impact",
       rows: expect.arrayContaining([
         expect.objectContaining({
-          id: "income",
-          amountCents: result.incomeTotalCents,
+          id: "income-average",
+          amountCents: result.spendableCashToday?.averageMonthlyIncomeCents,
         }),
         expect.objectContaining({
           id: "today",
-          amountCents: result.freeCashTodayCents,
+          amountCents: result.spendableCashToday?.spendableCashTodayCents,
         }),
       ]),
     });
@@ -49,15 +51,23 @@ describe("agent tool runner", () => {
       title: "What affects today",
       rows: expect.arrayContaining([
         expect.objectContaining({
-          id: "income",
+          id: "baseline-room",
         }),
         expect.objectContaining({
-          id: "spending",
+          id: "recent-spending-adjustment",
         }),
         expect.objectContaining({
           id: "protected-savings",
         }),
       ]),
+    });
+    expect(runAgentTool("show_pattern_assumptions", {}, fakeSnapshot).cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "Pattern assumptions",
+    });
+    expect(runAgentTool("show_recent_spending_pressure", {}, fakeSnapshot).cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "Recent spending pressure",
     });
     expect(runAgentTool("detect_missing_card", {}, fakeSnapshot).cards[0]).toMatchObject({
       type: "missing_card_nudge",

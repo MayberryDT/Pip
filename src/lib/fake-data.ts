@@ -1,6 +1,14 @@
 import type { FinancialSnapshot } from "@/lib/types";
 
-export type FakeDataScenario = "default" | "negative";
+export type FakeDataScenario =
+  | "default"
+  | "healthy"
+  | "overspending"
+  | "shortfall"
+  | "low-confidence"
+  | "missing-card"
+  | "cash-guardrail"
+  | "negative";
 
 export const fakeSnapshot: FinancialSnapshot = {
   settings: {
@@ -403,14 +411,260 @@ export const negativeFreeCashSnapshot: FinancialSnapshot = {
   ],
 };
 
-export function getFakeSnapshot(scenario: string | null | undefined): FinancialSnapshot {
-  if (scenario === "negative") {
-    return negativeFreeCashSnapshot;
-  }
+export const healthySpendableSnapshot = buildSpendableScenario({
+  scenarioId: "healthy",
+  checkingAvailableCents: 260000,
+  currentEverydaySpendCents: 60000,
+});
 
-  return fakeSnapshot;
+export const overspendingSpendableSnapshot = buildSpendableScenario({
+  scenarioId: "overspending",
+  checkingAvailableCents: 240000,
+  currentEverydaySpendCents: 245000,
+});
+
+export const shortfallSpendableSnapshot = buildSpendableScenario({
+  scenarioId: "shortfall",
+  checkingAvailableCents: 4000,
+  monthlyIncomeCents: 220000,
+  monthlyRecurringCents: 215000,
+  protectedSavingsMonthlyCents: 30000,
+  currentEverydaySpendCents: 120000,
+});
+
+export const lowConfidenceSpendableSnapshot = buildSpendableScenario({
+  scenarioId: "low-confidence",
+  checkingAvailableCents: 140000,
+  currentEverydaySpendCents: 58000,
+  completedMonthCount: 0,
+});
+
+export const missingCardSpendableSnapshot = buildSpendableScenario({
+  scenarioId: "missing-card",
+  checkingAvailableCents: 260000,
+  currentEverydaySpendCents: 72000,
+  includeMissingCardPayment: true,
+});
+
+export const cashGuardrailSpendableSnapshot = buildSpendableScenario({
+  scenarioId: "cash-guardrail",
+  checkingAvailableCents: 2800,
+  currentEverydaySpendCents: 65000,
+});
+
+export function getFakeSnapshot(scenario: string | null | undefined): FinancialSnapshot {
+  switch (scenario) {
+    case "healthy":
+      return healthySpendableSnapshot;
+    case "overspending":
+      return overspendingSpendableSnapshot;
+    case "shortfall":
+      return shortfallSpendableSnapshot;
+    case "low-confidence":
+      return lowConfidenceSpendableSnapshot;
+    case "missing-card":
+      return missingCardSpendableSnapshot;
+    case "cash-guardrail":
+      return cashGuardrailSpendableSnapshot;
+    case "negative":
+      return negativeFreeCashSnapshot;
+    case "default":
+    default:
+      return fakeSnapshot;
+  }
 }
 
 export function isFakeDataScenario(value: string | null | undefined): value is FakeDataScenario {
-  return value === "default" || value === "negative";
+  return (
+    value === "default" ||
+    value === "healthy" ||
+    value === "overspending" ||
+    value === "shortfall" ||
+    value === "low-confidence" ||
+    value === "missing-card" ||
+    value === "cash-guardrail" ||
+    value === "negative"
+  );
+}
+
+function buildSpendableScenario(input: {
+  scenarioId: string;
+  checkingAvailableCents: number;
+  currentEverydaySpendCents: number;
+  monthlyIncomeCents?: number;
+  monthlyRecurringCents?: number;
+  protectedSavingsMonthlyCents?: number;
+  completedMonthCount?: number;
+  includeMissingCardPayment?: boolean;
+}): FinancialSnapshot {
+  const monthlyIncomeCents = input.monthlyIncomeCents ?? 420000;
+  const monthlyRecurringCents = input.monthlyRecurringCents ?? 172000;
+  const protectedSavingsMonthlyCents = input.protectedSavingsMonthlyCents ?? 20000;
+  const completedMonthCount = input.completedMonthCount ?? 3;
+  const completedMonths = ["2026-03", "2026-04", "2026-05"].slice(3 - completedMonthCount);
+  const transactions = [
+    ...completedMonths.flatMap((month) =>
+      buildMonthlyPatternTransactions({
+        scenarioId: input.scenarioId,
+        month,
+        incomeCents: monthlyIncomeCents,
+        recurringCents: monthlyRecurringCents,
+        everydaySpendCents: 104000,
+      }),
+    ),
+    ...buildMonthlyPatternTransactions({
+      scenarioId: input.scenarioId,
+      month: "2026-06",
+      incomeCents: monthlyIncomeCents,
+      recurringCents: monthlyRecurringCents,
+      everydaySpendCents: input.currentEverydaySpendCents,
+      currentMonth: true,
+    }),
+  ];
+
+  if (input.includeMissingCardPayment) {
+    transactions.push({
+      id: `${input.scenarioId}-missing-card-payment`,
+      accountId: "acct_checking",
+      date: "2026-06-17",
+      description: "Capital One card payment",
+      merchantName: "Capital One",
+      amountCents: -18400,
+      category: "credit card payment",
+      kind: "credit_card_payment",
+      metadata: {
+        issuerName: "Capital One",
+        matchedConnectedCard: false,
+      },
+    });
+  }
+
+  return {
+    settings: {
+      asOfDate: "2026-06-20",
+      protectedSavingsMonthlyCents,
+    },
+    accounts: [
+      {
+        id: "acct_checking",
+        name: "Everyday Checking",
+        institutionName: "Northstar Bank",
+        kind: "checking",
+        balanceCents: input.checkingAvailableCents,
+        availableBalanceCents: input.checkingAvailableCents,
+        lastFour: "1042",
+      },
+      {
+        id: "acct_savings",
+        name: "Protected Savings",
+        institutionName: "Northstar Bank",
+        kind: "savings",
+        balanceCents: 420000,
+        availableBalanceCents: 420000,
+        lastFour: "7719",
+        isProtectedSavings: true,
+      },
+      {
+        id: "acct_visa",
+        name: "Everyday Visa",
+        institutionName: "Northstar Bank",
+        kind: "credit_card",
+        balanceCents: -42000,
+        availableBalanceCents: 258000,
+        lastFour: "8821",
+      },
+    ],
+    transactions,
+  };
+}
+
+function buildMonthlyPatternTransactions(input: {
+  scenarioId: string;
+  month: string;
+  incomeCents: number;
+  recurringCents: number;
+  everydaySpendCents: number;
+  currentMonth?: boolean;
+}): FinancialSnapshot["transactions"] {
+  const rentCents = Math.min(input.recurringCents, 145000);
+  const remainingRecurringCents = Math.max(0, input.recurringCents - rentCents);
+  const utilityCents = Math.round(remainingRecurringCents * 0.48);
+  const phoneCents = Math.round(remainingRecurringCents * 0.25);
+  const subscriptionCents = Math.max(0, remainingRecurringCents - utilityCents - phoneCents);
+  const everydayHalfCents = Math.round(input.everydaySpendCents / 2);
+  const everydayRestCents = input.everydaySpendCents - everydayHalfCents;
+  const currentDay = input.currentMonth ? "18" : "20";
+
+  return [
+    {
+      id: `${input.scenarioId}-${input.month}-income`,
+      accountId: "acct_checking",
+      date: `${input.month}-07`,
+      description: "Payroll deposit",
+      merchantName: "Acme Studio",
+      amountCents: input.incomeCents,
+      category: "payroll",
+      kind: "income",
+    },
+    {
+      id: `${input.scenarioId}-${input.month}-rent`,
+      accountId: "acct_checking",
+      date: `${input.month}-01`,
+      description: "Monthly rent",
+      merchantName: "Trailhead Apartments",
+      amountCents: -rentCents,
+      category: "rent",
+      kind: "rent",
+    },
+    {
+      id: `${input.scenarioId}-${input.month}-utilities`,
+      accountId: "acct_checking",
+      date: `${input.month}-03`,
+      description: "Utilities",
+      merchantName: "City Power",
+      amountCents: -utilityCents,
+      category: "utilities",
+      kind: "purchase",
+    },
+    {
+      id: `${input.scenarioId}-${input.month}-phone`,
+      accountId: "acct_checking",
+      date: `${input.month}-10`,
+      description: "Phone bill",
+      merchantName: "Signal Mobile",
+      amountCents: -phoneCents,
+      category: "phone",
+      kind: "purchase",
+    },
+    {
+      id: `${input.scenarioId}-${input.month}-subscription`,
+      accountId: "acct_visa",
+      date: `${input.month}-09`,
+      description: "Subscription bundle",
+      merchantName: "Streambox",
+      amountCents: -subscriptionCents,
+      category: "subscriptions",
+      kind: "purchase",
+    },
+    {
+      id: `${input.scenarioId}-${input.month}-groceries`,
+      accountId: "acct_visa",
+      date: `${input.month}-12`,
+      description: "Groceries",
+      merchantName: "City Market",
+      amountCents: -everydayHalfCents,
+      category: "groceries",
+      kind: "purchase",
+    },
+    {
+      id: `${input.scenarioId}-${input.month}-shopping`,
+      accountId: "acct_visa",
+      date: `${input.month}-${currentDay}`,
+      description: "Household supplies",
+      merchantName: "Basecamp Market",
+      amountCents: -everydayRestCents,
+      category: "shopping",
+      kind: "purchase",
+    },
+  ];
 }

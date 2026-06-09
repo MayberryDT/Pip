@@ -78,7 +78,7 @@ export async function recordProductEventSafely(
 export function getAgentProductEventNames(
   response: AgentResponse,
   freeCashTodayCents: number,
-  context: { isFollowUp?: boolean } = {},
+  context: { isFollowUp?: boolean; isShortfall?: boolean } = {},
 ): ProductEventName[] {
   const names = new Set<ProductEventName>(["agent_question_asked"]);
   const cardTypes = response.cards.map((card) => card.type);
@@ -99,7 +99,7 @@ export function getAgentProductEventNames(
     names.add("missing_card_nudge_shown");
   }
 
-  if (freeCashTodayCents < 0) {
+  if (freeCashTodayCents < 0 || context.isShortfall) {
     names.add("negative_free_cash_follow_up");
   }
 

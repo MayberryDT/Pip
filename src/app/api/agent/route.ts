@@ -28,6 +28,11 @@ import {
   type SpendableAgentActionResult,
 } from "@/lib/agent/ai-agent";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
+import {
+  getDisplayedSpendableCashTodayCents,
+  getSpendableCashTodayState,
+} from "@/lib/free-cash/spendable-cash-today";
+import type { FakeDataScenario } from "@/lib/fake-data";
 import type { FinancialProviderName, PlaidConnectSession } from "@/lib/providers/FinancialDataProvider";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import {
@@ -48,7 +53,18 @@ const requestSchema = z.object({
     .max(120)
     .regex(/^[a-zA-Z0-9._:-]+$/)
     .optional(),
-  scenario: z.enum(["default", "negative"]).optional(),
+  scenario: z
+    .enum([
+      "default",
+      "healthy",
+      "overspending",
+      "shortfall",
+      "low-confidence",
+      "missing-card",
+      "cash-guardrail",
+      "negative",
+    ])
+    .optional(),
   selectedPromptChipId: z.string().min(1).max(80).optional(),
   history: z
     .array(
@@ -75,7 +91,7 @@ const requestSchema = z.object({
         .array(
           z.object({
             id: z.string().min(1).max(80),
-            label: z.string().min(1).max(36),
+            label: z.string().min(1).max(56),
             prompt: z.string().min(1).max(160),
           }),
         )
@@ -135,21 +151,24 @@ export async function POST(request: Request) {
     );
 
     if (parsed.data.requestKind !== "prompt_chips") {
+      const routeResult = routeContext.snapshot ? calculateFreeCash(routeContext.snapshot) : null;
+
       await Promise.all([
         recordAgentEvents(routeContext.eventContext, {
           message: parsed.data.message,
           historyLength: parsed.data.history?.length ?? 0,
           response,
-          freeCashTodayCents: routeContext.snapshot
-            ? calculateFreeCash(routeContext.snapshot).freeCashTodayCents
+          freeCashTodayCents: routeResult
+            ? getDisplayedSpendableCashTodayCents(routeResult)
             : null,
+          isShortfall: routeResult ? getSpendableCashTodayState(routeResult) === "shortfall" : false,
         }),
         recordAgentChatTurnSafely(routeContext.eventContext?.supabase ?? null, {
           userId: routeContext.eventContext?.userId ?? null,
           conversationId,
           userMessage: parsed.data.message,
           response,
-          requestMetadata: createChatTurnRequestMetadata(parsed.data, routeContext),
+          requestMetadata: createChatTurnRequestMetadata(parsed.data, routeContext, response),
         }),
       ]);
     }
@@ -180,6 +199,7 @@ export async function POST(request: Request) {
 function createChatTurnRequestMetadata(
   input: AgentRouteRequest,
   routeContext: RouteAgentContext | undefined,
+  response?: AgentResponse,
 ): Record<string, Json> {
   return {
     scenario: input.scenario ?? null,
@@ -195,6 +215,7 @@ function createChatTurnRequestMetadata(
     syncInstitutionCount: routeContext?.syncStatus?.institutions.length ?? 0,
     syncHasStaleInstitution: routeContext?.syncStatus?.hasStaleInstitution ?? false,
     latestSyncStatus: routeContext?.syncStatus?.latestSyncRun?.status ?? null,
+    responseQuality: response?.audit.quality ? response.audit.quality as unknown as Json : null,
   };
 }
 
@@ -207,7 +228,7 @@ function createServerConversationId(): string {
 }
 
 async function createRouteAgentContext(input: {
-  scenario?: "default" | "negative";
+  scenario?: FakeDataScenario;
 }): Promise<RouteAgentContext> {
   if (!isSupabaseConfigured()) {
     try {
@@ -527,6 +548,7 @@ async function recordAgentEvents(
     historyLength: number;
     response: AgentResponse;
     freeCashTodayCents: number | null;
+    isShortfall?: boolean;
   },
 ) {
   if (!context) {
@@ -536,6 +558,7 @@ async function recordAgentEvents(
   const cardTypes = input.response.cards.map((card) => card.type);
   const eventNames = getRouteAgentEventNames(input.response, input.freeCashTodayCents, {
     isFollowUp: input.historyLength > 0,
+    isShortfall: input.isShortfall,
   });
 
   await Promise.all(
@@ -557,7 +580,7 @@ async function recordAgentEvents(
 function getRouteAgentEventNames(
   response: AgentResponse,
   freeCashTodayCents: number | null,
-  context: { isFollowUp?: boolean } = {},
+  context: { isFollowUp?: boolean; isShortfall?: boolean } = {},
 ): ProductEventName[] {
   if (typeof freeCashTodayCents === "number") {
     return getAgentProductEventNames(response, freeCashTodayCents, context);

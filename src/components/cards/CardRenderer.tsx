@@ -56,15 +56,34 @@ export function CardRenderer({
             <MoneyRow
               label="Current Spendable Cash"
               value={formatMoney(card.beforeCents)}
-              tone={card.beforeCents < 0 ? "negative" : "positive"}
+              tone={card.beforeCents <= 0 ? "neutral" : "positive"}
             />
             <MoneyRow label="Purchase" value={formatMoney(-card.amountCents)} tone="negative" />
             <MoneyRow
-              label="After purchase"
-              value={formatMoney(card.afterTodayCents)}
-              tone={card.afterTodayCents < 0 ? "negative" : "positive"}
+              label="Today room left"
+              value={formatMoney(card.todayRemainingCents)}
+              tone={card.todayRemainingCents < 0 ? "warning" : "positive"}
               strong
             />
+            <MoneyRow
+              label="V2 daily room after"
+              value={formatMoney(card.afterTodayCents)}
+              tone={card.afterTodayCents <= 0 ? "warning" : "positive"}
+            />
+            {card.dailyEffectCents !== undefined ? (
+              <MoneyRow
+                label="Daily room change"
+                value={formatMoney(card.dailyEffectCents)}
+                tone={card.dailyEffectCents < 0 ? "negative" : "neutral"}
+              />
+            ) : null}
+            {card.shortfallCents && card.shortfallCents > 0 ? (
+              <MoneyRow
+                label="Added shortfall"
+                value={formatMoney(-card.shortfallCents)}
+                tone="warning"
+              />
+            ) : null}
           </div>
         </CardShell>
       );
@@ -213,14 +232,26 @@ export function CardRenderer({
       return (
         <CardShell icon={<Calculator aria-hidden="true" size={18} />} title={card.title}>
           <div className="space-y-2 text-sm">
-            <FormulaRow label="Income" value={card.incomeTotalCents} />
-            <FormulaRow label="Spending" value={-card.spendingTotalCents} />
-            <FormulaRow label="Protected savings" value={-card.protectedSavingsMonthlyCents} />
-            <FormulaRow label="Rolling net" value={card.rollingNetCents} strong />
+            {card.spendableCashTodayCents !== undefined ? (
+              <>
+                <FormulaRow label="Spendable today" value={card.spendableCashTodayCents} strong />
+                <FormulaRow label="Normal room" value={card.baselineDailyAllowanceCents ?? 0} />
+                <FormulaRow label="Recent spending" value={card.behaviorAdjustmentCents ?? 0} />
+                <FormulaRow label="Cash guardrail" value={-(card.cashRealityAdjustmentCents ?? 0)} />
+              </>
+            ) : (
+              <>
+                <FormulaRow label="Income" value={card.incomeTotalCents} />
+                <FormulaRow label="Spending" value={-card.spendingTotalCents} />
+                <FormulaRow label="Protected savings" value={-card.protectedSavingsMonthlyCents} />
+                <FormulaRow label="Rolling net" value={card.rollingNetCents} strong />
+              </>
+            )}
           </div>
           <p className="mt-4 text-sm text-ink/[0.62]">
-            {formatMoney(card.rollingNetCents)} divided by {card.dayCount} days equals{" "}
-            {formatMoney(Math.round(card.rollingNetCents / card.dayCount))}.
+            {card.spendableCashTodayCents !== undefined
+              ? `Legacy rolling surplus is ${formatMoney(card.legacyRollingDailySurplusCents ?? Math.round(card.rollingNetCents / card.dayCount))} per day.`
+              : `${formatMoney(card.rollingNetCents)} divided by ${card.dayCount} days equals ${formatMoney(Math.round(card.rollingNetCents / card.dayCount))}.`}
           </p>
         </CardShell>
       );
@@ -321,14 +352,10 @@ function MoneyRow({
 }: {
   label: string;
   value: string;
-  tone: "positive" | "negative" | "neutral";
+  tone: "positive" | "negative" | "neutral" | "warning";
   strong?: boolean;
 }) {
-  const valueClass = tone === "negative"
-    ? "text-coral"
-    : tone === "positive"
-      ? "text-moss"
-      : "text-ink/[0.58]";
+  const valueClass = toneClass(tone);
 
   return (
     <div className="flex min-h-10 items-center justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">

@@ -50,8 +50,12 @@ export type AgentCard =
       title: string;
       amountCents: number;
       beforeCents: number;
+      todayRemainingCents: number;
+      todayOverageCents: number;
       afterTodayCents: number;
       monthlyAverageAfterCents: number;
+      dailyEffectCents?: number;
+      shortfallCents?: number;
     }
   | {
       type: "true_balances";
@@ -105,6 +109,11 @@ export type AgentCard =
       protectedSavingsMonthlyCents: number;
       rollingNetCents: number;
       dayCount: number;
+      spendableCashTodayCents?: number;
+      baselineDailyAllowanceCents?: number;
+      behaviorAdjustmentCents?: number;
+      cashRealityAdjustmentCents?: number;
+      legacyRollingDailySurplusCents?: number;
     }
   | {
       type: "insight_card";
@@ -138,5 +147,16 @@ export type AgentResponse = {
     usedModel: boolean;
     model?: string;
     transport?: "netlify-ai-gateway" | "openai-direct" | "custom-openai-compatible";
+    quality?: {
+      conversationJob: string;
+      answerPatternId: string;
+      chipFamilyIds: string[];
+      repeatedJob: boolean;
+      repeatedTool: boolean;
+      repeatedCard: boolean;
+      repeatedMessage: boolean;
+      repetitionAdjusted: boolean;
+      chipFallbackReason: string;
+    };
   };
 };

@@ -8,28 +8,27 @@ describe("Spendable Cash explanation primitives", () => {
   it("summarizes bounded aggregate math without exposing raw transaction details", () => {
     const summary = summarizeFreeCash(calculateFreeCash(fakeSnapshot));
 
-    expect(summary).toContain("$43");
-    expect(summary).toContain("$4,200 income");
-    expect(summary).toContain("-$2,624 spending");
-    expect(summary).toContain("-$243 protected savings");
+    expect(summary).toContain("$104");
+    expect(summary).toContain("normal room");
+    expect(summary).toContain("recent spending pace");
     expect(summary).not.toContain("rolling calendar-month window");
     expect(summary).not.toContain("Trailhead Apartments");
     expect(summary).not.toContain("City Market");
     expect(summary).not.toContain("Copper Cup");
   });
 
-  it("prioritizes rent as the primary driver when rent is inside the window", () => {
+  it("uses the V2 top driver when V2 metric is available", () => {
     expect(getPrimaryDriver(calculateFreeCash(fakeSnapshot))).toBe(
-      "Rent is inside the current rolling window.",
+      "Pattern-based daily room after recurring obligations and protected savings.",
     );
   });
 
-  it("falls back to spending pressure or income depending on the aggregate result", () => {
+  it("falls back to the V2 baseline driver for sparse aggregate snapshots", () => {
     expect(getPrimaryDriver(calculateFreeCash(spendingSnapshot))).toBe(
-      "Spending in the current window is the biggest pressure on Spendable Cash Today.",
+      "Pattern-based daily room after recurring obligations and protected savings.",
     );
     expect(getPrimaryDriver(calculateFreeCash(incomeOnlySnapshot))).toBe(
-      "Income is carrying the current Spendable Cash Today number.",
+      "Pattern-based daily room after recurring obligations and protected savings.",
     );
   });
 });

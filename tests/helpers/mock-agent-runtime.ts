@@ -30,19 +30,19 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
       message: "Ready.",
       promptChips: [
         {
-          id: "ai-upcoming-bills",
-          label: "Upcoming bills",
-          prompt: "What bills are coming up?",
+          id: "ai-what-number-means",
+          label: "What does my $43 mean?",
+          prompt: "What does my Spendable Cash Today number mean?",
         },
         {
-          id: "ai-payday-impact",
-          label: "Payday impact",
-          prompt: "How did payday affect today?",
+          id: "ai-why-today",
+          label: "Why is it $43 today?",
+          prompt: "Show the biggest drivers behind today's number",
         },
         {
-          id: "ai-show-trend",
-          label: "Show my trend",
-          prompt: "Show my Spendable Cash Today trend",
+          id: "ai-teach-money-basic",
+          label: "Teach me a money basic",
+          prompt: "Teach me one useful money basic",
         },
       ],
     });
@@ -145,7 +145,43 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     });
   }
 
-  if (/\b(recurring|repeating|subscription|subscriptions|bills? coming up|monthly charges?|upcoming bills?|youtube|premium)\b/.test(normalized)) {
+  if (
+    /^(yes|yeah|yep|ok|okay|sure|do that|yes do that|show me|please do|that)$/.test(normalized) &&
+    input.history?.slice(-4).some((item) =>
+      /\b(spending breakdown|breakdown|categories|merchants|card payments|income sources)\b/.test(item.content.toLowerCase()),
+    )
+  ) {
+    return toolResponse(input, "show_spending_breakdown", {});
+  }
+
+  if (
+    /^(yes|yeah|yep|ok|okay|sure|do that|yes do that|show me|please do|that)$/.test(normalized) &&
+    input.history?.slice(-4).some((item) =>
+      /\b(recurring|repeat(?:ing)? items?|subscriptions?|upcoming bills|bills coming up)\b/.test(item.content.toLowerCase()),
+    )
+  ) {
+    return toolResponse(input, "show_recurring_activity", {});
+  }
+
+  if (
+    /^(yes|yeah|yep|ok|okay|sure|do that|yes do that|show me|please do|that)$/.test(normalized) &&
+    input.history?.slice(-4).some((item) =>
+      /\b(recent charges|recent transactions|recent purchases|recent activity)\b/.test(item.content.toLowerCase()),
+    )
+  ) {
+    return toolResponse(input, "show_recent_transactions", { limit: 6 });
+  }
+
+  if (
+    /^(yes|yeah|yep|ok|okay|sure|do that|yes do that|show me|please do|that)$/.test(normalized) &&
+    input.history?.slice(-4).some((item) =>
+      /\b(show math|math breakdown|calculation|formula)\b/.test(item.content.toLowerCase()),
+    )
+  ) {
+    return toolResponse(input, "show_math", {});
+  }
+
+  if (/\b(recurring|repeating|subscription|subscriptions|bills? (are )?coming up|monthly charges?|upcoming bills?|youtube|premium)\b/.test(normalized)) {
     return toolResponse(input, "show_recurring_activity", {});
   }
 
@@ -202,6 +238,8 @@ function toolResponse(
     show_recurring_activity: "get_recurring_activity",
     show_spendable_cash_forecast: "forecast_spendable_cash",
     define_spendable_cash: "get_spendable_cash_definition",
+    show_pattern_assumptions: "get_pattern_assumptions",
+    show_recent_spending_pressure: "get_recent_spending_pressure",
     detect_missing_card: "get_data_quality",
     show_math: "get_free_cash_math",
     compose_insight_card: "compose_insight_card",

@@ -1,4 +1,8 @@
 import type { PromptChip } from "@/lib/agent/card-types";
+import {
+  getDefaultReadyPromptChips,
+  getReadyPromptChipCatalog,
+} from "@/lib/agent/prompt-chip-planner";
 import type { FreeCashResult } from "@/lib/types";
 
 export const guestOnboardingPromptChips: PromptChip[] = [
@@ -36,13 +40,21 @@ export const dataOnboardingPromptChips: PromptChip[] = [
 ];
 
 const retiredDefaultPromptChipTexts = new Set([
+  "missing card",
+  "why today?",
+  "why today",
+  "test purchase",
   "why this number?",
   "can i spend $50?",
   "what changed?",
 ]);
 
-export function getSuggestedPrompts(_result: FreeCashResult): PromptChip[] {
-  return [];
+export function getSuggestedPrompts(result: FreeCashResult): PromptChip[] {
+  return getDefaultReadyPromptChips(result);
+}
+
+export function getReadyPromptChipExamples(): PromptChip[] {
+  return getReadyPromptChipCatalog();
 }
 
 export function isRetiredDefaultPromptChip(chip: Pick<PromptChip, "label" | "prompt">): boolean {

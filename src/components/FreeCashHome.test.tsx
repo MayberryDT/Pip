@@ -10,13 +10,19 @@ describe("FreeCashHome", () => {
 
     expect(countOccurrences(markup, 'data-testid="free-cash-number"')).toBe(1);
     expect(countOccurrences(markup, 'data-testid="agent-thread"')).toBe(1);
-    expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
+    expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(1);
     expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(1);
     expect(visibleText).toContain("Pip");
     expect(visibleText).toContain("Spendable Cash Today");
-    expect(visibleText).toContain("$43");
+    expect(visibleText).toContain("$104");
     expect(visibleText).toContain("Hi, I’m Pip. I’ll show what’s actually spendable today.");
     expect(markup).toContain("Ask Pip anything...");
+    expect(markup).toContain("What does my $104 mean?");
+    expect(markup).toContain("Why is it $104 today?");
+    expect(markup).toContain("Teach me a money basic");
+    expect(markup).not.toContain("Missing card");
+    expect(markup).not.toContain("Why today?");
+    expect(markup).not.toContain("Test purchase");
     expect(markup).not.toContain("Why this number?");
     expect(markup).not.toContain("Can I spend $50?");
     expect(markup).not.toContain("What changed?");

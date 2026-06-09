@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { agentFinalOutputSchema, agentMessageMaxChars, cardSchema } from "@/lib/agent/response-schema";
+import { agentFinalOutputSchema, agentMessageMaxChars, agentResponseSchema, cardSchema } from "@/lib/agent/response-schema";
 import {
   FREE_CASH_AI_MODEL,
   NETLIFY_AI_GATEWAY_MODEL,
@@ -68,6 +68,7 @@ describe("runAIAgent", () => {
   });
 
   it("calls the purchase simulation tool when the user asks about a specific spend", async () => {
+    const result = calculateFreeCash(fakeSnapshot);
     const response = await runAIAgent(
       { message: "Can I spend $40?" },
       createMockModelClient(),
@@ -77,8 +78,11 @@ describe("runAIAgent", () => {
     expect(response.cards[0]).toMatchObject({
       type: "purchase_simulation",
       amountCents: 4000,
-      beforeCents: 4300,
-      afterTodayCents: 300,
+      beforeCents: result.spendableCashToday?.spendableCashTodayCents,
+      todayRemainingCents: (result.spendableCashToday?.spendableCashTodayCents ?? 0) - 4000,
+      todayOverageCents: Math.max(0, 4000 - (result.spendableCashToday?.spendableCashTodayCents ?? 0)),
+      afterTodayCents: expect.any(Number),
+      dailyEffectCents: expect.any(Number),
     });
   });
 
@@ -104,7 +108,10 @@ describe("runAIAgent", () => {
     expect(response.cards[0]).toMatchObject({
       type: "purchase_simulation",
       amountCents: 2000,
-      afterTodayCents: 2300,
+      todayRemainingCents: expect.any(Number),
+      todayOverageCents: expect.any(Number),
+      afterTodayCents: expect.any(Number),
+      dailyEffectCents: expect.any(Number),
     });
   });
 
@@ -189,6 +196,97 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("treats affirmative follow-ups after offered branches as the matching card request", async () => {
+    const breakdownResponse = await runAIAgent(
+      {
+        message: "show me",
+        history: [
+          {
+            role: "assistant",
+            content: "I can show a spending breakdown or recent charges.",
+          },
+        ],
+      },
+      createMockModelClient(),
+    );
+    const recurringResponse = await runAIAgent(
+      {
+        message: "yes do that",
+        history: [
+          {
+            role: "assistant",
+            content: "I can show recurring items next.",
+          },
+        ],
+      },
+      createMockModelClient(),
+    );
+    const recentResponse = await runAIAgent(
+      {
+        message: "sure",
+        history: [
+          {
+            role: "assistant",
+            content: "I can show recent charges.",
+          },
+        ],
+      },
+      createMockModelClient(),
+    );
+    const mathResponse = await runAIAgent(
+      {
+        message: "ok",
+        history: [
+          {
+            role: "assistant",
+            content: "I can show math behind today's number.",
+          },
+        ],
+      },
+      createMockModelClient(),
+    );
+
+    expect(breakdownResponse.usedTools).toEqual(["get_spending_breakdown"]);
+    expect(breakdownResponse.cards[0]?.type).toBe("spending_breakdown");
+    expect(recurringResponse.usedTools).toEqual(["get_recurring_activity"]);
+    expect(recurringResponse.cards[0]?.type).toBe("recurring_activity");
+    expect(recentResponse.usedTools).toEqual(["get_recent_transactions"]);
+    expect(recentResponse.cards[0]?.type).toBe("recent_transactions");
+    expect(mathResponse.usedTools).toEqual(["get_free_cash_math"]);
+    expect(mathResponse.cards[0]?.type).toBe("math_breakdown");
+  });
+
+  it("routes affirmative follow-ups through the real forced-tool classifier", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "show me",
+        history: [
+          {
+            role: "assistant",
+            content: "I can show a spending breakdown or recent charges.",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      toolName: "get_spending_breakdown",
+      requireCard: true,
+    });
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "yes do that",
+        history: [
+          {
+            role: "assistant",
+            content: "I can show recurring items next.",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      toolName: "get_recurring_activity",
+      requireCard: true,
+    });
+  });
+
   it("calls the recurring activity tool when the user asks about a subscription coming up", async () => {
     const response = await runAIAgent(
       { message: "Do I have YouTube Premium coming up?" },
@@ -231,7 +329,7 @@ describe("runAIAgent", () => {
     }
 
     expect(response.cards[0].rows.map((row) => row.id)).toEqual(
-      expect.arrayContaining(["income", "daily-income", "spending", "protected-savings", "today"]),
+      expect.arrayContaining(["income-average", "bills", "savings", "today"]),
     );
   });
 
@@ -391,8 +489,8 @@ describe("runAIAgent", () => {
     ).toThrow();
   });
 
-  it("filters retired default prompt chips without adding deterministic fallback chips", () => {
-    const chips = __agentTestHooks.selectPromptChips(
+  it("filters retired default prompt chips and falls back to deterministic ready-state chips", () => {
+    const plan = __agentTestHooks.selectPromptChips(
       {
         message: "I can help.",
         responseMode: "chat_only",
@@ -443,13 +541,24 @@ describe("runAIAgent", () => {
         snapshot: fakeSnapshot,
       } as never,
       calculateFreeCash(fakeSnapshot),
+      {
+        input: {
+          message: "I can help.",
+        },
+        cards: [],
+        usedTools: [],
+      },
     );
 
-    expect(chips).toEqual([]);
+    expect(plan.chips.map((chip) => chip.id)).toEqual([
+      "ai-what-number-means",
+      "ai-why-today",
+      "ai-teach-money-basic",
+    ]);
   });
 
-  it("keeps fresh model-generated prompt chips for ready users", () => {
-    const chips = __agentTestHooks.selectPromptChips(
+  it("uses deterministic ready-state chips before model-generated supplements", () => {
+    const plan = __agentTestHooks.selectPromptChips(
       {
         message: "I can help.",
         responseMode: "chat_only",
@@ -484,10 +593,21 @@ describe("runAIAgent", () => {
         snapshot: fakeSnapshot,
       } as never,
       calculateFreeCash(fakeSnapshot),
+      {
+        input: {
+          message: "I can help.",
+        },
+        cards: [],
+        usedTools: [],
+      },
     );
 
-    expect(chips.map((chip) => chip.label)).toEqual(["Main drivers", "Upcoming bills", "Payday impact"]);
-    expect(chips[0]?.prompt).toBe("Show drivers behind this number");
+    expect(plan.chips.map((chip) => chip.label)).toEqual([
+      "What does my $104 mean?",
+      "Why is it $104 today?",
+      "Teach me a money basic",
+    ]);
+    expect(plan.chips[1]?.prompt).toBe("Show the biggest drivers behind today's number");
   });
 
   it("keeps prompt-chip refreshes populated when every generated chip repeats recent history", () => {
@@ -508,7 +628,7 @@ describe("runAIAgent", () => {
         prompt: "Show my Spendable Cash trend",
       },
     ];
-    const chips = __agentTestHooks.selectPromptChips(
+    const plan = __agentTestHooks.selectPromptChips(
       {
         message: "Ready.",
         responseMode: "chat_only",
@@ -528,9 +648,49 @@ describe("runAIAgent", () => {
         snapshot: fakeSnapshot,
       } as never,
       calculateFreeCash(fakeSnapshot),
+      {
+        input: {
+          message: "Create prompt chips for the current Pip screen.",
+          requestKind: "prompt_chips",
+        },
+        cards: [],
+        usedTools: [],
+      },
     );
 
-    expect(chips.map((chip) => chip.label)).toEqual(["Upcoming bills", "Payday impact", "Show my trend"]);
+    expect(plan.chips).toHaveLength(3);
+    expect(plan.chips.map((chip) => chip.label)).toEqual([
+      "What does my $104 mean?",
+      "Why is it $104 today?",
+      "Teach me a money basic",
+    ]);
+  });
+
+  it("accepts longer human-facing prompt chip labels at the schema boundary", () => {
+    expect(
+      agentFinalOutputSchema.parse({
+        message: "I can answer that.",
+        responseMode: "chat_only",
+        promptChips: [
+          {
+            id: "ai-spending-basic",
+            label: "How should I think about spending?",
+            prompt: "How should I think about spending?",
+          },
+        ],
+      }).promptChips[0]?.label,
+    ).toBe("How should I think about spending?");
+  });
+
+  it("keeps broad personal-finance education chat-only", async () => {
+    const response = await runAIAgent(
+      { message: "What is cash flow?" },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual([]);
+    expect(response.responseMode).toBe("chat_only");
+    expect(response.cards).toHaveLength(0);
   });
 
   it("repairs detached metric openings instead of throwing a visible error", () => {
@@ -563,14 +723,81 @@ describe("runAIAgent", () => {
     ).toBe("I can talk through likely repeats: YouTube Premium may repeat soon.");
   });
 
-  it("rejects long visible final messages at the structured output boundary", () => {
-    expect(() =>
+  it("allows long model drafts but still rejects long visible final responses", () => {
+    expect(
       agentFinalOutputSchema.parse({
         message: "x".repeat(agentMessageMaxChars + 1),
         responseMode: "chat_only",
         promptChips: [],
+      }).message.length,
+    ).toBe(agentMessageMaxChars + 1);
+
+    expect(() =>
+      agentResponseSchema.parse({
+        message: "x".repeat(agentMessageMaxChars + 1),
+        cards: [],
+        promptChips: [],
+        usedTools: [],
+        responseMode: "chat_only",
+        audit: {
+          toolNames: [],
+          usedModel: true,
+        },
       }),
     ).toThrow();
+  });
+
+  it("allows extra raw model prompt chips for deterministic replanning", () => {
+    const parsed = agentFinalOutputSchema.parse({
+      message: "Short draft.",
+      responseMode: "chat_only",
+      promptChips: Array.from({ length: 5 }, (_, index) => ({
+        id: `chip-${index}`,
+        label: `Chip ${index}`,
+        prompt: `Prompt ${index}`,
+      })),
+    });
+
+    expect(parsed.promptChips).toHaveLength(5);
+  });
+
+  it("allows long raw support text for visible-answer composition", () => {
+    const parsed = agentFinalOutputSchema.parse({
+      message: "Short draft.",
+      support: "x".repeat(300),
+      responseMode: "chat_only",
+      promptChips: [],
+    });
+
+    expect(parsed.support).toHaveLength(300);
+  });
+
+  it("repairs summary display promises without a card", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "This is the short driver summary. I can show the full summary if you’d like.",
+      ),
+    ).toBe("This is the short driver summary. I can talk through the full summary if you’d like.");
+  });
+
+  it("repairs generic no-card display offers", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "Note: one data card may be missing, but you still have room today.",
+      ),
+    ).toBe("Note: one data source may be missing, but you still have room today.");
+
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "Want to see the details card or adjust protection?",
+      ),
+    ).toBe("Want to talk through the details or adjust protection?");
+
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "I can show what is driving today if you like.",
+      ),
+    ).toBe("I can talk through what is driving today if you like.");
   });
 
   it("rejects when OpenAI is not configured", async () => {

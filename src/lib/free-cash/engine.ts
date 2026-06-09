@@ -18,6 +18,7 @@ import {
   findUnmatchedCreditCardPayments,
   isDedupedCreditCardPayment,
 } from "@/lib/free-cash/dedupe-credit-card-payments";
+import { calculateSpendableCashToday } from "@/lib/free-cash/spendable-cash-today";
 
 const MATERIAL_PENDING_THRESHOLD_CENTS = 2000;
 
@@ -66,6 +67,19 @@ export function calculateFreeCash(snapshot: FinancialSnapshot): FreeCashResult {
     spendingTotalCents -
     snapshot.settings.protectedSavingsMonthlyCents;
   const freeCashTodayCents = Math.round(rollingNetCents / window.dayCount);
+  const drivers = buildDrivers({
+    incomeTotalCents,
+    spendingTotalCents,
+    refundTotalCents,
+    protectedSavingsMonthlyCents: snapshot.settings.protectedSavingsMonthlyCents,
+    dedupedPaymentCount,
+    windowTransactions,
+    allTransactions: transactions,
+    window,
+    accounts: snapshot.accounts,
+  });
+  const warnings = buildWarnings(windowTransactions, snapshot.settings.suppressedMissingCardIssuers);
+  const dataStates = buildDataStates(windowTransactions, snapshot.accounts);
 
   return {
     freeCashTodayCents,
@@ -75,20 +89,16 @@ export function calculateFreeCash(snapshot: FinancialSnapshot): FreeCashResult {
     refundTotalCents,
     protectedSavingsMonthlyCents: snapshot.settings.protectedSavingsMonthlyCents,
     window,
-    drivers: buildDrivers({
-      incomeTotalCents,
-      spendingTotalCents,
-      refundTotalCents,
-      protectedSavingsMonthlyCents: snapshot.settings.protectedSavingsMonthlyCents,
-      dedupedPaymentCount,
-      windowTransactions,
-      allTransactions: transactions,
-      window,
-      accounts: snapshot.accounts,
-    }),
-    warnings: buildWarnings(windowTransactions, snapshot.settings.suppressedMissingCardIssuers),
-    dataStates: buildDataStates(windowTransactions, snapshot.accounts),
+    drivers,
+    warnings,
+    dataStates,
     trueBalances: snapshot.accounts.map(toBalanceSummary),
+    spendableCashToday: calculateSpendableCashToday(snapshot, {
+      legacyRollingDailySurplusCents: freeCashTodayCents,
+      legacyRollingNetCents: rollingNetCents,
+      warnings,
+      dataStates,
+    }),
   };
 }
 

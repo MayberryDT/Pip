@@ -11,13 +11,16 @@ describe("PromptChips", () => {
 
     expect(markup.match(/<button/g)).toHaveLength(3);
     expect(markup).toContain("Upcoming bills");
-    expect(markup).toContain("Show true balances");
-    expect(markup).toContain("Try $25");
+    expect(markup).toContain("How should I think about spending?");
+    expect(markup).toContain("What would a $25 purchase do?");
     expect(markup).not.toContain("Show recent transactions");
     expect(markup).not.toContain("Show the math");
     expect(markup).toContain("flex-nowrap");
     expect(markup).toContain("overflow-x-auto");
     expect(markup).toContain("scrollbar-none");
+    expect(markup).toContain("justify-center");
+    expect(markup).toContain("min-w-full");
+    expect(markup).toContain("w-max");
     expect(markup).toContain("whitespace-nowrap");
     expect(markup).not.toContain("role=&quot;menu&quot;");
   });
@@ -31,12 +34,12 @@ const overflowingPromptChips: PromptChip[] = [
   },
   {
     id: "balances",
-    label: "Show true balances",
-    prompt: "Show true balances",
+    label: "How should I think about spending?",
+    prompt: "How should I think about spending?",
   },
   {
     id: "try-25",
-    label: "Try $25",
+    label: "What would a $25 purchase do?",
     prompt: "Can I spend $25?",
   },
   {

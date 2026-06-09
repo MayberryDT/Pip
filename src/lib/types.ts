@@ -46,6 +46,35 @@ export type UserSettings = {
 
 export type MoneyTone = "positive" | "negative" | "neutral" | "warning";
 
+export type SpendableTransactionGroup =
+  | "income"
+  | "recurring_obligation"
+  | "everyday_spending"
+  | "transfer"
+  | "card_settlement"
+  | "refund"
+  | "savings_protected"
+  | "fee"
+  | "unknown";
+
+export type SpendableCashConfidence = "high" | "medium" | "low";
+
+export type SpendableCashTodayState =
+  | "healthy"
+  | "normal"
+  | "tight"
+  | "overspending"
+  | "shortfall"
+  | "low_confidence"
+  | "missing_data";
+
+export type ClassifiedSpendableTransaction = {
+  transaction: Transaction;
+  group: SpendableTransactionGroup;
+  confidence: SpendableCashConfidence;
+  reason: string;
+};
+
 export type FreeCashDriver = {
   id: string;
   label: string;
@@ -80,6 +109,44 @@ export type RollingWindow = {
   daysRemaining: number;
 };
 
+export type SpendableCashTodayResult = {
+  metricVersion: "v2";
+  spendableCashTodayCents: number;
+  shortfallCents: number;
+  patternShortfallCents: number;
+  behaviorShortfallCents: number;
+  cashShortfallCents: number;
+  baselineDailyAllowanceCents: number;
+  behaviorAdjustmentCents: number;
+  cashRealityAdjustmentCents: number;
+  adaptiveDailyAllowanceCents: number;
+  monthlyEverydayPoolCents: number;
+  averageMonthlyIncomeCents: number;
+  averageMonthlyRecurringObligationsCents: number;
+  averageMonthlyEverydaySpendCents: number;
+  protectedSavingsMonthlyCents: number;
+  hiddenCushionCents: number;
+  allowedSoFarThisMonthCents: number;
+  actualEverydaySpendSoFarCents: number;
+  currentMonthVarianceCents: number;
+  availableCashGuardrailCents: number;
+  pendingCommittedSpendCents: number;
+  cashDailyCapCents: number;
+  lookbackStartDate: string;
+  lookbackEndDate: string;
+  completedMonthCount: number;
+  currentMonthStartDate: string;
+  currentMonthElapsedDays: number;
+  recoveryDays: number;
+  confidence: SpendableCashConfidence;
+  state: SpendableCashTodayState;
+  drivers: FreeCashDriver[];
+  warnings: FreeCashWarning[];
+  dataStates: FinancialDataState[];
+  legacyRollingDailySurplusCents: number;
+  legacyRollingNetCents: number;
+};
+
 export type FreeCashResult = {
   freeCashTodayCents: number;
   rollingNetCents: number;
@@ -92,6 +159,7 @@ export type FreeCashResult = {
   warnings: FreeCashWarning[];
   dataStates: FinancialDataState[];
   trueBalances: AccountBalanceSummary[];
+  spendableCashToday?: SpendableCashTodayResult;
 };
 
 export type FinancialSnapshot = {
@@ -101,7 +169,7 @@ export type FinancialSnapshot = {
 };
 
 export type FinancialDataState = {
-  id: "pending-transactions";
+  id: "pending-transactions" | "low-confidence" | "missing-data";
   label: string;
   detail: string;
   amountCents: number;

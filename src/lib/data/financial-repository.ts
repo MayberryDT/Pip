@@ -208,7 +208,27 @@ function isFreeCashResult(value: unknown): value is FreeCashResult {
     Array.isArray(record.drivers) &&
     Array.isArray(record.warnings) &&
     Array.isArray(record.dataStates) &&
-    Array.isArray(record.trueBalances)
+    Array.isArray(record.trueBalances) &&
+    (record.spendableCashToday === undefined || isSpendableCashTodayResult(record.spendableCashToday))
+  );
+}
+
+function isSpendableCashTodayResult(value: unknown): boolean {
+  const record = asRecord(value);
+
+  return Boolean(
+    record &&
+      record.metricVersion === "v2" &&
+      typeof record.spendableCashTodayCents === "number" &&
+      typeof record.shortfallCents === "number" &&
+      typeof record.baselineDailyAllowanceCents === "number" &&
+      typeof record.behaviorAdjustmentCents === "number" &&
+      typeof record.cashRealityAdjustmentCents === "number" &&
+      typeof record.state === "string" &&
+      typeof record.confidence === "string" &&
+      Array.isArray(record.drivers) &&
+      Array.isArray(record.warnings) &&
+      Array.isArray(record.dataStates),
   );
 }
 

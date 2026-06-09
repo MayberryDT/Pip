@@ -68,7 +68,7 @@ export async function getCurrentFreeCashResult(input: {
 
   const cachedResult = await loadCachedFreeCashResultForUser(supabase, user.id);
 
-  if (cachedResult) {
+  if (cachedResult?.spendableCashToday) {
     return cachedResult;
   }
 

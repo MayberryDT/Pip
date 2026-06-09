@@ -135,6 +135,21 @@ export const agentEvalCases = [
     expectedCards: ["spendable_cash_forecast"],
   },
   {
+    id: "duplicate-why-followup",
+    description: "Vague repeated why follow-up should not repeat the same explanation card by default.",
+    message: "why?",
+    history: [
+      { role: "user", content: "Why this number?" },
+      { role: "assistant", content: "I found the main drivers behind today's number." },
+    ],
+    recentCardTypes: ["free_cash_explanation"],
+    recentToolNames: ["get_free_cash_drivers"],
+    previousAssistantMessage: "I found the main drivers behind today's number.",
+    forbiddenCards: ["free_cash_explanation"],
+    forbiddenAdjacentSameTools: ["get_free_cash_drivers"],
+    expectNoRepeatedAssistantMessage: true,
+  },
+  {
     id: "subscriptions",
     description: "Subscription prompt should use recurring activity detection.",
     message: "Do I have any subscriptions coming up?",
@@ -248,6 +263,31 @@ function wordCount(text) {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
+function normalizeText(text) {
+  return String(text ?? "")
+    .toLowerCase()
+    .replace(/[?!.]+$/g, "")
+    .replace(/[^a-z0-9$.\s-]/g, " ")
+    .replace(/\$?\d+(?:\.\d+)?/g, "$amount")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function similarity(left, right) {
+  const stopWords = new Set(["a", "an", "and", "are", "as", "at", "for", "i", "is", "it", "me", "my", "of", "on", "or", "that", "the", "this", "to", "with", "you", "your"]);
+  const leftTokens = normalizeText(left).split(/\s+/).filter((token) => token.length > 2 && !stopWords.has(token));
+  const rightTokens = normalizeText(right).split(/\s+/).filter((token) => token.length > 2 && !stopWords.has(token));
+
+  if (leftTokens.length === 0 || rightTokens.length === 0) return 0;
+
+  const leftSet = new Set(leftTokens);
+  const rightSet = new Set(rightTokens);
+  const intersection = [...leftSet].filter((token) => rightSet.has(token)).length;
+  const union = new Set([...leftSet, ...rightSet]).size;
+
+  return intersection / union;
+}
+
 function includesAny(values, wanted) {
   return wanted.some((value) => values.includes(value));
 }
@@ -325,6 +365,39 @@ function validatePromptChips({ promptChips, failures }) {
   }
 }
 
+function chipSetKey(chips) {
+  return asArray(chips)
+    .map((chip) => normalizeText(`${chip?.label ?? ""}|${chip?.prompt ?? ""}`))
+    .filter(Boolean)
+    .sort()
+    .join("||");
+}
+
+function validateConversationProgression({ caseDef, message, usedTools, promptChips, failures }) {
+  if (caseDef.expectNoRepeatedAssistantMessage && caseDef.previousAssistantMessage) {
+    const overlap = similarity(message, caseDef.previousAssistantMessage);
+
+    if (normalizeText(message) === normalizeText(caseDef.previousAssistantMessage) || overlap >= 0.82) {
+      failures.push(`assistant message repeats the previous answer (${overlap.toFixed(2)} similarity).`);
+    }
+  }
+
+  if (caseDef.expectNoRepeatedChipSet && asArray(caseDef.previousPromptChips).length > 0) {
+    const previousKey = chipSetKey(caseDef.previousPromptChips);
+    const nextKey = chipSetKey(promptChips);
+
+    if (previousKey && previousKey === nextKey) {
+      failures.push("prompt chips repeat the previous chip set.");
+    }
+  }
+
+  for (const toolName of asArray(caseDef.forbiddenAdjacentSameTools)) {
+    if (asArray(caseDef.recentToolNames).at(-1) === toolName && usedTools.includes(toolName)) {
+      failures.push(`adjacent same-tool loop: ${toolName}`);
+    }
+  }
+}
+
 export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, httpOk = true, error = null }) {
   const failures = [];
   const message = getResponseMessage(response);
@@ -355,6 +428,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     failures.push("assistant message ends with a follow-up question after returning a card.");
   }
   validatePromptChips({ promptChips, failures });
+  validateConversationProgression({ caseDef, message, usedTools, promptChips, failures });
 
   for (const toolName of asArray(caseDef.expectedTools)) {
     if (!usedTools.includes(toolName)) {
@@ -424,6 +498,7 @@ function buildRequestBody(caseDef, conversationId) {
           type,
         })),
       lastToolNames: providedState.lastToolNames ?? caseDef.recentToolNames ?? [],
+      promptChips: providedState.promptChips ?? caseDef.previousPromptChips ?? [],
     },
     conversationId,
   };

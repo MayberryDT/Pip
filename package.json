@@ -18,7 +18,8 @@
     "check:netlify-bundle": "node scripts/check-netlify-bundle.mjs",
     "check:prd-complete": "node scripts/check-prd-complete.mjs",
     "deploy:netlify": "node scripts/safe-netlify-deploy.mjs",
-    "eval:agent": "node scripts/eval-agent.mjs"
+    "eval:agent": "node scripts/eval-agent.mjs",
+    "analyze:agent-conversations": "node scripts/analyze-agent-conversations.mjs"
   },
   "dependencies": {
     "@openai/agents": "^0.11.6",
