@@ -6,7 +6,7 @@ import {
   type RunAiAgentInput,
 } from "@/lib/agent/ai-agent";
 import { getOnboardingPromptChips } from "@/lib/agent/suggested-prompts";
-import { runAgentTool } from "@/lib/agent/tool-runner";
+import { buildFinancialGuidanceToolResult, runAgentTool } from "@/lib/agent/tool-runner";
 import { fakeSnapshot } from "@/lib/fake-data";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
 import { formatMoney } from "@/lib/money";
@@ -102,6 +102,10 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     });
   }
 
+  if (amountCents === null && isFinancialGuidancePrompt(normalized)) {
+    return guidanceResponse(input);
+  }
+
   if (isSpendingPrompt(normalized)) {
     if (amountCents === null) {
       if (/\b(any|money|at all|negative)\b/.test(normalized)) {
@@ -117,7 +121,9 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
       });
     }
 
-    return toolResponse(input, "simulate_purchase", { amount_cents: amountCents });
+    return toolResponse(input, "simulate_purchase", { amount_cents: amountCents }, {
+      includeGuidance: isJudgmentalPurchasePrompt(normalized),
+    });
   }
 
   if (isShortPurchaseFollowUp(normalized, input.history) && amountCents !== null) {
@@ -226,6 +232,9 @@ function toolResponse(
   input: RunAiAgentInput,
   toolName: Parameters<typeof runAgentTool>[0],
   args: unknown,
+  options: {
+    includeGuidance?: boolean;
+  } = {},
 ): AgentResponse {
   const snapshot = input.snapshot ?? fakeSnapshot;
   const response = runAgentTool(toolName, args, snapshot);
@@ -240,24 +249,114 @@ function toolResponse(
     define_spendable_cash: "get_spendable_cash_definition",
     show_pattern_assumptions: "get_pattern_assumptions",
     show_recent_spending_pressure: "get_recent_spending_pressure",
+    get_financial_guidance_context: "get_financial_guidance_context",
     detect_missing_card: "get_data_quality",
     show_math: "get_free_cash_math",
     compose_insight_card: "compose_insight_card",
     answer_unrelated: "answer_unrelated",
   } satisfies Record<Parameters<typeof runAgentTool>[0], string>;
-  const usedTools = [toolNameByRunner[toolName]];
+  const usedTools = options.includeGuidance
+    ? [toolNameByRunner[toolName], "get_financial_guidance_context"]
+    : [toolNameByRunner[toolName]];
+  const guidanceContext = options.includeGuidance
+    ? buildFinancialGuidanceToolResult(snapshot).context
+    : null;
 
   return {
     ...response,
-    message: createToolMessage(response),
+    message: options.includeGuidance
+      ? `${createToolMessage(response)} My read: keep it under today's number unless it matters.`
+      : createToolMessage(response),
     usedTools,
+    responseMode: options.includeGuidance ? response.responseMode : response.responseMode,
     audit: {
       toolNames: usedTools,
       usedModel: true,
       model: FREE_CASH_AI_MODEL,
       transport: getFreeCashAiTransport(),
+      guidance: guidanceContext
+        ? {
+            validationOutcome: "context_built",
+            metricVersion: "v2",
+            state: guidanceContext.currentRead.state,
+            confidence: guidanceContext.currentRead.confidence,
+            evidenceIds: guidanceContext.evidence.map((evidence) => evidence.id),
+            spendableCashTodayCents: guidanceContext.currentRead.spendableCashTodayCents,
+            shortfallCents: guidanceContext.currentRead.shortfallCents,
+            baselineDailyAllowanceCents: guidanceContext.pattern.baselineDailyAllowanceCents,
+            behaviorAdjustmentCents: guidanceContext.behavior.behaviorAdjustmentCents,
+            cashRealityAdjustmentCents: guidanceContext.cash.cashRealityAdjustmentCents,
+            currentMonthVarianceCents: guidanceContext.behavior.currentMonthVarianceCents,
+          }
+        : undefined,
     },
   };
+}
+
+function guidanceResponse(input: RunAiAgentInput): AgentResponse {
+  const snapshot = input.snapshot ?? fakeSnapshot;
+  const guidance = buildFinancialGuidanceToolResult(snapshot).context;
+  const evidenceIds = guidance.evidence.map((evidence) => evidence.id);
+  const hot = evidenceIds.includes("recent-spending-hot");
+  const shortfall = guidance.currentRead.state === "shortfall";
+  const card: AgentResponse["cards"][number] = {
+    type: "guidance_card",
+    title: "My read",
+    stance: shortfall ? "shortfall" : hot ? "watch" : "stable",
+    summary: shortfall
+      ? "There is no extra room today, so optional spending adds pressure."
+      : hot
+        ? "You are not in crisis, but recent spending is running hot."
+        : "You look steady, with bills and savings already held back.",
+    rows: [
+      {
+        label: hot ? "Main pressure" : "Today",
+        detail: hot
+          ? "Recent everyday spending is ahead of pace."
+          : "The read is based on today's Spendable Cash evidence.",
+        tone: hot ? "warning" : "neutral",
+        evidenceIds: hot ? ["recent-spending-hot"] : ["spendable-today"],
+      },
+      {
+        label: "Why it matters",
+        detail: "Bills, savings, and cash reality are already reflected.",
+        tone: "neutral",
+        evidenceIds: ["bills-held-back", "protected-savings"],
+      },
+    ],
+  };
+  const usedTools = ["get_financial_guidance_context"];
+
+  return baseResponse(input, {
+    message: hot
+      ? "My read: you are okay, but recent spending is running hot."
+      : "My read: you look steady, with the main holds already counted.",
+    cards: [card],
+    usedTools,
+    responseMode: "guidance",
+    audit: {
+      toolNames: usedTools,
+      usedModel: true,
+      model: FREE_CASH_AI_MODEL,
+      transport: getFreeCashAiTransport(),
+      guidance: {
+        validationOutcome: "shown",
+        metricVersion: "v2",
+        state: guidance.currentRead.state,
+        confidence: guidance.currentRead.confidence,
+        stance: card.type === "guidance_card" ? card.stance : undefined,
+        evidenceIds: card.type === "guidance_card"
+          ? [...new Set(card.rows.flatMap((row) => row.evidenceIds))]
+          : evidenceIds,
+        spendableCashTodayCents: guidance.currentRead.spendableCashTodayCents,
+        shortfallCents: guidance.currentRead.shortfallCents,
+        baselineDailyAllowanceCents: guidance.pattern.baselineDailyAllowanceCents,
+        behaviorAdjustmentCents: guidance.behavior.behaviorAdjustmentCents,
+        cashRealityAdjustmentCents: guidance.cash.cashRealityAdjustmentCents,
+        currentMonthVarianceCents: guidance.behavior.currentMonthVarianceCents,
+      },
+    },
+  });
 }
 
 function baseResponse(
@@ -289,11 +388,11 @@ function createToolMessage(response: AgentResponse): string {
   const card = response.cards[0];
 
   if (card?.type === "purchase_simulation") {
-    if (card.afterTodayCents < 0) {
-      return `You can, but it would put you ${formatMoney(Math.abs(card.afterTodayCents))} over today.`;
+    if (card.todayRemainingCents < 0) {
+      return `That would put Spendable Cash Today at ${formatMoney(card.todayRemainingCents)}.`;
     }
 
-    return `That would leave ${formatMoney(card.afterTodayCents)} for today.`;
+    return `That would leave ${formatMoney(card.todayRemainingCents)} in Spendable Cash Today.`;
   }
 
   if (card?.type === "recent_transactions") {
@@ -328,7 +427,24 @@ function createToolMessage(response: AgentResponse): string {
 }
 
 function isSpendingPrompt(normalized: string): boolean {
-  return /\b(spend|buy|purchase|order|afford|pay|cost)\b/.test(normalized);
+  return /\b(spend(?:ing)?|buy(?:ing)?|purchase|purchasing|order(?:ing)?|afford|pay(?:ing)?|cost)\b/.test(normalized);
+}
+
+function isFinancialGuidancePrompt(normalized: string): boolean {
+  return (
+    /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|is my spending bad|am i broke|why am i broke|i'?m broke|in trouble|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized) ||
+    /\bwhy\b.{0,40}\b(can'?t|cannot|cant)\b.{0,40}\bspend\b/.test(normalized)
+  );
+}
+
+function isJudgmentalPurchasePrompt(normalized: string): boolean {
+  return (
+    isSpendingPrompt(normalized) &&
+    (
+      /\b(should i|would you|what would you do|do you think|is this okay|is this ok|is this bad|is this dumb|can i|could i)\b/.test(normalized) ||
+      /\bwhy\b.{0,40}\b(can'?t|cannot|cant)\b.{0,40}\bspend\b/.test(normalized)
+    )
+  );
 }
 
 function isPaydayImpactPrompt(normalized: string): boolean {
@@ -357,13 +473,61 @@ function isShortPurchaseFollowUp(
 }
 
 function extractDollarAmount(message: string): number | null {
-  const match = message.match(/\$?\s*(\d+(?:\.\d{1,2})?)/);
+  const candidates: Array<{ amountCents: number; index: number; score: number }> = [];
+  const amountPattern =
+    /(?:\$|usd\s*)\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)|(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)/gi;
+  const normalized = message.toLowerCase();
 
-  if (!match) {
+  for (const match of message.matchAll(amountPattern)) {
+    const rawAmount = match[1] ?? match[2];
+    const amount = Number(rawAmount.replaceAll(",", ""));
+
+    if (!Number.isFinite(amount)) {
+      continue;
+    }
+
+    candidates.push({
+      amountCents: Math.round(amount * 100),
+      index: match.index ?? 0,
+      score: scorePurchaseAmountCandidate(normalized, match.index ?? 0),
+    });
+  }
+
+  if (candidates.length === 0) {
     return null;
   }
 
-  return Math.round(Number.parseFloat(match[1]) * 100);
+  candidates.sort((left, right) => right.score - left.score || right.index - left.index);
+
+  return candidates[0]?.amountCents ?? null;
+}
+
+function scorePurchaseAmountCandidate(message: string, index: number): number {
+  const before = message.slice(Math.max(0, index - 56), index);
+  const after = message.slice(index, index + 56);
+  let score = 0;
+
+  if (/\b(spend(?:ing)?|buy(?:ing)?|purchase|purchasing|order(?:ing)?|afford|pay(?:ing)?|cost)\b/.test(before)) {
+    score += 8;
+  }
+
+  if (/\b(what about|how about|instead|rather|does|do to|leave|would)\b/.test(before)) {
+    score += 5;
+  }
+
+  if (/\b(spend(?:ing)?|buy(?:ing)?|purchase|purchasing|order(?:ing)?|afford|pay(?:ing)?|cost|instead|today)\b/.test(after)) {
+    score += 3;
+  }
+
+  if (/\b(balance|checking|paycheck|income|deposit|have|left)\b/.test(before)) {
+    score -= 4;
+  }
+
+  if (/\b(balance|checking|paycheck|income|deposit)\b/.test(after)) {
+    score -= 4;
+  }
+
+  return score;
 }
 
 function extractForecastHorizonDays(message: string): number {

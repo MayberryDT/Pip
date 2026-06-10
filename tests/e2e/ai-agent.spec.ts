@@ -7,9 +7,9 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await page.goto("/");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
-  await expect(page.getByRole("button", { name: "What does my $43 mean?" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Why is it $43 today?" })).toBeVisible();
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByRole("button", { name: "What does my $104 mean?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Why is it $104 today?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Teach me a money basic" })).toBeVisible();
   await expect(page.getByText("Why this number?")).toHaveCount(0);
   await expect(page.getByText("Can I spend $50?")).toHaveCount(0);
@@ -28,7 +28,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByRole("button", { name: "Show recent charges" })).toBeVisible();
   await expect(page.getByRole("button", { name: "What bills are coming up?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Show how the math works" })).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
 
   const [recentChargeChipResponse] = await Promise.all([
     waitForAgentResponse(page),
@@ -41,7 +41,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByText("Basecamp Market")).toBeVisible();
   await expect(page.getByRole("button", { name: "Show the biggest drivers" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Show my spending breakdown" })).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
 
   await input.fill("Can I spend $50?");
   const [chipResponse] = await Promise.all([
@@ -53,9 +53,10 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   expect(chipJson.audit.usedModel).toBe(true);
 
   await expect(page.getByRole("heading", { name: "Purchase simulation" })).toBeVisible();
-  await expect(page.getByText("You can, but it would put you $7 over today.")).toBeVisible();
+  await expect(page.getByText("That would leave $54 in Spendable Cash Today.")).toBeVisible();
+  await expect(page.getByText("Today room left")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Why this number changed" })).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
 
   await input.fill("What about $20 instead?");
   const [followUpResponse] = await Promise.all([
@@ -69,9 +70,9 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
     type: "purchase_simulation",
     amountCents: 2000,
   });
-  await expect(page.getByText("That leaves $23 of today's room. Your V2 daily room stays about $43.")).toBeVisible();
+  await expect(page.getByText("That would leave $84 in Spendable Cash Today.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Purchase simulation" })).toHaveCount(2);
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
 
   await input.fill("Show true balances");
   const [balancesResponse] = await Promise.all([
@@ -84,7 +85,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByRole("heading", { name: "True balances" })).toBeVisible();
   await expect(page.getByText("Everyday Checking")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Purchase simulation" })).toHaveCount(2);
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
 
   await input.fill("Show recent transactions");
   const [transactionsResponse] = await Promise.all([
@@ -97,7 +98,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByRole("heading", { name: "Recent transactions" })).toHaveCount(2);
   await expect(page.getByText("Basecamp Market")).toHaveCount(2);
   await expect(page.getByRole("heading", { name: "True balances" })).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
 
   await input.fill("Show the math");
   const [mathResponse] = await Promise.all([
@@ -110,7 +111,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByRole("heading", { name: "Math breakdown" })).toBeVisible();
   await expect(page.getByText("Rolling net")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Recent transactions" })).toHaveCount(2);
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
 
   await input.fill("Is a card missing?");
   const [missingCardResponse] = await Promise.all([
@@ -123,7 +124,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByRole("heading", { name: "Possible missing card" })).toBeVisible();
   await expect(page.getByText("I see a payment to Capital One")).toHaveCount(2);
   await expect(page.getByRole("heading", { name: "Math breakdown" })).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
 });
 
 test("mobile viewport keeps the one-number layout from overlapping or overflowing", async ({
@@ -137,11 +138,12 @@ test("mobile viewport keeps the one-number layout from overlapping or overflowin
   await page.goto("/");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
   await expectNoDocumentHorizontalOverflow(page);
   await expectMobileRegionsToStack(page);
   await expectElementHorizontallyInsideViewport(page, page.getByTestId("free-cash-number"));
   await expectElementHorizontallyInsideViewport(page, page.getByTestId("agent-input"));
+  await expectChatChromePinned(page);
 
   await page.getByLabel("Ask Pip").fill("Why this number?");
   const [whyResponse] = await Promise.all([
@@ -155,6 +157,7 @@ test("mobile viewport keeps the one-number layout from overlapping or overflowin
   await expectNoDocumentHorizontalOverflow(page);
   await expectMobileRegionsToStack(page);
   await expectVisibleElementAboveInput(page, page.getByRole("heading", { name: "Why this number changed" }));
+  await expectChatChromePinned(page);
 
   await page.getByLabel("Ask Pip").fill("Show true balances");
   const [balancesResponse] = await Promise.all([
@@ -168,6 +171,12 @@ test("mobile viewport keeps the one-number layout from overlapping or overflowin
   await expectNoDocumentHorizontalOverflow(page);
   await expectMobileRegionsToStack(page);
   await expectVisibleElementAboveInput(page, page.getByRole("heading", { name: "True balances" }));
+  await page.evaluate(() => window.scrollTo(0, 1000));
+  await expectChatChromePinned(page);
+  await page.getByTestId("agent-thread").evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expectChatChromePinned(page);
 });
 
 test("chat send feels responsive while the agent is thinking", async ({ page }) => {
@@ -214,12 +223,13 @@ test("chat send feels responsive while the agent is thinking", async ({ page }) 
   await page.getByRole("button", { name: "Send" }).click();
 
   await expect(page.getByText("hi", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Ask Pip")).not.toBeFocused();
+  await expect(page.getByLabel("Ask Pip")).toBeFocused();
+  await expect(page.getByLabel("Ask Pip")).toHaveValue("");
   await expect(page.getByTestId("agent-thinking")).toBeVisible();
   await expectHeaderToBeCompact(page);
   await responsePromise;
   await expect(page.getByTestId("agent-thinking")).toBeHidden();
-  await expect(page.getByLabel("Ask Pip")).not.toBeFocused();
+  await expect(page.getByLabel("Ask Pip")).toBeFocused();
   await expect(page.getByText("Hi. Ask me about Spendable Cash Today or setup.")).toBeVisible();
 });
 
@@ -300,7 +310,7 @@ test("dev test onboarding walks a fresh local user through setup", async ({ page
   await expect(page.getByTestId("free-cash-number")).toHaveText("$--");
 
   await page.getByRole("button", { name: "Connect data" }).click();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$43");
+  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
   await expect(page.getByText("Hi, I’m Pip. I’ll show what’s actually spendable today.")).toBeVisible();
 });
 
@@ -688,12 +698,12 @@ function createMockAgentResponse(
       promptChips: [
         {
           id: "ai-what-number-means",
-          label: "What does my $43 mean?",
+          label: "What does my $104 mean?",
           prompt: "What does my Spendable Cash Today number mean?",
         },
         {
           id: "ai-why-today",
-          label: "Why is it $43 today?",
+          label: "Why is it $104 today?",
           prompt: "Show the biggest drivers behind today's number",
         },
         {
@@ -758,7 +768,7 @@ function createMockAgentResponse(
         {
           type: "free_cash_explanation",
           title: "Why this number changed",
-          summary: "$43 reflects income, spending, and protected savings in the rolling window.",
+          summary: "$104 reflects income, spending, and protected savings in the rolling window.",
           drivers: [
             {
               id: "income",
@@ -872,14 +882,14 @@ function createMockAgentResponse(
   const amountMatch = userMessage.match(/\$(\d+)/);
   if (amountMatch) {
     const amountCents = Number(amountMatch[1]) * 100;
-    const afterTodayCents = 4300;
-    const todayRemainingCents = 4300 - amountCents;
-    const todayOverageCents = Math.max(0, amountCents - 4300);
+    const afterTodayCents = 10400;
+    const todayRemainingCents = 10400 - amountCents;
+    const todayOverageCents = Math.max(0, amountCents - 10400);
 
     return baseAgentResponse({
       message: todayOverageCents > 0
-        ? `That is ${formatTestMoney(todayOverageCents)} over today's room. The V2 daily room after would be ${formatTestMoney(afterTodayCents)}.`
-        : `That leaves ${formatTestMoney(todayRemainingCents)} of today's room. Your V2 daily room stays about ${formatTestMoney(4300)}.`,
+        ? `That would put Spendable Cash Today at ${formatTestMoney(todayRemainingCents)}.`
+        : `That would leave ${formatTestMoney(todayRemainingCents)} in Spendable Cash Today.`,
       usedTools: ["simulate_purchase"],
       responseMode: "show_card",
       cards: [
@@ -887,7 +897,7 @@ function createMockAgentResponse(
           type: "purchase_simulation",
           title: "Purchase simulation",
           amountCents,
-          beforeCents: 4300,
+          beforeCents: 10400,
           todayRemainingCents,
           todayOverageCents,
           afterTodayCents,
@@ -908,7 +918,7 @@ function createMockAgentResponse(
 function baseAgentResponse(input: {
   message: string;
   usedTools: string[];
-  responseMode: "chat_only" | "show_card" | "update_context" | "clarify";
+  responseMode: "chat_only" | "show_card" | "update_context" | "clarify" | "guidance";
   cards: unknown[];
   clientAction?: unknown;
   promptChips?: unknown[];
@@ -984,6 +994,24 @@ async function expectVisibleElementAboveInput(page: Page, locator: ReturnType<Pa
       return element.bottom - chips.top;
     })
     .toBeLessThanOrEqual(1);
+}
+
+async function expectChatChromePinned(page: Page) {
+  const viewport = page.viewportSize();
+
+  if (!viewport) {
+    throw new Error("Expected Playwright viewport to be configured.");
+  }
+
+  await expect.poll(async () => page.evaluate(() => window.scrollY)).toBe(0);
+  await expect(page.getByTestId("free-cash-number")).toBeInViewport();
+  await expect(page.getByTestId("agent-input")).toBeInViewport();
+
+  const number = await requiredBox(page.getByTestId("free-cash-number"));
+  const input = await requiredBox(page.getByTestId("agent-input"));
+
+  expect(number.top).toBeGreaterThanOrEqual(-1);
+  expect(input.bottom).toBeLessThanOrEqual(viewport.height + 1);
 }
 
 async function expectHeaderToBeCompact(page: Page) {

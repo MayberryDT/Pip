@@ -81,12 +81,30 @@ export function composeAgentVisibleAnswer(
     };
   }
 
+  if (isFriendlySmallTalkPrompt(input.userMessage) && input.cards.length === 0 && input.usedTools.length === 0) {
+    return {
+      message: "I’m here with you. Ask me a money question or test a specific purchase amount.",
+      answerPatternId: "friendly-small-talk",
+      repeatedMessage: modelRepeated,
+      repetitionAdjusted: false,
+    };
+  }
+
   const deterministicNoCardAnswer = composeDeterministicNoCardAnswer(input);
 
   if (deterministicNoCardAnswer) {
     return {
       message: deterministicNoCardAnswer.message,
       answerPatternId: deterministicNoCardAnswer.answerPatternId,
+      repeatedMessage: modelRepeated,
+      repetitionAdjusted: false,
+    };
+  }
+
+  if (input.cards[0]?.type === "guidance_card") {
+    return {
+      message: modelMessage,
+      answerPatternId: "guidance-model",
       repeatedMessage: modelRepeated,
       repetitionAdjusted: false,
     };
@@ -178,20 +196,13 @@ function composeCardBackedAnswer(
 
       if (card.todayOverageCents > 0) {
         return {
-          message: `That is ${formatMoney(card.todayOverageCents)} over today's room. The V2 daily room after would be ${formatMoney(card.afterTodayCents)}.`,
-          answerPatternId: "purchase-simulation",
-        };
-      }
-
-      if (card.dailyEffectCents && card.dailyEffectCents < 0) {
-        return {
-          message: `That leaves ${formatMoney(card.todayRemainingCents)} of today's room and lowers your V2 daily room by ${formatMoney(Math.abs(card.dailyEffectCents))}.`,
+          message: `That would put Spendable Cash Today at ${formatMoney(card.todayRemainingCents)}.`,
           answerPatternId: "purchase-simulation",
         };
       }
 
       return {
-        message: `That leaves ${formatMoney(card.todayRemainingCents)} of today's room. Your V2 daily room stays about ${formatMoney(card.afterTodayCents)}.`,
+        message: `That would leave ${formatMoney(card.todayRemainingCents)} in Spendable Cash Today.`,
         answerPatternId: "purchase-simulation",
       };
     case "true_balances":
@@ -236,6 +247,8 @@ function composeCardBackedAnswer(
         message: `I built a short summary for ${card.title.toLowerCase()}.`,
         answerPatternId: "insight-card",
       };
+    case "guidance_card":
+      return null;
     case "connect_account":
       return {
         message: "I checked the connection state.",
@@ -275,6 +288,13 @@ function isGreetingPrompt(message: string): boolean {
   return /^(hi|hello|hey|yo|sup|good morning|good afternoon|good evening)$/i.test(message.trim());
 }
 
+function isFriendlySmallTalkPrompt(message: string): boolean {
+  const normalized = message.toLowerCase().replace(/[\u2018\u2019]/g, "'").trim();
+
+  return /\b(i love you|love you|love u|luv you)\b/.test(normalized) ||
+    /\b(why are you so cute|you're cute|you are cute|you('re| are)? so cute)\b/.test(normalized);
+}
+
 function composeDeterministicNoCardAnswer(
   input: ComposeAgentVisibleAnswerInput,
 ): { message: string; answerPatternId: string } | null {
@@ -309,6 +329,13 @@ function composeDeterministicNoCardAnswer(
     };
   }
 
+  if (input.usedTools.length === 0 && isMoneyBasicPrompt(input.userMessage)) {
+    return {
+      message: "One useful money basic: separate bills, needs, and fun money before you spend. A small planned amount beats guessing.",
+      answerPatternId: "money-basic",
+    };
+  }
+
   if (isCreditCardDiscussion(input.userMessage) && input.usedTools.length === 0) {
     return {
       message: "I can help with credit cards. We can talk through payoff timing, card use, or how a specific purchase would affect today.",
@@ -326,6 +353,16 @@ function getSpendableCents(result: FreeCashResult): number {
 function isCreditCardDiscussion(message: string): boolean {
   return /\bcredit cards?\b|\bcards?\b/.test(message.toLowerCase()) &&
     !/\b(show|list|pull|view|transactions?|charges?|payments?|breakdown)\b/.test(message.toLowerCase());
+}
+
+function isMoneyBasicPrompt(message: string): boolean {
+  const normalized = message.toLowerCase();
+
+  return /\b(teach me|money basic|useful basic|learn|tip|tips|spending tips|how to spend|teach me something)\b/.test(normalized) &&
+    (
+      /\b(money|spend|spending|cash|budget|finance|financial|basic|something)\b/.test(normalized) ||
+      normalized.trim() === "teach me something"
+    );
 }
 
 function getRepetitionAdjustedMessage(
@@ -349,6 +386,8 @@ function getRepetitionAdjustedMessage(
       return "I grouped the flows again, and the next chips can narrow the view.";
     case "math_breakdown":
       return "I checked the math again, and the next chips can explain the drivers.";
+    case "guidance_card":
+      return "I checked the read again and kept it tied to the same evidence.";
     default:
       return "I checked that again and kept the next steps focused on a different angle.";
   }

@@ -12,6 +12,7 @@ import {
   buildSpendableCashForecast,
   buildSpendingBreakdown,
 } from "@/lib/free-cash/insights";
+import { buildFinancialGuidanceContext } from "@/lib/free-cash/guidance-context";
 import { fakeSnapshot } from "@/lib/fake-data";
 import { formatMoney } from "@/lib/money";
 import type { FinancialSnapshot } from "@/lib/types";
@@ -24,6 +25,7 @@ export const agentToolNames = [
   "show_spending_breakdown",
   "show_recurring_activity",
   "show_spendable_cash_forecast",
+  "get_financial_guidance_context",
   "define_spendable_cash",
   "show_pattern_assumptions",
   "show_recent_spending_pressure",
@@ -34,6 +36,16 @@ export const agentToolNames = [
 ] as const;
 
 export type AgentToolName = (typeof agentToolNames)[number];
+
+export function buildFinancialGuidanceToolResult(snapshot: FinancialSnapshot) {
+  const result = calculateFreeCash(snapshot);
+
+  return {
+    context: buildFinancialGuidanceContext(result),
+    suggestedPrompts: getSuggestedPrompts(result),
+    availableCards: [],
+  };
+}
 
 const simulatePurchaseArgsSchema = z.object({
   amount_cents: z.number().int().positive().max(1000000),
@@ -80,6 +92,9 @@ export function runAgentTool(
       const args = forecastArgsSchema.parse(rawArgs ?? {});
       return showSpendableCashForecast(args.horizon_days, snapshot);
     }
+    case "get_financial_guidance_context":
+      emptyArgsSchema.parse(rawArgs ?? {});
+      return getFinancialGuidanceContext(snapshot);
     case "define_spendable_cash":
       emptyArgsSchema.parse(rawArgs ?? {});
       return defineSpendableCash(snapshot);
@@ -294,6 +309,17 @@ function showSpendableCashForecast(
     cards,
     promptChips: getSuggestedPrompts(result),
     ...baseResponse("show_spendable_cash_forecast", cards),
+  };
+}
+
+function getFinancialGuidanceContext(snapshot: FinancialSnapshot): AgentResponse {
+  const toolResult = buildFinancialGuidanceToolResult(snapshot);
+
+  return {
+    message: "",
+    cards: [],
+    promptChips: toolResult.suggestedPrompts,
+    ...baseResponse("get_financial_guidance_context", []),
   };
 }
 

@@ -19,6 +19,7 @@ export type ConversationJob =
   | "math"
   | "true_balances"
   | "data_quality"
+  | "financial_guidance"
   | "definition"
   | "setup"
   | "broad_chat"
@@ -68,6 +69,7 @@ export type ConversationStateSummary = {
 const cardJobByType: Partial<Record<AgentCard["type"], ConversationJob>> = {
   free_cash_explanation: "explain_number",
   insight_card: "explain_number",
+  guidance_card: "financial_guidance",
   purchase_simulation: "purchase_test",
   spendable_cash_forecast: "forecast",
   recurring_activity: "recurring_activity",
@@ -81,6 +83,7 @@ const cardJobByType: Partial<Record<AgentCard["type"], ConversationJob>> = {
 
 const toolJobByName: Record<string, ConversationJob> = {
   get_free_cash_snapshot: "explain_number",
+  get_financial_guidance_context: "financial_guidance",
   get_free_cash_drivers: "explain_number",
   compose_insight_card: "explain_number",
   get_pattern_assumptions: "explain_number",
@@ -225,6 +228,10 @@ export function inferConversationJob(
     return "purchase_test";
   }
 
+  if (isFinancialGuidancePrompt(normalized)) {
+    return "financial_guidance";
+  }
+
   if (isDefinitionPrompt(normalized)) {
     return "definition";
   }
@@ -357,6 +364,10 @@ function isPurchasePrompt(normalized: string, history: ConversationHistoryItem[]
   return (history ?? [])
     .slice(-4)
     .some((item) => item.role === "user" && /\b(spend|buy|purchase|order|afford|pay|cost)\b/.test(normalizeText(item.content)));
+}
+
+function isFinancialGuidancePrompt(normalized: string): boolean {
+  return /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|am i broke|why am i broke|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized);
 }
 
 function isDefinitionPrompt(normalized: string): boolean {

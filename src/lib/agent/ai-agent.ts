@@ -8,6 +8,9 @@ import type {
   PromptChip,
 } from "@/lib/agent/card-types";
 import {
+  validateGuidanceCardDraft,
+} from "@/lib/agent/guidance-card";
+import {
   agentFinalOutputSchema,
   agentMessageMaxChars,
   agentResponseSchema,
@@ -25,11 +28,12 @@ import {
   planPromptChips,
   type PromptChipPlan,
 } from "@/lib/agent/prompt-chip-planner";
-import { runAgentTool } from "@/lib/agent/tool-runner";
+import { buildFinancialGuidanceToolResult, runAgentTool } from "@/lib/agent/tool-runner";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import { fakeSnapshot } from "@/lib/fake-data";
 import { calculateFreeCash } from "@/lib/free-cash/engine";
 import { summarizeFreeCash } from "@/lib/free-cash/explanation";
+import type { FinancialGuidanceContext } from "@/lib/free-cash/guidance-context";
 import {
   getDisplayedSpendableCashTodayCents,
   getSpendableCashTodayState,
@@ -41,7 +45,15 @@ export const FREE_CASH_AI_MODEL = "gpt-5-nano";
 export const NETLIFY_AI_GATEWAY_MODEL = "gpt-5-nano";
 
 type AiTransport = NonNullable<AgentResponse["audit"]["transport"]>;
-type AgentFinalOutput = z.infer<typeof agentFinalOutputSchema>;
+type RawAgentFinalOutput = z.infer<typeof agentFinalOutputSchema>;
+type AgentFinalOutput = Omit<
+  RawAgentFinalOutput,
+  "support" | "guidanceCardDraft" | "promptChips"
+> & {
+  support?: string;
+  guidanceCardDraft?: NonNullable<RawAgentFinalOutput["guidanceCardDraft"]>;
+  promptChips: PromptChip[];
+};
 
 type OpenAIClientConfig = {
   apiKey?: string;
@@ -122,6 +134,8 @@ type SpendableAgentContext = {
   usedTools: string[];
   availableCards: AgentCard[];
   availablePromptChips: PromptChip[];
+  guidanceContext?: FinancialGuidanceContext;
+  guidanceCardRejectionReason?: string;
   clientAction?: AgentClientAction;
 };
 
@@ -134,6 +148,7 @@ type DeterministicAgentToolName =
   | "request_delete_data_confirmation"
   | "delete_user_data"
   | "get_free_cash_snapshot"
+  | "get_financial_guidance_context"
   | "get_free_cash_drivers"
   | "get_spendable_cash_definition"
   | "get_pattern_assumptions"
@@ -156,7 +171,7 @@ type ForcedAgentTool = {
 };
 
 type AgentResponseRepair = {
-  reason: "invalid_final_output" | "disallowed_language" | "unsupported_promise";
+  reason: "invalid_final_output" | "invalid_guidance_card" | "disallowed_language" | "unsupported_promise";
   detail?: string;
 };
 
@@ -277,6 +292,14 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     return undefined;
   }
 
+  if (amountCents === null && isFinancialGuidancePrompt(normalized)) {
+    return {
+      toolName: "get_financial_guidance_context",
+      args: {},
+      requireCard: false,
+    };
+  }
+
   if (isGeneralSpendingQuestion(normalized) && isSpendingPrompt(normalized)) {
     return {
       toolName: "get_free_cash_snapshot",
@@ -369,7 +392,7 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     };
   }
 
-  if (isExplicitFreeCashDriversPrompt(normalized)) {
+  if (isExplicitFreeCashDriversPrompt(normalized) || isFlexibleFreeCashDriversPrompt(normalized)) {
     return {
       toolName: "get_free_cash_drivers",
       args: {},
@@ -773,6 +796,27 @@ function createSpendableTools() {
       },
     }),
     tool<typeof emptyToolParameters, SpendableAgentContext>({
+      name: "get_financial_guidance_context",
+      description:
+        "Collect Spendable Cash facts, evidence IDs, allowed domains, and blocked domains needed for a grounded financial read. This tool does not write advice or card copy.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_financial_guidance_context");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const toolResult = buildFinancialGuidanceToolResult(snapshot);
+        context.guidanceContext = toolResult.context;
+
+        return toolResult;
+      },
+    }),
+    tool<typeof emptyToolParameters, SpendableAgentContext>({
       name: "get_free_cash_drivers",
       description:
         "Get the deterministic drivers behind Spendable Cash Today and make the explanation card available. Use when the user asks why, what changed, or what is behind the number.",
@@ -883,7 +927,7 @@ function createSpendableTools() {
     tool<typeof emptyToolParameters, SpendableAgentContext>({
       name: "get_pattern_assumptions",
       description:
-        "Show the deterministic assumptions behind the V2 pattern-based Spendable Cash Today metric, including income, bills, everyday context, and confidence.",
+        "Show the deterministic assumptions behind the pattern-based Spendable Cash Today metric, including income, bills, everyday context, and confidence.",
       parameters: emptyToolParameters,
       strict: true,
       execute(_input, runContext) {
@@ -907,7 +951,7 @@ function createSpendableTools() {
     tool<typeof emptyToolParameters, SpendableAgentContext>({
       name: "get_recent_spending_pressure",
       description:
-        "Show how current-month everyday spending pace changes today's V2 Spendable Cash number.",
+        "Show how current-month everyday spending pace changes today's Spendable Cash number.",
       parameters: emptyToolParameters,
       strict: true,
       execute(_input, runContext) {
@@ -1059,22 +1103,21 @@ function createSpendableTools() {
         const response = runAgentTool("simulate_purchase", toolInput, snapshot);
         const card = response.cards[0];
         addAvailableCards(context, response.cards);
+        const guidanceContext = maybeAttachPurchaseGuidanceContext(context, snapshot);
 
         return {
           amountCents: toolInput.amount_cents,
           amount: formatMoney(toolInput.amount_cents),
           availableCards: response.cards,
           suggestedPrompts: response.promptChips,
+          guidanceContext,
           simulation:
             card?.type === "purchase_simulation"
               ? {
                   before: formatMoney(card.beforeCents),
-                  todayRemaining: formatMoney(card.todayRemainingCents),
+                  spendableCashAfterPurchase: formatMoney(card.todayRemainingCents),
                   todayOverage: formatMoney(card.todayOverageCents),
-                  afterToday: formatMoney(card.afterTodayCents),
-                  dailyEffect: card.dailyEffectCents === undefined ? undefined : formatMoney(card.dailyEffectCents),
                   shortfall: card.shortfallCents === undefined ? undefined : formatMoney(card.shortfallCents),
-                  monthlyAverageAfter: formatMoney(card.monthlyAverageAfterCents),
                 }
               : null,
         };
@@ -1252,6 +1295,13 @@ function createSpendableInstructions(runContext: {
     "Do not start financial answers with 'Spendable Cash Today is'. Start from what you found or see.",
     "This is your single-screen app with a top Spendable Cash Today number, temporary cards, prompt chips, and this chat input.",
     "Your job is to explain Spendable Cash Today and help users make simple spending decisions.",
+    "You may give a grounded financial read when the user asks what you think, asks what to do, asks how they are doing, asks about a purchase, or when guidance context shows tight, shortfall, missing-data, or low-confidence state.",
+    "Use get_financial_guidance_context before giving a read based on the user's actual finances, unless a judgmental purchase simulation already returned guidanceContext in the same turn.",
+    "For a grounded read, use evidence IDs from guidanceContext. Do not invent facts, categories, merchants, balances, bills, or dollar amounts.",
+    "You may be direct about spending pace, whether things look stable or tight, whether a purchase adds pressure, whether the savings cushion looks reasonable for now, whether bills or everyday spending are the bigger pressure, whether cash reality is limiting the number, whether data quality limits the read, and general high-interest debt priority.",
+    "You may gently disagree with the user when evidence conflicts with their assumption. Use phrases like my read, I'd treat this as, the conservative move, this adds pressure, this looks stable, this looks tight, I would be careful with that, or I would not treat that as open room.",
+    "Do not call this financial advice. Do not use canned responses, moralize, shame, or over-explain.",
+    "Do not give securities advice, crypto advice, tax advice, legal advice, bankruptcy advice, specific credit-card recommendations, specific loan recommendations, specific lender recommendations, insurance product recommendations, or instructions to skip required bills.",
     "Use Spendable Cash Today for the top daily metric. Do not say Free Cash in visible replies.",
     "There is no dashboard, dashboard page, budget page, transaction page, tab view, or separate area to send the user to.",
     "Do not mention dashboards, pages, tabs, sections, navigation, budgeting apps, expense tracking, or financial planning.",
@@ -1276,28 +1326,33 @@ function createSpendableInstructions(runContext: {
     "If the user asks what Spendable Cash Today means, how Pip works, or what makes the number rise or fall, call get_spendable_cash_definition.",
     "If the user asks what pattern, assumptions, confidence, or baseline I am using, call get_pattern_assumptions.",
     "If the user asks how recent spending affects today's number, pace, over/under pattern, or spending pressure, call get_recent_spending_pressure.",
+    "If the user asks how they are doing, what you think, what they should do, whether spending is too high, whether to lower the cushion, whether they are broke, or asks for your read, call get_financial_guidance_context.",
     "If the user asks for a trend, forecast, projection, or next-days view, call forecast_spendable_cash.",
     "If the user asks about recurring bills, subscriptions, monthly charges, or likely upcoming repeats, call get_recurring_activity.",
     "If the user asks for a complete, item, category, merchant, income, spending, refund, or card-payment breakdown, call get_spending_breakdown.",
     "Only ask for an amount when the user is clearly asking you to simulate or test a specific purchase but did not provide the amount.",
     "For general spend questions without an amount, call get_free_cash_snapshot. Explain what the number signals, but do not give a max spend limit.",
-    "For purchase simulations, answer directly from the tool result. Explain today's remaining room, the recomputed V2 daily room, and the daily effect over the recovery period. If there is a shortfall, say it adds to the shortfall; do not describe the number as a bank balance.",
+    "For purchase simulations, answer directly from the tool result. Explain Spendable Cash after the purchase as current Spendable Cash minus the purchase. Never mention internal engine version names, recomputed daily room, or daily effect in visible replies. If guidanceContext is present, also give a brief read on pressure from the purchase. If there is a shortfall, say it adds to the shortfall; do not describe the number as a bank balance.",
     "If the user asks generally whether $0 or a shortfall means they cannot spend money, use get_free_cash_snapshot and explain the signal conversationally without treating it as a purchase simulation.",
     "Spendable Cash Today floors at $0 in shortfall states. That is a warning about today's pattern and cash reality; it does not literally mean every dollar of spending is impossible.",
     "Only call get_recent_transactions when the user plainly asks to show, list, or identify transactions, charges, purchases, or recent activity.",
     "Do not call get_recent_transactions for general why, math, negative Spendable Cash Today, or can-I-spend questions.",
     "Prefer a short answer plus a structured card. For card answers, keep your sentence short and let the card carry the detail.",
-    "When a card is returned, write one short bridge sentence. Do not duplicate the card rows in chat.",
+    "When a utility card is returned, write one short bridge sentence. For guidance_card, write the read itself. Do not duplicate card rows in chat.",
     "Cards are optional. Prefer conversational explanation after the first card.",
     "Do not repeat a card whose type is listed in recent_card_types unless the user clearly asks to see that card, details, or breakdown again.",
-    "Tools create any cards. You do not emit card data or card selectors in the final answer.",
+    "Tools create utility cards. For financial reads only, you may emit guidanceCardDraft in the final structured output after get_financial_guidance_context or purchase guidanceContext was used.",
+    "For guidanceCardDraft, use title My read or a similarly short title, choose stance stable/watch/tight/shortfall/uncertain, include 1 to 3 rows, and put at least one valid evidence ID on every row.",
+    "For guidanceCardDraft evidenceIds, copy exact strings from guidanceContext.evidence[].id. Common valid ids include spendable-today, state, confidence, data_quality, baseline-room, normal-room, bills-held-back, recurring-obligations, protected-savings, hidden-cushion, recent-spending-hot, recent-spending-light, low-confidence, missing-card, missing-data, cash-guardrail, and shortfall.",
+    "Do not emit arbitrary card data or card selectors in the final answer.",
     "Do not invent card data, rows, balances, merchants, dates, or transaction details.",
     "Only say show, list, pull, view, card, trend view, forecast, or breakdown when a matching tool returned a card in this same turn.",
     "For broad personal-finance basics without a matching Pip card, teach one simple concept conversationally. Do not promise to show data.",
+    "For broad money basics, keep the answer general unless a tool was called in this same turn. Do not mention the user's current number, bills, cushion, cards, data, or say I see.",
     "Forecasts are pattern guesses only. If mentioning a forecast caveat, use one short sentence: Forecast only; not guaranteed.",
     "Do not use guarantee language except the exact forecast caveat phrase: not guaranteed.",
     "Use at most one card unless the user explicitly asks for multiple details.",
-    "Never use guaranteed-spending language, affordability claims, recommendations, or tell the user what they should buy.",
+    "Never use guaranteed-spending language, affordability claims, the phrase I recommend, or tell the user what they should buy.",
     `Never say ${["safe", "to", "spend"].join(" ")}, safe to buy, you can afford, I recommend, financial advice, or financial advisor.`,
     "Do not moralize, shame, praise, or use motivational wellness language.",
     "Do not use emojis by default.",
@@ -1308,7 +1363,8 @@ function createSpendableInstructions(runContext: {
     "Use message for the direct lead sentence. Use support only when one short extra sentence adds useful context.",
     "Use common words. Avoid formal phrases like deterministic, rolling-window pattern, liquidity, optimal, analyze, or sufficient.",
     "Never use k shorthand for money. Say $210, not $0.21k.",
-    "For card answers, let the card carry the detail. The message should only tell the user what the card is showing.",
+    "For guidance_card answers, preserve the financial read in the visible message; do not reduce it to a bridge sentence.",
+    "For other card answers, let the card carry the detail. The message should only tell the user what the card is showing.",
     "Do not end card answers with a follow-up question. Prompt chips handle next steps.",
     "Prompt chips are mostly planned by the app. Return [] unless you have a specific supplemental next step that fits this exact turn.",
     "Do not use these retired prompt chip labels: Missing card, Why today?, Test purchase, Why this number?, Can I spend $50?, What changed?",
@@ -1501,6 +1557,21 @@ function noFinancialDataToolResult(context: SpendableAgentContext) {
   };
 }
 
+function maybeAttachPurchaseGuidanceContext(
+  context: SpendableAgentContext,
+  snapshot: FinancialSnapshot,
+): FinancialGuidanceContext | undefined {
+  if (!isJudgmentalPurchasePrompt(normalizePrompt(context.inputMessage))) {
+    return undefined;
+  }
+
+  const toolResult = buildFinancialGuidanceToolResult(snapshot);
+  context.guidanceContext = toolResult.context;
+  recordTool(context, "get_financial_guidance_context");
+
+  return toolResult.context;
+}
+
 function getToolInput<T extends z.ZodTypeAny>(
   context: SpendableAgentContext,
   toolName: DeterministicAgentToolName,
@@ -1526,7 +1597,12 @@ function buildAgentResponse(
 ): AgentResponse {
   const parsed = parseAgentFinalOutput(finalOutput);
   const rawUsedTools = uniqueStrings(context.usedTools);
-  const cards = input.requestKind === "prompt_chips" ? [] : selectDeterministicCards(parsed, context, input);
+  const guidanceSelection = input.requestKind === "prompt_chips"
+    ? { card: null, rejectionReason: null }
+    : selectGuidanceCard(parsed, context);
+  const cards = input.requestKind === "prompt_chips"
+    ? []
+    : selectDeterministicCards(parsed, context, input, guidanceSelection.card);
   const usedTools = suppressVisibleRepeatedTools(rawUsedTools, cards, input);
   const result = context.snapshot ? calculateFreeCash(context.snapshot) : null;
   const promptChipPlan = selectPromptChips(parsed, context, result, {
@@ -1535,16 +1611,22 @@ function buildAgentResponse(
     usedTools,
   });
   const promptChips = promptChipPlan.chips;
+  const hasGuidanceResponse =
+    parsed.responseMode === "guidance" ||
+    cards.some((card) => card.type === "guidance_card") ||
+    usedTools.includes("get_financial_guidance_context");
   const responseMode =
     input.requestKind === "prompt_chips"
       ? "chat_only"
-      : cards.length === 0 && parsed.responseMode === "show_card"
-        ? usedTools.length > 0
-          ? "update_context"
-          : "chat_only"
-        : cards.length > 0 && context.forcedTool?.requireCard
-          ? "show_card"
-          : parsed.responseMode;
+      : hasGuidanceResponse
+        ? "guidance"
+        : cards.length === 0 && parsed.responseMode === "show_card"
+          ? usedTools.length > 0
+            ? "update_context"
+            : "chat_only"
+          : cards.length > 0 && context.forcedTool?.requireCard
+            ? "show_card"
+            : parsed.responseMode;
 
   if (input.requestKind === "prompt_chips" && promptChips.length < 3) {
     throw new AgentUnavailableError({
@@ -1587,6 +1669,7 @@ function buildAgentResponse(
       usedModel: audit.usedModel,
       model: audit.model,
       transport: audit.transport,
+      guidance: buildGuidanceAudit(context, guidanceSelection, cards),
       quality: {
         conversationJob: promptChipPlan.conversationJob,
         answerPatternId: visibleAnswer.answerPatternId,
@@ -1604,7 +1687,7 @@ function buildAgentResponse(
 
 function parseAgentFinalOutput(finalOutput: unknown): AgentFinalOutput {
   try {
-    return agentFinalOutputSchema.parse(finalOutput);
+    return normalizeAgentFinalOutput(agentFinalOutputSchema.parse(finalOutput));
   } catch (error) {
     throw new AgentUnavailableError({
       code: "model-returned-invalid-final-output",
@@ -1616,10 +1699,106 @@ function parseAgentFinalOutput(finalOutput: unknown): AgentFinalOutput {
   }
 }
 
+function normalizeAgentFinalOutput(parsed: RawAgentFinalOutput): AgentFinalOutput {
+  const support = normalizeRawSupport(parsed.support);
+
+  return {
+    message: parsed.message,
+    ...(support ? { support } : {}),
+    responseMode: parsed.responseMode,
+    ...(parsed.guidanceCardDraft ? { guidanceCardDraft: parsed.guidanceCardDraft } : {}),
+    promptChips: normalizeRawPromptChips(parsed.promptChips),
+  };
+}
+
+function normalizeRawSupport(support: RawAgentFinalOutput["support"]): string | undefined {
+  if (typeof support !== "string") {
+    return undefined;
+  }
+
+  const normalized = support.replace(/\s+/g, " ").trim();
+
+  return normalized ? normalized.slice(0, 1000) : undefined;
+}
+
+function normalizeRawPromptChips(
+  chips: RawAgentFinalOutput["promptChips"],
+): PromptChip[] {
+  return (chips ?? []).filter((chip): chip is PromptChip =>
+    typeof chip === "object" &&
+    chip !== null &&
+    "id" in chip &&
+    "label" in chip &&
+    "prompt" in chip,
+  );
+}
+
+type GuidanceCardSelection = {
+  card: Extract<AgentCard, { type: "guidance_card" }> | null;
+  rejectionReason: string | null;
+};
+
+function selectGuidanceCard(
+  parsed: AgentFinalOutput,
+  context: SpendableAgentContext,
+): GuidanceCardSelection {
+  if (!parsed.guidanceCardDraft) {
+    return {
+      card: null,
+      rejectionReason: null,
+    };
+  }
+
+  if (!context.guidanceContext) {
+    const reason = "guidance card draft was returned without guidance context";
+
+    if (context.repair?.reason === "invalid_guidance_card") {
+      context.guidanceCardRejectionReason = reason;
+      return {
+        card: null,
+        rejectionReason: reason,
+      };
+    }
+
+    throw new AgentUnavailableError({
+      code: "model-returned-invalid-guidance-card",
+      message: "AI returned an invalid guidance card.",
+      status: 502,
+      detail: reason,
+    });
+  }
+
+  const result = validateGuidanceCardDraft(parsed.guidanceCardDraft, context.guidanceContext);
+
+  if (result.ok) {
+    return {
+      card: result.card,
+      rejectionReason: null,
+    };
+  }
+
+  context.guidanceCardRejectionReason = result.reason;
+
+  if (context.repair?.reason === "invalid_guidance_card") {
+    return {
+      card: null,
+      rejectionReason: result.reason,
+    };
+  }
+
+  throw new AgentUnavailableError({
+    code: "model-returned-invalid-guidance-card",
+    message: "AI returned an invalid guidance card.",
+    status: 502,
+    detail: result.reason,
+  });
+}
+
 function selectDeterministicCards(
   parsed: AgentFinalOutput,
   context: SpendableAgentContext,
   input: RunAiAgentInput,
+  guidanceCard: Extract<AgentCard, { type: "guidance_card" }> | null = null,
 ): AgentCard[] {
   const wantsMultipleCards = explicitlyRequestsMultipleCards(input.message);
   const forcedCards =
@@ -1634,7 +1813,12 @@ function selectDeterministicCards(
         ? context.availableCards
         : context.availableCards.slice(-1)
       : [];
-  const selected = uniqueCardsByType([...forcedCards, ...fallbackCards]);
+  const guidanceCards = guidanceCard
+    ? forcedCards.length === 0 || wantsMultipleCards
+      ? [guidanceCard]
+      : []
+    : [];
+  const selected = uniqueCardsByType([...forcedCards, ...fallbackCards, ...guidanceCards]);
   const suppressExplanation =
     wasCardRecentlyShown(input.conversationState, "free_cash_explanation") &&
     !explicitlyRequestsRepeatedCard(input.message);
@@ -1644,6 +1828,48 @@ function selectDeterministicCards(
     .filter((card) => !(suppressExplanation && card.type === "free_cash_explanation"))
     .filter((card) => !(suppressTransactions && card.type === "recent_transactions"))
     .slice(0, wantsMultipleCards ? 3 : 1);
+}
+
+function buildGuidanceAudit(
+  context: SpendableAgentContext,
+  selection: GuidanceCardSelection,
+  cards: AgentCard[],
+): NonNullable<AgentResponse["audit"]["guidance"]> | undefined {
+  const guidanceContext = context.guidanceContext;
+
+  if (!guidanceContext) {
+    return undefined;
+  }
+
+  const guidanceCard = cards.find(
+    (card): card is Extract<AgentCard, { type: "guidance_card" }> => card.type === "guidance_card",
+  );
+  const evidenceIds = guidanceCard
+    ? uniqueStrings(guidanceCard.rows.flatMap((row) => row.evidenceIds))
+    : guidanceContext.evidence.map((evidence) => evidence.id);
+  const validationOutcome = guidanceCard
+    ? context.repair?.reason === "invalid_guidance_card"
+      ? "repaired"
+      : "shown"
+    : selection.rejectionReason || context.guidanceCardRejectionReason
+      ? "rejected"
+      : "context_built";
+
+  return {
+    validationOutcome,
+    metricVersion: guidanceContext.metricVersion,
+    state: guidanceContext.currentRead.state,
+    confidence: guidanceContext.currentRead.confidence,
+    stance: guidanceCard?.stance,
+    evidenceIds,
+    spendableCashTodayCents: guidanceContext.currentRead.spendableCashTodayCents,
+    shortfallCents: guidanceContext.currentRead.shortfallCents,
+    baselineDailyAllowanceCents: guidanceContext.pattern.baselineDailyAllowanceCents,
+    behaviorAdjustmentCents: guidanceContext.behavior.behaviorAdjustmentCents,
+    cashRealityAdjustmentCents: guidanceContext.cash.cashRealityAdjustmentCents,
+    currentMonthVarianceCents: guidanceContext.behavior.currentMonthVarianceCents,
+    rejectionReason: selection.rejectionReason ?? context.guidanceCardRejectionReason,
+  };
 }
 
 function selectPromptChips(
@@ -2079,7 +2305,12 @@ function repairUnsupportedCardPromiseText(message: string, detail: string): stri
       .replace(/\b(want me to|should i|can i) forecast\b/gi, "$1 talk through")
       .replace(/\bi can forecast\b/gi, "I can talk through")
       .replace(/\bshow( me)? (a )?forecast\b/gi, "talk through a possible pattern")
+      .replace(/\b(show|showing|shown|showed|pull|pulled|view)( me)?\b/gi, "talk through")
+      .replace(/\b(?:the\s+)?next\s+\d+\s*days?\b/gi, "the next stretch")
+      .replace(/\b(?:the\s+)?next\s+(few|couple of)\s+days?\b/gi, "the next stretch")
       .replace(/\bforecast\b/gi, "possible pattern")
+      .replace(/\bprojection\b/gi, "possible pattern")
+      .replace(/\bprojected\b/gi, "estimated")
       .replace(/\btrend view\b/gi, "trend")
       .replace(/\s+/g, " ")
       .trim();
@@ -2089,6 +2320,7 @@ function repairUnsupportedCardPromiseText(message: string, detail: string): stri
 
   if (detail === "breakdown promised without breakdown card") {
     const repaired = message
+      .replace(/\b(show|showing|shown|showed|pull|pulled|view|list|listed)( me)?\b/gi, "talk through")
       .replace(/\bbreak down\b/gi, "talk through")
       .replace(/\bbreakdown\b/gi, "summary")
       .replace(/\s+/g, " ")
@@ -2220,7 +2452,7 @@ function getUnsupportedCardPromise(message: string, cards: AgentCard[]): string 
     return cards.length > 0 ? null : "card promised without card";
   }
 
-  if (cards.length === 0 && /\b(show|view|pull|list)( me| you| up)?\b/.test(normalized)) {
+  if (cards.length === 0 && /\b(show|view|pull)( me| you| up)?\b/.test(normalized)) {
     return "card promised without card";
   }
 
@@ -2247,11 +2479,12 @@ function hasSpecificDisplayCapabilityPromise(normalized: string): boolean {
 }
 
 function containsDisplayPromise(normalized: string): boolean {
-  return /\b(show|showing|shown|showed|list|listed|pull|pulled|view|card|cards|here is|here are)\b/.test(normalized) ||
+  return /\b(show|showing|shown|showed|pull|pulled|view|here is|here are)\b/.test(normalized) ||
     /\btrend view\b/.test(normalized) ||
+    /\b(?:this|the|data|details?) cards?\b|\bcards?\b.{0,20}\b(?:shown|below)\b/.test(normalized) ||
     (
       /\b(breakdown|forecast|projection|projected)\b/.test(normalized) &&
-      /\b(show|showing|shown|showed|list|listed|pull|pulled|view|card|cards|here is|here are)\b/.test(normalized)
+      /\b(show|showing|shown|showed|pull|pulled|view|here is|here are)\b/.test(normalized)
     );
 }
 
@@ -2280,6 +2513,12 @@ function getDisallowedFinalLanguageDetail(message: string): string | null {
     [/\bfinancial advisor\b/, "financial advisor"],
     [/\byou should (?:buy|spend|purchase|order)\b/, "you should spend"],
     [/\byou shouldn'?t (?:buy|spend|purchase|order)\b/, "you shouldn't spend"],
+    [/\b(buy|sell|hold)\b.{0,24}\b(stocks?|shares?|etf|fund|securities?)\b/, "securities advice"],
+    [/\binvest in\b.{0,40}\b(stocks?|shares?|etf|fund|securities?|nvidia|tesla|apple|crypto|bitcoin|ethereum)\b/, "investment advice"],
+    [/\b(buy|sell|hold)\b.{0,24}\b(crypto|bitcoin|ethereum|token)\b/, "crypto advice"],
+    [/\b(open|apply for|sign up for)\b.{0,40}\b(credit card|card|loan|lender|insurance)\b/, "product advice"],
+    [/\b(take|choose|get)\b.{0,28}\b(personal loan|payday loan|balance transfer card)\b/, "product advice"],
+    [/\b(refinance with|file bankruptcy|skip rent|write this off)\b/, "blocked domain advice"],
     [/\bdashboard\b/, "dashboard"],
     [/\bfree cash\b/, "free cash"],
     [/\bbudget(?:ing)?\b/, "budget"],
@@ -2344,6 +2583,7 @@ function toAgentUnavailableError(error: unknown): AgentUnavailableError {
 function shouldRetryFinalOutput(error: AgentUnavailableError): boolean {
   if (
     error.code === "model-returned-invalid-final-output" ||
+    error.code === "model-returned-invalid-guidance-card" ||
     error.code === "model-returned-disallowed-final-message" ||
     error.code === "model-promised-unsupported-card" ||
     error.code === "model-returned-no-prompt-chips" ||
@@ -2386,7 +2626,9 @@ function isVagueFollowUp(message: string): boolean {
 function createAgentResponseRepair(error: AgentUnavailableError): AgentResponseRepair {
   return {
     reason:
-      error.code === "model-returned-disallowed-final-message"
+      error.code === "model-returned-invalid-guidance-card"
+        ? "invalid_guidance_card"
+        : error.code === "model-returned-disallowed-final-message"
         ? "disallowed_language"
         : error.code === "model-promised-unsupported-card"
           ? "unsupported_promise"
@@ -2660,7 +2902,29 @@ function isExplicitBalancesPrompt(normalized: string): boolean {
 }
 
 function isSpendingPrompt(normalized: string): boolean {
-  return /\b(spend|buy|purchase|order|afford|pay|cost)\b/.test(normalized);
+  return /\b(spend(?:ing)?|buy(?:ing)?|purchase|purchasing|order(?:ing)?|afford|pay(?:ing)?|cost)\b/.test(normalized);
+}
+
+function isFinancialGuidancePrompt(normalized: string): boolean {
+  if (isExplicitTransactionsPrompt(normalized) || isExplicitBalancesPrompt(normalized) || isExplicitMathPrompt(normalized)) {
+    return false;
+  }
+
+  return (
+    /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|is my spending bad|am i broke|why am i broke|i'?m broke|in trouble|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized) ||
+    /\bwhy\b.{0,40}\b(can'?t|cannot|cant)\b.{0,40}\bspend\b/.test(normalized) ||
+    /\b(can'?t|cannot|cant)\b.{0,40}\bspend\b.{0,40}\b(because|why|if|when)\b/.test(normalized)
+  );
+}
+
+function isJudgmentalPurchasePrompt(normalized: string): boolean {
+  return (
+    isSpendingPrompt(normalized) &&
+    (
+      /\b(should i|would you|what would you do|do you think|is this okay|is this ok|is this bad|is this dumb|can i|could i)\b/.test(normalized) ||
+      /\bwhy\b.{0,40}\b(can'?t|cannot|cant)\b.{0,40}\bspend\b/.test(normalized)
+    )
+  );
 }
 
 function isSpecificSpendSimulationPrompt(normalized: string): boolean {
@@ -2726,7 +2990,7 @@ function scorePurchaseAmountCandidate(message: string, index: number): number {
   const after = message.slice(index, index + 56);
   let score = 0;
 
-  if (/\b(spend|buy|purchase|order|afford|pay|cost)\b/.test(before)) {
+  if (/\b(spend(?:ing)?|buy(?:ing)?|purchase|purchasing|order(?:ing)?|afford|pay(?:ing)?|cost)\b/.test(before)) {
     score += 8;
   }
 
@@ -2734,7 +2998,7 @@ function scorePurchaseAmountCandidate(message: string, index: number): number {
     score += 5;
   }
 
-  if (/\b(spend|buy|purchase|order|afford|pay|cost|instead|today)\b/.test(after)) {
+  if (/\b(spend(?:ing)?|buy(?:ing)?|purchase|purchasing|order(?:ing)?|afford|pay(?:ing)?|cost|instead|today)\b/.test(after)) {
     score += 3;
   }
 
@@ -2909,5 +3173,6 @@ function sanitizeErrorDetail(detail: string): string {
 export const __agentTestHooks = {
   getForcedAgentTool,
   guardVisibleFinalMessage,
+  normalizeAgentFinalOutput,
   selectPromptChips,
 };

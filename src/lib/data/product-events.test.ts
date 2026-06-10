@@ -54,6 +54,85 @@ describe("agent product event derivation", () => {
     ).toEqual(["agent_question_asked", "missing_card_nudge_shown"]);
   });
 
+  it("tracks guidance context, cards, and follow-ups", () => {
+    expect(
+      getAgentProductEventNames(
+        {
+          ...createAgentResponse({
+            type: "guidance_card",
+            title: "My read",
+            stance: "watch",
+            summary: "Recent spending is running hot.",
+            rows: [
+              {
+                label: "Main pressure",
+                detail: "Recent spending is ahead of pace.",
+                tone: "warning",
+                evidenceIds: ["recent-spending-hot"],
+              },
+            ],
+          }),
+          usedTools: ["get_financial_guidance_context"],
+          responseMode: "guidance",
+          audit: {
+            toolNames: ["get_financial_guidance_context"],
+            usedModel: true,
+            guidance: {
+              validationOutcome: "shown",
+              metricVersion: "v2",
+              state: "overspending",
+              confidence: "high",
+              stance: "watch",
+              evidenceIds: ["recent-spending-hot"],
+            },
+          },
+        },
+        4300,
+        { isFollowUp: true },
+      ),
+    ).toEqual([
+      "agent_question_asked",
+      "agent_follow_up_asked",
+      "financial_guidance_requested",
+      "financial_guidance_context_built",
+      "financial_guidance_followup",
+      "financial_guidance_card_drafted",
+      "financial_guidance_card_shown",
+    ]);
+  });
+
+  it("tracks rejected guidance cards separately", () => {
+    expect(
+      getAgentProductEventNames(
+        {
+          ...createAgentResponse({
+            type: "connect_account",
+            title: "Connect or repair data",
+            detail: "Connect data first.",
+          }),
+          cards: [],
+          usedTools: ["get_financial_guidance_context"],
+          responseMode: "guidance",
+          audit: {
+            toolNames: ["get_financial_guidance_context"],
+            usedModel: true,
+            guidance: {
+              validationOutcome: "rejected",
+              metricVersion: "v2",
+              rejectionReason: "unknown evidence id",
+            },
+          },
+        },
+        4300,
+      ),
+    ).toEqual([
+      "agent_question_asked",
+      "financial_guidance_requested",
+      "financial_guidance_context_built",
+      "financial_guidance_card_rejected",
+    ]);
+  });
+
   it("logs sanitized product-event failures without exposing secret-shaped values", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const error = new Error(

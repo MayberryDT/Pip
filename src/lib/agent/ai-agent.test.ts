@@ -74,7 +74,7 @@ describe("runAIAgent", () => {
       createMockModelClient(),
     );
 
-    expect(response.usedTools).toEqual(["simulate_purchase"]);
+    expect(response.usedTools).toEqual(["simulate_purchase", "get_financial_guidance_context"]);
     expect(response.cards[0]).toMatchObject({
       type: "purchase_simulation",
       amountCents: 4000,
@@ -84,6 +84,59 @@ describe("runAIAgent", () => {
       afterTodayCents: expect.any(Number),
       dailyEffectCents: expect.any(Number),
     });
+    expect(response.audit.guidance).toMatchObject({
+      validationOutcome: "context_built",
+      metricVersion: "v2",
+    });
+  });
+
+  it("treats thinking-of-spending phrasing as a purchase simulation", async () => {
+    const response = await runAIAgent(
+      { message: "I am thinking of spending $25 at Starbucks. How would that affect me?" },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["simulate_purchase"]);
+    expect(response.cards[0]).toMatchObject({
+      type: "purchase_simulation",
+      amountCents: 2500,
+    });
+    expect(response.message).toContain("Spendable Cash Today");
+  });
+
+  it("answers financial read prompts with guidance context and a validated guidance card", async () => {
+    const response = await runAIAgent(
+      { message: "How am I doing?" },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_financial_guidance_context"]);
+    expect(response.responseMode).toBe("guidance");
+    expect(response.cards[0]).toMatchObject({
+      type: "guidance_card",
+      title: "My read",
+    });
+    expect(response.message.toLowerCase()).toContain("my read");
+    expect(response.audit.guidance).toMatchObject({
+      validationOutcome: "shown",
+      metricVersion: "v2",
+      state: expect.any(String),
+      evidenceIds: expect.arrayContaining(["spendable-today"]),
+    });
+  });
+
+  it("combines purchase simulation with guidance context for bank-balance assumption prompts", async () => {
+    const response = await runAIAgent(
+      { message: "I have $900 in checking, why can't I spend $300?" },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["simulate_purchase", "get_financial_guidance_context"]);
+    expect(response.cards[0]).toMatchObject({
+      type: "purchase_simulation",
+      amountCents: 30000,
+    });
+    expect(response.message.toLowerCase()).toContain("my read");
   });
 
   it("uses history to treat a short amount follow-up as another purchase simulation", async () => {
@@ -388,6 +441,48 @@ describe("runAIAgent", () => {
       toolName: "get_free_cash_drivers",
       requireCard: true,
     });
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Show the biggest drivers behind today's number",
+      }),
+    ).toMatchObject({
+      toolName: "get_free_cash_drivers",
+      requireCard: true,
+    });
+  });
+
+  it("routes guidance prompts through the real forced-tool classifier", () => {
+    for (const message of [
+      "How am I doing?",
+      "What do you think?",
+      "What should I do?",
+      "Am I spending too much?",
+      "Should I lower my cushion?",
+    ]) {
+      expect(
+        __agentTestHooks.getForcedAgentTool({
+          message,
+        }),
+      ).toMatchObject({
+        toolName: "get_financial_guidance_context",
+        requireCard: false,
+      });
+    }
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Show my transactions",
+      }),
+    ).toMatchObject({
+      toolName: "get_recent_transactions",
+    });
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Show the math",
+      }),
+    ).toMatchObject({
+      toolName: "get_free_cash_math",
+    });
   });
 
   it("can discuss broad finance topics without pretending to show a card", async () => {
@@ -463,6 +558,77 @@ describe("runAIAgent", () => {
         },
       ],
     });
+  });
+
+  it("allows omitted model prompt chips at the JSON-schema-compatible final output boundary", () => {
+    expect(
+      agentFinalOutputSchema.parse({
+        message: "My read: things look stable.",
+        responseMode: "guidance",
+      }).promptChips,
+    ).toBeUndefined();
+  });
+
+  it("allows null optional model fields without failing final output parsing", () => {
+    expect(
+      agentFinalOutputSchema.parse({
+        message: "I found the useful basic.",
+        support: null,
+        responseMode: "chat_only",
+        guidanceCardDraft: null,
+        promptChips: null,
+      }),
+    ).toEqual({
+      message: "I found the useful basic.",
+      support: null,
+      responseMode: "chat_only",
+      guidanceCardDraft: null,
+      promptChips: null,
+    });
+  });
+
+  it("lets oversized model guidance drafts reach the guidance validator", () => {
+    const parsed = agentFinalOutputSchema.parse({
+      message: "My read: the rows need trimming.",
+      responseMode: "guidance",
+      guidanceCardDraft: {
+        title: "My read",
+        stance: "watch",
+        summary: "Recent spending is running hot.",
+        rows: Array.from({ length: 4 }, (_, index) => ({
+          label: `Row ${index + 1}`,
+          detail: "Recent everyday spending is ahead of pace.",
+          tone: "warning",
+          evidenceIds: ["recent-spending-hot"],
+        })),
+      },
+      promptChips: [],
+    });
+
+    expect(parsed.guidanceCardDraft?.rows).toHaveLength(4);
+  });
+
+  it("allows model-authored guidance card drafts only through the typed draft field", () => {
+    expect(
+      agentFinalOutputSchema.parse({
+        message: "My read: recent spending is running hot.",
+        responseMode: "guidance",
+        guidanceCardDraft: {
+          title: "My read",
+          stance: "watch",
+          summary: "Recent spending is running hot.",
+          rows: [
+            {
+              label: "Main pressure",
+              detail: "Recent everyday spending is ahead of pace.",
+              tone: "warning",
+              evidenceIds: ["recent-spending-hot"],
+            },
+          ],
+        },
+        promptChips: [],
+      }).guidanceCardDraft?.stance,
+    ).toBe("watch");
   });
 
   it("rejects invalid insight cards at the response schema boundary", () => {
@@ -761,6 +927,33 @@ describe("runAIAgent", () => {
     expect(parsed.promptChips).toHaveLength(5);
   });
 
+  it("allows string prompt chip mistakes at the raw model boundary", () => {
+    const parsed = agentFinalOutputSchema.parse({
+      message: "Short draft.",
+      responseMode: "chat_only",
+      promptChips: ["Teach me one useful money basic"],
+    });
+
+    expect(parsed.promptChips).toEqual(["Teach me one useful money basic"]);
+    expect(__agentTestHooks.normalizeAgentFinalOutput(parsed).promptChips).toEqual([]);
+  });
+
+  it("drops non-string support mistakes at the raw model boundary", () => {
+    const parsed = agentFinalOutputSchema.parse({
+      message: "Short draft.",
+      support: {
+        text: "This should have been a string.",
+      },
+      responseMode: "chat_only",
+      promptChips: [],
+    });
+
+    expect(parsed.support).toEqual({
+      text: "This should have been a string.",
+    });
+    expect(__agentTestHooks.normalizeAgentFinalOutput(parsed).support).toBeUndefined();
+  });
+
   it("allows long raw support text for visible-answer composition", () => {
     const parsed = agentFinalOutputSchema.parse({
       message: "Short draft.",
@@ -778,6 +971,22 @@ describe("runAIAgent", () => {
         "This is the short driver summary. I can show the full summary if you’d like.",
       ),
     ).toBe("This is the short driver summary. I can talk through the full summary if you’d like.");
+  });
+
+  it("repairs forecast display promises without a forecast card", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "I can show how this affects the next 7 days.",
+      ),
+    ).toBe("I can talk through how this affects the next stretch.");
+  });
+
+  it("repairs breakdown display promises without a breakdown card", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "I can show your spending breakdown in more detail.",
+      ),
+    ).toBe("I can talk through your spending summary in more detail.");
   });
 
   it("repairs generic no-card display offers", () => {
@@ -798,6 +1007,20 @@ describe("runAIAgent", () => {
         "I can show what is driving today if you like.",
       ),
     ).toBe("I can talk through what is driving today if you like.");
+  });
+
+  it("allows broad money basics that mention lists or credit cards without promising UI cards", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "One useful basic: make a short list before bigger purchases, so the plan beats the impulse.",
+      ),
+    ).toContain("short list");
+
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "One useful basic: pay attention to credit card timing, because purchases can feel delayed.",
+      ),
+    ).toContain("credit card timing");
   });
 
   it("rejects when OpenAI is not configured", async () => {

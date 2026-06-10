@@ -13,7 +13,7 @@ export function PromptChips({
 
   return (
     <div
-      className="scrollbar-none -mx-5 overflow-x-auto overflow-y-visible px-5 pb-1"
+      className="scrollbar-none -mx-5 shrink-0 overflow-x-auto overflow-y-visible px-5 pb-1"
       data-testid="prompt-chips"
     >
       <div className="flex w-max min-w-full flex-nowrap justify-center gap-2">

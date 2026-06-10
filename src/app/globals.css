@@ -96,6 +96,17 @@ button {
     linear-gradient(180deg, #fbf7ef 0%, #f8f3ea 100%);
 }
 
+.pip-chat-shell {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  max-height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  padding-top: max(1.25rem, env(safe-area-inset-top));
+  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+}
+
 .spendable-hero {
   display: flex;
   flex-shrink: 0;

@@ -60,23 +60,11 @@ export function CardRenderer({
             />
             <MoneyRow label="Purchase" value={formatMoney(-card.amountCents)} tone="negative" />
             <MoneyRow
-              label="Today room left"
+              label="Spendable Cash after"
               value={formatMoney(card.todayRemainingCents)}
               tone={card.todayRemainingCents < 0 ? "warning" : "positive"}
               strong
             />
-            <MoneyRow
-              label="V2 daily room after"
-              value={formatMoney(card.afterTodayCents)}
-              tone={card.afterTodayCents <= 0 ? "warning" : "positive"}
-            />
-            {card.dailyEffectCents !== undefined ? (
-              <MoneyRow
-                label="Daily room change"
-                value={formatMoney(card.dailyEffectCents)}
-                tone={card.dailyEffectCents < 0 ? "negative" : "neutral"}
-              />
-            ) : null}
             {card.shortfallCents && card.shortfallCents > 0 ? (
               <MoneyRow
                 label="Added shortfall"
@@ -273,6 +261,28 @@ export function CardRenderer({
         </CardShell>
       );
 
+    case "guidance_card":
+      return (
+        <CardShell icon={<Sparkles aria-hidden="true" size={18} />} title={card.title}>
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <p className="min-w-0 text-sm leading-6 text-ink/[0.72]">{card.summary}</p>
+            <span className={["shrink-0 rounded-full border px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-normal", stanceClass(card.stance)].join(" ")}>
+              {stanceLabel(card.stance)}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {card.rows.map((row) => (
+              <GuidanceRow key={`${row.label}-${row.evidenceIds.join("-")}`} row={row} />
+            ))}
+          </div>
+          {card.footer ? (
+            <p className="mt-3 text-xs font-semibold uppercase leading-5 tracking-normal text-taupe">
+              {card.footer}
+            </p>
+          ) : null}
+        </CardShell>
+      );
+
     case "connect_account":
       return (
         <CardShell icon={<CreditCard aria-hidden="true" size={18} />} title={card.title}>
@@ -328,6 +338,22 @@ function InsightRow({
   );
 }
 
+function GuidanceRow({
+  row,
+}: {
+  row: Extract<AgentCard, { type: "guidance_card" }>["rows"][number];
+}) {
+  return (
+    <div className="rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2.5">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-ink">{row.label}</p>
+        <span className={["h-2.5 w-2.5 shrink-0 rounded-full", dotToneClass(row.tone)].join(" ")} />
+      </div>
+      <p className="mt-1 text-xs leading-5 text-ink/[0.58]">{row.detail}</p>
+    </div>
+  );
+}
+
 function toneClass(tone: "positive" | "negative" | "neutral" | "warning"): string {
   if (tone === "positive") {
     return "text-moss";
@@ -342,6 +368,52 @@ function toneClass(tone: "positive" | "negative" | "neutral" | "warning"): strin
   }
 
   return "text-ink/[0.58]";
+}
+
+function dotToneClass(tone: "positive" | "negative" | "neutral" | "warning"): string {
+  if (tone === "positive") {
+    return "bg-moss";
+  }
+
+  if (tone === "negative") {
+    return "bg-coral";
+  }
+
+  if (tone === "warning") {
+    return "bg-gold";
+  }
+
+  return "bg-taupe/50";
+}
+
+function stanceLabel(stance: Extract<AgentCard, { type: "guidance_card" }>["stance"]): string {
+  switch (stance) {
+    case "stable":
+      return "Stable";
+    case "watch":
+      return "Watch";
+    case "tight":
+      return "Tight";
+    case "shortfall":
+      return "Shortfall";
+    case "uncertain":
+      return "Uncertain";
+  }
+}
+
+function stanceClass(stance: Extract<AgentCard, { type: "guidance_card" }>["stance"]): string {
+  switch (stance) {
+    case "stable":
+      return "border-moss/20 bg-moss/[0.08] text-moss";
+    case "watch":
+      return "border-gold/25 bg-gold/[0.09] text-gold";
+    case "tight":
+      return "border-coral/20 bg-coral/[0.08] text-coral";
+    case "shortfall":
+      return "border-coral/25 bg-coral/[0.1] text-coral";
+    case "uncertain":
+      return "border-taupe/20 bg-taupe/[0.08] text-taupe";
+  }
 }
 
 function MoneyRow({

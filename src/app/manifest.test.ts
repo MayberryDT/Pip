@@ -6,11 +6,18 @@ import manifest from "@/app/manifest";
 describe("PWA manifest", () => {
   it("keeps the install surface focused on the one-number app", () => {
     expect(manifest()).toMatchObject({
+      id: "/",
       name: "Pip",
       short_name: "Pip",
       start_url: "/",
       scope: "/",
       display: "standalone",
+      display_override: ["standalone", "minimal-ui"],
+      orientation: "portrait",
+      prefer_related_applications: false,
+      categories: ["finance", "productivity"],
+      lang: "en-US",
+      dir: "ltr",
       background_color: "#F8F3EA",
       theme_color: "#F8F3EA",
       icons: [
@@ -69,6 +76,7 @@ describe("PWA manifest", () => {
 
     const source = readFileSync(serviceWorkerPath, "utf8");
 
+    expect(source).toContain('const STATIC_CACHE_NAME = "pip-static-v3"');
     expect(source).toContain("/offline.html");
     expect(source).toContain("/_next/static/");
     expect(source).toContain('url.pathname.startsWith("/api/")');

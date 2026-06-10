@@ -494,6 +494,8 @@ function getJobChipFamilyIds(job: ConversationJob): PromptChipFamilyId[] {
       return ["ai-why-today", "ai-test-purchase", "ai-next-few-days"];
     case "data_quality":
       return ["ai-why-today", "ai-recent-charges", "ai-refresh-data"];
+    case "financial_guidance":
+      return ["ai-spending-pressure", "ai-test-purchase", "ai-upcoming-bills", "ai-next-few-days"];
     case "definition":
       return ["ai-biggest-drivers", "ai-test-purchase", "ai-next-few-days"];
     case "duplicate_follow_up":

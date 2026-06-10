@@ -22,7 +22,8 @@ import type {
 const DAYS_PER_MONTH = 30.44;
 const LOOKBACK_MONTHS = 3;
 const RECOVERY_DAYS = 14;
-const MATERIAL_DAILY_CHANGE_CENTS = 100;
+const MIN_MATERIAL_DAILY_CHANGE_CENTS = 500;
+const LOW_CONFIDENCE_DAILY_CAP_CENTS = 5000;
 
 type MonthlySpendableSummary = {
   month: string;
@@ -114,6 +115,7 @@ export function calculateSpendableCashToday(
     0,
     Math.round(monthlyEverydayPoolCents / DAYS_PER_MONTH),
   );
+  const materialDailyChangeCents = getMaterialDailyChangeCents(baselineDailyAllowanceCents);
   const actualEverydaySpendSoFarCents = Math.max(
     0,
     currentMonthSummary.everydaySpendCents +
@@ -147,10 +149,23 @@ export function calculateSpendableCashToday(
     0,
     uncappedPositiveAllowanceCents - Math.min(uncappedPositiveAllowanceCents, cashDailyCapCents),
   );
-  const spendableCashTodayCents = Math.max(
+  const cashCappedAllowanceCents = Math.max(
     0,
     Math.min(uncappedPositiveAllowanceCents, cashDailyCapCents),
   );
+  const lowConfidenceDailyCapCents = completedMonthCount === 0
+    ? LOW_CONFIDENCE_DAILY_CAP_CENTS
+    : undefined;
+  const spendableCashTodayCents = lowConfidenceDailyCapCents === undefined
+    ? cashCappedAllowanceCents
+    : Math.min(cashCappedAllowanceCents, lowConfidenceDailyCapCents);
+  const lowConfidenceCapApplied =
+    lowConfidenceDailyCapCents !== undefined && cashCappedAllowanceCents > lowConfidenceDailyCapCents;
+  const cashGuardrailApplied = cashRealityAdjustmentCents >= materialDailyChangeCents;
+  const cashGuardrailShareOfBaseline =
+    baselineDailyAllowanceCents > 0
+      ? cashRealityAdjustmentCents / baselineDailyAllowanceCents
+      : 0;
   const behaviorShortfallCents = Math.max(0, -adaptiveDailyAllowanceCents);
   const cashShortfallCents =
     uncappedPositiveAllowanceCents > 0 && cashDailyCapCents <= 0
@@ -178,6 +193,7 @@ export function calculateSpendableCashToday(
     spendableCashTodayCents,
     shortfallCents,
     behaviorAdjustmentCents,
+    materialDailyChangeCents,
     confidence,
     warningCount: warnings.length,
     accountCount: snapshot.accounts.length,
@@ -194,6 +210,11 @@ export function calculateSpendableCashToday(
     baselineDailyAllowanceCents,
     behaviorAdjustmentCents,
     cashRealityAdjustmentCents,
+    cashGuardrailApplied,
+    cashGuardrailShareOfBaseline,
+    materialDailyChangeCents,
+    lowConfidenceDailyCapCents,
+    lowConfidenceCapApplied,
     adaptiveDailyAllowanceCents,
     monthlyEverydayPoolCents,
     averageMonthlyIncomeCents,
@@ -218,6 +239,7 @@ export function calculateSpendableCashToday(
     drivers: buildSpendableDrivers({
       baselineDailyAllowanceCents,
       behaviorAdjustmentCents,
+      materialDailyChangeCents,
       averageMonthlyRecurringObligationsCents,
       protectedSavingsMonthlyCents,
       hiddenCushionCents,
@@ -609,6 +631,7 @@ function determineState(input: {
   spendableCashTodayCents: number;
   shortfallCents: number;
   behaviorAdjustmentCents: number;
+  materialDailyChangeCents: number;
   confidence: SpendableCashConfidence;
   warningCount: number;
   accountCount: number;
@@ -634,11 +657,11 @@ function determineState(input: {
     return "tight";
   }
 
-  if (input.behaviorAdjustmentCents <= -MATERIAL_DAILY_CHANGE_CENTS) {
+  if (input.behaviorAdjustmentCents <= -input.materialDailyChangeCents) {
     return "overspending";
   }
 
-  if (input.behaviorAdjustmentCents >= MATERIAL_DAILY_CHANGE_CENTS) {
+  if (input.behaviorAdjustmentCents >= input.materialDailyChangeCents) {
     return "healthy";
   }
 
@@ -677,6 +700,7 @@ function buildSpendableDataStates(input: {
 function buildSpendableDrivers(input: {
   baselineDailyAllowanceCents: number;
   behaviorAdjustmentCents: number;
+  materialDailyChangeCents: number;
   averageMonthlyRecurringObligationsCents: number;
   protectedSavingsMonthlyCents: number;
   hiddenCushionCents: number;
@@ -695,7 +719,7 @@ function buildSpendableDrivers(input: {
     },
   ];
 
-  if (Math.abs(input.behaviorAdjustmentCents) >= MATERIAL_DAILY_CHANGE_CENTS) {
+  if (Math.abs(input.behaviorAdjustmentCents) >= input.materialDailyChangeCents) {
     drivers.push({
       id: "recent-spending-adjustment",
       label: "Recent spending adjustment",
@@ -732,7 +756,7 @@ function buildSpendableDrivers(input: {
     },
   );
 
-  if (input.cashRealityAdjustmentCents >= MATERIAL_DAILY_CHANGE_CENTS) {
+  if (input.cashRealityAdjustmentCents >= input.materialDailyChangeCents) {
     drivers.push({
       id: "cash-guardrail",
       label: "Cash guardrail",
@@ -860,6 +884,13 @@ function median(values: number[]): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function getMaterialDailyChangeCents(baselineDailyAllowanceCents: number): number {
+  return Math.max(
+    MIN_MATERIAL_DAILY_CHANGE_CENTS,
+    Math.round(Math.abs(baselineDailyAllowanceCents) * 0.1),
+  );
 }
 
 function normalizeText(value: string): string {

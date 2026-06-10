@@ -479,7 +479,7 @@ export function FreeCashHome({
   }, [freeCashTodayCents, hasLoadedServerResult, liveAccountControlsEnabled, result, scenario]);
 
   return (
-    <main className="free-cash-app-shell h-[100dvh] overflow-hidden px-5 py-5 text-ink sm:px-6">
+    <main className="free-cash-app-shell pip-chat-shell px-5 py-5 text-ink sm:px-6">
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[430px] flex-col">
         <section className={hasConversation ? "spendable-hero is-chatting" : "spendable-hero"}>
           <h1 className="pip-brand-title">
@@ -502,7 +502,7 @@ export function FreeCashHome({
           <p className="spendable-subtitle">{getSpendableCashTodaySubtitle(result)}</p>
         </section>
 
-        <section className={hasConversation ? "mt-3 flex min-h-0 flex-1 flex-col" : "mt-6 flex min-h-0 flex-1 flex-col max-[380px]:mt-5"}>
+        <section className={hasConversation ? "mt-3 flex min-h-0 flex-1 flex-col overflow-hidden" : "mt-6 flex min-h-0 flex-1 flex-col overflow-hidden max-[380px]:mt-5"}>
           {isOnboarding && thread.length === 0 ? (
             <OnboardingIntro
               authNotice={authNotice}

@@ -26,13 +26,13 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "That is $7 over today's room. The V2 daily room after would be -$7.",
+      message: "That would put Spendable Cash Today at -$7.",
       answerPatternId: "purchase-simulation",
       repetitionAdjusted: false,
     });
   });
 
-  it("separates immediate room left from unchanged V2 daily room", () => {
+  it("separates immediate room left from unchanged Spendable Cash after purchase", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
         message: "Model bridge.",
@@ -57,7 +57,7 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "That leaves $79 of today's room. Your V2 daily room stays about $104.",
+      message: "That would leave $79 in Spendable Cash Today.",
       answerPatternId: "purchase-simulation",
     });
   });
@@ -160,6 +160,42 @@ describe("answer composer", () => {
     expect(answer).toMatchObject({
       message: "I can help with your Spendable Cash Today. Ask what changed or whether a specific purchase fits.",
       answerPatternId: "greeting",
+    });
+  });
+
+  it("keeps friendly small talk free of display promises", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "I love you back. Want me to show your spending breakdown?",
+      },
+      userMessage: "i love you",
+      cards: [],
+      usedTools: [],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "I’m here with you. Ask me a money question or test a specific purchase amount.",
+      answerPatternId: "friendly-small-talk",
+    });
+  });
+
+  it("keeps broad money basics general and off user data", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "I see your cushion and bills.",
+      },
+      userMessage: "Teach me one useful money basic",
+      cards: [],
+      usedTools: [],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "One useful money basic: separate bills, needs, and fun money before you spend. A small planned amount beats guessing.",
+      answerPatternId: "money-basic",
     });
   });
 

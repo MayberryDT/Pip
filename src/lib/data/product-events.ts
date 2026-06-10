@@ -22,6 +22,13 @@ export const productEventNames = [
   "plaid_sync_succeeded",
   "plaid_sync_failed",
   "negative_free_cash_follow_up",
+  "financial_guidance_requested",
+  "financial_guidance_context_built",
+  "financial_guidance_card_drafted",
+  "financial_guidance_card_shown",
+  "financial_guidance_card_repaired",
+  "financial_guidance_card_rejected",
+  "financial_guidance_followup",
   "settings_updated",
   "manual_sync_succeeded",
   "manual_sync_partial",
@@ -97,6 +104,36 @@ export function getAgentProductEventNames(
 
   if (cardTypes.includes("missing_card_nudge")) {
     names.add("missing_card_nudge_shown");
+  }
+
+  if (
+    response.usedTools.includes("get_financial_guidance_context") ||
+    response.responseMode === "guidance" ||
+    Boolean(response.audit.guidance)
+  ) {
+    names.add("financial_guidance_requested");
+    names.add("financial_guidance_context_built");
+
+    if (context.isFollowUp) {
+      names.add("financial_guidance_followup");
+    }
+  }
+
+  if (response.audit.guidance?.validationOutcome === "shown") {
+    names.add("financial_guidance_card_drafted");
+  }
+
+  if (response.audit.guidance?.validationOutcome === "repaired") {
+    names.add("financial_guidance_card_drafted");
+    names.add("financial_guidance_card_repaired");
+  }
+
+  if (cardTypes.includes("guidance_card")) {
+    names.add("financial_guidance_card_shown");
+  }
+
+  if (response.audit.guidance?.validationOutcome === "rejected") {
+    names.add("financial_guidance_card_rejected");
   }
 
   if (freeCashTodayCents < 0 || context.isShortfall) {

@@ -87,6 +87,11 @@ describe("agent tool runner", () => {
       horizonDays: 7,
       disclaimer: "Forecast only; not guaranteed.",
     });
+    expect(runAgentTool("get_financial_guidance_context", {}, fakeSnapshot)).toMatchObject({
+      usedTools: ["get_financial_guidance_context"],
+      cards: [],
+      responseMode: "chat_only",
+    });
   });
 
   it("requires purchase simulations to include an explicit amount", () => {

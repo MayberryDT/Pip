@@ -5,13 +5,17 @@ import type { AgentCard } from "@/lib/agent/card-types";
 import { CardRenderer } from "@/components/cards/CardRenderer";
 
 describe("CardRenderer", () => {
-  it.each(getRenderableCards())("renders the $name card without missing-field artifacts", ({ card, expectedText }) => {
+  it.each(getRenderableCards())("renders the $name card without missing-field artifacts", ({ card, expectedText, absentText = [] }) => {
     const markup = renderToStaticMarkup(
       <CardRenderer card={card} onSuppressMissingCard={() => undefined} />,
     );
 
     for (const text of expectedText) {
       expect(markup).toContain(text);
+    }
+
+    for (const text of absentText) {
+      expect(markup).not.toContain(text);
     }
 
     expect(markup).not.toContain("undefined");
@@ -65,6 +69,7 @@ function getRenderableCards(): Array<{
   name: AgentCard["type"];
   card: AgentCard;
   expectedText: string[];
+  absentText?: string[];
 }> {
   return [
     {
@@ -124,7 +129,8 @@ function getRenderableCards(): Array<{
         afterTodayCents: 4300,
         monthlyAverageAfterCents: -700,
       },
-      expectedText: ["Purchase simulation", "Current Spendable Cash", "Purchase", "Today room left", "V2 daily room after", "$43", "-$50", "-$7"],
+      expectedText: ["Purchase simulation", "Current Spendable Cash", "Purchase", "Spendable Cash after", "$43", "-$50", "-$7"],
+      absentText: ["Today room left", "Daily room change"],
     },
     {
       name: "true_balances",
@@ -347,6 +353,39 @@ function getRenderableCards(): Array<{
         "-$1,220",
         "On track",
         "Payday helps most",
+      ],
+    },
+    {
+      name: "guidance_card",
+      card: {
+        type: "guidance_card",
+        title: "My read",
+        stance: "watch",
+        summary: "You are not in crisis, but recent spending is running hot.",
+        rows: [
+          {
+            label: "Main pressure",
+            detail: "Recent everyday spending is ahead of pace.",
+            tone: "warning",
+            evidenceIds: ["recent-spending-hot"],
+          },
+          {
+            label: "Why it matters",
+            detail: "Today's number is lower while that pressure recovers.",
+            tone: "neutral",
+            evidenceIds: ["behavior-adjustment-negative"],
+          },
+        ],
+        footer: "Based on Spendable Cash Today evidence.",
+      },
+      expectedText: [
+        "My read",
+        "Watch",
+        "You are not in crisis",
+        "Main pressure",
+        "Recent everyday spending is ahead of pace.",
+        "Why it matters",
+        "Based on Spendable Cash Today evidence.",
       ],
     },
     {

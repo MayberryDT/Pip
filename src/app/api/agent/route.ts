@@ -572,6 +572,13 @@ async function recordAgentEvents(
         historyLength: input.historyLength,
         isFollowUp: input.historyLength > 0,
         freeCashTodayCents: input.freeCashTodayCents,
+        guidance: input.response.audit.guidance
+          ? input.response.audit.guidance as unknown as Json
+          : null,
+        guidanceState: input.response.audit.guidance?.state ?? null,
+        guidanceStance: input.response.audit.guidance?.stance ?? null,
+        guidanceValidationOutcome: input.response.audit.guidance?.validationOutcome ?? null,
+        guidanceEvidenceIds: input.response.audit.guidance?.evidenceIds?.join(",") ?? null,
       }),
     ),
   );

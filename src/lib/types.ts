@@ -119,6 +119,11 @@ export type SpendableCashTodayResult = {
   baselineDailyAllowanceCents: number;
   behaviorAdjustmentCents: number;
   cashRealityAdjustmentCents: number;
+  cashGuardrailApplied: boolean;
+  cashGuardrailShareOfBaseline: number;
+  materialDailyChangeCents: number;
+  lowConfidenceDailyCapCents?: number;
+  lowConfidenceCapApplied: boolean;
   adaptiveDailyAllowanceCents: number;
   monthlyEverydayPoolCents: number;
   averageMonthlyIncomeCents: number;

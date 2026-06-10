@@ -144,6 +144,23 @@ const insightCardRowSchema = z.object({
   tone: moneyToneSchema,
 });
 
+const guidanceStanceSchema = z.enum(["stable", "watch", "tight", "shortfall", "uncertain"]);
+
+const guidanceCardRowSchema = z.object({
+  label: z.string().min(1).max(48),
+  detail: z.string().min(1).max(180),
+  tone: moneyToneSchema,
+  evidenceIds: z.array(z.string().min(1).max(80)).min(1).max(4),
+});
+
+export const guidanceCardDraftOutputSchema = z.object({
+  title: z.string().min(1).max(48),
+  stance: guidanceStanceSchema,
+  summary: z.string().min(1).max(220),
+  rows: z.array(guidanceCardRowSchema).min(1).max(8),
+  footer: z.string().min(1).max(140).optional(),
+});
+
 export const cardSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("free_cash_explanation"),
@@ -238,19 +255,37 @@ export const cardSchema = z.discriminatedUnion("type", [
     footer: z.string().min(1).max(160).optional(),
   }),
   z.object({
+    type: z.literal("guidance_card"),
+    title: z.string().min(1).max(48),
+    stance: guidanceStanceSchema,
+    summary: z.string().min(1).max(220),
+    rows: z.array(guidanceCardRowSchema).min(1).max(3),
+    footer: z.string().min(1).max(140).optional(),
+  }),
+  z.object({
     type: z.literal("connect_account"),
     title: z.string(),
     detail: z.string(),
   }),
 ]);
 
-export const responseModeSchema = z.enum(["chat_only", "show_card", "update_context", "clarify"]);
+export const responseModeSchema = z.enum(["chat_only", "show_card", "update_context", "clarify", "guidance"]);
+export const rawPromptChipOutputSchema = z.union([promptChipSchema, z.string().min(1).max(160)]);
+const rawSupportOutputSchema = z.union([
+  z.string().max(1000),
+  z.null(),
+  z.boolean(),
+  z.number(),
+  z.array(z.unknown()).max(8),
+  z.record(z.string(), z.unknown()),
+]).optional();
 
 export const agentFinalOutputSchema = z.object({
   message: z.string().min(1).max(agentModelMessageMaxChars),
-  support: z.string().min(1).max(500).optional(),
+  support: rawSupportOutputSchema,
   responseMode: responseModeSchema,
-  promptChips: z.array(promptChipSchema).max(8),
+  guidanceCardDraft: guidanceCardDraftOutputSchema.nullable().optional(),
+  promptChips: z.array(rawPromptChipOutputSchema).max(8).nullable().optional(),
 });
 
 export const agentResponseSchema = z.object({
@@ -266,6 +301,23 @@ export const agentResponseSchema = z.object({
     model: z.string().optional(),
     transport: z
       .enum(["netlify-ai-gateway", "openai-direct", "custom-openai-compatible"])
+      .optional(),
+    guidance: z
+      .object({
+        validationOutcome: z.enum(["not_requested", "context_built", "shown", "repaired", "rejected"]),
+        metricVersion: z.literal("v2").optional(),
+        state: z.string().optional(),
+        confidence: z.string().optional(),
+        stance: z.string().optional(),
+        evidenceIds: z.array(z.string()).optional(),
+        spendableCashTodayCents: z.number().int().optional(),
+        shortfallCents: z.number().int().optional(),
+        baselineDailyAllowanceCents: z.number().int().optional(),
+        behaviorAdjustmentCents: z.number().int().optional(),
+        cashRealityAdjustmentCents: z.number().int().optional(),
+        currentMonthVarianceCents: z.number().int().optional(),
+        rejectionReason: z.string().optional(),
+      })
       .optional(),
     quality: z
       .object({

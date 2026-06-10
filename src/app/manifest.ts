@@ -2,12 +2,19 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
+    id: "/",
     name: "Pip",
     short_name: "Pip",
     description: "Spendable cash for everyday life.",
     start_url: "/",
     scope: "/",
     display: "standalone",
+    display_override: ["standalone", "minimal-ui"],
+    orientation: "portrait",
+    prefer_related_applications: false,
+    categories: ["finance", "productivity"],
+    lang: "en-US",
+    dir: "ltr",
     background_color: "#F8F3EA",
     theme_color: "#F8F3EA",
     icons: [

@@ -56,7 +56,7 @@ export function AgentInput({
 
   return (
     <form
-      className="relative mt-auto pt-4"
+      className="relative mt-auto shrink-0 pt-4"
       data-testid="agent-input"
       onSubmit={handleSubmit}
       aria-busy={busy}
@@ -86,9 +86,17 @@ export function AgentInput({
 }
 
 function resetComposerViewport(input: HTMLTextAreaElement | null) {
-  input?.blur();
+  if (!input) {
+    return;
+  }
 
   requestAnimationFrame(() => {
-    window.scrollTo(0, 0);
+    input.style.height = "0px";
+    input.style.height = `${Math.min(input.scrollHeight, composerMaxHeight)}px`;
+    input.style.overflowY = input.scrollHeight > composerMaxHeight ? "auto" : "hidden";
+
+    if (!input.disabled) {
+      input.focus({ preventScroll: true });
+    }
   });
 }

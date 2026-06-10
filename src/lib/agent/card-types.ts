@@ -130,6 +130,19 @@ export type AgentCard =
       footer?: string;
     }
   | {
+      type: "guidance_card";
+      title: string;
+      stance: "stable" | "watch" | "tight" | "shortfall" | "uncertain";
+      summary: string;
+      rows: Array<{
+        label: string;
+        detail: string;
+        tone: "positive" | "negative" | "neutral" | "warning";
+        evidenceIds: string[];
+      }>;
+      footer?: string;
+    }
+  | {
       type: "connect_account";
       title: string;
       detail: string;
@@ -140,13 +153,28 @@ export type AgentResponse = {
   cards: AgentCard[];
   promptChips: PromptChip[];
   usedTools: string[];
-  responseMode: "chat_only" | "show_card" | "update_context" | "clarify";
+  responseMode: "chat_only" | "show_card" | "update_context" | "clarify" | "guidance";
   clientAction?: AgentClientAction;
   audit: {
     toolNames: string[];
     usedModel: boolean;
     model?: string;
     transport?: "netlify-ai-gateway" | "openai-direct" | "custom-openai-compatible";
+    guidance?: {
+      validationOutcome: "not_requested" | "context_built" | "shown" | "repaired" | "rejected";
+      metricVersion?: "v2";
+      state?: string;
+      confidence?: string;
+      stance?: string;
+      evidenceIds?: string[];
+      spendableCashTodayCents?: number;
+      shortfallCents?: number;
+      baselineDailyAllowanceCents?: number;
+      behaviorAdjustmentCents?: number;
+      cashRealityAdjustmentCents?: number;
+      currentMonthVarianceCents?: number;
+      rejectionReason?: string;
+    };
     quality?: {
       conversationJob: string;
       answerPatternId: string;
