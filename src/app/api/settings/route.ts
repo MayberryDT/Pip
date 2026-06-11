@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
-  markFreeCashSnapshotsStaleForUser,
+  markPipCashSnapshotsStaleForUser,
   upsertUserSettings,
 } from "@/lib/data/financial-repository";
 import { recordProductEventSafely } from "@/lib/data/product-events";
@@ -82,7 +82,7 @@ export async function PUT(request: Request) {
     }
 
     const settings = await upsertUserSettings(supabase, user.id, parsed.data);
-    await markFreeCashSnapshotsStaleForUser(supabase, user.id);
+    await markPipCashSnapshotsStaleForUser(supabase, user.id);
     await recordProductEventSafely(supabase, user.id, "settings_updated", {
       protectedSavingsMonthlyCents: parsed.data.protectedSavingsMonthlyCents,
     });

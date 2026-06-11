@@ -7,7 +7,7 @@ export default defineConfig({
     timeout: 5_000,
   },
   webServer: {
-    command: "FREE_CASH_SUPABASE_MODE=off npm run dev -- -p 3000",
+    command: "PIP_SUPABASE_MODE=off npm run dev -- -p 3000",
     url: "http://localhost:3000",
     reuseExistingServer: false,
     timeout: 30_000,

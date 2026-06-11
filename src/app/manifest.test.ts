@@ -85,7 +85,7 @@ describe("PWA manifest", () => {
     expect(source).toContain('url.pathname.includes("/sync/")');
     expect(source).toContain('url.pathname.includes("/agent")');
     expect(source).toContain('url.pathname.includes("/events")');
-    expect(source).toContain('url.pathname.includes("/free-cash")');
+    expect(source).toContain('url.pathname.includes("/pip-cash")');
 
     const registrationSource = readFileSync(registrationPath, "utf8");
 

@@ -1,17 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentFinalOutputSchema, agentMessageMaxChars, agentResponseSchema, cardSchema } from "@/lib/agent/response-schema";
 import {
-  FREE_CASH_AI_MODEL,
+  PIP_AI_MODEL,
   NETLIFY_AI_GATEWAY_MODEL,
-  getFreeCashAiTransport,
-  getFreeCashAiModel,
+  getPipAiTransport,
+  getPipAiModel,
   getOpenAIClientConfig,
   getOpenAIApiKeyForSdk,
   runAIAgent,
   __agentTestHooks,
 } from "@/lib/agent/ai-agent";
 import { createMockModelClient } from "../../../tests/helpers/mock-agent-runtime";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { fakeSnapshot } from "@/lib/fake-data";
 
 afterEach(() => {
@@ -26,7 +26,7 @@ describe("runAIAgent", () => {
     );
 
     expect(response.audit.usedModel).toBe(true);
-    expect(response.audit.model).toBe(FREE_CASH_AI_MODEL);
+    expect(response.audit.model).toBe(PIP_AI_MODEL);
     expect(response.usedTools).toEqual([]);
     expect(response.audit.toolNames).toEqual([]);
     expect(response.responseMode).toBe("chat_only");
@@ -40,9 +40,9 @@ describe("runAIAgent", () => {
       createMockModelClient(),
     );
 
-    expect(response.usedTools).toEqual(["get_free_cash_drivers"]);
+    expect(response.usedTools).toEqual(["get_pip_cash_drivers"]);
     expect(response.responseMode).toBe("show_card");
-    expect(response.cards[0]?.type).toBe("free_cash_explanation");
+    expect(response.cards[0]?.type).toBe("pip_cash_explanation");
   });
 
   it("does not repeat the same explanation card for an immediate vague follow-up", async () => {
@@ -52,11 +52,11 @@ describe("runAIAgent", () => {
         conversationState: {
           shownCards: [
             {
-              type: "free_cash_explanation",
+              type: "pip_cash_explanation",
               title: "Why this number changed",
             },
           ],
-          lastToolNames: ["get_free_cash_drivers"],
+          lastToolNames: ["get_pip_cash_drivers"],
         },
       },
       createMockModelClient(),
@@ -68,7 +68,7 @@ describe("runAIAgent", () => {
   });
 
   it("calls the purchase simulation tool when the user asks about a specific spend", async () => {
-    const result = calculateFreeCash(fakeSnapshot);
+    const result = calculatePipCash(fakeSnapshot);
     const response = await runAIAgent(
       { message: "Can I spend $40?" },
       createMockModelClient(),
@@ -176,7 +176,7 @@ describe("runAIAgent", () => {
       createMockModelClient(),
     );
 
-    expect(response.usedTools).toEqual(["get_free_cash_snapshot"]);
+    expect(response.usedTools).toEqual(["get_pip_cash_snapshot"]);
     expect(response.responseMode).toBe("chat_only");
     expect(response.cards).toHaveLength(0);
     expect(response.message.toLowerCase()).toContain("not a hard limit");
@@ -305,7 +305,7 @@ describe("runAIAgent", () => {
     expect(recurringResponse.cards[0]?.type).toBe("recurring_activity");
     expect(recentResponse.usedTools).toEqual(["get_recent_transactions"]);
     expect(recentResponse.cards[0]?.type).toBe("recent_transactions");
-    expect(mathResponse.usedTools).toEqual(["get_free_cash_math"]);
+    expect(mathResponse.usedTools).toEqual(["get_pip_cash_math"]);
     expect(mathResponse.cards[0]?.type).toBe("math_breakdown");
   });
 
@@ -404,9 +404,9 @@ describe("runAIAgent", () => {
       createMockModelClient(),
     );
 
-    expect(whyResponse.usedTools).toEqual(["get_free_cash_drivers"]);
+    expect(whyResponse.usedTools).toEqual(["get_pip_cash_drivers"]);
     expect(whyResponse.cards[0]).toMatchObject({
-      type: "free_cash_explanation",
+      type: "pip_cash_explanation",
     });
   });
 
@@ -438,7 +438,7 @@ describe("runAIAgent", () => {
         message: "Why this number?",
       }),
     ).toMatchObject({
-      toolName: "get_free_cash_drivers",
+      toolName: "get_pip_cash_drivers",
       requireCard: true,
     });
     expect(
@@ -446,7 +446,7 @@ describe("runAIAgent", () => {
         message: "Show the biggest drivers behind today's number",
       }),
     ).toMatchObject({
-      toolName: "get_free_cash_drivers",
+      toolName: "get_pip_cash_drivers",
       requireCard: true,
     });
   });
@@ -481,7 +481,7 @@ describe("runAIAgent", () => {
         message: "Show the math",
       }),
     ).toMatchObject({
-      toolName: "get_free_cash_math",
+      toolName: "get_pip_cash_math",
     });
   });
 
@@ -706,7 +706,7 @@ describe("runAIAgent", () => {
         },
         snapshot: fakeSnapshot,
       } as never,
-      calculateFreeCash(fakeSnapshot),
+      calculatePipCash(fakeSnapshot),
       {
         input: {
           message: "I can help.",
@@ -758,7 +758,7 @@ describe("runAIAgent", () => {
         },
         snapshot: fakeSnapshot,
       } as never,
-      calculateFreeCash(fakeSnapshot),
+      calculatePipCash(fakeSnapshot),
       {
         input: {
           message: "I can help.",
@@ -813,7 +813,7 @@ describe("runAIAgent", () => {
         },
         snapshot: fakeSnapshot,
       } as never,
-      calculateFreeCash(fakeSnapshot),
+      calculatePipCash(fakeSnapshot),
       {
         input: {
           message: "Create prompt chips for the current Pip screen.",
@@ -870,7 +870,7 @@ describe("runAIAgent", () => {
       __agentTestHooks.guardVisibleFinalMessage(
         "You can ask about why it changed, forecast hints, or to see a quick breakdown. Pick a chip or tell me a dollar amount.",
       ),
-    ).toContain("forecast hints");
+    ).toBe("You can ask about why it changed, possible pattern hints, or to talk through a quick summary. Pick a chip or tell me a dollar amount.");
   });
 
   it("allows suggestion-menu replies that mention transactions without returning a card", () => {
@@ -878,7 +878,7 @@ describe("runAIAgent", () => {
       __agentTestHooks.guardVisibleFinalMessage(
         "You could ask to see recent transactions, check upcoming bills, or test a purchase amount.",
       ),
-    ).toContain("recent transactions");
+    ).toBe("You could ask to talk through recent activity, check bills that may repeat, or test a spending amount.");
   });
 
   it("repairs recurring activity display promises without a recurring card", () => {
@@ -989,6 +989,26 @@ describe("runAIAgent", () => {
     ).toBe("I can talk through your spending summary in more detail.");
   });
 
+  it("repairs cardless driver display language", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "I see my main drivers: normal room, bills held back, and protected savings.",
+      ),
+    ).toBe("The same main drivers still apply: normal room, bills held back, and protected savings.");
+  });
+
+  it("repairs blocked-advice replies that promise cardless follow-up views", () => {
+    const message =
+      "I don’t give investment advice. I see you have $104 Spendable Cash Today with missing-data signals. I’d treat Nvidia as a high-risk, nonessential purchase today. If you want, I can simulate a small purchase to show impact or pull up the latest drivers.";
+    const repaired = __agentTestHooks.repairUnsupportedCardPromises(message, []);
+
+    expect(repaired).toContain("I don’t give investment advice.");
+    expect(repaired?.trim().split(/\s+/).length).toBeLessThanOrEqual(45);
+    expect(__agentTestHooks.getUnsupportedCardPromise(repaired ?? "", [])).toBeNull();
+    expect(repaired).not.toMatch(/\b(show|see|pull|view|here is|here are)\b/i);
+    expect(__agentTestHooks.guardVisibleFinalMessage(message)).toBe(repaired);
+  });
+
   it("repairs generic no-card display offers", () => {
     expect(
       __agentTestHooks.guardVisibleFinalMessage(
@@ -1035,12 +1055,12 @@ describe("runAIAgent", () => {
 
 describe("AI model configuration", () => {
   it("uses the direct OpenAI default unless Netlify AI Gateway is configured", () => {
-    expect(getFreeCashAiModel({})).toBe(FREE_CASH_AI_MODEL);
+    expect(getPipAiModel({})).toBe(PIP_AI_MODEL);
   });
 
   it("uses a Netlify AI Gateway supported default when OPENAI_BASE_URL is present", () => {
     expect(
-      getFreeCashAiModel({
+      getPipAiModel({
         OPENAI_BASE_URL: "https://example.netlify.app/.netlify/ai",
       }),
     ).toBe(NETLIFY_AI_GATEWAY_MODEL);
@@ -1048,18 +1068,18 @@ describe("AI model configuration", () => {
 
   it("uses a Netlify AI Gateway supported default when Netlify injects gateway env", () => {
     expect(
-      getFreeCashAiModel({
+      getPipAiModel({
         NETLIFY_AI_GATEWAY_BASE_URL: "https://api.netlify.com/ai/v1",
         NETLIFY_AI_GATEWAY_KEY: "netlify-key",
       }),
     ).toBe(NETLIFY_AI_GATEWAY_MODEL);
   });
 
-  it("lets an explicit FREE_CASH_AI_MODEL override either deployment default", () => {
+  it("lets an explicit PIP_AI_MODEL override either deployment default", () => {
     expect(
-      getFreeCashAiModel({
+      getPipAiModel({
         OPENAI_BASE_URL: "https://example.netlify.app/.netlify/ai",
-        FREE_CASH_AI_MODEL: "custom-model",
+        PIP_AI_MODEL: "custom-model",
       }),
     ).toBe("custom-model");
   });
@@ -1090,7 +1110,7 @@ describe("AI model configuration", () => {
       getOpenAIClientConfig({
         OPENAI_API_KEY: "custom-key",
         OPENAI_BASE_URL: "https://llm-gateway.example",
-        FREE_CASH_AI_TRANSPORT: "custom-openai-compatible",
+        PIP_AI_TRANSPORT: "custom-openai-compatible",
       }),
     ).toEqual({
       apiKey: "custom-key",
@@ -1112,7 +1132,7 @@ describe("AI model configuration", () => {
       transport: "netlify-ai-gateway",
     });
     expect(
-      getFreeCashAiTransport({
+      getPipAiTransport({
         OPENAI_API_KEY: "direct-openai-key",
         NETLIFY_AI_GATEWAY_BASE_URL: "https://api.netlify.com/ai/v1",
         NETLIFY_AI_GATEWAY_KEY: "netlify-key",

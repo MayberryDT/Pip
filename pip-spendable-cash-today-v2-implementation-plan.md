@@ -88,7 +88,7 @@ Preserve these:
 
 ## Current calculation
 
-The existing engine lives around `calculateFreeCash`. It:
+The existing engine lives around `calculatePipCash`. It:
 
 - Builds a rolling calendar-month window from the `asOfDate`
 - Annotates credit-card settlement matches
@@ -123,7 +123,7 @@ Keep these concepts:
 
 ## Current pieces to demote
 
-The existing `freeCashTodayCents` should no longer be the main product metric.
+The existing `pipCashTodayCents` should no longer be the main product metric.
 
 It should become a secondary signal, something like:
 
@@ -883,7 +883,7 @@ Subtitle: You’re $38 over your pattern.
 
 ## 15.1 Add V2 result type
 
-Create a new result concept rather than mutating the meaning of `FreeCashResult` too aggressively.
+Create a new result concept rather than mutating the meaning of `PipCashResult` too aggressively.
 
 Suggested type:
 
@@ -949,9 +949,9 @@ Do not break existing routes immediately.
 
 For migration:
 
-- Keep `FreeCashResult`.
+- Keep `PipCashResult`.
 - Add `SpendableCashTodayResult`.
-- Let `/api/free-cash` return both during transition if needed.
+- Let `/api/pip-cash` return both during transition if needed.
 - Eventually rename API concepts only after UI and agent are stable.
 
 Plan a gradual transition rather than a hard rewrite.
@@ -1256,10 +1256,10 @@ Tasks:
 
 3. Decide whether to:
    - add a new table
-   - add fields to existing `free_cash_snapshots`
+   - add fields to existing `pip_cash_snapshots`
    - store V2 in the existing JSON `result` field during beta
 
-4. Update `/api/free-cash` response to include V2 metric.
+4. Update `/api/pip-cash` response to include V2 metric.
 
 5. Keep backward compatibility for UI until migration complete.
 
@@ -1443,7 +1443,7 @@ Create deterministic tests for:
 
 ## 17.2 Integration tests
 
-1. `/api/free-cash` returns V2 result.
+1. `/api/pip-cash` returns V2 result.
 2. Manual sync stores V2 snapshot.
 3. Home screen displays V2 number.
 4. Agent “why this amount?” uses V2 drivers.
@@ -1551,14 +1551,14 @@ cashRealityAdjustmentCents
 legacyRollingDailySurplusCents
 ```
 
-Avoid continuing to call the new value `freeCashTodayCents` internally if possible. It will confuse future work.
+Avoid continuing to call the new value `pipCashTodayCents` internally if possible. It will confuse future work.
 
-## 19.2 Current `FreeCashResult`
+## 19.2 Current `PipCashResult`
 
 Current type includes:
 
 ```txt
-freeCashTodayCents
+pipCashTodayCents
 rollingNetCents
 incomeTotalCents
 spendingTotalCents
@@ -1609,7 +1609,7 @@ Do not simply cram the new model into these fields. Add a new result shape and b
 
 ## API/data
 
-- [ ] Return V2 metric from `/api/free-cash`.
+- [ ] Return V2 metric from `/api/pip-cash`.
 - [ ] Store V2 snapshot on manual sync.
 - [ ] Invalidate V2 snapshot when settings change.
 - [ ] Preserve current result during transition.

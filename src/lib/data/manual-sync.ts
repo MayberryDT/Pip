@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentAppDate } from "@/lib/date/app-date";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
-import { getDisplayedSpendableCashTodayCents } from "@/lib/free-cash/spendable-cash-today";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
+import { getDisplayedSpendableCashTodayCents } from "@/lib/pip-cash/spendable-cash-today";
 import { loadFinancialSnapshotForUser } from "@/lib/data/financial-repository";
 import { recordProductEvent } from "@/lib/data/product-events";
 import type {
@@ -27,7 +27,7 @@ export type ManualSyncResult = {
   accountCount: number;
   transactionCount: number;
   balanceCount: number;
-  freeCashTodayCents: number;
+  pipCashTodayCents: number;
   failedInstitutionCount: number;
   failures: ManualSyncFailure[];
 };
@@ -126,7 +126,7 @@ export async function runManualSync(
       transactions: successes.flatMap((success) => success.transactions),
       settings,
     };
-    const result = calculateFreeCash(snapshot);
+    const result = calculatePipCash(snapshot);
     const spendableCashTodayCents = getDisplayedSpendableCashTodayCents(result);
     const v2Metric = result.spendableCashToday;
     const syncFailures = await Promise.all(
@@ -143,7 +143,7 @@ export async function runManualSync(
     );
     const status = syncFailures.length > 0 ? "partial" : "succeeded";
 
-    await storeFreeCashSnapshot(supabase, {
+    await storePipCashSnapshot(supabase, {
       userId: input.userId,
       syncRunId: syncRun.id,
       result,
@@ -171,7 +171,7 @@ export async function runManualSync(
       accountCount,
       transactionCount,
       failedInstitutionCount: syncFailures.length,
-      freeCashTodayCents: spendableCashTodayCents,
+      pipCashTodayCents: spendableCashTodayCents,
       metricVersion: v2Metric?.metricVersion ?? "legacy",
       spendableCashTodayCents,
       baselineDailyAllowanceCents: v2Metric?.baselineDailyAllowanceCents,
@@ -192,7 +192,7 @@ export async function runManualSync(
       accountCount,
       transactionCount,
       balanceCount,
-      freeCashTodayCents: spendableCashTodayCents,
+      pipCashTodayCents: spendableCashTodayCents,
       failedInstitutionCount: syncFailures.length,
       failures: syncFailures.map(toManualSyncFailure),
     };
@@ -516,18 +516,18 @@ async function upsertDefaultSettings(
   };
 }
 
-async function storeFreeCashSnapshot(
+async function storePipCashSnapshot(
   supabase: SupabaseClient<Database>,
   input: {
     userId: string;
     syncRunId: string;
-    result: ReturnType<typeof calculateFreeCash>;
+    result: ReturnType<typeof calculatePipCash>;
   },
 ) {
-  const { error } = await supabase.from("free_cash_snapshots").insert({
+  const { error } = await supabase.from("pip_cash_snapshots").insert({
     user_id: input.userId,
     as_of_date: input.result.window.endDate,
-    free_cash_today_cents: input.result.freeCashTodayCents,
+    pip_cash_today_cents: input.result.pipCashTodayCents,
     rolling_net_cents: input.result.rollingNetCents,
     income_total_cents: input.result.incomeTotalCents,
     spending_total_cents: input.result.spendingTotalCents,

@@ -1,5 +1,5 @@
 import type {
-  FreeCashResult,
+  PipCashResult,
   MoneyTone,
   SpendableCashConfidence,
   SpendableCashTodayState,
@@ -124,7 +124,7 @@ export const blockedGuidanceDomains: BlockedGuidanceDomain[] = [
   "insurance_products",
 ];
 
-export function buildFinancialGuidanceContext(result: FreeCashResult): FinancialGuidanceContext {
+export function buildFinancialGuidanceContext(result: PipCashResult): FinancialGuidanceContext {
   const metric = result.spendableCashToday;
 
   if (!metric) {
@@ -452,9 +452,9 @@ export function buildFinancialGuidanceContext(result: FreeCashResult): Financial
   };
 }
 
-function buildLegacyFallbackContext(result: FreeCashResult): FinancialGuidanceContext {
-  const spendableCashTodayCents = Math.max(0, result.freeCashTodayCents);
-  const shortfallCents = Math.max(0, -result.freeCashTodayCents);
+function buildLegacyFallbackContext(result: PipCashResult): FinancialGuidanceContext {
+  const spendableCashTodayCents = Math.max(0, result.pipCashTodayCents);
+  const shortfallCents = Math.max(0, -result.pipCashTodayCents);
   const state: SpendableCashTodayState = shortfallCents > 0 ? "shortfall" : "low_confidence";
   const evidence = createEvidenceCollector();
 

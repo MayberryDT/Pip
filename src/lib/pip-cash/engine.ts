@@ -2,27 +2,27 @@ import type {
   Account,
   AccountBalanceSummary,
   FinancialSnapshot,
-  FreeCashDriver,
-  FreeCashResult,
-  FreeCashWarning,
+  PipCashDriver,
+  PipCashResult,
+  PipCashWarning,
   Transaction,
 } from "@/lib/types";
-import { classifyTransaction } from "@/lib/free-cash/classify";
+import { classifyTransaction } from "@/lib/pip-cash/classify";
 import {
   addDays,
   buildRollingCalendarWindow,
   isWithinInclusiveWindow,
-} from "@/lib/free-cash/date-window";
+} from "@/lib/pip-cash/date-window";
 import {
   annotateCreditCardPaymentMatches,
   findUnmatchedCreditCardPayments,
   isDedupedCreditCardPayment,
-} from "@/lib/free-cash/dedupe-credit-card-payments";
-import { calculateSpendableCashToday } from "@/lib/free-cash/spendable-cash-today";
+} from "@/lib/pip-cash/dedupe-credit-card-payments";
+import { calculateSpendableCashToday } from "@/lib/pip-cash/spendable-cash-today";
 
 const MATERIAL_PENDING_THRESHOLD_CENTS = 2000;
 
-export function calculateFreeCash(snapshot: FinancialSnapshot): FreeCashResult {
+export function calculatePipCash(snapshot: FinancialSnapshot): PipCashResult {
   const window = buildRollingCalendarWindow(snapshot.settings.asOfDate);
   const transactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts);
   const windowTransactions = transactions.filter((transaction) =>
@@ -66,7 +66,7 @@ export function calculateFreeCash(snapshot: FinancialSnapshot): FreeCashResult {
     incomeTotalCents -
     spendingTotalCents -
     snapshot.settings.protectedSavingsMonthlyCents;
-  const freeCashTodayCents = Math.round(rollingNetCents / window.dayCount);
+  const pipCashTodayCents = Math.round(rollingNetCents / window.dayCount);
   const drivers = buildDrivers({
     incomeTotalCents,
     spendingTotalCents,
@@ -82,7 +82,7 @@ export function calculateFreeCash(snapshot: FinancialSnapshot): FreeCashResult {
   const dataStates = buildDataStates(windowTransactions, snapshot.accounts);
 
   return {
-    freeCashTodayCents,
+    pipCashTodayCents,
     rollingNetCents,
     incomeTotalCents,
     spendingTotalCents,
@@ -94,7 +94,7 @@ export function calculateFreeCash(snapshot: FinancialSnapshot): FreeCashResult {
     dataStates,
     trueBalances: snapshot.accounts.map(toBalanceSummary),
     spendableCashToday: calculateSpendableCashToday(snapshot, {
-      legacyRollingDailySurplusCents: freeCashTodayCents,
+      legacyRollingDailySurplusCents: pipCashTodayCents,
       legacyRollingNetCents: rollingNetCents,
       warnings,
       dataStates,
@@ -112,7 +112,7 @@ function buildDrivers(input: {
   allTransactions: Transaction[];
   window: ReturnType<typeof buildRollingCalendarWindow>;
   accounts: Account[];
-}): FreeCashDriver[] {
+}): PipCashDriver[] {
   const rentTotalCents = input.windowTransactions
     .filter((transaction) => classifyTransaction(transaction) === "rent")
     .reduce((total, transaction) => total + Math.max(0, -transaction.amountCents), 0);
@@ -121,7 +121,7 @@ function buildDrivers(input: {
     input.accounts,
   );
 
-  const drivers: FreeCashDriver[] = [
+  const drivers: PipCashDriver[] = [
     {
       id: "income",
       label: "Income in window",
@@ -193,7 +193,7 @@ function buildDrivers(input: {
 function buildWindowMovementDrivers(
   transactions: Transaction[],
   window: ReturnType<typeof buildRollingCalendarWindow>,
-): FreeCashDriver[] {
+): PipCashDriver[] {
   const enteredContributionCents = sumRollingNetContributions(
     transactions.filter((transaction) => transaction.date === window.endDate),
   );
@@ -202,7 +202,7 @@ function buildWindowMovementDrivers(
     -sumRollingNetContributions(
       transactions.filter((transaction) => transaction.date === exitedDate),
     );
-  const drivers: FreeCashDriver[] = [];
+  const drivers: PipCashDriver[] = [];
 
   if (enteredContributionCents !== 0) {
     drivers.push({
@@ -230,7 +230,7 @@ function buildWindowMovementDrivers(
 function buildWarnings(
   windowTransactions: Transaction[],
   suppressedMissingCardIssuers: string[] = [],
-): FreeCashWarning[] {
+): PipCashWarning[] {
   const unmatchedPayments = findUnmatchedCreditCardPayments(windowTransactions);
 
   if (unmatchedPayments.length === 0) {
@@ -327,7 +327,7 @@ function getRollingNetContribution(transaction: Transaction): number {
   return 0;
 }
 
-function toneForAmount(amountCents: number): FreeCashDriver["tone"] {
+function toneForAmount(amountCents: number): PipCashDriver["tone"] {
   if (amountCents > 0) {
     return "positive";
   }

@@ -159,10 +159,10 @@ values
     1
   );
 
-insert into public.free_cash_snapshots (
+insert into public.pip_cash_snapshots (
   user_id,
   as_of_date,
-  free_cash_today_cents,
+  pip_cash_today_cents,
   rolling_net_cents,
   income_total_cents,
   spending_total_cents,
@@ -204,8 +204,8 @@ values
 
 insert into public.product_events (user_id, event_name, properties)
 values
-  ('00000000-0000-0000-0000-00000000a101', 'free_cash_viewed', '{}'::jsonb),
-  ('00000000-0000-0000-0000-00000000b202', 'free_cash_viewed', '{}'::jsonb);
+  ('00000000-0000-0000-0000-00000000a101', 'pip_cash_viewed', '{}'::jsonb),
+  ('00000000-0000-0000-0000-00000000b202', 'pip_cash_viewed', '{}'::jsonb);
 
 insert into public.data_deletion_requests (user_id, completed_at, status)
 values
@@ -240,7 +240,7 @@ select
   (select count(*) from public.accounts) as visible_accounts,
   (select count(*) from public.transactions) as visible_transactions,
   (select count(*) from public.sync_runs) as visible_sync_runs,
-  (select count(*) from public.free_cash_snapshots) as visible_free_cash_snapshots,
+  (select count(*) from public.pip_cash_snapshots) as visible_pip_cash_snapshots,
   (select count(*) from public.missing_card_preferences) as visible_missing_card_preferences,
   (select count(*) from public.product_events) as visible_product_events,
   (select count(*) from public.data_deletion_requests) as visible_data_deletion_requests,

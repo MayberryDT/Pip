@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { markFreeCashSnapshotsStaleForUser } from "@/lib/data/financial-repository";
+import { markPipCashSnapshotsStaleForUser } from "@/lib/data/financial-repository";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
         throw insertError;
       }
 
-      await markFreeCashSnapshotsStaleForUser(supabase, user.id);
+      await markPipCashSnapshotsStaleForUser(supabase, user.id);
     }
 
     await recordProductEventSafely(supabase, user.id, "missing_card_nudge_suppressed", {

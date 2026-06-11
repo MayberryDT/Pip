@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
-import { getPrimaryDriver, summarizeFreeCash } from "@/lib/free-cash/explanation";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
+import { getPrimaryDriver, summarizePipCash } from "@/lib/pip-cash/explanation";
 import { fakeSnapshot } from "@/lib/fake-data";
 import type { FinancialSnapshot } from "@/lib/types";
 
 describe("Spendable Cash explanation primitives", () => {
   it("summarizes bounded aggregate math without exposing raw transaction details", () => {
-    const summary = summarizeFreeCash(calculateFreeCash(fakeSnapshot));
+    const summary = summarizePipCash(calculatePipCash(fakeSnapshot));
 
     expect(summary).toContain("$104");
     expect(summary).toContain("normal room");
@@ -18,16 +18,16 @@ describe("Spendable Cash explanation primitives", () => {
   });
 
   it("uses the V2 top driver when V2 metric is available", () => {
-    expect(getPrimaryDriver(calculateFreeCash(fakeSnapshot))).toBe(
+    expect(getPrimaryDriver(calculatePipCash(fakeSnapshot))).toBe(
       "Pattern-based daily room after recurring obligations and protected savings.",
     );
   });
 
   it("falls back to the V2 baseline driver for sparse aggregate snapshots", () => {
-    expect(getPrimaryDriver(calculateFreeCash(spendingSnapshot))).toBe(
+    expect(getPrimaryDriver(calculatePipCash(spendingSnapshot))).toBe(
       "Pattern-based daily room after recurring obligations and protected savings.",
     );
-    expect(getPrimaryDriver(calculateFreeCash(incomeOnlySnapshot))).toBe(
+    expect(getPrimaryDriver(calculatePipCash(incomeOnlySnapshot))).toBe(
       "Pattern-based daily room after recurring obligations and protected savings.",
     );
   });

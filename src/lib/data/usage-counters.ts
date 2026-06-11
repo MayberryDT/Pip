@@ -12,7 +12,7 @@ type SyncRunRow = Pick<
 
 export type UsageCounters = {
   periodStart: string;
-  freeCashViewCount: number;
+  pipCashViewCount: number;
   promptChipSelectionCount: number;
   aiQuestionCount: number;
   agentFollowUpCount: number;
@@ -21,7 +21,7 @@ export type UsageCounters = {
   trueBalanceRevealCount: number;
   missingCardNudgeShownCount: number;
   missingCardSuppressionCount: number;
-  negativeFreeCashFollowUpCount: number;
+  negativePipCashFollowUpCount: number;
   providerSyncCount: number;
   partialProviderSyncCount: number;
   failedProviderSyncCount: number;
@@ -70,7 +70,7 @@ export function summarizeUsageCounters(input: {
 
   return {
     periodStart: input.periodStart,
-    freeCashViewCount: countEvents(input.events, "free_cash_viewed"),
+    pipCashViewCount: countEvents(input.events, "pip_cash_viewed"),
     promptChipSelectionCount: countEvents(input.events, "prompt_chip_selected"),
     aiQuestionCount,
     agentFollowUpCount: countEvents(input.events, "agent_follow_up_asked"),
@@ -79,7 +79,7 @@ export function summarizeUsageCounters(input: {
     trueBalanceRevealCount: countEvents(input.events, "true_balances_revealed"),
     missingCardNudgeShownCount: countEvents(input.events, "missing_card_nudge_shown"),
     missingCardSuppressionCount: countEvents(input.events, "missing_card_nudge_suppressed"),
-    negativeFreeCashFollowUpCount: countEvents(input.events, "negative_free_cash_follow_up"),
+    negativePipCashFollowUpCount: countEvents(input.events, "negative_pip_cash_follow_up"),
     providerSyncCount: input.syncRuns.length,
     partialProviderSyncCount: input.syncRuns.filter((run) => run.status === "partial").length,
     failedProviderSyncCount: input.syncRuns.filter((run) => run.status === "failed").length,

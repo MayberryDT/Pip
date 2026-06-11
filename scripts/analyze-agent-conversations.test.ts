@@ -60,7 +60,7 @@ describe("Pip conversation analysis", () => {
 
   it("loads JSONL turns and writes a report", async () => {
     const { runAgentConversationAnalysis } = await loadAnalysisHarness();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-agent-analysis-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-analysis-"));
     const logPath = join(tempDir, "turns.jsonl");
     const reportPath = join(tempDir, "report.json");
 

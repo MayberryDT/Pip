@@ -3,8 +3,8 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const DEFAULT_STORAGE_STATE = "/tmp/spendable-live-auth.json";
-const DEFAULT_PROOF_REPORT = "/tmp/spendable-live-proof.json";
+const DEFAULT_STORAGE_STATE = "/tmp/pip-live-auth.json";
+const DEFAULT_PROOF_REPORT = "/tmp/pip-live-proof.json";
 
 export function provePrdComplete({
   argv = process.argv.slice(2),
@@ -15,11 +15,11 @@ export function provePrdComplete({
   const skipCapture = argv.includes("--skip-capture");
   const effectiveEnv = {
     ...env,
-    SPENDABLE_LIVE_STORAGE_STATE:
-      env.SPENDABLE_LIVE_STORAGE_STATE || DEFAULT_STORAGE_STATE,
-    SPENDABLE_LIVE_PROOF_REPORT:
-      env.SPENDABLE_LIVE_PROOF_REPORT || DEFAULT_PROOF_REPORT,
-    SPENDABLE_LIVE_COMPLETE_PLAID: "1",
+    PIP_LIVE_STORAGE_STATE:
+      env.PIP_LIVE_STORAGE_STATE || DEFAULT_STORAGE_STATE,
+    PIP_LIVE_PROOF_REPORT:
+      env.PIP_LIVE_PROOF_REPORT || DEFAULT_PROOF_REPORT,
+    PIP_LIVE_COMPLETE_PLAID: "1",
   };
   const steps = [
     ...(skipCapture

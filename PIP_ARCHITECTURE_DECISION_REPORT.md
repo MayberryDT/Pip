@@ -1,4 +1,4 @@
-# Free Cash Architecture Decision Report
+# PIP Cash Architecture Decision Report
 
 Date: June 5, 2026
 Author: Codex
@@ -6,7 +6,7 @@ Scope: Follow-up architecture investigation for Netlify, Plaid vs Teller, SDK ch
 
 ## Executive Decision
 
-Build the first real product as a Netlify-hosted mobile PWA with a deterministic Free Cash engine, a provider abstraction, and a mock agent. Do not start by integrating Plaid, Teller, OpenAI, or Supabase.
+Build the first real product as a Netlify-hosted mobile PWA with a deterministic PIP cash engine, a provider abstraction, and a mock agent. Do not start by integrating Plaid, Teller, OpenAI, or Supabase.
 
 The sequence should be:
 
@@ -21,7 +21,7 @@ The sequence should be:
 Short version:
 
 ```text
-Now:     Next.js + Netlify + fake data + pure TypeScript Free Cash engine
+Now:     Next.js + Netlify + fake data + pure TypeScript PIP Cash engine
 Beta:    Supabase + MockProvider + TellerProvider
 Later:   PlaidProvider + OpenAI SDK via Netlify AI Gateway
 Avoid:   both bank providers now, Vercel, Vercel AI SDK, OpenAI Agents SDK in v1
@@ -88,7 +88,7 @@ Plaid is the safer institutional choice:
 That counterargument wins if any of these happen:
 
 - Teller does not cover Tyler's or testers' key institutions/cards.
-- Teller's credit-card transaction data is not good enough for Free Cash.
+- Teller's credit-card transaction data is not good enough for PIP Cash.
 - Netlify Functions cannot reliably perform Teller mTLS requests.
 - Teller certificate/key handling becomes fragile across local, preview, and production.
 - Tyler shifts from private beta to broader public launch earlier than expected.
@@ -116,7 +116,7 @@ Why Next.js instead of a plain Vite SPA:
 
 - The prior app plan already maps cleanly to `src/app/page.tsx` and route handlers.
 - Netlify now supports modern Next.js through OpenNext, including App Router and route handlers.
-- Route handlers give a clean home for `/api/free-cash`, `/api/agent`, `/api/sync`, and provider callbacks.
+- Route handlers give a clean home for `/api/pip-cash`, `/api/agent`, `/api/sync`, and provider callbacks.
 - We can keep the UI static/client-heavy while still having server-side endpoints in one framework.
 
 Why not Vercel:
@@ -150,8 +150,8 @@ Next.js on Netlify
   |     Agent thread
   |     Temporary cards
   |
-  +-- app/api/free-cash/route.ts
-  |     Calls deterministic Free Cash engine
+  +-- app/api/pip-cash/route.ts
+  |     Calls deterministic PIP cash engine
   |
   +-- app/api/agent/route.ts
   |     Phase 1: MockAgentRouter
@@ -176,7 +176,7 @@ Supabase
   +-- connected_institutions
   +-- accounts
   +-- transactions
-  +-- free_cash_snapshots
+  +-- pip_cash_snapshots
   +-- agent_messages
   +-- events
 
@@ -186,7 +186,7 @@ FinancialDataProvider
   +-- TellerProvider
   +-- PlaidProvider later
 
-Free Cash Engine
+PIP Cash Engine
   |
   +-- Pure TypeScript
   +-- Tested independently
@@ -238,7 +238,7 @@ The important distinction:
 Agent-first UX does not require an agent framework SDK.
 ```
 
-Free Cash is agent-first because the interface is "ask the money layer" instead of "navigate budgeting screens." That does not mean v1 needs OpenAI Agents SDK. In v1, the right "agent" is a deterministic mock router that returns known card types.
+PIP Cash is agent-first because the interface is "ask the money layer" instead of "navigate budgeting screens." That does not mean v1 needs OpenAI Agents SDK. In v1, the right "agent" is a deterministic mock router that returns known card types.
 
 ## SDKs By Phase
 
@@ -270,7 +270,7 @@ The first milestone is proving the product loop:
 
 ```text
 Open app
-See Free Cash
+See PIP Cash
 Ask "Why this number?"
 Ask "Can I spend $50?"
 Ask "Show true balances"
@@ -308,8 +308,8 @@ Do not let the model query raw transaction tables directly.
 Good pattern:
 
 ```text
-User asks: "Why did Free Cash drop?"
-API calls Free Cash engine.
+User asks: "Why did PIP Cash drop?"
+API calls PIP Cash engine.
 Engine returns small JSON explanation.
 Model rewrites that explanation in a friendly voice.
 UI renders a typed card.
@@ -382,7 +382,7 @@ Cost controls:
 - Invite-only beta.
 - Daily agent-message caps.
 - Never send full transaction histories to the model.
-- Precompute Free Cash snapshots.
+- Precompute PIP Cash snapshots.
 - Cache explanation JSON.
 - Log model, token, and credit usage per request.
 - Use deterministic tools before model calls.
@@ -475,7 +475,7 @@ export interface FinancialDataProvider {
 }
 ```
 
-Internal data models must not contain Plaid/Teller assumptions in the Free Cash engine.
+Internal data models must not contain Plaid/Teller assumptions in the PIP Cash engine.
 
 Provider-specific fields belong in provider tables or metadata:
 
@@ -488,7 +488,7 @@ connected_institutions.institution_name
 connected_institutions.status
 ```
 
-The Free Cash engine receives normalized data only:
+The PIP Cash engine receives normalized data only:
 
 ```ts
 type Account = {
@@ -523,7 +523,7 @@ type Transaction = {
 };
 ```
 
-## Free Cash Engine Rules
+## PIP Cash Engine Rules
 
 The current architecture must preserve the original product decisions:
 
@@ -540,27 +540,27 @@ The current architecture must preserve the original product decisions:
 Core module structure:
 
 ```text
-src/lib/free-cash/date-window.ts
-src/lib/free-cash/classify.ts
-src/lib/free-cash/dedupe-credit-card-payments.ts
-src/lib/free-cash/engine.ts
-src/lib/free-cash/explanation.ts
-src/lib/free-cash/engine.test.ts
+src/lib/pip-cash/date-window.ts
+src/lib/pip-cash/classify.ts
+src/lib/pip-cash/dedupe-credit-card-payments.ts
+src/lib/pip-cash/engine.ts
+src/lib/pip-cash/explanation.ts
+src/lib/pip-cash/engine.test.ts
 ```
 
 The engine should return both the number and explanation primitives:
 
 ```ts
-type FreeCashResult = {
-  freeCashTodayCents: number;
+type PipCashResult = {
+  pipCashTodayCents: number;
   window: {
     startDate: string;
     endDate: string;
     daysElapsed: number;
     daysRemaining: number;
   };
-  drivers: FreeCashDriver[];
-  warnings: FreeCashWarning[];
+  drivers: PipCashDriver[];
+  warnings: PipCashWarning[];
   trueBalances?: AccountBalanceSummary[];
 };
 ```
@@ -570,7 +570,7 @@ type FreeCashResult = {
 Minimal endpoints:
 
 ```text
-GET  /api/free-cash
+GET  /api/pip-cash
 POST /api/agent
 POST /api/sync
 POST /api/connect/teller/session
@@ -598,7 +598,7 @@ type AgentResponse = {
 Card types:
 
 ```text
-free_cash_explanation
+pip_cash_explanation
 purchase_simulation
 true_balances
 recent_transactions
@@ -641,7 +641,7 @@ Cost/risk caps:
 
 Minimum standard:
 
-- No bank credentials stored by Free Cash.
+- No bank credentials stored by PIP Cash.
 - Provider tokens encrypted or stored in a secrets-safe pattern.
 - Supabase RLS enabled on all user financial tables.
 - Service role key only in server-side Netlify code.
@@ -659,7 +659,7 @@ Agent restrictions:
 - Cannot change bank connections without explicit user action.
 - Cannot call itself a financial advisor.
 - Cannot promise a purchase is "safe."
-- Must use "Free Cash" language, not "safe to spend."
+- Must use "PIP Cash" language, not "safe to spend."
 - Must show true balances only when asked or legally/security necessary.
 
 ## Pricing Snapshot
@@ -740,7 +740,7 @@ First repo milestone:
 
 ```text
 Open app
-See Free Cash Today
+See PIP Cash Today
 Tap "Why this number?"
 Receive explanation card
 Tap "Can I spend $50?"
@@ -763,11 +763,11 @@ src/app/globals.css
 src/lib/types.ts
 src/lib/fake-data.ts
 
-src/lib/free-cash/date-window.ts
-src/lib/free-cash/classify.ts
-src/lib/free-cash/engine.ts
-src/lib/free-cash/explanation.ts
-src/lib/free-cash/engine.test.ts
+src/lib/pip-cash/date-window.ts
+src/lib/pip-cash/classify.ts
+src/lib/pip-cash/engine.ts
+src/lib/pip-cash/explanation.ts
+src/lib/pip-cash/engine.test.ts
 
 src/lib/providers/FinancialDataProvider.ts
 src/lib/providers/MockProvider.ts
@@ -776,7 +776,7 @@ src/lib/agent/mock-agent.ts
 src/lib/agent/suggested-prompts.ts
 src/lib/agent/card-types.ts
 
-src/components/FreeCashHome.tsx
+src/components/PipHome.tsx
 src/components/PromptChips.tsx
 src/components/AgentThread.tsx
 src/components/AgentInput.tsx
@@ -825,7 +825,7 @@ When AI is added, `/api/agent` should look like this conceptually:
 3. If known deterministic command, call app tool directly.
 4. If model needed, call OpenAI Responses API through Netlify AI Gateway.
 5. Expose only approved tools:
-   - explain_free_cash
+   - explain_pip_cash
    - simulate_purchase
    - show_true_balances
    - show_recent_transactions

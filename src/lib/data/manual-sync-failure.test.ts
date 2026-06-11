@@ -165,7 +165,7 @@ describe("manual sync provider failures", () => {
       now,
     });
 
-    expect(captures.freeCashSnapshotInserts[0]).toMatchObject({
+    expect(captures.pipCashSnapshotInserts[0]).toMatchObject({
       user_id: "user-1",
       as_of_date: "2026-03-15",
       source_sync_run_id: "sync-run-1",
@@ -222,7 +222,7 @@ describe("manual sync provider failures", () => {
       now,
     });
 
-    expect(captures.freeCashSnapshotInserts[0]).toMatchObject({
+    expect(captures.pipCashSnapshotInserts[0]).toMatchObject({
       user_id: "user-1",
       as_of_date: "2026-06-07",
     });
@@ -532,7 +532,7 @@ function createCaptures() {
   return {
     syncRunUpdates: [] as Capture[],
     institutionUpdates: [] as Capture[],
-    freeCashSnapshotInserts: [] as Record<string, unknown>[],
+    pipCashSnapshotInserts: [] as Record<string, unknown>[],
     upserts: [] as Array<{
       tableName: string;
       rows: Record<string, unknown>[];
@@ -575,8 +575,8 @@ function createQuery(tableName: string, captures: ReturnType<typeof createCaptur
       operation = "insert";
       payload = row;
 
-      if (tableName === "free_cash_snapshots") {
-        captures.freeCashSnapshotInserts.push(row);
+      if (tableName === "pip_cash_snapshots") {
+        captures.pipCashSnapshotInserts.push(row);
       }
 
       return query;

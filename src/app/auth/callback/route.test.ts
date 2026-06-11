@@ -29,7 +29,7 @@ describe("GET /auth/callback", () => {
   });
 
   it("redirects home when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await GET(new Request("http://localhost/auth/callback?code=abc"));
 
@@ -54,34 +54,34 @@ describe("GET /auth/callback", () => {
 
   it("redirects successful OAuth callbacks to the canonical public site origin", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://pip-mayberrydt.netlify.app");
     const supabase = createSupabaseClient({ error: null });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
     const response = await GET(
       new Request(
-        "https://main--free-cash-mayberrydt.netlify.app/auth/callback?code=abc123&next=/welcome",
+        "https://main--pip-mayberrydt.netlify.app/auth/callback?code=abc123&next=/welcome",
       ),
     );
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("https://free-cash-mayberrydt.netlify.app/welcome");
+    expect(response.headers.get("location")).toBe("https://pip-mayberrydt.netlify.app/welcome");
     expect(supabase.auth.exchangeCodeForSession).toHaveBeenCalledWith("abc123");
   });
 
   it("redirects failed OAuth callbacks to the canonical public site origin", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://pip-mayberrydt.netlify.app");
     const supabase = createSupabaseClient({ error: new Error("bad code") });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
     const response = await GET(
-      new Request("https://main--free-cash-mayberrydt.netlify.app/auth/callback?code=bad"),
+      new Request("https://main--pip-mayberrydt.netlify.app/auth/callback?code=bad"),
     );
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
-      "https://free-cash-mayberrydt.netlify.app/?auth=callback-failed",
+      "https://pip-mayberrydt.netlify.app/?auth=callback-failed",
     );
   });
 
@@ -167,7 +167,7 @@ describe("GET /auth/callback", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

@@ -31,9 +31,9 @@ describe("PRD final proof orchestrator", () => {
     ]);
     expect(spawnCapture.calls[0].env).toEqual(
       expect.objectContaining({
-        SPENDABLE_LIVE_STORAGE_STATE: "/tmp/spendable-live-auth.json",
-        SPENDABLE_LIVE_PROOF_REPORT: "/tmp/spendable-live-proof.json",
-        SPENDABLE_LIVE_COMPLETE_PLAID: "1",
+        PIP_LIVE_STORAGE_STATE: "/tmp/pip-live-auth.json",
+        PIP_LIVE_PROOF_REPORT: "/tmp/pip-live-proof.json",
+        PIP_LIVE_COMPLETE_PLAID: "1",
       }),
     );
   });
@@ -44,7 +44,7 @@ describe("PRD final proof orchestrator", () => {
     const result = provePrdComplete({
       argv: ["--skip-capture"],
       env: {
-        SPENDABLE_LIVE_STORAGE_STATE: "/tmp/existing-state.json",
+        PIP_LIVE_STORAGE_STATE: "/tmp/existing-state.json",
       },
       stdout: () => undefined,
       spawn: spawnCapture.spawn,
@@ -58,7 +58,7 @@ describe("PRD final proof orchestrator", () => {
     ]);
     expect(spawnCapture.calls[0].env).toEqual(
       expect.objectContaining({
-        SPENDABLE_LIVE_STORAGE_STATE: "/tmp/existing-state.json",
+        PIP_LIVE_STORAGE_STATE: "/tmp/existing-state.json",
       }),
     );
   });

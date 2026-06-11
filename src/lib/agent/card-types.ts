@@ -3,8 +3,8 @@ import type {
   SpendableCashForecastPoint,
   SpendingBreakdown,
   SpendingBreakdownGroup,
-} from "@/lib/free-cash/insights";
-import type { AccountBalanceSummary, FreeCashDriver, FreeCashResult, RollingWindow, Transaction } from "@/lib/types";
+} from "@/lib/pip-cash/insights";
+import type { AccountBalanceSummary, PipCashDriver, PipCashResult, RollingWindow, Transaction } from "@/lib/types";
 
 export type PromptChip = {
   id: string;
@@ -38,12 +38,12 @@ export type AgentClientAction =
 
 export type AgentCard =
   | {
-      type: "free_cash_explanation";
+      type: "pip_cash_explanation";
       title: string;
       summary: string;
-      drivers: FreeCashDriver[];
-      warnings: FreeCashResult["warnings"];
-      dataStates: FreeCashResult["dataStates"];
+      drivers: PipCashDriver[];
+      warnings: PipCashResult["warnings"];
+      dataStates: PipCashResult["dataStates"];
     }
   | {
       type: "purchase_simulation";

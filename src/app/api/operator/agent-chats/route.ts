@@ -8,7 +8,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 
 export async function GET(request: Request) {
-  const expectedToken = process.env.FREE_CASH_OPERATOR_TOKEN;
+  const expectedToken = process.env.PIP_OPERATOR_TOKEN;
 
   if (!expectedToken) {
     return NextResponse.json({ error: "Operator access is not configured." }, { status: 503 });

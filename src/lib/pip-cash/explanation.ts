@@ -1,7 +1,7 @@
-import type { FreeCashResult } from "@/lib/types";
+import type { PipCashResult } from "@/lib/types";
 import { formatMoney } from "@/lib/money";
 
-export function summarizeFreeCash(result: FreeCashResult): string {
+export function summarizePipCash(result: PipCashResult): string {
   if (result.spendableCashToday) {
     const metric = result.spendableCashToday;
     const spendable = formatMoney(metric.spendableCashTodayCents);
@@ -21,15 +21,15 @@ export function summarizeFreeCash(result: FreeCashResult): string {
     return `I found ${spendable} for today. Your normal room is ${baseline}/day after bills, protected savings, and a small cushion are already held back.`;
   }
 
-  const freeCash = formatMoney(result.freeCashTodayCents);
+  const pipCash = formatMoney(result.pipCashTodayCents);
   const income = formatMoney(result.incomeTotalCents);
   const spending = formatMoney(-result.spendingTotalCents);
   const savings = formatMoney(-result.protectedSavingsMonthlyCents);
 
-  return `Spendable Cash is ${freeCash} today after ${income} income, ${spending} spending, and ${savings} protected savings.`;
+  return `Spendable Cash is ${pipCash} today after ${income} income, ${spending} spending, and ${savings} protected savings.`;
 }
 
-export function getPrimaryDriver(result: FreeCashResult): string {
+export function getPrimaryDriver(result: PipCashResult): string {
   if (result.spendableCashToday?.drivers[0]) {
     return result.spendableCashToday.drivers[0].detail;
   }

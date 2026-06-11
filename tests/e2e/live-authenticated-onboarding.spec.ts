@@ -1,17 +1,17 @@
 import { expect, test, type Page } from "@playwright/test";
 import { existsSync } from "node:fs";
 
-const storageState = process.env.SPENDABLE_LIVE_STORAGE_STATE;
+const storageState = process.env.PIP_LIVE_STORAGE_STATE;
 const usableStorageState = storageState && existsSync(storageState) ? storageState : undefined;
-const shouldCompletePlaid = process.env.SPENDABLE_LIVE_COMPLETE_PLAID === "1";
-const plaidInstitution = process.env.SPENDABLE_LIVE_PLAID_INSTITUTION ?? "First Platypus Bank";
-const plaidUsername = process.env.SPENDABLE_LIVE_PLAID_USERNAME ?? "user_good";
-const plaidPassword = process.env.SPENDABLE_LIVE_PLAID_PASSWORD ?? "pass_good";
+const shouldCompletePlaid = process.env.PIP_LIVE_COMPLETE_PLAID === "1";
+const plaidInstitution = process.env.PIP_LIVE_PLAID_INSTITUTION ?? "First Platypus Bank";
+const plaidUsername = process.env.PIP_LIVE_PLAID_USERNAME ?? "user_good";
+const plaidPassword = process.env.PIP_LIVE_PLAID_PASSWORD ?? "pass_good";
 
 test.describe("live authenticated onboarding smoke", () => {
   test.skip(
     !usableStorageState,
-    "Set SPENDABLE_LIVE_STORAGE_STATE to an existing Playwright storageState file for a Google user.",
+    "Set PIP_LIVE_STORAGE_STATE to an existing Playwright storageState file for a Google user.",
   );
 
   test.use({
@@ -32,7 +32,7 @@ test.describe("live authenticated onboarding smoke", () => {
 
     await completePlaidIfNeeded(page);
 
-    await expect(page.getByTestId("free-cash-number")).not.toHaveText("$--", {
+    await expect(page.getByTestId("pip-cash-number")).not.toHaveText("$--", {
       timeout: 15_000,
     });
     const responsePromise = page.waitForResponse((response) => {
@@ -55,7 +55,7 @@ test.describe("live authenticated onboarding smoke", () => {
 
     expect(response.ok()).toBe(true);
     expect(payload.audit?.usedModel).toBe(true);
-    expect(payload.audit?.toolNames).toContain("get_free_cash_drivers");
+    expect(payload.audit?.toolNames).toContain("get_pip_cash_drivers");
     await expect(page.getByRole("heading", { name: "Why this number changed" })).toBeVisible();
   });
 });
@@ -93,7 +93,7 @@ async function completePlaidIfNeeded(page: Page) {
 
   if (!shouldCompletePlaid) {
     throw new Error(
-      "The live user is still at the connect-data step. Set SPENDABLE_LIVE_COMPLETE_PLAID=1 to let this smoke attempt Plaid Sandbox Link, or complete Plaid manually and save storage state again.",
+      "The live user is still at the connect-data step. Set PIP_LIVE_COMPLETE_PLAID=1 to let this smoke attempt Plaid Sandbox Link, or complete Plaid manually and save storage state again.",
     );
   }
 

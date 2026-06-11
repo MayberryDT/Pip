@@ -35,7 +35,7 @@ describe("GET /api/operator/overview", () => {
 
   it("requires the configured operator bearer token", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("FREE_CASH_OPERATOR_TOKEN", "operator-secret");
+    vi.stubEnv("PIP_OPERATOR_TOKEN", "operator-secret");
 
     const response = await GET(jsonRequest("wrong-token"));
 
@@ -48,7 +48,7 @@ describe("GET /api/operator/overview", () => {
 
   it("loads the overview through the server-side admin client", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("FREE_CASH_OPERATOR_TOKEN", "operator-secret");
+    vi.stubEnv("PIP_OPERATOR_TOKEN", "operator-secret");
     const admin = { kind: "admin" };
     routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
     routeMocks.loadOperatorOverview.mockResolvedValue({
@@ -78,7 +78,7 @@ describe("GET /api/operator/overview", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

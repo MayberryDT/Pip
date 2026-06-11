@@ -218,12 +218,12 @@ export type Database = {
         };
         Relationships: [];
       };
-      free_cash_snapshots: {
+      pip_cash_snapshots: {
         Row: {
           id: string;
           user_id: string;
           as_of_date: string;
-          free_cash_today_cents: number;
+          pip_cash_today_cents: number;
           rolling_net_cents: number;
           income_total_cents: number;
           spending_total_cents: number;
@@ -237,7 +237,7 @@ export type Database = {
         Insert: {
           user_id: string;
           as_of_date: string;
-          free_cash_today_cents: number;
+          pip_cash_today_cents: number;
           rolling_net_cents: number;
           income_total_cents: number;
           spending_total_cents: number;

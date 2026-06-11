@@ -277,7 +277,7 @@ export const fakeSnapshot: FinancialSnapshot = {
   ],
 };
 
-export const negativeFreeCashSnapshot: FinancialSnapshot = {
+export const negativePipCashSnapshot: FinancialSnapshot = {
   settings: {
     asOfDate: "2026-06-20",
     protectedSavingsMonthlyCents: 20000,
@@ -411,19 +411,19 @@ export const negativeFreeCashSnapshot: FinancialSnapshot = {
   ],
 };
 
-export const healthySpendableSnapshot = buildSpendableScenario({
+export const healthyPipSnapshot = buildPipScenario({
   scenarioId: "healthy",
   checkingAvailableCents: 260000,
   currentEverydaySpendCents: 60000,
 });
 
-export const overspendingSpendableSnapshot = buildSpendableScenario({
+export const overspendingPipSnapshot = buildPipScenario({
   scenarioId: "overspending",
   checkingAvailableCents: 240000,
   currentEverydaySpendCents: 245000,
 });
 
-export const shortfallSpendableSnapshot = buildSpendableScenario({
+export const shortfallPipSnapshot = buildPipScenario({
   scenarioId: "shortfall",
   checkingAvailableCents: 4000,
   monthlyIncomeCents: 220000,
@@ -432,21 +432,21 @@ export const shortfallSpendableSnapshot = buildSpendableScenario({
   currentEverydaySpendCents: 120000,
 });
 
-export const lowConfidenceSpendableSnapshot = buildSpendableScenario({
+export const lowConfidencePipSnapshot = buildPipScenario({
   scenarioId: "low-confidence",
   checkingAvailableCents: 140000,
   currentEverydaySpendCents: 58000,
   completedMonthCount: 0,
 });
 
-export const missingCardSpendableSnapshot = buildSpendableScenario({
+export const missingCardPipSnapshot = buildPipScenario({
   scenarioId: "missing-card",
   checkingAvailableCents: 260000,
   currentEverydaySpendCents: 72000,
   includeMissingCardPayment: true,
 });
 
-export const cashGuardrailSpendableSnapshot = buildSpendableScenario({
+export const cashGuardrailPipSnapshot = buildPipScenario({
   scenarioId: "cash-guardrail",
   checkingAvailableCents: 2800,
   currentEverydaySpendCents: 65000,
@@ -455,19 +455,19 @@ export const cashGuardrailSpendableSnapshot = buildSpendableScenario({
 export function getFakeSnapshot(scenario: string | null | undefined): FinancialSnapshot {
   switch (scenario) {
     case "healthy":
-      return healthySpendableSnapshot;
+      return healthyPipSnapshot;
     case "overspending":
-      return overspendingSpendableSnapshot;
+      return overspendingPipSnapshot;
     case "shortfall":
-      return shortfallSpendableSnapshot;
+      return shortfallPipSnapshot;
     case "low-confidence":
-      return lowConfidenceSpendableSnapshot;
+      return lowConfidencePipSnapshot;
     case "missing-card":
-      return missingCardSpendableSnapshot;
+      return missingCardPipSnapshot;
     case "cash-guardrail":
-      return cashGuardrailSpendableSnapshot;
+      return cashGuardrailPipSnapshot;
     case "negative":
-      return negativeFreeCashSnapshot;
+      return negativePipCashSnapshot;
     case "default":
     default:
       return fakeSnapshot;
@@ -487,7 +487,7 @@ export function isFakeDataScenario(value: string | null | undefined): value is F
   );
 }
 
-function buildSpendableScenario(input: {
+function buildPipScenario(input: {
   scenarioId: string;
   checkingAvailableCents: number;
   currentEverydaySpendCents: number;

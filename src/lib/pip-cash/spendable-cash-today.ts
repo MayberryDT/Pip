@@ -1,17 +1,17 @@
-import { classifyTransaction } from "@/lib/free-cash/classify";
-import { addDays, daysInMonth, formatDateParts, parseDateParts } from "@/lib/free-cash/date-window";
+import { classifyTransaction } from "@/lib/pip-cash/classify";
+import { addDays, daysInMonth, formatDateParts, parseDateParts } from "@/lib/pip-cash/date-window";
 import {
   annotateCreditCardPaymentMatches,
   isDedupedCreditCardPayment,
-} from "@/lib/free-cash/dedupe-credit-card-payments";
+} from "@/lib/pip-cash/dedupe-credit-card-payments";
 import type {
   Account,
   ClassifiedSpendableTransaction,
   FinancialDataState,
   FinancialSnapshot,
-  FreeCashDriver,
-  FreeCashResult,
-  FreeCashWarning,
+  PipCashDriver,
+  PipCashResult,
+  PipCashWarning,
   SpendableCashConfidence,
   SpendableCashTodayResult,
   SpendableCashTodayState,
@@ -53,7 +53,7 @@ export function calculateSpendableCashToday(
   input: {
     legacyRollingDailySurplusCents?: number;
     legacyRollingNetCents?: number;
-    warnings?: FreeCashWarning[];
+    warnings?: PipCashWarning[];
     dataStates?: FinancialDataState[];
   } = {},
 ): SpendableCashTodayResult {
@@ -260,7 +260,7 @@ export function simulateSpendablePurchase(
   snapshot: FinancialSnapshot,
   input: {
     before?: SpendableCashTodayResult;
-    warnings?: FreeCashWarning[];
+    warnings?: PipCashWarning[];
     dataStates?: FinancialDataState[];
     legacyRollingDailySurplusCents?: number;
     legacyRollingNetCents?: number;
@@ -297,19 +297,19 @@ export function simulateSpendablePurchase(
   };
 }
 
-export function getDisplayedSpendableCashTodayCents(result: FreeCashResult): number {
-  return result.spendableCashToday?.spendableCashTodayCents ?? Math.max(0, result.freeCashTodayCents);
+export function getDisplayedSpendableCashTodayCents(result: PipCashResult): number {
+  return result.spendableCashToday?.spendableCashTodayCents ?? Math.max(0, result.pipCashTodayCents);
 }
 
-export function getSpendableCashTodayState(result: FreeCashResult): SpendableCashTodayState {
+export function getSpendableCashTodayState(result: PipCashResult): SpendableCashTodayState {
   if (result.spendableCashToday) {
     return result.spendableCashToday.state;
   }
 
-  return result.freeCashTodayCents < 0 ? "shortfall" : "normal";
+  return result.pipCashTodayCents < 0 ? "shortfall" : "normal";
 }
 
-export function getSpendableCashTodaySubtitle(result: FreeCashResult | null): string {
+export function getSpendableCashTodaySubtitle(result: PipCashResult | null): string {
   if (!result) {
     return "Connect data to see today’s number.";
   }
@@ -317,8 +317,8 @@ export function getSpendableCashTodaySubtitle(result: FreeCashResult | null): st
   const metric = result.spendableCashToday;
 
   if (!metric) {
-    return result.freeCashTodayCents < 0
-      ? `You’re ${formatPlainMoney(Math.abs(result.freeCashTodayCents))} over today.`
+    return result.pipCashTodayCents < 0
+      ? `You’re ${formatPlainMoney(Math.abs(result.pipCashTodayCents))} over today.`
       : "That’s your room for today after bills and savings.";
   }
 
@@ -708,8 +708,8 @@ function buildSpendableDrivers(input: {
   confidence: SpendableCashConfidence;
   completedMonthCount: number;
   warningCount: number;
-}): FreeCashDriver[] {
-  const drivers: FreeCashDriver[] = [
+}): PipCashDriver[] {
+  const drivers: PipCashDriver[] = [
     {
       id: "baseline-room",
       label: "Normal room",

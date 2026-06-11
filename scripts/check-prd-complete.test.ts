@@ -20,7 +20,7 @@ describe("PRD completion check", () => {
     const output = createOutputCapture();
     const result = checkPrdComplete({
       env: {
-        SPENDABLE_LIVE_PROOF_REPORT: "/tmp/spendable-missing-proof.json",
+        PIP_LIVE_PROOF_REPORT: "/tmp/pip-missing-proof.json",
       },
       stdout: output.stdout,
       stderr: output.stderr,
@@ -33,7 +33,7 @@ describe("PRD completion check", () => {
 
   it("fails when the proof report does not prove the final Plaid production smoke", async () => {
     const checkPrdComplete = await loadCheckPrdComplete();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-prd-complete-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-prd-complete-"));
     const proofReport = join(tempDir, "proof.json");
     writeFileSync(
       proofReport,
@@ -42,7 +42,7 @@ describe("PRD completion check", () => {
         generatedAt: new Date().toISOString(),
         baseUrl: "http://localhost:3000",
         latestVerifiedDeployUrl:
-          "https://olderdeploy--free-cash-mayberrydt.netlify.app",
+          "https://olderdeploy--pip-mayberrydt.netlify.app",
         latestVerifiedDeployId: "olderdeploy",
         storageStatePath: "/tmp/state.json",
         plaidAutomationRequired: false,
@@ -55,7 +55,7 @@ describe("PRD completion check", () => {
       const output = createOutputCapture();
       const result = checkPrdComplete({
         env: {
-          SPENDABLE_LIVE_PROOF_REPORT: proofReport,
+          PIP_LIVE_PROOF_REPORT: proofReport,
         },
         stdout: output.stdout,
         stderr: output.stderr,
@@ -73,18 +73,18 @@ describe("PRD completion check", () => {
 
   it("passes with a valid final production smoke proof report", async () => {
     const checkPrdComplete = await loadCheckPrdComplete();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-prd-complete-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-prd-complete-"));
     const proofReport = join(tempDir, "proof.json");
     writeFileSync(
       proofReport,
       JSON.stringify({
         status: "passed",
         generatedAt: new Date().toISOString(),
-        baseUrl: "https://free-cash-mayberrydt.netlify.app",
+        baseUrl: "https://pip-mayberrydt.netlify.app",
         latestVerifiedDeployUrl:
-          "https://6a265f4336389d2a1930a78b--free-cash-mayberrydt.netlify.app",
+          "https://6a265f4336389d2a1930a78b--pip-mayberrydt.netlify.app",
         latestVerifiedDeployId: "6a265f4336389d2a1930a78b",
-        storageStatePath: "/tmp/spendable-live-auth.json",
+        storageStatePath: "/tmp/pip-live-auth.json",
         plaidAutomationRequired: true,
         plaidAutomationEnabled: true,
         command: "npm run test:e2e:live:final",
@@ -95,7 +95,7 @@ describe("PRD completion check", () => {
       const output = createOutputCapture();
       const result = checkPrdComplete({
         env: {
-          SPENDABLE_LIVE_PROOF_REPORT: proofReport,
+          PIP_LIVE_PROOF_REPORT: proofReport,
         },
         stdout: output.stdout,
         stderr: output.stderr,

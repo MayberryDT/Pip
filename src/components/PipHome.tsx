@@ -19,14 +19,14 @@ import {
   type SyncStatusResponse,
 } from "@/components/data-controls-helpers";
 import { type FakeDataScenario, getFakeSnapshot, isFakeDataScenario } from "@/lib/fake-data";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 import {
   getDisplayedSpendableCashTodayCents,
   getSpendableCashTodaySubtitle,
   getSpendableCashTodayState,
-} from "@/lib/free-cash/spendable-cash-today";
+} from "@/lib/pip-cash/spendable-cash-today";
 import { formatMoney } from "@/lib/money";
-import type { FreeCashResult } from "@/lib/types";
+import type { PipCashResult } from "@/lib/types";
 import { AgentInput } from "@/components/AgentInput";
 import { AgentThread } from "@/components/AgentThread";
 import { PipIntroScene } from "@/components/onboarding/PipIntroScene";
@@ -43,7 +43,7 @@ type ThreadItem = {
   isPending?: boolean;
 };
 
-export type SpendableAuthState =
+export type PipAuthState =
   | {
       status: "guest";
     }
@@ -56,7 +56,7 @@ export type SpendableAuthState =
       email?: string;
     };
 
-export function FreeCashHome({
+export function PipHome({
   authNotice,
   connectionNotice,
   authState,
@@ -65,21 +65,21 @@ export function FreeCashHome({
 }: {
   authNotice?: "auth-error";
   connectionNotice?: "plaid-connected";
-  authState?: SpendableAuthState;
+  authState?: PipAuthState;
   devOnboardingFlow?: boolean;
   enableAccountControls?: boolean;
 }) {
   const [scenario, setScenario] = useState<FakeDataScenario>("default");
   const snapshot = useMemo(() => getFakeSnapshot(scenario), [scenario]);
-  const localResult = useMemo(() => calculateFreeCash(snapshot), [snapshot]);
-  const [devAuthState, setDevAuthState] = useState<SpendableAuthState>({
+  const localResult = useMemo(() => calculatePipCash(snapshot), [snapshot]);
+  const [devAuthState, setDevAuthState] = useState<PipAuthState>({
     status: "guest",
   });
   const [devHasConnectedData, setDevHasConnectedData] = useState(false);
   const activeAuthState = devOnboardingFlow ? devAuthState : authState;
   const liveAccountControlsEnabled = !devOnboardingFlow && enableAccountControls;
   const onboardingPromptControlsEnabled = liveAccountControlsEnabled || devOnboardingFlow;
-  const [serverResult, setServerResult] = useState<FreeCashResult | null>(null);
+  const [serverResult, setServerResult] = useState<PipCashResult | null>(null);
   const [serverErrorText, setServerErrorText] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatusResponse | null>(null);
   const [hasLoadedServerState, setHasLoadedServerState] = useState(false);
@@ -97,7 +97,7 @@ export function FreeCashHome({
         ? serverResult
         : localResult;
   const hasLoadedServerResult = Boolean(result);
-  const freeCashTodayCents = result ? getDisplayedSpendableCashTodayCents(result) : undefined;
+  const pipCashTodayCents = result ? getDisplayedSpendableCashTodayCents(result) : undefined;
   const [thread, setThread] = useState<ThreadItem[]>([]);
   const [chips, setChips] = useState<PromptChip[]>(() =>
     getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, result),
@@ -148,7 +148,7 @@ export function FreeCashHome({
     setHasLoadedServerState(false);
 
     async function loadBackendResult() {
-      const response = await fetch(`/api/free-cash?scenario=${scenario}`);
+      const response = await fetch(`/api/pip-cash?scenario=${scenario}`);
 
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
@@ -165,7 +165,7 @@ export function FreeCashHome({
         return;
       }
 
-      const payload = (await response.json()) as FreeCashResult;
+      const payload = (await response.json()) as PipCashResult;
 
       if (!ignore) {
         setServerResult(payload);
@@ -276,7 +276,7 @@ export function FreeCashHome({
       liveAccountControlsEnabled ? "live" : devOnboardingFlow ? "dev-onboarding" : "demo",
       scenario,
       result.window.endDate,
-      result.freeCashTodayCents,
+      result.pipCashTodayCents,
       latestThreadFingerprint,
       promptChipRefreshSequence,
     ].join("|");
@@ -383,7 +383,21 @@ export function FreeCashHome({
         setPromptChipRefreshSequence((current) => current + 1);
       }
 
-      await executeClientAction(response.clientAction);
+      try {
+        await executeClientAction(response.clientAction);
+      } catch (actionError) {
+        setThread((current) =>
+          current.map((item) =>
+            item.id === itemId
+              ? {
+                  ...item,
+                  errorText: getClientActionErrorText(actionError),
+                  isPending: false,
+                }
+              : item,
+          ),
+        );
+      }
     } catch (error) {
       setThread((current) =>
         current.map((item) =>
@@ -459,13 +473,13 @@ export function FreeCashHome({
   }
 
   useEffect(() => {
-    if (!liveAccountControlsEnabled || !hasLoadedServerResult || !result || freeCashTodayCents === undefined) {
+    if (!liveAccountControlsEnabled || !hasLoadedServerResult || !result || pipCashTodayCents === undefined) {
       return;
     }
 
-    void trackProductEvent("free_cash_viewed", {
+    void trackProductEvent("pip_cash_viewed", {
       scenario,
-      freeCashTodayCents,
+      pipCashTodayCents,
       negative: getSpendableCashTodayState(result) === "shortfall",
       metricVersion: result.spendableCashToday?.metricVersion ?? "legacy",
       state: result.spendableCashToday?.state ?? null,
@@ -476,12 +490,12 @@ export function FreeCashHome({
       shortfallCents: result.spendableCashToday?.shortfallCents ?? null,
       currentMonthVarianceCents: result.spendableCashToday?.currentMonthVarianceCents ?? null,
     });
-  }, [freeCashTodayCents, hasLoadedServerResult, liveAccountControlsEnabled, result, scenario]);
+  }, [pipCashTodayCents, hasLoadedServerResult, liveAccountControlsEnabled, result, scenario]);
 
   return (
-    <main className="free-cash-app-shell pip-chat-shell px-5 py-5 text-ink sm:px-6">
+    <main className="pip-app-shell pip-chat-shell px-5 py-5 text-ink sm:px-6">
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[430px] flex-col">
-        <section className={hasConversation ? "spendable-hero is-chatting" : "spendable-hero"}>
+        <section className={hasConversation ? "pip-metric-hero is-chatting" : "pip-metric-hero"}>
           <h1 className="pip-brand-title">
             <span className="sr-only">Pip</span>
             <img
@@ -492,14 +506,14 @@ export function FreeCashHome({
               draggable={false}
             />
           </h1>
-          <p className="spendable-label">Spendable Cash Today</p>
+          <p className="pip-metric-label">Spendable Cash Today</p>
           <div
-            className="spendable-number"
-            data-testid="free-cash-number"
+            className="pip-metric-number"
+            data-testid="pip-cash-number"
           >
             {result ? formatMoney(getDisplayedSpendableCashTodayCents(result)) : "$--"}
           </div>
-          <p className="spendable-subtitle">{getSpendableCashTodaySubtitle(result)}</p>
+          <p className="pip-metric-subtitle">{getSpendableCashTodaySubtitle(result)}</p>
         </section>
 
         <section className={hasConversation ? "mt-3 flex min-h-0 flex-1 flex-col overflow-hidden" : "mt-6 flex min-h-0 flex-1 flex-col overflow-hidden max-[380px]:mt-5"}>
@@ -751,7 +765,7 @@ function OnboardingIntro({
   onSaveProtectedSavings,
 }: {
   authNotice?: "auth-error";
-  authState: SpendableAuthState;
+  authState: PipAuthState;
   onStartDevSignIn?: () => void;
   onSaveProtectedSavings: (amountCents: number) => Promise<void>;
 }) {
@@ -871,10 +885,10 @@ function DefaultAssistantIntro({
   result,
 }: {
   connectionNotice?: "plaid-connected";
-  result: FreeCashResult | null;
+  result: PipCashResult | null;
 }) {
-  const isNegative = Boolean(result && result.freeCashTodayCents < 0);
-  const overAmount = result ? formatMoney(Math.abs(Math.min(result.freeCashTodayCents, 0))) : "";
+  const isNegative = Boolean(result && result.pipCashTodayCents < 0);
+  const overAmount = result ? formatMoney(Math.abs(Math.min(result.pipCashTodayCents, 0))) : "";
 
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
@@ -902,7 +916,7 @@ function PlaidConnectedNotice() {
   );
 }
 
-function getInputPlaceholder(authState: SpendableAuthState | undefined): string {
+function getInputPlaceholder(authState: PipAuthState | undefined): string {
   if (authState?.status === "guest") {
     return "Ask Pip anything...";
   }
@@ -915,9 +929,9 @@ function getInputPlaceholder(authState: SpendableAuthState | undefined): string 
 }
 
 function getDefaultPromptChips(
-  authState: SpendableAuthState | undefined,
+  authState: PipAuthState | undefined,
   enableAccountControls: boolean,
-  result: FreeCashResult | null,
+  result: PipCashResult | null,
 ): PromptChip[] {
   if (authState?.status === "guest" || authState?.status === "needs-consent") {
     return getOnboardingPromptChips({
@@ -942,6 +956,22 @@ function getErrorMessage(payload: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+class AgentRequestError extends Error {
+  code?: string;
+  status: number;
+
+  constructor(input: {
+    message: string;
+    status: number;
+    code?: string;
+  }) {
+    super(input.message);
+    this.name = "AgentRequestError";
+    this.code = input.code;
+    this.status = input.status;
+  }
 }
 
 async function fetchAgentResponse(
@@ -972,10 +1002,16 @@ async function fetchAgentResponse(
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    const error = payload && typeof payload.error === "string" ? payload.error : "Agent request failed.";
-    const detail = payload && typeof payload.detail === "string" ? payload.detail : "";
+    const code = payload && typeof payload.code === "string" ? payload.code : undefined;
 
-    throw new Error([error, detail].filter(Boolean).join(" "));
+    throw new AgentRequestError({
+      code,
+      status: response.status,
+      message: getSafeAgentFailureMessage({
+        code,
+        status: response.status,
+      }),
+    });
   }
 
   return response.json();
@@ -1064,11 +1100,47 @@ function getNextVisiblePromptChips(
 }
 
 function getAgentErrorText(error: unknown): string {
-  if (error instanceof Error && error.message) {
+  if (error instanceof AgentRequestError) {
     return error.message;
   }
 
-  return "AI request failed.";
+  return getSafeAgentFailureMessage();
+}
+
+function getSafeAgentFailureMessage(input?: {
+  code?: string;
+  status?: number;
+}): string {
+  const code = input?.code ?? "";
+  const status = input?.status ?? 0;
+
+  if (
+    status === 401 ||
+    status === 403 ||
+    code === "authentication-required" ||
+    code === "no-financial-data"
+  ) {
+    return "I need your setup finished before I can answer that.";
+  }
+
+  if (
+    status === 503 ||
+    code === "missing-openai-config" ||
+    code === "model-unavailable"
+  ) {
+    return "I can’t reach the answer service right now. Try again in a moment.";
+  }
+
+  if (
+    status === 502 ||
+    code === "invalid-agent-output" ||
+    code === "invalid-agent-response" ||
+    code === "agent-output-rejected"
+  ) {
+    return "I couldn’t answer that cleanly. Try again, or ask for the math.";
+  }
+
+  return "I couldn’t answer that cleanly. Try again.";
 }
 
 function getClientErrorMessage(error: unknown): string {
@@ -1079,8 +1151,22 @@ function getClientErrorMessage(error: unknown): string {
   return "Unknown client error.";
 }
 
-export const __freeCashHomeTestHooks = {
+function getClientActionErrorText(error: unknown): string {
+  const message = getClientErrorMessage(error);
+
+  if (/\bplaid\b/i.test(message)) {
+    return message;
+  }
+
+  return "I couldn’t finish that action. Try again.";
+}
+
+export const __pipHomeTestHooks = {
+  AgentRequestError,
+  getAgentErrorText,
+  getClientActionErrorText,
   getNextVisiblePromptChips,
+  getSafeAgentFailureMessage,
 };
 
 function getPlaidEventProperties(
@@ -1130,7 +1216,7 @@ function createThreadItemId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-const spendableConversationStorageKey = "spendable-conversation-id";
+const pipConversationStorageKey = "pip-conversation-id";
 
 function getOrCreateConversationId(): string {
   if (typeof window === "undefined") {
@@ -1138,14 +1224,14 @@ function getOrCreateConversationId(): string {
   }
 
   try {
-    const existing = window.localStorage.getItem(spendableConversationStorageKey);
+    const existing = window.localStorage.getItem(pipConversationStorageKey);
 
     if (existing) {
       return existing;
     }
 
     const next = createConversationId();
-    window.localStorage.setItem(spendableConversationStorageKey, next);
+    window.localStorage.setItem(pipConversationStorageKey, next);
 
     return next;
   } catch {

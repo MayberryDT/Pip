@@ -204,7 +204,7 @@ src/lib/agent/guidance-context.ts
 or:
 
 ```txt
-src/lib/free-cash/guidance-context.ts
+src/lib/pip-cash/guidance-context.ts
 ```
 
 Recommended type:
@@ -323,7 +323,7 @@ Not:
 Implement a helper:
 
 ```ts
-buildFinancialGuidanceContext(result: FreeCashResult): FinancialGuidanceContext
+buildFinancialGuidanceContext(result: PipCashResult): FinancialGuidanceContext
 ```
 
 It should read:
@@ -429,7 +429,7 @@ Collect the V2 metric facts, evidence, allowed domains, and blocked domains Pip 
 
 ## Behavior
 
-- Calls `calculateFreeCash(snapshot)`.
+- Calls `calculatePipCash(snapshot)`.
 - Reads `result.spendableCashToday`.
 - Builds `FinancialGuidanceContext`.
 - Does not generate final advice.

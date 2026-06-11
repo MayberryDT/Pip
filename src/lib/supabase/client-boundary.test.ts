@@ -18,7 +18,7 @@ describe("Supabase browser boundary", () => {
       "PLAID_SECRET",
       "PLAID_SANDBOX_SECRET",
       "SUPABASE_SERVICE_ROLE_KEY",
-      "FREE_CASH_PROVIDER_TOKEN_KEY_BASE64",
+      "PIP_PROVIDER_TOKEN_KEY_BASE64",
       "provider_credentials",
       "credential-store",
       "token-crypto",
@@ -28,7 +28,7 @@ describe("Supabase browser boundary", () => {
 
     expect(clientFiles).toEqual(
       expect.arrayContaining([
-        join(process.cwd(), "src/components/FreeCashHome.tsx"),
+        join(process.cwd(), "src/components/PipHome.tsx"),
         join(process.cwd(), "src/lib/supabase/client.ts"),
       ]),
     );
@@ -43,7 +43,7 @@ describe("Supabase browser boundary", () => {
   });
 
   it("keeps long-lived provider token handling out of the Spendable browser surface", () => {
-    const source = readFileSync(join(process.cwd(), "src/components/FreeCashHome.tsx"), "utf8");
+    const source = readFileSync(join(process.cwd(), "src/components/PipHome.tsx"), "utf8");
 
     expect(source).not.toContain("TellerConnect");
     expect(source).not.toContain("accessToken");

@@ -46,7 +46,7 @@ describe("Teller config", () => {
           TELLER_APPLICATION_ID: "app_test",
           TELLER_CERTIFICATE_PEM: "cert",
           TELLER_PRIVATE_KEY_PEM: "key",
-          FREE_CASH_PROVIDER_TOKEN_KEY_BASE64: Buffer.alloc(32, 1).toString("base64"),
+          PIP_PROVIDER_TOKEN_KEY_BASE64: Buffer.alloc(32, 1).toString("base64"),
         }),
       ),
     ).toMatchObject({

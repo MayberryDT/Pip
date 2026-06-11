@@ -1,4 +1,4 @@
-# Free Cash App Investigation Report
+# PIP Cash App Investigation Report
 
 Date: 2026-06-05
 
@@ -25,9 +25,9 @@ That is the whole product thesis in miniature. The app should not feel like a fi
 
 ## Product Thesis
 
-Free Cash is an AI-native personal finance app that replaces the misleading default bank balance with one behavior-shaping number: "Free Cash Today." Tyler's observation is that many people open their bank app, see a large account balance, and treat that number as permission to spend, even when rent, bills, card spending, or savings goals make that balance deceptive. Free Cash intentionally hides the tempting big numbers by default and instead shows a rolling calendar-month cash-flow signal that answers the daily question: "How much money is actually free today?" Everything else lives behind an agent-first interface.
+PIP Cash is an AI-native personal finance app that replaces the misleading default bank balance with one behavior-shaping number: "PIP Cash Today." Tyler's observation is that many people open their bank app, see a large account balance, and treat that number as permission to spend, even when rent, bills, card spending, or savings goals make that balance deceptive. PIP Cash intentionally hides the tempting big numbers by default and instead shows a rolling calendar-month cash-flow signal that answers the daily question: "How much money is actually free today?" Everything else lives behind an agent-first interface.
 
-This is not "a finance app with an AI assistant." It is an agentic-first finance app where the assistant is the operating system and the only default financial output is Free Cash.
+This is not "a finance app with an AI assistant." It is an agentic-first finance app where the assistant is the operating system and the only default financial output is PIP Cash.
 
 ## Conversation Evolution
 
@@ -35,11 +35,11 @@ This is not "a finance app with an AI assistant." It is an agentic-first finance
 
 2. Tyler rejected heavier forward-looking planning because it asks too much from users. The product should be "brain-dead simple": connect accounts and be done. The complexity should be absorbed by calculation logic and the agent.
 
-3. The concept moved from "safe to spend" toward "Free Cash." Tyler preferred Free Cash because "safe to spend" implies too much certainty and sounds like a liability-bearing promise. Free Cash is a better behavioral signal.
+3. The concept moved from "safe to spend" toward "PIP Cash." Tyler preferred PIP Cash because "safe to spend" implies too much certainty and sounds like a liability-bearing promise. PIP Cash is a better behavioral signal.
 
 4. Tyler explicitly chose a rolling calendar-month window, not a fixed 30-day window, because fixed 30-day windows can miss rent in 28-day or 31-day month cases. Rent should usually be captured by looking back one calendar month from today.
 
-5. Tyler pushed for the radical version: no menus, no dashboards, no standard account screens. The app should be the Free Cash number plus the agent.
+5. Tyler pushed for the radical version: no menus, no dashboards, no standard account screens. The app should be the PIP Cash number plus the agent.
 
 6. Tyler identified credit-card evasion as a core behavioral issue. Users may connect only checking and then spend on credit cards to make the number look better. The app should detect card payments, nudge naturally, and avoid supervisory warning banners or confidence labels.
 
@@ -49,7 +49,7 @@ This is not "a finance app with an AI assistant." It is an agentic-first finance
 
 ## Tyler's Non-Negotiable Product Rules
 
-- One number by default: "Free Cash Today."
+- One number by default: "PIP Cash Today."
 - The true balance must be available, but only by asking the agent.
 - No default account balance, no total net worth, no account cards, no transaction feed.
 - No dashboard.
@@ -63,7 +63,7 @@ This is not "a finance app with an AI assistant." It is an agentic-first finance
 - Temporary cards can appear inside the agent thread, but should not become persistent pages.
 - User setup should feel like "connect accounts and done."
 - Do not moralize, shame, interrogate, or warn like a compliance dashboard.
-- Use consequence language: "That would move Free Cash from $43 to -$7."
+- Use consequence language: "That would move PIP Cash from $43 to -$7."
 - Avoid legal/precision overclaiming: do not say "safe," "guaranteed," or "you can definitely afford this."
 
 ## MVP Scope
@@ -72,15 +72,15 @@ The MVP should include:
 
 - Mobile-first PWA/web app.
 - One primary screen.
-- Free Cash Today number.
+- PIP Cash Today number.
 - Three prompt chips.
 - Agent conversation area and input.
 - Temporary structured card renderer.
 - Fake-data prototype first.
-- Deterministic Free Cash engine.
+- Deterministic PIP Cash engine.
 - Mock provider abstraction.
 - Mock/deterministic agent router first if real model integration slows the loop.
-- Unit tests around the Free Cash engine.
+- Unit tests around the PIP Cash engine.
 - Later: auth, Supabase schema, invite code gate, RLS, events table.
 - Later: one real provider, Teller or Plaid, behind a provider interface.
 
@@ -109,7 +109,7 @@ The MVP should exclude:
 The first prototype should literally be shaped like this:
 
 ```text
-Free Cash Today
+PIP Cash Today
 $43
 
 [ Why this number? ] [ Can I spend $50? ] [ What changed? ]
@@ -125,7 +125,7 @@ If a feature wants to become a route, page, modal stack, sidebar, or settings sc
 
 The agent should feel like the app's operating system. It should:
 
-- Explain Free Cash.
+- Explain PIP Cash.
 - Simulate purchases.
 - Show true balances only when asked.
 - Show recent transactions only when asked.
@@ -141,7 +141,7 @@ The agent must not calculate money from raw prompt context. It should call deter
 Suggested mock routing:
 
 ```text
-why / low / changed -> explain_free_cash
+why / low / changed -> explain_pip_cash
 can I spend / spend $X / buy -> simulate_purchase
 balance / true balance -> show_true_balances
 recent / transactions / charges -> show_recent_transactions
@@ -149,20 +149,20 @@ amex / credit card / connect card -> missing_credit_card_nudge
 protect savings -> confirmation_card
 ```
 
-## Free Cash Calculation Model
+## PIP Cash Calculation Model
 
 ### Visible Metric
 
 The only default visible metric is:
 
 ```text
-Free Cash Today
+PIP Cash Today
 ```
 
 Example:
 
 ```text
-Free Cash Today
+PIP Cash Today
 $43
 ```
 
@@ -265,14 +265,14 @@ Transfers:
 
 Negative values:
 
-- Free Cash can be negative.
+- PIP Cash can be negative.
 - Do not hide negative values.
 - Use practical language, not alarm language.
 
 Example:
 
 ```text
-Free Cash Today
+PIP Cash Today
 -$17
 ```
 
@@ -288,7 +288,7 @@ Free Cash Today
 - Credit-card payments deduped.
 - Refunds reduce spending.
 - Transfers ignored.
-- Negative Free Cash allowed.
+- Negative PIP Cash allowed.
 
 ## Prompt Chips
 
@@ -359,7 +359,7 @@ Temporary cards are the hidden UI system. They replace menus and pages.
 Implement these card types in the first prototype:
 
 ```text
-free_cash_explanation
+pip_cash_explanation
 purchase_simulation
 true_balances
 recent_transactions
@@ -372,7 +372,7 @@ Cards should be typed templates. The agent can choose which card to render, but 
 Example explanation card:
 
 ```text
-Why Free Cash Changed
+Why PIP Cash Changed
 Rent posted: -$1,450
 Groceries increased: -$82
 Dining increased: -$41
@@ -383,7 +383,7 @@ Example purchase simulation:
 
 ```text
 $80 Purchase
-Current Free Cash: $43
+Current PIP Cash: $43
 After purchase: -$37
 Not recommended.
 ```
@@ -396,14 +396,14 @@ Checking: $2,184
 Savings: $5,700
 Credit cards: -$812
 
-Actual balance is not the same as Free Cash.
+Actual balance is not the same as PIP Cash.
 ```
 
 Example missing card nudge:
 
 ```text
 I noticed payments to Amex, but Amex is not connected.
-If you spend on that card, connecting it will make Free Cash more accurate.
+If you spend on that card, connecting it will make PIP Cash more accurate.
 
 [Connect Amex] [Not now] [Stop asking]
 ```
@@ -415,7 +415,7 @@ The product goal is "connect accounts and done." Do not ask the user to enter re
 Minimum flow:
 
 ```text
-To calculate Free Cash, connect the accounts where you earn and spend money.
+To calculate PIP Cash, connect the accounts where you earn and spend money.
 
 [Connect account]
 ```
@@ -423,20 +423,20 @@ To calculate Free Cash, connect the accounts where you earn and spend money.
 Then, gently:
 
 ```text
-Do you spend on credit cards? If you do, connecting them will make Free Cash more accurate.
+Do you spend on credit cards? If you do, connecting them will make PIP Cash more accurate.
 ```
 
 Optional savings protection:
 
 ```text
-Want to protect savings before Free Cash is calculated?
+Want to protect savings before PIP Cash is calculated?
 [Skip] [$100/month] [$200/month] [Custom]
 ```
 
 Then:
 
 ```text
-Free Cash is ready.
+PIP Cash is ready.
 ```
 
 For the first fake-data prototype, the "connect" flow can be a stub that immediately simulates connected accounts.
@@ -448,14 +448,14 @@ Tyler explicitly rejected persistent confidence labels and generic warnings. Do 
 ```text
 Confidence: Partial
 Only checking connected
-Free Cash may be inaccurate
+PIP Cash may be inaccurate
 ```
 
 Instead, the agent should occasionally nudge in plain language. The strongest case is specific issuer detection:
 
 ```text
 I noticed payments to Amex, but Amex is not connected.
-If you spend on that card, connecting it will make Free Cash more accurate.
+If you spend on that card, connecting it will make PIP Cash more accurate.
 ```
 
 Recommended prototype behavior:
@@ -487,13 +487,13 @@ Use a fixed fake current date:
 Target default visible result:
 
 ```text
-Free Cash Today = $43
+PIP Cash Today = $43
 ```
 
 Also create an internal negative scenario for tests:
 
 ```text
-Free Cash Today = -$17
+PIP Cash Today = -$17
 ```
 
 Seed transactions should prove the thesis:
@@ -578,14 +578,14 @@ transactions
 - is_refund
 - created_at
 
-free_cash_snapshots
+pip_cash_snapshots
 - id
 - user_id
 - date
 - rolling_window_start
 - rolling_window_end
 - rolling_net
-- free_cash_today
+- pip_cash_today
 - explanation_json
 - created_at
 
@@ -629,8 +629,8 @@ The agent should only answer finance questions by calling approved tools.
 Minimum tool list:
 
 ```text
-get_free_cash(userId)
-explain_free_cash(userId)
+get_pip_cash(userId)
+explain_pip_cash(userId)
 simulate_purchase(userId, amount)
 show_true_balances(userId)
 show_recent_transactions(userId, filters)
@@ -649,7 +649,7 @@ type AgentResponse = {
   message: string
   card?: {
     type:
-      | "free_cash_explanation"
+      | "pip_cash_explanation"
       | "true_balances"
       | "purchase_simulation"
       | "recent_transactions"
@@ -667,8 +667,8 @@ type SuggestedPrompt = {
   message: string
   reason:
     | "default"
-    | "free_cash_drop"
-    | "negative_free_cash"
+    | "pip_cash_drop"
+    | "negative_pip_cash"
     | "missing_card"
     | "user_history"
     | "recent_change"
@@ -706,7 +706,7 @@ Agent must never:
 Invent balances.
 Invent transactions.
 Invent account status.
-Calculate Free Cash from raw prompt context.
+Calculate PIP Cash from raw prompt context.
 Move money.
 Initiate payments.
 Recommend loans or credit products.
@@ -773,7 +773,7 @@ daily active users
 D1 retention
 D7 retention
 D30 retention
-Free Cash views
+PIP Cash views
 agent questions per user
 prompt chip tap rate
 ```
@@ -783,8 +783,8 @@ Behavior:
 ```text
 "Can I spend $X?" requests
 purchase simulations per user
-negative Free Cash follow-up behavior
-spending reduction after negative Free Cash
+negative PIP Cash follow-up behavior
+spending reduction after negative PIP Cash
 users who connect credit cards
 missing-card nudge conversion
 savings protection adoption
@@ -825,7 +825,7 @@ Avoid ads and be very cautious with affiliate revenue because those incentives c
 The acquisition/funding story to preserve:
 
 ```text
-Free Cash is a daily financial decision layer.
+PIP Cash is a daily financial decision layer.
 It creates repeated daily engagement around spending decisions.
 It replaces the misleading bank balance with one agentic behavior-shaping number.
 ```
@@ -844,8 +844,8 @@ It replaces the misleading bank balance with one agentic behavior-shaping number
 4. Adding generic warnings or confidence labels.
    - Use agentic nudges instead.
 
-5. Building "Safe to Spend" instead of "Free Cash."
-   - Use "Free Cash Today."
+5. Building "Safe to Spend" instead of "PIP Cash."
+   - Use "PIP Cash Today."
 
 6. Using a fixed 30-day lookback.
    - Use rolling calendar-month date math.
@@ -889,7 +889,7 @@ These should not block the fake-data prototype:
 1. Final brand tone and exact copy style.
 2. Whether legal/privacy/account deletion links can live in tiny footer text or must only be agent commands plus footer.
 3. Whether "Stop asking" about cards is absolute or can be overridden once by a newly detected issuer.
-4. Whether Free Cash should ever include expected future income. Default is no.
+4. Whether PIP Cash should ever include expected future income. Default is no.
 5. Exact wording for purchase recommendations: "OK", "Caution", "Not recommended."
 6. Whether users can ever customize the main number. Default is no.
 7. Whether savings protection belongs in onboarding or after first use.
@@ -901,7 +901,7 @@ Goal:
 
 ```text
 Open app
--> see one Free Cash number
+-> see one PIP Cash number
 -> tap a prompt
 -> agent explains or simulates spending
 -> user understands without dashboard
@@ -911,26 +911,26 @@ Required files/components:
 
 ```text
 src/app/page.tsx
-src/components/FreeCashHome.tsx
+src/components/PipHome.tsx
 src/components/PromptChips.tsx
 src/components/AgentThread.tsx
 src/components/AgentInput.tsx
 src/components/cards/CardRenderer.tsx
 src/lib/fake-data.ts
-src/lib/free-cash/date-window.ts
-src/lib/free-cash/engine.ts
-src/lib/free-cash/classify.ts
-src/lib/free-cash/explanation.ts
+src/lib/pip-cash/date-window.ts
+src/lib/pip-cash/engine.ts
+src/lib/pip-cash/classify.ts
+src/lib/pip-cash/explanation.ts
 src/lib/agent/mock-agent.ts
 src/lib/agent/suggested-prompts.ts
 src/types.ts
-src/lib/free-cash/engine.test.ts
+src/lib/pip-cash/engine.test.ts
 ```
 
 Minimal UI:
 
 ```text
-Free Cash Today
+PIP Cash Today
 $43
 [ Why this number? ] [ Can I spend $50? ] [ What changed? ]
 Ask anything about your money...
@@ -948,11 +948,11 @@ Minimal acceptance criteria:
 
 - No menus exist.
 - No actual balances appear by default.
-- Free Cash is the only default financial number.
+- PIP Cash is the only default financial number.
 - Prompt chips are visible and limited to three.
 - Agent can answer why this number, can I spend $X, show true balances, and connect missing credit card.
 - Temporary cards render inside the chat.
-- Free Cash comes from a deterministic engine.
+- PIP Cash comes from a deterministic engine.
 - Credit-card payment dedupe works in tests.
 - The app still makes sense on a phone-sized screen.
 
@@ -977,7 +977,7 @@ BUILD_PLAN.md
 ```text
 Next.js + TypeScript + Tailwind
 Mobile-first home screen
-Fake Free Cash number
+Fake PIP Cash number
 Fake prompt chips
 Agent chat UI
 Temporary card renderer
@@ -987,27 +987,27 @@ Mock agent responses
 Acceptance:
 
 ```text
-User opens app. Sees only Free Cash Today, prompt chips, and agent input.
+User opens app. Sees only PIP Cash Today, prompt chips, and agent input.
 Tapping prompt chips creates agent response.
 Temporary cards render.
 No menus/tabs/dashboard exist.
 ```
 
-3. Build the Free Cash engine:
+3. Build the PIP Cash engine:
 
 ```text
-src/lib/free-cash/date-window.ts
-src/lib/free-cash/normalize.ts
-src/lib/free-cash/classify.ts
-src/lib/free-cash/engine.ts
-src/lib/free-cash/explanation.ts
-src/lib/free-cash/engine.test.ts
+src/lib/pip-cash/date-window.ts
+src/lib/pip-cash/normalize.ts
+src/lib/pip-cash/classify.ts
+src/lib/pip-cash/engine.ts
+src/lib/pip-cash/explanation.ts
+src/lib/pip-cash/engine.test.ts
 ```
 
 Acceptance:
 
 ```text
-Engine produces deterministic Free Cash and explanation JSON from fake transactions.
+Engine produces deterministic PIP Cash and explanation JSON from fake transactions.
 Tests cover rolling month, rent, income, transfers, card purchases, card-payment dedupe, refunds, protected savings, and negative values.
 ```
 
@@ -1038,7 +1038,7 @@ No monetization.
 One number.
 Three prompts.
 Agent cards.
-Deterministic Free Cash engine.
+Deterministic PIP Cash engine.
 ```
 
 Once that loop feels right, then connect auth, database, provider abstraction, and real bank data.

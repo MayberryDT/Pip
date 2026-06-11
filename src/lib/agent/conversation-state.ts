@@ -1,7 +1,7 @@
 import type { AgentCard, PromptChip } from "@/lib/agent/card-types";
 import type { SyncStatus } from "@/lib/data/sync-status";
-import { getSpendableCashTodayState } from "@/lib/free-cash/spendable-cash-today";
-import type { FreeCashResult } from "@/lib/types";
+import { getSpendableCashTodayState } from "@/lib/pip-cash/spendable-cash-today";
+import type { PipCashResult } from "@/lib/types";
 
 export type ConversationHistoryItem = {
   role: "user" | "assistant";
@@ -37,7 +37,7 @@ export type ConversationStateInput = {
   selectedPromptChipId?: string;
   responseCards?: AgentCard[];
   responseToolNames?: string[];
-  result?: FreeCashResult | null;
+  result?: PipCashResult | null;
   syncStatus?: SyncStatus | null;
   onboardingState?: {
     status: "guest" | "needs-consent" | "ready";
@@ -67,7 +67,7 @@ export type ConversationStateSummary = {
 };
 
 const cardJobByType: Partial<Record<AgentCard["type"], ConversationJob>> = {
-  free_cash_explanation: "explain_number",
+  pip_cash_explanation: "explain_number",
   insight_card: "explain_number",
   guidance_card: "financial_guidance",
   purchase_simulation: "purchase_test",
@@ -82,9 +82,9 @@ const cardJobByType: Partial<Record<AgentCard["type"], ConversationJob>> = {
 };
 
 const toolJobByName: Record<string, ConversationJob> = {
-  get_free_cash_snapshot: "explain_number",
+  get_pip_cash_snapshot: "explain_number",
   get_financial_guidance_context: "financial_guidance",
-  get_free_cash_drivers: "explain_number",
+  get_pip_cash_drivers: "explain_number",
   compose_insight_card: "explain_number",
   get_pattern_assumptions: "explain_number",
   get_recent_spending_pressure: "explain_number",
@@ -93,7 +93,7 @@ const toolJobByName: Record<string, ConversationJob> = {
   get_recurring_activity: "recurring_activity",
   get_recent_transactions: "recent_transactions",
   get_spending_breakdown: "spending_breakdown",
-  get_free_cash_math: "math",
+  get_pip_cash_math: "math",
   get_true_balances: "true_balances",
   get_data_quality: "data_quality",
   get_sync_status: "data_quality",

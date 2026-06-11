@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   upsertUserSettings: vi.fn(),
-  markFreeCashSnapshotsStaleForUser: vi.fn(),
+  markPipCashSnapshotsStaleForUser: vi.fn(),
   recordProductEventSafely: vi.fn(),
 }));
 
@@ -13,7 +13,7 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/lib/data/financial-repository", () => ({
   upsertUserSettings: routeMocks.upsertUserSettings,
-  markFreeCashSnapshotsStaleForUser: routeMocks.markFreeCashSnapshotsStaleForUser,
+  markPipCashSnapshotsStaleForUser: routeMocks.markPipCashSnapshotsStaleForUser,
 }));
 
 vi.mock("@/lib/data/product-events", () => ({
@@ -29,7 +29,7 @@ afterEach(() => {
 
 describe("/api/settings", () => {
   it("returns 503 when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await GET();
 
@@ -81,7 +81,7 @@ describe("/api/settings", () => {
       error: "Authentication required.",
     });
     expect(routeMocks.upsertUserSettings).not.toHaveBeenCalled();
-    expect(routeMocks.markFreeCashSnapshotsStaleForUser).not.toHaveBeenCalled();
+    expect(routeMocks.markPipCashSnapshotsStaleForUser).not.toHaveBeenCalled();
     expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalled();
   });
 
@@ -97,12 +97,12 @@ describe("/api/settings", () => {
       error: "Invalid settings.",
     });
     expect(routeMocks.upsertUserSettings).not.toHaveBeenCalled();
-    expect(routeMocks.markFreeCashSnapshotsStaleForUser).not.toHaveBeenCalled();
+    expect(routeMocks.markPipCashSnapshotsStaleForUser).not.toHaveBeenCalled();
     expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalled();
   });
 
   it("returns 503 on valid updates when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await PUT(jsonRequest({ protectedSavingsMonthlyCents: 35000 }));
 
@@ -125,7 +125,7 @@ describe("/api/settings", () => {
       error: "Authentication required.",
     });
     expect(routeMocks.upsertUserSettings).not.toHaveBeenCalled();
-    expect(routeMocks.markFreeCashSnapshotsStaleForUser).not.toHaveBeenCalled();
+    expect(routeMocks.markPipCashSnapshotsStaleForUser).not.toHaveBeenCalled();
     expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalled();
   });
 
@@ -137,7 +137,7 @@ describe("/api/settings", () => {
       asOfDate: "2026-06-06",
       protectedSavingsMonthlyCents: 35000,
     });
-    routeMocks.markFreeCashSnapshotsStaleForUser.mockResolvedValue(undefined);
+    routeMocks.markPipCashSnapshotsStaleForUser.mockResolvedValue(undefined);
     routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
 
     const response = await PUT(jsonRequest({ protectedSavingsMonthlyCents: 35000 }));
@@ -150,7 +150,7 @@ describe("/api/settings", () => {
     expect(routeMocks.upsertUserSettings).toHaveBeenCalledWith(supabase, "user-1", {
       protectedSavingsMonthlyCents: 35000,
     });
-    expect(routeMocks.markFreeCashSnapshotsStaleForUser).toHaveBeenCalledWith(
+    expect(routeMocks.markPipCashSnapshotsStaleForUser).toHaveBeenCalledWith(
       supabase,
       "user-1",
     );
@@ -166,7 +166,7 @@ describe("/api/settings", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

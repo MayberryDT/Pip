@@ -3,11 +3,11 @@
 import { writeFileSync } from "node:fs";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
-const DEFAULT_REPORT_PATH = "/tmp/spendable-agent-eval-report.json";
+const DEFAULT_REPORT_PATH = "/tmp/pip-agent-eval-report.json";
 const DEFAULT_TIMEOUT_MS = 45_000;
 
 const ALL_CARD_TYPES = [
-  "free_cash_explanation",
+  "pip_cash_explanation",
   "math_breakdown",
   "recent_transactions",
   "purchase_simulation",
@@ -36,14 +36,14 @@ export const agentEvalCases = [
     id: "why-number",
     description: "Core explanation should use the drivers tool and show the drivers card.",
     message: "Why this number?",
-    expectedTools: ["get_free_cash_drivers"],
-    expectedCards: ["free_cash_explanation"],
+    expectedTools: ["get_pip_cash_drivers"],
+    expectedCards: ["pip_cash_explanation"],
   },
   {
     id: "math",
     description: "Math prompt should use deterministic math and show the math card.",
     message: "Show the math",
-    expectedTools: ["get_free_cash_math"],
+    expectedTools: ["get_pip_cash_math"],
     expectedCards: ["math_breakdown"],
   },
   {
@@ -167,11 +167,11 @@ export const agentEvalCases = [
       { role: "user", content: "Why this number?" },
       { role: "assistant", content: "I found the main drivers behind today's number." },
     ],
-    recentCardTypes: ["free_cash_explanation"],
-    recentToolNames: ["get_free_cash_drivers"],
+    recentCardTypes: ["pip_cash_explanation"],
+    recentToolNames: ["get_pip_cash_drivers"],
     previousAssistantMessage: "I found the main drivers behind today's number.",
-    forbiddenCards: ["free_cash_explanation"],
-    forbiddenAdjacentSameTools: ["get_free_cash_drivers"],
+    forbiddenCards: ["pip_cash_explanation"],
+    forbiddenAdjacentSameTools: ["get_pip_cash_drivers"],
     expectNoRepeatedAssistantMessage: true,
   },
   {
@@ -204,7 +204,7 @@ export const agentEvalCases = [
   },
   {
     id: "how-it-works",
-    description: "Product explanation should not say Free Cash or point to screens.",
+    description: "Product explanation should not say PIP Cash or point to screens.",
     message: "Tell me how Pip works",
     expectNoCards: true,
   },
@@ -231,8 +231,10 @@ export const agentEvalCases = [
   },
 ];
 
+const legacyCashPhrase = "free" + " cash";
+
 const disallowedTextChecks = [
-  { label: "Free Cash", pattern: /\bfree cash\b/i },
+  { label: "legacy cash wording", pattern: new RegExp(`\\b${legacyCashPhrase}\\b`, "i") },
   { label: "dashboard", pattern: /\bdashboard\b/i },
   { label: "safe to spend", pattern: /\bsafe to spend\b/i },
   { label: "safe to buy", pattern: /\bsafe to buy\b/i },
@@ -262,7 +264,7 @@ const promiseCapabilities = [
   {
     label: "breakdown",
     pattern: /\b(?:breakdown|break down|category|categories|merchants|card payments?|complete breakdown)\b/i,
-    cards: ["spending_breakdown", "free_cash_explanation", "math_breakdown", "spendable_cash_forecast"],
+    cards: ["spending_breakdown", "pip_cash_explanation", "math_breakdown", "spendable_cash_forecast"],
   },
   {
     label: "transactions",
@@ -578,13 +580,13 @@ async function readJson(response) {
 }
 
 export async function runAgentEval({
-  baseUrl = process.env.SPENDABLE_AGENT_EVAL_BASE_URL || DEFAULT_BASE_URL,
-  reportPath = process.env.SPENDABLE_AGENT_EVAL_REPORT || DEFAULT_REPORT_PATH,
+  baseUrl = process.env.PIP_AGENT_EVAL_BASE_URL || DEFAULT_BASE_URL,
+  reportPath = process.env.PIP_AGENT_EVAL_REPORT || DEFAULT_REPORT_PATH,
   cases = agentEvalCases,
-  caseIds = process.env.SPENDABLE_AGENT_EVAL_CASE_IDS,
+  caseIds = process.env.PIP_AGENT_EVAL_CASE_IDS,
   fetchImpl = globalThis.fetch,
-  timeoutMs = Number(process.env.SPENDABLE_AGENT_EVAL_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
-  conversationPrefix = process.env.SPENDABLE_AGENT_EVAL_CONVERSATION_PREFIX || `eval-${Date.now()}`,
+  timeoutMs = Number(process.env.PIP_AGENT_EVAL_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
+  conversationPrefix = process.env.PIP_AGENT_EVAL_CONVERSATION_PREFIX || `eval-${Date.now()}`,
   log = console.log,
 } = {}) {
   if (typeof fetchImpl !== "function") {

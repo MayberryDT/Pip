@@ -1,14 +1,14 @@
 import type { AgentResponse } from "@/lib/agent/card-types";
 import {
-  FREE_CASH_AI_MODEL,
-  getFreeCashAiTransport,
+  PIP_AI_MODEL,
+  getPipAiTransport,
   type AgentRuntime,
   type RunAiAgentInput,
 } from "@/lib/agent/ai-agent";
 import { getOnboardingPromptChips } from "@/lib/agent/suggested-prompts";
 import { buildFinancialGuidanceToolResult, runAgentTool } from "@/lib/agent/tool-runner";
 import { fakeSnapshot } from "@/lib/fake-data";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { formatMoney } from "@/lib/money";
 
 export function createMockModelClient(): AgentRuntime {
@@ -21,7 +21,7 @@ export function createMockModelClient(): AgentRuntime {
 
 function createMockResponse(input: RunAiAgentInput): AgentResponse {
   const snapshot = input.snapshot ?? fakeSnapshot;
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const normalized = input.message.trim().toLowerCase();
   const amountCents = extractDollarAmount(input.message);
 
@@ -111,7 +111,7 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
       if (/\b(any|money|at all|negative)\b/.test(normalized)) {
         return baseResponse(input, {
           message: "I use Spendable Cash Today as a signal, not a hard limit.",
-          usedTools: ["get_free_cash_snapshot"],
+          usedTools: ["get_pip_cash_snapshot"],
         });
       }
 
@@ -211,18 +211,18 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return toolResponse(input, "show_math", {});
   }
 
-  if (/\bwhy\b|\bchanged\b|\bfree cash\b|\bnumber\b|\bbehind\b/.test(normalized)) {
-    if (input.conversationState?.shownCards?.some((card) => card.type === "free_cash_explanation")) {
+  if (/\bwhy\b|\bchanged\b|\bpip cash\b|\bnumber\b|\bbehind\b/.test(normalized)) {
+    if (input.conversationState?.shownCards?.some((card) => card.type === "pip_cash_explanation")) {
       return baseResponse(input, {
         message: "The same drivers still apply.",
       });
     }
 
-    return toolResponse(input, "explain_free_cash", {});
+    return toolResponse(input, "explain_pip_cash", {});
   }
 
   return baseResponse(input, {
-    message: result.freeCashTodayCents < 0
+    message: result.pipCashTodayCents < 0
       ? "Spendable Cash Today is below zero right now."
       : "I can help with Spendable Cash Today.",
   });
@@ -239,7 +239,7 @@ function toolResponse(
   const snapshot = input.snapshot ?? fakeSnapshot;
   const response = runAgentTool(toolName, args, snapshot);
   const toolNameByRunner = {
-    explain_free_cash: "get_free_cash_drivers",
+    explain_pip_cash: "get_pip_cash_drivers",
     simulate_purchase: "simulate_purchase",
     show_true_balances: "get_true_balances",
     show_recent_transactions: "get_recent_transactions",
@@ -251,7 +251,7 @@ function toolResponse(
     show_recent_spending_pressure: "get_recent_spending_pressure",
     get_financial_guidance_context: "get_financial_guidance_context",
     detect_missing_card: "get_data_quality",
-    show_math: "get_free_cash_math",
+    show_math: "get_pip_cash_math",
     compose_insight_card: "compose_insight_card",
     answer_unrelated: "answer_unrelated",
   } satisfies Record<Parameters<typeof runAgentTool>[0], string>;
@@ -272,8 +272,8 @@ function toolResponse(
     audit: {
       toolNames: usedTools,
       usedModel: true,
-      model: FREE_CASH_AI_MODEL,
-      transport: getFreeCashAiTransport(),
+      model: PIP_AI_MODEL,
+      transport: getPipAiTransport(),
       guidance: guidanceContext
         ? {
             validationOutcome: "context_built",
@@ -337,8 +337,8 @@ function guidanceResponse(input: RunAiAgentInput): AgentResponse {
     audit: {
       toolNames: usedTools,
       usedModel: true,
-      model: FREE_CASH_AI_MODEL,
-      transport: getFreeCashAiTransport(),
+      model: PIP_AI_MODEL,
+      transport: getPipAiTransport(),
       guidance: {
         validationOutcome: "shown",
         metricVersion: "v2",
@@ -377,8 +377,8 @@ function baseResponse(
     audit: {
       toolNames: overrides.usedTools ?? [],
       usedModel: true,
-      model: FREE_CASH_AI_MODEL,
-      transport: getFreeCashAiTransport(),
+      model: PIP_AI_MODEL,
+      transport: getPipAiTransport(),
       ...overrides.audit,
     },
   };

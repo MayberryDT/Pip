@@ -70,7 +70,7 @@ describe("answer composer", () => {
       userMessage: "Why this number?",
       cards: [
         {
-          type: "free_cash_explanation",
+          type: "pip_cash_explanation",
           title: "Why this number changed",
           summary: "Spending moved it most.",
           drivers: [
@@ -86,7 +86,7 @@ describe("answer composer", () => {
           dataStates: [],
         },
       ],
-      usedTools: ["get_free_cash_drivers"],
+      usedTools: ["get_pip_cash_drivers"],
       maxChars: 260,
       maxWords: 45,
     });

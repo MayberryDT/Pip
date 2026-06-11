@@ -23,7 +23,7 @@ describe("Netlify deployment secret boundary", () => {
     expect(safeDeployScript).toContain("hideLocalEnvFiles");
     expect(safeDeployScript).toContain("restoreLocalEnvFiles");
     expect(safeDeployScript).toContain("--skip-functions-cache");
-    expect(safeDeployScript).toContain("FREE_CASH_DEPLOY_MODE");
+    expect(safeDeployScript).toContain("PIP_DEPLOY_MODE");
     expect(safeDeployScript).toContain("scripts/check-netlify-bundle.mjs");
     expect(bundleCheckScript).toContain("unzip");
     expect(bundleCheckScript).toContain("Netlify function artifacts include forbidden env files");
@@ -34,7 +34,7 @@ describe("Netlify deployment secret boundary", () => {
   it("ignores generated live browser auth state files", () => {
     const gitignore = readFileSync(join(process.cwd(), ".gitignore"), "utf8");
 
-    expect(gitignore).toContain("spendable-live-auth*.json");
+    expect(gitignore).toContain("pip-live-auth*.json");
     expect(gitignore).toContain("*.storage-state.json");
   });
 

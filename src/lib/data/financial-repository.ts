@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Account, FinancialSnapshot, FreeCashResult, Transaction, UserSettings } from "@/lib/types";
+import type { Account, FinancialSnapshot, PipCashResult, Transaction, UserSettings } from "@/lib/types";
 import type {
   AccountRow,
   Database,
@@ -63,13 +63,13 @@ export async function loadFinancialSnapshotForUser(
   };
 }
 
-export async function loadCachedFreeCashResultForUser(
+export async function loadCachedPipCashResultForUser(
   supabase: SupabaseClient<Database>,
   userId: string,
   asOfDate = getCurrentAppDate(),
-): Promise<FreeCashResult | null> {
+): Promise<PipCashResult | null> {
   const { data, error } = await supabase
-    .from("free_cash_snapshots")
+    .from("pip_cash_snapshots")
     .select("result")
     .eq("user_id", userId)
     .eq("as_of_date", asOfDate)
@@ -83,7 +83,7 @@ export async function loadCachedFreeCashResultForUser(
 
   const result = data?.[0]?.result;
 
-  if (!isFreeCashResult(result)) {
+  if (!isPipCashResult(result)) {
     return null;
   }
 
@@ -112,12 +112,12 @@ export async function upsertUserSettings(
   return mapUserSettingsRow(data);
 }
 
-export async function markFreeCashSnapshotsStaleForUser(
+export async function markPipCashSnapshotsStaleForUser(
   supabase: SupabaseClient<Database>,
   userId: string,
 ) {
   const { error } = await supabase
-    .from("free_cash_snapshots")
+    .from("pip_cash_snapshots")
     .update({
       stale: true,
     })
@@ -190,7 +190,7 @@ function getTransactionMetadata(metadata: Json): Transaction["metadata"] {
   };
 }
 
-function isFreeCashResult(value: unknown): value is FreeCashResult {
+function isPipCashResult(value: unknown): value is PipCashResult {
   const record = asRecord(value);
 
   if (!record) {
@@ -198,7 +198,7 @@ function isFreeCashResult(value: unknown): value is FreeCashResult {
   }
 
   return (
-    typeof record.freeCashTodayCents === "number" &&
+    typeof record.pipCashTodayCents === "number" &&
     typeof record.rollingNetCents === "number" &&
     typeof record.incomeTotalCents === "number" &&
     typeof record.spendingTotalCents === "number" &&

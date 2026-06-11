@@ -25,7 +25,7 @@ export function ConsentGate({ email }: { email: string }) {
   }
 
   return (
-    <main className="free-cash-app-shell grid min-h-screen place-items-center px-4 py-8 text-ink">
+    <main className="pip-app-shell grid min-h-screen place-items-center px-4 py-8 text-ink">
       <section className="w-full max-w-sm">
         <PipIntroScene
           priority

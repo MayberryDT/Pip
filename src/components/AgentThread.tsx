@@ -11,6 +11,8 @@ export type AgentThreadItem = {
   isPending?: boolean;
 };
 
+const defaultAgentErrorText = "I couldn’t answer that cleanly. Try again.";
+
 export function AgentThread({
   thread,
   onSuppressMissingCard,
@@ -73,14 +75,22 @@ export function AgentThread({
                     onSuppressMissingCard={onSuppressMissingCard}
                   />
                 ))}
+                {item.errorText ? (
+                  <p className="glass-panel border-red-200/80 bg-red-50/[0.84] px-4 py-3 text-sm font-medium leading-6 text-red-800">
+                    {item.errorText}
+                  </p>
+                ) : null}
               </div>
             </div>
           ) : item.isPending ? (
             <ThinkingBubble />
           ) : (
-            <p className="chat-message-in rounded-[1.25rem] border border-red-200 bg-red-50/[0.84] px-4 py-3 text-sm leading-6 text-red-800">
-              {item.errorText ?? "AI request failed."}
-            </p>
+            <div className="chat-message-in flex items-start gap-3">
+              <PipAvatar size="sm" expression="concerned" ariaLabel="Pip" />
+              <p className="glass-panel border-red-200/80 bg-red-50/[0.84] px-4 py-3 text-sm font-medium leading-6 text-red-800">
+                {item.errorText ?? defaultAgentErrorText}
+              </p>
+            </div>
           )}
         </article>
       ))}

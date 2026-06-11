@@ -3,15 +3,15 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const DEFAULT_PROOF_REPORT = "/tmp/spendable-live-proof.json";
-const EXPECTED_BASE_URL = "https://free-cash-mayberrydt.netlify.app";
+const DEFAULT_PROOF_REPORT = "/tmp/pip-live-proof.json";
+const EXPECTED_BASE_URL = "https://pip-mayberrydt.netlify.app";
 
 export function checkPrdComplete({
   env = process.env,
   stdout = console.log,
   stderr = console.error,
 } = {}) {
-  const proofReport = env.SPENDABLE_LIVE_PROOF_REPORT || DEFAULT_PROOF_REPORT;
+  const proofReport = env.PIP_LIVE_PROOF_REPORT || DEFAULT_PROOF_REPORT;
   const errors = [];
   const report = readProofReport(proofReport, errors);
 
@@ -93,7 +93,7 @@ function extractDeployId(url) {
     return null;
   }
 
-  const match = url.match(/^https:\/\/([a-f0-9]+)--free-cash-mayberrydt\.netlify\.app/);
+  const match = url.match(/^https:\/\/([a-f0-9]+)--pip-mayberrydt\.netlify\.app/);
 
   return match?.[1] ?? null;
 }
@@ -102,7 +102,7 @@ function readProofReport(path, errors) {
   if (!existsSync(path)) {
     errors.push(`Missing proof report: ${path}`);
     errors.push(
-      "Run `npm run capture:live-auth`, then `SPENDABLE_LIVE_STORAGE_STATE=/tmp/spendable-live-auth.json npm run test:e2e:live:final`.",
+      "Run `npm run capture:live-auth`, then `PIP_LIVE_STORAGE_STATE=/tmp/pip-live-auth.json npm run test:e2e:live:final`.",
     );
     return null;
   }

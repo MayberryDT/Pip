@@ -29,7 +29,7 @@ describe("POST /api/auth/sign-in", () => {
   });
 
   it("returns 503 when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await POST(jsonRequest({ email: "mayberrydt@gmail.com" }));
 
@@ -41,7 +41,7 @@ describe("POST /api/auth/sign-in", () => {
 
   it("normalizes any valid email and sends the magic link to the callback route", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://pip-mayberrydt.netlify.app");
     const supabase = createSupabaseClient();
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
@@ -54,7 +54,7 @@ describe("POST /api/auth/sign-in", () => {
     expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
       email: "mayberrydt@gmail.com",
       options: {
-        emailRedirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback",
+        emailRedirectTo: "https://pip-mayberrydt.netlify.app/auth/callback",
         shouldCreateUser: true,
       },
     });
@@ -69,7 +69,7 @@ describe("POST /api/auth/sign-in", () => {
       jsonRequest(
         { email: "mayberrydt@gmail.com" },
         {
-          "x-forwarded-host": "free-cash-mayberrydt.netlify.app",
+          "x-forwarded-host": "pip-mayberrydt.netlify.app",
           "x-forwarded-proto": "https",
         },
       ),
@@ -79,7 +79,7 @@ describe("POST /api/auth/sign-in", () => {
     expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
       email: "mayberrydt@gmail.com",
       options: {
-        emailRedirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback",
+        emailRedirectTo: "https://pip-mayberrydt.netlify.app/auth/callback",
         shouldCreateUser: true,
       },
     });
@@ -87,7 +87,7 @@ describe("POST /api/auth/sign-in", () => {
 
   it("uses forwarded production headers before a Netlify deploy-prime URL", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("DEPLOY_PRIME_URL", "https://main--free-cash-mayberrydt.netlify.app");
+    vi.stubEnv("DEPLOY_PRIME_URL", "https://main--pip-mayberrydt.netlify.app");
     const supabase = createSupabaseClient();
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
@@ -95,7 +95,7 @@ describe("POST /api/auth/sign-in", () => {
       jsonRequest(
         { email: "mayberrydt@gmail.com" },
         {
-          "x-forwarded-host": "free-cash-mayberrydt.netlify.app",
+          "x-forwarded-host": "pip-mayberrydt.netlify.app",
           "x-forwarded-proto": "https",
         },
       ),
@@ -105,7 +105,7 @@ describe("POST /api/auth/sign-in", () => {
     expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
       email: "mayberrydt@gmail.com",
       options: {
-        emailRedirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback",
+        emailRedirectTo: "https://pip-mayberrydt.netlify.app/auth/callback",
         shouldCreateUser: true,
       },
     });
@@ -113,7 +113,7 @@ describe("POST /api/auth/sign-in", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

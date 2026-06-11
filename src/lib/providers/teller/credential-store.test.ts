@@ -7,7 +7,7 @@ afterEach(() => {
 
 describe("Teller credential store", () => {
   it("stores Teller access tokens encrypted with a certificate reference instead of raw certificate material", async () => {
-    vi.stubEnv("FREE_CASH_PROVIDER_TOKEN_KEY_BASE64", Buffer.alloc(32, 9).toString("base64"));
+    vi.stubEnv("PIP_PROVIDER_TOKEN_KEY_BASE64", Buffer.alloc(32, 9).toString("base64"));
     const supabase = createPrivateCredentialClient();
 
     await storeTellerCredential({

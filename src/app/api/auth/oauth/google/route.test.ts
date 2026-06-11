@@ -18,7 +18,7 @@ afterEach(() => {
 describe("GET /api/auth/oauth/google", () => {
   it("starts Google OAuth with a canonical same-origin callback URL", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://pip-mayberrydt.netlify.app");
     const supabase = createSupabaseClient("https://supabase.example/auth/v1/authorize?provider=google");
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
@@ -31,7 +31,7 @@ describe("GET /api/auth/oauth/google", () => {
     expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider: "google",
       options: {
-        redirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback?next=%2Fwelcome",
+        redirectTo: "https://pip-mayberrydt.netlify.app/auth/callback?next=%2Fwelcome",
         skipBrowserRedirect: true,
       },
     });
@@ -45,7 +45,7 @@ describe("GET /api/auth/oauth/google", () => {
     const response = await GET(
       new Request("http://localhost/api/auth/oauth/google", {
         headers: {
-          "x-forwarded-host": "free-cash-mayberrydt.netlify.app",
+          "x-forwarded-host": "pip-mayberrydt.netlify.app",
           "x-forwarded-proto": "https",
         },
       }),
@@ -55,7 +55,7 @@ describe("GET /api/auth/oauth/google", () => {
     expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider: "google",
       options: {
-        redirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback",
+        redirectTo: "https://pip-mayberrydt.netlify.app/auth/callback",
         skipBrowserRedirect: true,
       },
     });
@@ -63,14 +63,14 @@ describe("GET /api/auth/oauth/google", () => {
 
   it("uses forwarded production headers before a Netlify deploy-prime URL", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("DEPLOY_PRIME_URL", "https://main--free-cash-mayberrydt.netlify.app");
+    vi.stubEnv("DEPLOY_PRIME_URL", "https://main--pip-mayberrydt.netlify.app");
     const supabase = createSupabaseClient("https://supabase.example/auth/v1/authorize?provider=google");
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
     const response = await GET(
-      new Request("https://main--free-cash-mayberrydt.netlify.app/api/auth/oauth/google", {
+      new Request("https://main--pip-mayberrydt.netlify.app/api/auth/oauth/google", {
         headers: {
-          "x-forwarded-host": "free-cash-mayberrydt.netlify.app",
+          "x-forwarded-host": "pip-mayberrydt.netlify.app",
           "x-forwarded-proto": "https",
         },
       }),
@@ -80,7 +80,7 @@ describe("GET /api/auth/oauth/google", () => {
     expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider: "google",
       options: {
-        redirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback",
+        redirectTo: "https://pip-mayberrydt.netlify.app/auth/callback",
         skipBrowserRedirect: true,
       },
     });
@@ -88,7 +88,7 @@ describe("GET /api/auth/oauth/google", () => {
 
   it("keeps next redirects inside the app", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://pip-mayberrydt.netlify.app");
     const supabase = createSupabaseClient("https://supabase.example/auth/v1/authorize?provider=google");
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
@@ -97,7 +97,7 @@ describe("GET /api/auth/oauth/google", () => {
     expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider: "google",
       options: {
-        redirectTo: "https://free-cash-mayberrydt.netlify.app/auth/callback",
+        redirectTo: "https://pip-mayberrydt.netlify.app/auth/callback",
         skipBrowserRedirect: true,
       },
     });
@@ -105,7 +105,7 @@ describe("GET /api/auth/oauth/google", () => {
 
   it("keeps auth-start failure redirects on the canonical site origin", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://free-cash-mayberrydt.netlify.app");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://pip-mayberrydt.netlify.app");
     const supabase = {
       auth: {
         signInWithOAuth: vi.fn().mockResolvedValue({
@@ -119,18 +119,18 @@ describe("GET /api/auth/oauth/google", () => {
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
     const response = await GET(
-      new Request("https://main--free-cash-mayberrydt.netlify.app/api/auth/oauth/google"),
+      new Request("https://main--pip-mayberrydt.netlify.app/api/auth/oauth/google"),
     );
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
-      "https://free-cash-mayberrydt.netlify.app/?auth=oauth-start-failed",
+      "https://pip-mayberrydt.netlify.app/?auth=oauth-start-failed",
     );
   });
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

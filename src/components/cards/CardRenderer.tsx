@@ -22,7 +22,7 @@ export function CardRenderer({
   onSuppressMissingCard?: (issuerName: string) => void;
 }) {
   switch (card.type) {
-    case "free_cash_explanation":
+    case "pip_cash_explanation":
       return (
         <CardShell icon={<ListChecks aria-hidden="true" size={18} />} title={card.title}>
           <div className="space-y-1.5">

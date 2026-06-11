@@ -81,7 +81,7 @@ describe("POST /api/sync/manual", () => {
   });
 
   it("returns 503 when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await POST(jsonRequest({ provider: "mock" }));
 
@@ -115,7 +115,7 @@ describe("POST /api/sync/manual", () => {
       accountCount: 3,
       transactionCount: 22,
       balanceCount: 3,
-      freeCashTodayCents: 4300,
+      pipCashTodayCents: 4300,
     });
 
     const response = await POST(jsonRequest({ provider: "mock" }));
@@ -123,7 +123,7 @@ describe("POST /api/sync/manual", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       syncRunId: "sync-1",
-      freeCashTodayCents: 4300,
+      pipCashTodayCents: 4300,
     });
     expect(routeMocks.runManualSync).toHaveBeenCalledWith(supabase, {
       userId: "user-1",
@@ -155,7 +155,7 @@ describe("POST /api/sync/manual", () => {
       accountCount: 3,
       transactionCount: 22,
       balanceCount: 3,
-      freeCashTodayCents: 4300,
+      pipCashTodayCents: 4300,
     });
 
     const response = await POST(jsonRequest({
@@ -195,7 +195,7 @@ describe("POST /api/sync/manual", () => {
       accountCount: 3,
       transactionCount: 22,
       balanceCount: 3,
-      freeCashTodayCents: 4300,
+      pipCashTodayCents: 4300,
     });
 
     const response = await POST(jsonRequest({
@@ -267,7 +267,7 @@ describe("POST /api/sync/manual", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

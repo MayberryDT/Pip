@@ -10,7 +10,7 @@ afterEach(() => {
 
 describe("Plaid credential store", () => {
   it("stores Plaid access tokens encrypted with minimal private metadata", async () => {
-    vi.stubEnv("FREE_CASH_PROVIDER_TOKEN_KEY_BASE64", Buffer.alloc(32, 7).toString("base64"));
+    vi.stubEnv("PIP_PROVIDER_TOKEN_KEY_BASE64", Buffer.alloc(32, 7).toString("base64"));
     const supabase = createPrivateCredentialClient();
 
     await storePlaidCredential({

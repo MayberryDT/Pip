@@ -59,7 +59,7 @@ afterEach(() => {
 
 describe("POST /api/agent", () => {
   it("rejects invalid request bodies with a structured 400 response", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await POST(jsonRequest({ message: "" }));
 
@@ -70,7 +70,7 @@ describe("POST /api/agent", () => {
   });
 
   it("returns a structured AI error when model configuration is missing", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("OPENAI_BASE_URL", "");
     routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
@@ -100,7 +100,7 @@ describe("POST /api/agent", () => {
   });
 
   it("calls the real agent route path without runtime injection", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
     routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
       cards: [
@@ -179,7 +179,7 @@ describe("POST /api/agent", () => {
   });
 
   it("returns silent prompt chip refreshes without recording a chat turn", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
     routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
       message: "Ready.",
@@ -220,7 +220,7 @@ describe("POST /api/agent", () => {
   });
 
   it("passes conversation state into the agent so duplicate cards can be suppressed", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
     routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
       cards: [],
@@ -234,11 +234,11 @@ describe("POST /api/agent", () => {
         conversationState: {
           shownCards: [
             {
-              type: "free_cash_explanation",
+              type: "pip_cash_explanation",
               title: "Why this number changed",
             },
           ],
-          lastToolNames: ["get_free_cash_drivers"],
+          lastToolNames: ["get_pip_cash_drivers"],
         },
       }),
     );
@@ -259,11 +259,11 @@ describe("POST /api/agent", () => {
         conversationState: {
           shownCards: [
             {
-              type: "free_cash_explanation",
+              type: "pip_cash_explanation",
               title: "Why this number changed",
             },
           ],
-          lastToolNames: ["get_free_cash_drivers"],
+          lastToolNames: ["get_pip_cash_drivers"],
         },
       }),
     );
@@ -343,7 +343,7 @@ describe("POST /api/agent", () => {
   });
 
   it("passes authenticated no-data state into the agent without answering from fake rows", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockRejectedValue(new NoFinancialDataError());
     routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
       usedTools: ["get_onboarding_state"],
@@ -370,7 +370,7 @@ describe("POST /api/agent", () => {
   });
 
   it("passes missing auth into the agent as guest onboarding state", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockRejectedValue(new AuthenticationRequiredError());
     routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
       usedTools: ["start_google_oauth"],
@@ -402,7 +402,7 @@ describe("POST /api/agent", () => {
   });
 
   it("rejects oversized history before calling the model", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await POST(
       jsonRequest({
@@ -430,7 +430,7 @@ function jsonRequest(body: unknown, headers: Record<string, string> = {}) {
 }
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

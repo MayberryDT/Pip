@@ -3,7 +3,7 @@ import type { AgentResponse } from "@/lib/agent/card-types";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 export const productEventNames = [
-  "free_cash_viewed",
+  "pip_cash_viewed",
   "prompt_chip_selected",
   "agent_question_asked",
   "agent_follow_up_asked",
@@ -21,7 +21,7 @@ export const productEventNames = [
   "plaid_exchange_failed",
   "plaid_sync_succeeded",
   "plaid_sync_failed",
-  "negative_free_cash_follow_up",
+  "negative_pip_cash_follow_up",
   "financial_guidance_requested",
   "financial_guidance_context_built",
   "financial_guidance_card_drafted",
@@ -38,7 +38,7 @@ export const productEventNames = [
 export type ProductEventName = (typeof productEventNames)[number];
 
 export const clientReportedProductEventNames = [
-  "free_cash_viewed",
+  "pip_cash_viewed",
   "prompt_chip_selected",
   "plaid_link_started",
   "plaid_link_event",
@@ -84,7 +84,7 @@ export async function recordProductEventSafely(
 
 export function getAgentProductEventNames(
   response: AgentResponse,
-  freeCashTodayCents: number,
+  pipCashTodayCents: number,
   context: { isFollowUp?: boolean; isShortfall?: boolean } = {},
 ): ProductEventName[] {
   const names = new Set<ProductEventName>(["agent_question_asked"]);
@@ -136,8 +136,8 @@ export function getAgentProductEventNames(
     names.add("financial_guidance_card_rejected");
   }
 
-  if (freeCashTodayCents < 0 || context.isShortfall) {
-    names.add("negative_free_cash_follow_up");
+  if (pipCashTodayCents < 0 || context.isShortfall) {
+    names.add("negative_pip_cash_follow_up");
   }
 
   return [...names];

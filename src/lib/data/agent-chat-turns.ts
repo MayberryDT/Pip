@@ -32,7 +32,7 @@ export type OperatorAgentChatTurn = {
   createdAt: string;
 };
 
-const localChatLogPath = "/tmp/spendable-agent-chat-turns.jsonl";
+const localChatLogPath = "/tmp/pip-agent-chat-turns.jsonl";
 
 export async function recordAgentChatTurnSafely(
   supabase: SupabaseClient<Database> | null,

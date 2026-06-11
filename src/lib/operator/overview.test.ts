@@ -94,7 +94,7 @@ describe("operator overview", () => {
         events: [
           {
             user_id: "user-1",
-            event_name: "free_cash_viewed",
+            event_name: "pip_cash_viewed",
             created_at: "2026-06-06T09:00:00.000Z",
           },
           {
@@ -114,7 +114,7 @@ describe("operator overview", () => {
           },
           {
             user_id: "user-2",
-            event_name: "negative_free_cash_follow_up",
+            event_name: "negative_pip_cash_follow_up",
             created_at: "2026-06-06T09:02:00.000Z",
           },
           {
@@ -132,11 +132,11 @@ describe("operator overview", () => {
       partialSyncCount: 1,
       failedSyncCount: 1,
       eventCounts: {
-        free_cash_viewed: 1,
+        pip_cash_viewed: 1,
         prompt_chip_selected: 1,
         purchase_simulation_requested: 1,
         missing_card_nudge_shown: 1,
-        negative_free_cash_follow_up: 1,
+        negative_pip_cash_follow_up: 1,
         missing_card_nudge_suppressed: 1,
       },
       staleConnections: [

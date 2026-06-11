@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
-import { addDays, buildRollingCalendarWindow, subtractOneCalendarMonth } from "@/lib/free-cash/date-window";
-import { fakeSnapshot, negativeFreeCashSnapshot } from "@/lib/fake-data";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
+import { addDays, buildRollingCalendarWindow, subtractOneCalendarMonth } from "@/lib/pip-cash/date-window";
+import { fakeSnapshot, negativePipCashSnapshot } from "@/lib/fake-data";
 import type { FinancialSnapshot } from "@/lib/types";
 
 describe("rolling calendar-month window", () => {
@@ -26,19 +26,19 @@ describe("rolling calendar-month window", () => {
   });
 });
 
-describe("calculateFreeCash", () => {
+describe("calculatePipCash", () => {
   it("returns the intended $43 fake-data prototype number", () => {
-    const result = calculateFreeCash(fakeSnapshot);
+    const result = calculatePipCash(fakeSnapshot);
 
     expect(result.incomeTotalCents).toBe(420000);
     expect(result.spendingTotalCents).toBe(262400);
     expect(result.protectedSavingsMonthlyCents).toBe(24300);
     expect(result.rollingNetCents).toBe(133300);
-    expect(result.freeCashTodayCents).toBe(4300);
+    expect(result.pipCashTodayCents).toBe(4300);
   });
 
   it("includes rent, protected savings, refunds, and deduped card payments as explanation drivers", () => {
-    const result = calculateFreeCash(fakeSnapshot);
+    const result = calculatePipCash(fakeSnapshot);
     const driverIds = result.drivers.map((driver) => driver.id);
 
     expect(driverIds).toContain("rent");
@@ -77,10 +77,10 @@ describe("calculateFreeCash", () => {
       ],
     };
 
-    const result = calculateFreeCash(withOnlyIgnoredTransactions);
+    const result = calculatePipCash(withOnlyIgnoredTransactions);
 
     expect(result.spendingTotalCents).toBe(0);
-    expect(result.freeCashTodayCents).toBe(0);
+    expect(result.pipCashTodayCents).toBe(0);
   });
 
   it("counts connected credit-card purchases while ignoring the matching settlement payment", () => {
@@ -134,7 +134,7 @@ describe("calculateFreeCash", () => {
       ],
     };
 
-    const result = calculateFreeCash(cardPurchaseSnapshot);
+    const result = calculatePipCash(cardPurchaseSnapshot);
 
     expect(result.incomeTotalCents).toBe(100000);
     expect(result.spendingTotalCents).toBe(30000);
@@ -184,7 +184,7 @@ describe("calculateFreeCash", () => {
       ],
     };
 
-    const result = calculateFreeCash(signSnapshot);
+    const result = calculatePipCash(signSnapshot);
 
     expect(result.incomeTotalCents).toBe(100000);
     expect(result.refundTotalCents).toBe(10000);
@@ -193,7 +193,7 @@ describe("calculateFreeCash", () => {
     expect(result.rollingNetCents).toBe(60000);
   });
 
-  it("can return positive, zero, and negative Free Cash values", () => {
+  it("can return positive, zero, and negative PIP cash values", () => {
     const baseSnapshot: FinancialSnapshot = {
       settings: {
         asOfDate: "2026-06-20",
@@ -204,7 +204,7 @@ describe("calculateFreeCash", () => {
     };
 
     expect(
-      calculateFreeCash({
+      calculatePipCash({
         ...baseSnapshot,
         transactions: [
           {
@@ -216,11 +216,11 @@ describe("calculateFreeCash", () => {
             kind: "income",
           },
         ],
-      }).freeCashTodayCents,
+      }).pipCashTodayCents,
     ).toBeGreaterThan(0);
-    expect(calculateFreeCash(baseSnapshot).freeCashTodayCents).toBe(0);
+    expect(calculatePipCash(baseSnapshot).pipCashTodayCents).toBe(0);
     expect(
-      calculateFreeCash({
+      calculatePipCash({
         ...baseSnapshot,
         transactions: [
           {
@@ -232,11 +232,11 @@ describe("calculateFreeCash", () => {
             kind: "purchase",
           },
         ],
-      }).freeCashTodayCents,
+      }).pipCashTodayCents,
     ).toBeLessThan(0);
   });
 
-  it("allows negative Free Cash values", () => {
+  it("allows negative PIP cash values", () => {
     const negativeSnapshot: FinancialSnapshot = {
       settings: {
         asOfDate: "2026-06-20",
@@ -263,11 +263,11 @@ describe("calculateFreeCash", () => {
       ],
     };
 
-    expect(calculateFreeCash(negativeSnapshot).freeCashTodayCents).toBeLessThan(0);
+    expect(calculatePipCash(negativeSnapshot).pipCashTodayCents).toBeLessThan(0);
   });
 
   it("surfaces a missing-card nudge when a card payment is not matched to a connected card", () => {
-    const result = calculateFreeCash(fakeSnapshot);
+    const result = calculatePipCash(fakeSnapshot);
 
     expect(result.warnings).toEqual(
       expect.arrayContaining([
@@ -280,7 +280,7 @@ describe("calculateFreeCash", () => {
   });
 
   it("suppresses missing-card nudges for issuers the user intentionally hid", () => {
-    const result = calculateFreeCash({
+    const result = calculatePipCash({
       ...fakeSnapshot,
       settings: {
         ...fakeSnapshot.settings,
@@ -292,9 +292,9 @@ describe("calculateFreeCash", () => {
   });
 
   it("keeps a negative fake-data scenario available for product testing", () => {
-    const result = calculateFreeCash(negativeFreeCashSnapshot);
+    const result = calculatePipCash(negativePipCashSnapshot);
 
-    expect(result.freeCashTodayCents).toBeLessThan(0);
+    expect(result.pipCashTodayCents).toBeLessThan(0);
     expect(result.drivers.map((driver) => driver.id)).toContain("pending-card-spend");
     expect(result.dataStates).toEqual(
       expect.arrayContaining([
@@ -306,7 +306,7 @@ describe("calculateFreeCash", () => {
     );
   });
 
-  it("labels pending card purchases while including them in Free Cash", () => {
+  it("labels pending card purchases while including them in PIP cash", () => {
     const pendingSnapshot: FinancialSnapshot = {
       settings: {
         asOfDate: "2026-06-20",
@@ -342,7 +342,7 @@ describe("calculateFreeCash", () => {
       ],
     };
 
-    const result = calculateFreeCash(pendingSnapshot);
+    const result = calculatePipCash(pendingSnapshot);
 
     expect(result.spendingTotalCents).toBe(2500);
     expect(result.dataStates[0]).toMatchObject({
@@ -378,7 +378,7 @@ describe("calculateFreeCash", () => {
       ],
     };
 
-    const result = calculateFreeCash(movementSnapshot);
+    const result = calculatePipCash(movementSnapshot);
     const entered = result.drivers.find((driver) => driver.id === "entered-window");
     const exited = result.drivers.find((driver) => driver.id === "exited-window");
 
@@ -419,7 +419,7 @@ describe("calculateFreeCash", () => {
       ],
     };
 
-    const result = calculateFreeCash(rentMovementSnapshot);
+    const result = calculatePipCash(rentMovementSnapshot);
 
     expect(result.drivers).toEqual(
       expect.arrayContaining([

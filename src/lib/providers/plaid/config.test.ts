@@ -46,10 +46,10 @@ describe("Plaid config", () => {
     const config = getPlaidConfig({
       PLAID_CLIENT_ID: "client-id",
       PLAID_SECRET: "secret",
-      NEXT_PUBLIC_SITE_URL: "https://free-cash-mayberrydt.netlify.app/some/path",
+      NEXT_PUBLIC_SITE_URL: "https://pip-mayberrydt.netlify.app/some/path",
     });
 
-    expect(config.redirectUri).toBe("https://free-cash-mayberrydt.netlify.app/plaid/oauth");
+    expect(config.redirectUri).toBe("https://pip-mayberrydt.netlify.app/plaid/oauth");
   });
 
   it("creates a client-safe Link session without exposing credentials", async () => {
@@ -69,7 +69,7 @@ describe("Plaid config", () => {
         PLAID_CLIENT_ID: "client-id",
         PLAID_SECRET: "secret",
         PLAID_CLIENT_NAME: "Spendable",
-        PLAID_REDIRECT_URI: "https://free-cash-mayberrydt.netlify.app/plaid/oauth",
+        PLAID_REDIRECT_URI: "https://pip-mayberrydt.netlify.app/plaid/oauth",
       }),
     });
 
@@ -89,7 +89,7 @@ describe("Plaid config", () => {
         client_name: "Spendable",
         products: [Products.Transactions],
         country_codes: [CountryCode.Us],
-        redirect_uri: "https://free-cash-mayberrydt.netlify.app/plaid/oauth",
+        redirect_uri: "https://pip-mayberrydt.netlify.app/plaid/oauth",
         user: {
           client_user_id: "user-1",
         },

@@ -73,9 +73,9 @@ function getRenderableCards(): Array<{
 }> {
   return [
     {
-      name: "free_cash_explanation",
+      name: "pip_cash_explanation",
       card: {
-        type: "free_cash_explanation",
+        type: "pip_cash_explanation",
         title: "Why this number changed",
         summary: "$43 comes from income, spending, and protected savings.",
         drivers: [

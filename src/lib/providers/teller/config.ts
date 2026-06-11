@@ -34,7 +34,7 @@ export function getTellerConfig(env: Record<string, string | undefined> = proces
     apiBaseUrl: env.TELLER_API_BASE_URL ?? "https://api.teller.io",
     certificatePem: normalizePem(env.TELLER_CERTIFICATE_PEM),
     privateKeyPem: normalizePem(env.TELLER_PRIVATE_KEY_PEM),
-    tokenEncryptionKeyBase64: env.FREE_CASH_PROVIDER_TOKEN_KEY_BASE64,
+    tokenEncryptionKeyBase64: env.PIP_PROVIDER_TOKEN_KEY_BASE64,
   };
 }
 

@@ -75,7 +75,7 @@ export type ClassifiedSpendableTransaction = {
   reason: string;
 };
 
-export type FreeCashDriver = {
+export type PipCashDriver = {
   id: string;
   label: string;
   detail: string;
@@ -83,7 +83,7 @@ export type FreeCashDriver = {
   tone: MoneyTone;
 };
 
-export type FreeCashWarning = {
+export type PipCashWarning = {
   id: string;
   label: string;
   detail: string;
@@ -145,23 +145,23 @@ export type SpendableCashTodayResult = {
   recoveryDays: number;
   confidence: SpendableCashConfidence;
   state: SpendableCashTodayState;
-  drivers: FreeCashDriver[];
-  warnings: FreeCashWarning[];
+  drivers: PipCashDriver[];
+  warnings: PipCashWarning[];
   dataStates: FinancialDataState[];
   legacyRollingDailySurplusCents: number;
   legacyRollingNetCents: number;
 };
 
-export type FreeCashResult = {
-  freeCashTodayCents: number;
+export type PipCashResult = {
+  pipCashTodayCents: number;
   rollingNetCents: number;
   incomeTotalCents: number;
   spendingTotalCents: number;
   refundTotalCents: number;
   protectedSavingsMonthlyCents: number;
   window: RollingWindow;
-  drivers: FreeCashDriver[];
-  warnings: FreeCashWarning[];
+  drivers: PipCashDriver[];
+  warnings: PipCashWarning[];
   dataStates: FinancialDataState[];
   trueBalances: AccountBalanceSummary[];
   spendableCashToday?: SpendableCashTodayResult;

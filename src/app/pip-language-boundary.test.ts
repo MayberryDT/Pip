@@ -8,7 +8,7 @@ const sourcePaths = [
   "src/lib/agent",
 ];
 
-describe("Free Cash language boundary", () => {
+describe("PIP language boundary", () => {
   it("does not use safe-to-spend wording in app source", () => {
     const matches = sourcePaths.flatMap((path) => {
       return findSourceFiles(join(process.cwd(), path))

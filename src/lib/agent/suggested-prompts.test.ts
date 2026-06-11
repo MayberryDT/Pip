@@ -4,12 +4,12 @@ import {
   getSuggestedPrompts,
   isRetiredDefaultPromptChip,
 } from "@/lib/agent/suggested-prompts";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { fakeSnapshot } from "@/lib/fake-data";
 
 describe("prompt chips", () => {
   it("provides deterministic ready-state financial next steps", () => {
-    expect(getSuggestedPrompts(calculateFreeCash(fakeSnapshot))).toEqual([
+    expect(getSuggestedPrompts(calculatePipCash(fakeSnapshot))).toEqual([
       {
         id: "ai-what-number-means",
         label: "What does my $104 mean?",

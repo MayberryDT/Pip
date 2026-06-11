@@ -3,7 +3,7 @@ import {
   buildRollingCalendarWindow,
   inclusiveDayCount,
   subtractOneCalendarMonth,
-} from "@/lib/free-cash/date-window";
+} from "@/lib/pip-cash/date-window";
 
 describe("buildRollingCalendarWindow", () => {
   it.each([

@@ -15,7 +15,7 @@ describe("live authenticated smoke runner", () => {
       "node scripts/run-live-smoke.mjs --require-plaid --complete-plaid",
     );
     expect(readme).toContain("npm run test:e2e:live:final");
-    expect(readme).toContain("Requires SPENDABLE_LIVE_STORAGE_STATE");
+    expect(readme).toContain("Requires PIP_LIVE_STORAGE_STATE");
   });
 
   it("requires Plaid automation when final PRD proof is requested", async () => {
@@ -36,7 +36,7 @@ describe("live authenticated smoke runner", () => {
 
   it("runs the live e2e command after preflight passes", async () => {
     const runLiveSmoke = await loadRunLiveSmoke();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-live-runner-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-live-runner-"));
     const storageState = join(tempDir, "state.json");
     const proofReport = join(tempDir, "proof.json");
     writeStorageState(storageState);
@@ -47,8 +47,8 @@ describe("live authenticated smoke runner", () => {
       const result = runLiveSmoke({
         argv: ["--require-plaid", "--complete-plaid"],
         env: {
-          SPENDABLE_LIVE_STORAGE_STATE: storageState,
-          SPENDABLE_LIVE_PROOF_REPORT: proofReport,
+          PIP_LIVE_STORAGE_STATE: storageState,
+          PIP_LIVE_PROOF_REPORT: proofReport,
         },
         stdout: output.stdout,
         stderr: output.stderr,
@@ -63,9 +63,9 @@ describe("live authenticated smoke runner", () => {
           command: "npm",
           args: ["run", "test:e2e:live"],
           env: expect.objectContaining({
-            SPENDABLE_LIVE_STORAGE_STATE: storageState,
-            SPENDABLE_LIVE_COMPLETE_PLAID: "1",
-            SPENDABLE_LIVE_PROOF_REPORT: proofReport,
+            PIP_LIVE_STORAGE_STATE: storageState,
+            PIP_LIVE_COMPLETE_PLAID: "1",
+            PIP_LIVE_PROOF_REPORT: proofReport,
           }),
           stdio: "inherit",
         },
@@ -73,9 +73,9 @@ describe("live authenticated smoke runner", () => {
       expect(output.logs.join("\n")).toContain("proof report written");
       expect(JSON.parse(readFileSync(proofReport, "utf8"))).toMatchObject({
         status: "passed",
-        baseUrl: "https://free-cash-mayberrydt.netlify.app",
+        baseUrl: "https://pip-mayberrydt.netlify.app",
         latestVerifiedDeployUrl:
-          "https://6a265f4336389d2a1930a78b--free-cash-mayberrydt.netlify.app",
+          "https://6a265f4336389d2a1930a78b--pip-mayberrydt.netlify.app",
         latestVerifiedDeployId: "6a265f4336389d2a1930a78b",
         storageStatePath: storageState,
         plaidAutomationRequired: true,
@@ -89,7 +89,7 @@ describe("live authenticated smoke runner", () => {
 
   it("does not write a proof report when the live e2e command fails", async () => {
     const runLiveSmoke = await loadRunLiveSmoke();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-live-runner-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-live-runner-"));
     const storageState = join(tempDir, "state.json");
     const proofReport = join(tempDir, "proof.json");
     writeStorageState(storageState);
@@ -98,8 +98,8 @@ describe("live authenticated smoke runner", () => {
       const result = runLiveSmoke({
         argv: ["--require-plaid", "--complete-plaid"],
         env: {
-          SPENDABLE_LIVE_STORAGE_STATE: storageState,
-          SPENDABLE_LIVE_PROOF_REPORT: proofReport,
+          PIP_LIVE_STORAGE_STATE: storageState,
+          PIP_LIVE_PROOF_REPORT: proofReport,
         },
         stdout: () => undefined,
         stderr: () => undefined,
@@ -137,7 +137,7 @@ function writeStorageState(path: string) {
       cookies: [],
       origins: [
         {
-          origin: "https://free-cash-mayberrydt.netlify.app",
+          origin: "https://pip-mayberrydt.netlify.app",
           localStorage: [
             {
               name: "sb-qevvmulexfoebjmlxbts-auth-token",

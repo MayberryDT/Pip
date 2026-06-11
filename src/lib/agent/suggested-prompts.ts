@@ -3,7 +3,7 @@ import {
   getDefaultReadyPromptChips,
   getReadyPromptChipCatalog,
 } from "@/lib/agent/prompt-chip-planner";
-import type { FreeCashResult } from "@/lib/types";
+import type { PipCashResult } from "@/lib/types";
 
 export const guestOnboardingPromptChips: PromptChip[] = [
   {
@@ -49,7 +49,7 @@ const retiredDefaultPromptChipTexts = new Set([
   "what changed?",
 ]);
 
-export function getSuggestedPrompts(result: FreeCashResult): PromptChip[] {
+export function getSuggestedPrompts(result: PipCashResult): PromptChip[] {
   return getDefaultReadyPromptChips(result);
 }
 

@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
-  markFreeCashSnapshotsStaleForUser: vi.fn(),
+  markPipCashSnapshotsStaleForUser: vi.fn(),
   recordProductEventSafely: vi.fn(),
 }));
 
@@ -11,7 +11,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 vi.mock("@/lib/data/financial-repository", () => ({
-  markFreeCashSnapshotsStaleForUser: routeMocks.markFreeCashSnapshotsStaleForUser,
+  markPipCashSnapshotsStaleForUser: routeMocks.markPipCashSnapshotsStaleForUser,
 }));
 
 vi.mock("@/lib/data/product-events", () => ({
@@ -69,7 +69,7 @@ describe("POST /api/missing-card-preferences", () => {
   });
 
   it("returns 503 on valid suppression requests when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await POST(jsonRequest({ issuerName: "Amex" }));
 
@@ -85,7 +85,7 @@ describe("POST /api/missing-card-preferences", () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ id: "user-1" }, null);
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
-    routeMocks.markFreeCashSnapshotsStaleForUser.mockResolvedValue(undefined);
+    routeMocks.markPipCashSnapshotsStaleForUser.mockResolvedValue(undefined);
     routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
 
     const response = await POST(jsonRequest({ issuerName: " Amex " }));
@@ -99,7 +99,7 @@ describe("POST /api/missing-card-preferences", () => {
       user_id: "user-1",
       issuer_name: "Amex",
     });
-    expect(routeMocks.markFreeCashSnapshotsStaleForUser).toHaveBeenCalledWith(
+    expect(routeMocks.markPipCashSnapshotsStaleForUser).toHaveBeenCalledWith(
       supabase,
       "user-1",
     );
@@ -127,7 +127,7 @@ describe("POST /api/missing-card-preferences", () => {
       issuerName: "Amex",
     });
     expect(supabase.insert).not.toHaveBeenCalled();
-    expect(routeMocks.markFreeCashSnapshotsStaleForUser).not.toHaveBeenCalled();
+    expect(routeMocks.markPipCashSnapshotsStaleForUser).not.toHaveBeenCalled();
     expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,
       "user-1",
@@ -140,7 +140,7 @@ describe("POST /api/missing-card-preferences", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

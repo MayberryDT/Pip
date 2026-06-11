@@ -6,7 +6,7 @@ import {
 } from "@/lib/agent/conversation-state";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import { formatMoney } from "@/lib/money";
-import type { FreeCashResult } from "@/lib/types";
+import type { PipCashResult } from "@/lib/types";
 
 export type AgentAnswerModelOutput = {
   message: string;
@@ -20,7 +20,7 @@ export type AgentAnswerConversationState = {
   }>;
   lastToolNames?: string[];
   promptChips?: PromptChip[];
-  result?: FreeCashResult | null;
+  result?: PipCashResult | null;
   syncStatus?: SyncStatus | null;
   onboardingState?: {
     status: "guest" | "needs-consent" | "ready";
@@ -176,7 +176,7 @@ function composeCardBackedAnswer(
   }
 
   switch (card.type) {
-    case "free_cash_explanation": {
+    case "pip_cash_explanation": {
       const biggestDriver = card.drivers[0]?.label;
 
       return {
@@ -313,7 +313,7 @@ function composeDeterministicNoCardAnswer(
     };
   }
 
-  if (input.usedTools.includes("get_free_cash_snapshot") && result) {
+  if (input.usedTools.includes("get_pip_cash_snapshot") && result) {
     const metric = result.spendableCashToday;
 
     if (metric?.state === "shortfall" || getSpendableCents(result) <= 0) {
@@ -346,8 +346,8 @@ function composeDeterministicNoCardAnswer(
   return null;
 }
 
-function getSpendableCents(result: FreeCashResult): number {
-  return result.spendableCashToday?.spendableCashTodayCents ?? Math.max(0, result.freeCashTodayCents);
+function getSpendableCents(result: PipCashResult): number {
+  return result.spendableCashToday?.spendableCashTodayCents ?? Math.max(0, result.pipCashTodayCents);
 }
 
 function isCreditCardDiscussion(message: string): boolean {
@@ -374,7 +374,7 @@ function getRepetitionAdjustedMessage(
   }
 
   switch (card?.type) {
-    case "free_cash_explanation":
+    case "pip_cash_explanation":
       return "I checked the drivers again, and the next chips can take it deeper.";
     case "spendable_cash_forecast":
       return "I refreshed the near-term view, and the next chips can narrow it down.";

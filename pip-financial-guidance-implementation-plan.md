@@ -145,7 +145,7 @@ Blocked:
 
 The new Spendable Cash engine is strong enough to support this layer.
 
-It now provides a `spendableCashToday` V2 metric attached to `FreeCashResult`.
+It now provides a `spendableCashToday` V2 metric attached to `PipCashResult`.
 
 Important fields already available:
 

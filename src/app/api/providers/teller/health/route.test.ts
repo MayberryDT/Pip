@@ -17,7 +17,7 @@ afterEach(() => {
 
 describe("GET /api/providers/teller/health", () => {
   it("returns 503 when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await GET();
 
@@ -47,7 +47,7 @@ describe("GET /api/providers/teller/health", () => {
     vi.stubEnv("TELLER_PRODUCTS", "transactions,balance");
     vi.stubEnv("TELLER_CERTIFICATE_PEM", "secret-cert");
     vi.stubEnv("TELLER_PRIVATE_KEY_PEM", "secret-key");
-    vi.stubEnv("FREE_CASH_PROVIDER_TOKEN_KEY_BASE64", Buffer.alloc(32, 1).toString("base64"));
+    vi.stubEnv("PIP_PROVIDER_TOKEN_KEY_BASE64", Buffer.alloc(32, 1).toString("base64"));
     routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
 
     const response = await GET();
@@ -87,7 +87,7 @@ describe("GET /api/providers/teller/health", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

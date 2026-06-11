@@ -163,7 +163,7 @@ export const guidanceCardDraftOutputSchema = z.object({
 
 export const cardSchema = z.discriminatedUnion("type", [
   z.object({
-    type: z.literal("free_cash_explanation"),
+    type: z.literal("pip_cash_explanation"),
     title: z.string(),
     summary: z.string(),
     drivers: z.array(driverSchema),

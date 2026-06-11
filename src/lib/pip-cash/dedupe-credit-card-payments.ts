@@ -1,5 +1,5 @@
 import type { Account, Transaction } from "@/lib/types";
-import { classifyTransaction } from "@/lib/free-cash/classify";
+import { classifyTransaction } from "@/lib/pip-cash/classify";
 
 const GENERIC_CARD_TOKENS = new Set([
   "bank",

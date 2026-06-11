@@ -2,8 +2,8 @@
 
 import { readFileSync, writeFileSync } from "node:fs";
 
-const DEFAULT_CHAT_LOG_PATH = "/tmp/spendable-agent-chat-turns.jsonl";
-const DEFAULT_REPORT_PATH = "/tmp/spendable-agent-conversation-analysis.json";
+const DEFAULT_CHAT_LOG_PATH = "/tmp/pip-agent-chat-turns.jsonl";
+const DEFAULT_REPORT_PATH = "/tmp/pip-agent-conversation-analysis.json";
 const DEFAULT_SIMILARITY_THRESHOLD = 0.82;
 
 export function analyzeAgentConversationTurns({
@@ -102,8 +102,8 @@ export function loadAgentConversationTurnsFromJsonl(path = DEFAULT_CHAT_LOG_PATH
 }
 
 export function runAgentConversationAnalysis({
-  logPath = process.env.SPENDABLE_AGENT_CHAT_LOG || DEFAULT_CHAT_LOG_PATH,
-  reportPath = process.env.SPENDABLE_AGENT_ANALYSIS_REPORT || DEFAULT_REPORT_PATH,
+  logPath = process.env.PIP_AGENT_CHAT_LOG || DEFAULT_CHAT_LOG_PATH,
+  reportPath = process.env.PIP_AGENT_ANALYSIS_REPORT || DEFAULT_REPORT_PATH,
   log = console.log,
 } = {}) {
   const turns = loadAgentConversationTurnsFromJsonl(logPath);

@@ -74,7 +74,7 @@ function shouldBypassCache(url) {
     url.pathname.includes("/sync/") ||
     url.pathname.includes("/agent") ||
     url.pathname.includes("/events") ||
-    url.pathname.includes("/free-cash")
+    url.pathname.includes("/pip-cash")
   );
 }
 

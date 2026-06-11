@@ -5,8 +5,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runLiveSmokeEnvCheck } from "./check-live-smoke-env.mjs";
 
-const DEFAULT_LIVE_BASE_URL = "https://free-cash-mayberrydt.netlify.app";
-const DEFAULT_PROOF_REPORT = "/tmp/spendable-live-proof.json";
+const DEFAULT_LIVE_BASE_URL = "https://pip-mayberrydt.netlify.app";
+const DEFAULT_PROOF_REPORT = "/tmp/pip-live-proof.json";
 
 export function runLiveSmoke({
   argv = process.argv.slice(2),
@@ -20,17 +20,17 @@ export function runLiveSmoke({
   const requiresPlaid = argv.includes("--require-plaid");
 
   if (argv.includes("--complete-plaid")) {
-    effectiveEnv.SPENDABLE_LIVE_COMPLETE_PLAID = "1";
+    effectiveEnv.PIP_LIVE_COMPLETE_PLAID = "1";
   }
 
-  if (requiresPlaid && effectiveEnv.SPENDABLE_LIVE_COMPLETE_PLAID !== "1") {
+  if (requiresPlaid && effectiveEnv.PIP_LIVE_COMPLETE_PLAID !== "1") {
     stderr("Live authenticated smoke requires Plaid automation for final PRD proof.");
-    stderr("Rerun with --complete-plaid or set SPENDABLE_LIVE_COMPLETE_PLAID=1.");
+    stderr("Rerun with --complete-plaid or set PIP_LIVE_COMPLETE_PLAID=1.");
     return 1;
   }
 
-  if (requiresPlaid && !effectiveEnv.SPENDABLE_LIVE_PROOF_REPORT) {
-    effectiveEnv.SPENDABLE_LIVE_PROOF_REPORT = DEFAULT_PROOF_REPORT;
+  if (requiresPlaid && !effectiveEnv.PIP_LIVE_PROOF_REPORT) {
+    effectiveEnv.PIP_LIVE_PROOF_REPORT = DEFAULT_PROOF_REPORT;
   }
 
   const preflightResult = runLiveSmokeEnvCheck({
@@ -55,7 +55,7 @@ export function runLiveSmoke({
     return status;
   }
 
-  const proofReport = effectiveEnv.SPENDABLE_LIVE_PROOF_REPORT;
+  const proofReport = effectiveEnv.PIP_LIVE_PROOF_REPORT;
 
   if (proofReport) {
     writeProofReport({
@@ -74,12 +74,12 @@ function writeProofReport({ path, env, requiresPlaid, stdout }) {
   const report = {
     status: "passed",
     generatedAt: new Date().toISOString(),
-    baseUrl: env.SPENDABLE_LIVE_BASE_URL || DEFAULT_LIVE_BASE_URL,
+    baseUrl: env.PIP_LIVE_BASE_URL || DEFAULT_LIVE_BASE_URL,
     latestVerifiedDeployUrl: latestDeployUrl,
     latestVerifiedDeployId: extractDeployId(latestDeployUrl),
-    storageStatePath: env.SPENDABLE_LIVE_STORAGE_STATE,
+    storageStatePath: env.PIP_LIVE_STORAGE_STATE,
     plaidAutomationRequired: requiresPlaid,
-    plaidAutomationEnabled: env.SPENDABLE_LIVE_COMPLETE_PLAID === "1",
+    plaidAutomationEnabled: env.PIP_LIVE_COMPLETE_PLAID === "1",
     command: "npm run test:e2e:live:final",
     evidence:
       "The live Playwright smoke passed against production with authenticated session, Plaid exchange/sync/status checks, Spendable Cash Today number, and deployed AI tool usage assertions.",
@@ -105,7 +105,7 @@ function extractDeployId(url) {
     return null;
   }
 
-  const match = url.match(/^https:\/\/([a-f0-9]+)--free-cash-mayberrydt\.netlify\.app/);
+  const match = url.match(/^https:\/\/([a-f0-9]+)--pip-mayberrydt\.netlify\.app/);
 
   return match?.[1] ?? null;
 }

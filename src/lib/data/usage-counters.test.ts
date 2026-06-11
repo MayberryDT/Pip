@@ -7,7 +7,7 @@ describe("usage counters", () => {
       summarizeUsageCounters({
         periodStart: "2026-06-01T00:00:00.000Z",
         events: [
-          { event_name: "free_cash_viewed", created_at: "2026-06-05T00:00:00.000Z" },
+          { event_name: "pip_cash_viewed", created_at: "2026-06-05T00:00:00.000Z" },
           { event_name: "prompt_chip_selected", created_at: "2026-06-05T00:00:30.000Z" },
           { event_name: "agent_question_asked", created_at: "2026-06-05T00:00:00.000Z" },
           { event_name: "agent_question_asked", created_at: "2026-06-05T00:01:00.000Z" },
@@ -26,7 +26,7 @@ describe("usage counters", () => {
             created_at: "2026-06-05T00:03:00.000Z",
           },
           {
-            event_name: "negative_free_cash_follow_up",
+            event_name: "negative_pip_cash_follow_up",
             created_at: "2026-06-05T00:04:00.000Z",
           },
         ],
@@ -38,7 +38,7 @@ describe("usage counters", () => {
       }),
     ).toEqual({
       periodStart: "2026-06-01T00:00:00.000Z",
-      freeCashViewCount: 1,
+      pipCashViewCount: 1,
       promptChipSelectionCount: 1,
       aiQuestionCount: 2,
       agentFollowUpCount: 1,
@@ -47,7 +47,7 @@ describe("usage counters", () => {
       trueBalanceRevealCount: 1,
       missingCardNudgeShownCount: 1,
       missingCardSuppressionCount: 1,
-      negativeFreeCashFollowUpCount: 1,
+      negativePipCashFollowUpCount: 1,
       providerSyncCount: 3,
       partialProviderSyncCount: 1,
       failedProviderSyncCount: 1,

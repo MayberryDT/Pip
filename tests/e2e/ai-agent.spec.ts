@@ -7,7 +7,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await page.goto("/");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
   await expect(page.getByRole("button", { name: "What does my $104 mean?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Why is it $104 today?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Teach me a money basic" })).toBeVisible();
@@ -23,12 +23,12 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   ]);
   const whyJson = await whyResponse.json();
 
-  expect(whyJson.audit.toolNames).toEqual(["get_free_cash_drivers"]);
+  expect(whyJson.audit.toolNames).toEqual(["get_pip_cash_drivers"]);
   await expect(page.getByRole("heading", { name: "Why this number changed" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Show recent charges" })).toBeVisible();
   await expect(page.getByRole("button", { name: "What bills are coming up?" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Show how the math works" })).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 
   const [recentChargeChipResponse] = await Promise.all([
     waitForAgentResponse(page),
@@ -41,7 +41,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByText("Basecamp Market")).toBeVisible();
   await expect(page.getByRole("button", { name: "Show the biggest drivers" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Show my spending breakdown" })).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 
   await input.fill("Can I spend $50?");
   const [chipResponse] = await Promise.all([
@@ -56,7 +56,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByText("That would leave $54 in Spendable Cash Today.")).toBeVisible();
   await expect(page.getByText("Today room left")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Why this number changed" })).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 
   await input.fill("What about $20 instead?");
   const [followUpResponse] = await Promise.all([
@@ -72,7 +72,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   });
   await expect(page.getByText("That would leave $84 in Spendable Cash Today.")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Purchase simulation" })).toHaveCount(2);
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 
   await input.fill("Show true balances");
   const [balancesResponse] = await Promise.all([
@@ -85,7 +85,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByRole("heading", { name: "True balances" })).toBeVisible();
   await expect(page.getByText("Everyday Checking")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Purchase simulation" })).toHaveCount(2);
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 
   await input.fill("Show recent transactions");
   const [transactionsResponse] = await Promise.all([
@@ -98,7 +98,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByRole("heading", { name: "Recent transactions" })).toHaveCount(2);
   await expect(page.getByText("Basecamp Market")).toHaveCount(2);
   await expect(page.getByRole("heading", { name: "True balances" })).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 
   await input.fill("Show the math");
   const [mathResponse] = await Promise.all([
@@ -107,11 +107,11 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   ]);
   const mathJson = await mathResponse.json();
 
-  expect(mathJson.audit.toolNames).toEqual(["get_free_cash_math"]);
+  expect(mathJson.audit.toolNames).toEqual(["get_pip_cash_math"]);
   await expect(page.getByRole("heading", { name: "Math breakdown" })).toBeVisible();
   await expect(page.getByText("Rolling net")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Recent transactions" })).toHaveCount(2);
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 
   await input.fill("Is a card missing?");
   const [missingCardResponse] = await Promise.all([
@@ -124,7 +124,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByRole("heading", { name: "Possible missing card" })).toBeVisible();
   await expect(page.getByText("I see a payment to Capital One")).toHaveCount(2);
   await expect(page.getByRole("heading", { name: "Math breakdown" })).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 });
 
 test("mobile viewport keeps the one-number layout from overlapping or overflowing", async ({
@@ -138,10 +138,10 @@ test("mobile viewport keeps the one-number layout from overlapping or overflowin
   await page.goto("/");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
   await expectNoDocumentHorizontalOverflow(page);
   await expectMobileRegionsToStack(page);
-  await expectElementHorizontallyInsideViewport(page, page.getByTestId("free-cash-number"));
+  await expectElementHorizontallyInsideViewport(page, page.getByTestId("pip-cash-number"));
   await expectElementHorizontallyInsideViewport(page, page.getByTestId("agent-input"));
   await expectChatChromePinned(page);
 
@@ -151,7 +151,7 @@ test("mobile viewport keeps the one-number layout from overlapping or overflowin
     page.getByRole("button", { name: "Send" }).click(),
   ]);
 
-  expect((await whyResponse.json()).audit.toolNames).toEqual(["get_free_cash_drivers"]);
+  expect((await whyResponse.json()).audit.toolNames).toEqual(["get_pip_cash_drivers"]);
   await expect(page.getByRole("heading", { name: "Why this number changed" })).toBeVisible();
   await expectHeaderToBeCompact(page);
   await expectNoDocumentHorizontalOverflow(page);
@@ -245,7 +245,7 @@ test("guest onboarding starts Google OAuth from the Pip screen", async ({ page }
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByText("Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today.")).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$--");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$--");
   await expect(page.getByLabel("Ask Pip")).toHaveAttribute(
     "placeholder",
     "Ask Pip anything...",
@@ -273,7 +273,7 @@ test("consent onboarding stays on the Pip screen before loading the number", asy
 
   await expect(page.getByText("Let’s set aside a little cushion first.")).toBeVisible();
   await expect(page.getByText("Savings cushion")).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$--");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$--");
   await expect(page.getByTestId("agent-input")).toHaveCount(0);
 
   const responsePromise = page.waitForResponse((response) =>
@@ -295,7 +295,7 @@ test("dev test onboarding walks a fresh local user through setup", async ({ page
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByText("Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today.")).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$--");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$--");
   await expect(page.getByRole("link", { name: "Continue with Google" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Continue with Google" }).click();
@@ -307,16 +307,16 @@ test("dev test onboarding walks a fresh local user through setup", async ({ page
   await expect(
     page.getByText("Almost there. Connect your account data and I’ll start showing your spendable cash."),
   ).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$--");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$--");
 
   await page.getByRole("button", { name: "Connect data" }).click();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$104");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
   await expect(page.getByText("Hi, I’m Pip. I’ll show what’s actually spendable today.")).toBeVisible();
 });
 
 test("connect data does not leave the chat stuck while Plaid is loading", async ({ page }) => {
   await routeAgentThroughMockModel(page);
-  await page.route("**/api/free-cash?scenario=default", async (route) => {
+  await page.route("**/api/pip-cash?scenario=default", async (route) => {
     await route.fulfill({
       status: 409,
       contentType: "application/json",
@@ -385,15 +385,15 @@ test("connect data does not leave the chat stuck while Plaid is loading", async 
 });
 
 test("connect data completes Plaid exchange and syncs back to the same Pip screen", async ({ page }) => {
-  let freeCashRequestCount = 0;
+  let pipCashRequestCount = 0;
   let exchangePayload: unknown = null;
   let syncPayload: unknown = null;
 
   await routeAgentThroughMockModel(page);
-  await page.route("**/api/free-cash?scenario=default", async (route) => {
-    freeCashRequestCount += 1;
+  await page.route("**/api/pip-cash?scenario=default", async (route) => {
+    pipCashRequestCount += 1;
 
-    if (freeCashRequestCount === 1) {
+    if (pipCashRequestCount === 1) {
       await route.fulfill({
         status: 409,
         contentType: "application/json",
@@ -408,7 +408,7 @@ test("connect data completes Plaid exchange and syncs back to the same Pip scree
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(createFreeCashResult(9100)),
+      body: JSON.stringify(createPipCashResult(9100)),
     });
   });
   await page.route("**/api/sync/status", async (route) => {
@@ -455,7 +455,7 @@ test("connect data completes Plaid exchange and syncs back to the same Pip scree
         accountCount: 3,
         transactionCount: 22,
         balanceCount: 3,
-        freeCashTodayCents: 9100,
+        pipCashTodayCents: 9100,
       }),
     });
   });
@@ -513,7 +513,7 @@ test("connect data completes Plaid exchange and syncs back to the same Pip scree
     })
     .toBe(true);
 
-  expect(freeCashRequestCount).toBeGreaterThanOrEqual(1);
+  expect(pipCashRequestCount).toBeGreaterThanOrEqual(1);
   expect(exchangePayload).toMatchObject({
     publicToken: "public-sandbox-token-success",
     metadata: {
@@ -530,7 +530,7 @@ test("connect data completes Plaid exchange and syncs back to the same Pip scree
 });
 
 test("live data loading does not wipe same-screen onboarding chat cards", async ({ page }) => {
-  let releaseFreeCash: (() => Promise<void>) | undefined;
+  let releasePipCash: (() => Promise<void>) | undefined;
 
   await page.route("**/api/agent", async (route) => {
     await route.fulfill({
@@ -544,13 +544,13 @@ test("live data loading does not wipe same-screen onboarding chat cards", async 
       })),
     });
   });
-  await page.route("**/api/free-cash?scenario=default", async (route) => {
+  await page.route("**/api/pip-cash?scenario=default", async (route) => {
     await new Promise<void>((resolve) => {
-      releaseFreeCash = async () => {
+      releasePipCash = async () => {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify(createFreeCashResult(7800)),
+          body: JSON.stringify(createPipCashResult(7800)),
         });
         resolve();
       };
@@ -583,17 +583,17 @@ test("live data loading does not wipe same-screen onboarding chat cards", async 
   await page.getByLabel("Ask Pip").fill("Tell me how Pip works");
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.getByText("I turn your connected account activity")).toBeVisible();
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$--");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$--");
 
   await expect
-    .poll(() => Boolean(releaseFreeCash), {
+    .poll(() => Boolean(releasePipCash), {
       message: "Expected the app to request the live Spendable Cash Today result.",
     })
     .toBe(true);
 
-  await releaseFreeCash?.();
+  await releasePipCash?.();
 
-  await expect(page.getByTestId("free-cash-number")).toHaveText("$78");
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$78");
   await expect(page.getByText("Tell me how Pip works", { exact: true })).toBeVisible();
   await expect(page.getByText("I turn your connected account activity")).toBeVisible();
 });
@@ -638,7 +638,7 @@ function createMockAgentResponse(
   const normalized = userMessage.toLowerCase();
 
   if (body.requestKind === "prompt_chips") {
-    if (body.conversationState?.lastToolNames?.at(-1) === "get_free_cash_drivers") {
+    if (body.conversationState?.lastToolNames?.at(-1) === "get_pip_cash_drivers") {
       return baseAgentResponse({
         message: "Ready.",
         usedTools: [],
@@ -762,11 +762,11 @@ function createMockAgentResponse(
   if (normalized.includes("why") || normalized.includes("changed")) {
     return baseAgentResponse({
       message: "I found the main drivers.",
-      usedTools: ["get_free_cash_drivers"],
+      usedTools: ["get_pip_cash_drivers"],
       responseMode: "show_card",
       cards: [
         {
-          type: "free_cash_explanation",
+          type: "pip_cash_explanation",
           title: "Why this number changed",
           summary: "$104 reflects income, spending, and protected savings in the rolling window.",
           drivers: [
@@ -847,7 +847,7 @@ function createMockAgentResponse(
   if (normalized.includes("math")) {
     return baseAgentResponse({
       message: "I pulled the math.",
-      usedTools: ["get_free_cash_math"],
+      usedTools: ["get_pip_cash_math"],
       responseMode: "show_card",
       cards: [
         {
@@ -957,7 +957,7 @@ async function expectNoDocumentHorizontalOverflow(page: Page) {
 }
 
 async function expectMobileRegionsToStack(page: Page) {
-  const number = await requiredBox(page.getByTestId("free-cash-number"));
+  const number = await requiredBox(page.getByTestId("pip-cash-number"));
   const thread = await requiredBox(page.getByTestId("agent-thread"));
   const chips = await requiredBox(page.getByTestId("prompt-chips"));
   const input = await requiredBox(page.getByTestId("agent-input"));
@@ -1004,10 +1004,10 @@ async function expectChatChromePinned(page: Page) {
   }
 
   await expect.poll(async () => page.evaluate(() => window.scrollY)).toBe(0);
-  await expect(page.getByTestId("free-cash-number")).toBeInViewport();
+  await expect(page.getByTestId("pip-cash-number")).toBeInViewport();
   await expect(page.getByTestId("agent-input")).toBeInViewport();
 
-  const number = await requiredBox(page.getByTestId("free-cash-number"));
+  const number = await requiredBox(page.getByTestId("pip-cash-number"));
   const input = await requiredBox(page.getByTestId("agent-input"));
 
   expect(number.top).toBeGreaterThanOrEqual(-1);
@@ -1017,7 +1017,7 @@ async function expectChatChromePinned(page: Page) {
 async function expectHeaderToBeCompact(page: Page) {
   await expect
     .poll(async () => {
-      const number = await requiredBox(page.getByTestId("free-cash-number"));
+      const number = await requiredBox(page.getByTestId("pip-cash-number"));
 
       return number.height;
     })
@@ -1040,9 +1040,9 @@ async function requiredBox(locator: ReturnType<Page["locator"]>) {
   };
 }
 
-function createFreeCashResult(freeCashTodayCents: number) {
+function createPipCashResult(pipCashTodayCents: number) {
   return {
-    freeCashTodayCents,
+    pipCashTodayCents,
     rollingNetCents: 11800,
     incomeTotalCents: 250000,
     spendingTotalCents: 238200,

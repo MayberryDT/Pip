@@ -49,7 +49,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid Teller enrollment." }, { status: 400 });
     }
 
-    const cookieNonce = getCookie(request, "free_cash_teller_nonce");
+    const cookieNonce = getCookie(request, "pip_teller_nonce");
 
     if (!cookieNonce || cookieNonce !== parsed.data.nonce) {
       return NextResponse.json({ error: "Teller connect session expired." }, { status: 403 });
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       institutionId: institution.id,
       institutionName,
     });
-    response.cookies.delete("free_cash_teller_nonce");
+    response.cookies.delete("pip_teller_nonce");
 
     return response;
   } catch (error) {

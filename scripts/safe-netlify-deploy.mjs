@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 
 const root = process.cwd();
-const backupDirectory = mkdtempSync(join(tmpdir(), "free-cash-netlify-env-"));
+const backupDirectory = mkdtempSync(join(tmpdir(), "pip-netlify-env-"));
 const movedFiles = [];
 
 try {
@@ -88,12 +88,12 @@ function getDeployArgs(args) {
 }
 
 function getModeEnv() {
-  if (process.env.FREE_CASH_DEPLOY_MODE !== "fake") {
+  if (process.env.PIP_DEPLOY_MODE !== "fake") {
     return {};
   }
 
   return {
-    FREE_CASH_SUPABASE_MODE: process.env.FREE_CASH_SUPABASE_MODE || "off",
+    PIP_SUPABASE_MODE: process.env.PIP_SUPABASE_MODE || "off",
   };
 }
 

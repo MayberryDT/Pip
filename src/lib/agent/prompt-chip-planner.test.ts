@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { planPromptChips } from "@/lib/agent/prompt-chip-planner";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { fakeSnapshot, getFakeSnapshot } from "@/lib/fake-data";
 import type { SyncStatus } from "@/lib/data/sync-status";
 
 describe("prompt chip planner", () => {
   it("returns contextual ready-state chips instead of an empty financial set", () => {
     const plan = planPromptChips({
-      result: calculateFreeCash(fakeSnapshot),
+      result: calculatePipCash(fakeSnapshot),
       message: "",
     });
 
@@ -28,11 +28,11 @@ describe("prompt chip planner", () => {
 
   it("branches from an explanation card into adjacent topics", () => {
     const plan = planPromptChips({
-      result: calculateFreeCash(fakeSnapshot),
+      result: calculatePipCash(fakeSnapshot),
       message: "Why this number?",
       responseCards: [
         {
-          type: "free_cash_explanation",
+          type: "pip_cash_explanation",
           title: "Why this number changed",
           summary: "Income and spending are the main drivers.",
           drivers: [],
@@ -40,7 +40,7 @@ describe("prompt chip planner", () => {
           dataStates: [],
         },
       ],
-      responseToolNames: ["get_free_cash_drivers"],
+      responseToolNames: ["get_pip_cash_drivers"],
     });
 
     expect(plan.conversationJob).toBe("explain_number");
@@ -52,7 +52,7 @@ describe("prompt chip planner", () => {
   });
 
   it("branches from a purchase simulation into amount comparison and near-term context", () => {
-    const result = calculateFreeCash(fakeSnapshot);
+    const result = calculatePipCash(fakeSnapshot);
     const plan = planPromptChips({
       result,
       message: "Can I spend $50?",
@@ -61,10 +61,10 @@ describe("prompt chip planner", () => {
           type: "purchase_simulation",
           title: "Purchase simulation",
           amountCents: 5000,
-          beforeCents: result.freeCashTodayCents,
-          todayRemainingCents: result.freeCashTodayCents - 5000,
-          todayOverageCents: Math.max(0, 5000 - result.freeCashTodayCents),
-          afterTodayCents: result.freeCashTodayCents - 5000,
+          beforeCents: result.pipCashTodayCents,
+          todayRemainingCents: result.pipCashTodayCents - 5000,
+          todayOverageCents: Math.max(0, 5000 - result.pipCashTodayCents),
+          afterTodayCents: result.pipCashTodayCents - 5000,
           monthlyAverageAfterCents: 0,
         },
       ],
@@ -81,7 +81,7 @@ describe("prompt chip planner", () => {
 
   it("uses starter chips even when the home number is negative", () => {
     const plan = planPromptChips({
-      result: calculateFreeCash(getFakeSnapshot("negative")),
+      result: calculatePipCash(getFakeSnapshot("negative")),
       message: "",
     });
 
@@ -108,7 +108,7 @@ describe("prompt chip planner", () => {
       },
     };
     const plan = planPromptChips({
-      result: calculateFreeCash(fakeSnapshot),
+      result: calculatePipCash(fakeSnapshot),
       message: "Check data quality",
       syncStatus,
     });
@@ -122,7 +122,7 @@ describe("prompt chip planner", () => {
 
   it("uses contextual copy for missing-card diagnostics only after a data-quality ask", () => {
     const plan = planPromptChips({
-      result: calculateFreeCash(fakeSnapshot),
+      result: calculatePipCash(fakeSnapshot),
       message: "Is a card missing?",
     });
 
@@ -134,9 +134,9 @@ describe("prompt chip planner", () => {
 
   it("rotates away from recently shown chips before falling back to repeats", () => {
     const plan = planPromptChips({
-      result: calculateFreeCash(fakeSnapshot),
+      result: calculatePipCash(fakeSnapshot),
       message: "Why this number?",
-      responseToolNames: ["get_free_cash_drivers"],
+      responseToolNames: ["get_pip_cash_drivers"],
       promptChips: [
         {
           id: "ai-missing-card",
@@ -165,7 +165,7 @@ describe("prompt chip planner", () => {
 
   it("reports repeated-job risk for adjacent vague follow-ups", () => {
     const plan = planPromptChips({
-      result: calculateFreeCash(fakeSnapshot),
+      result: calculatePipCash(fakeSnapshot),
       message: "why?",
       history: [
         {
@@ -179,11 +179,11 @@ describe("prompt chip planner", () => {
       ],
       shownCards: [
         {
-          type: "free_cash_explanation",
+          type: "pip_cash_explanation",
         },
       ],
-      lastToolNames: ["get_free_cash_drivers"],
-      responseToolNames: ["get_free_cash_drivers"],
+      lastToolNames: ["get_pip_cash_drivers"],
+      responseToolNames: ["get_pip_cash_drivers"],
     });
 
     expect(plan.conversationJob).toBe("explain_number");
@@ -198,7 +198,7 @@ describe("prompt chip planner", () => {
 
   it("prioritizes chips that match a visible Pip follow-up question", () => {
     const plan = planPromptChips({
-      result: calculateFreeCash(fakeSnapshot),
+      result: calculatePipCash(fakeSnapshot),
       message: "tell me more",
       assistantMessage:
         "Want to see the biggest drivers in more detail or a quick forecast for the next few days?",

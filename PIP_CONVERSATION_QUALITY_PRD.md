@@ -44,7 +44,7 @@ The first implementation should focus on deterministic conversation design befor
 The improved system should:
 
 - Keep the "one number and input" product thesis.
-- Preserve the existing deterministic Free Cash engine and tool boundaries.
+- Preserve the existing deterministic PIP cash engine and tool boundaries.
 - Add a real financial chip catalog for ready users.
 - Add a conversation state model that captures the user's current job, last answered job, recent chips, recent cards, recent tools, and last assistant message signal.
 - Refactor prompt instructions so the model is not solely responsible for both answer quality and next-step ideation.
@@ -160,7 +160,7 @@ The expected user outcome is simple: after each answer, the user should have a c
 
 52. As a Pip user, I want Pip to use Spendable Cash Today consistently, so that the product vocabulary remains clear.
 
-53. As a Pip user, I want Pip to avoid "Free Cash" in visible replies, so that old internal vocabulary does not leak.
+53. As a Pip user, I want Pip to avoid "PIP Cash" in visible replies, so that old internal vocabulary does not leak.
 
 54. As a Pip user, I want Pip to avoid dashboard references, so that the single-screen product model stays intact.
 
@@ -340,7 +340,7 @@ The expected user outcome is simple: after each answer, the user should have a c
 
 - Test with both fake default and negative scenarios. Conversation behavior should be validated against positive and negative Spendable Cash Today states.
 
-- Tests should preserve product vocabulary. Visible text should continue using Spendable Cash Today and should avoid Free Cash, dashboard, safe to spend, financial advice, and similar banned language.
+- Tests should preserve product vocabulary. Visible text should continue using Spendable Cash Today and should avoid PIP Cash, dashboard, safe to spend, financial advice, and similar banned language.
 
 ## Out of Scope
 

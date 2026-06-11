@@ -1,11 +1,11 @@
 import { getFakeSnapshot } from "@/lib/fake-data";
 import type { FakeDataScenario } from "@/lib/fake-data";
-import type { FinancialSnapshot, FreeCashResult } from "@/lib/types";
+import type { FinancialSnapshot, PipCashResult } from "@/lib/types";
 import {
-  loadCachedFreeCashResultForUser,
+  loadCachedPipCashResultForUser,
   loadFinancialSnapshotForUser,
 } from "@/lib/data/financial-repository";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
@@ -49,11 +49,11 @@ export async function getCurrentFinancialSnapshot(input: {
   return realSnapshot;
 }
 
-export async function getCurrentFreeCashResult(input: {
+export async function getCurrentPipCashResult(input: {
   scenario?: FakeDataScenario;
-}): Promise<FreeCashResult> {
+}): Promise<PipCashResult> {
   if (!isSupabaseConfigured()) {
-    return calculateFreeCash(getFakeSnapshot(input.scenario));
+    return calculatePipCash(getFakeSnapshot(input.scenario));
   }
 
   const supabase = await createSupabaseServerClient();
@@ -66,7 +66,7 @@ export async function getCurrentFreeCashResult(input: {
     throw new AuthenticationRequiredError();
   }
 
-  const cachedResult = await loadCachedFreeCashResultForUser(supabase, user.id);
+  const cachedResult = await loadCachedPipCashResultForUser(supabase, user.id);
 
   if (cachedResult?.spendableCashToday) {
     return cachedResult;
@@ -78,5 +78,5 @@ export async function getCurrentFreeCashResult(input: {
     throw new NoFinancialDataError();
   }
 
-  return calculateFreeCash(realSnapshot);
+  return calculatePipCash(realSnapshot);
 }

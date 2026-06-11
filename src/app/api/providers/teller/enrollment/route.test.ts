@@ -63,7 +63,7 @@ describe("POST /api/providers/teller/enrollment", () => {
   });
 
   it("returns 503 when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await POST(jsonRequest(validEnrollmentBody()));
 
@@ -79,7 +79,7 @@ describe("POST /api/providers/teller/enrollment", () => {
 
     const response = await POST(
       jsonRequest(validEnrollmentBody(), {
-        cookie: "free_cash_teller_nonce=nonce-123",
+        cookie: "pip_teller_nonce=nonce-123",
       }),
     );
 
@@ -96,7 +96,7 @@ describe("POST /api/providers/teller/enrollment", () => {
 
     const response = await POST(
       jsonRequest(validEnrollmentBody({ nonce: "nonce-123" }), {
-        cookie: "free_cash_teller_nonce=different",
+        cookie: "pip_teller_nonce=different",
       }),
     );
 
@@ -121,7 +121,7 @@ describe("POST /api/providers/teller/enrollment", () => {
 
     const response = await POST(
       jsonRequest(validEnrollmentBody({ nonce: "nonce-123" }), {
-        cookie: "free_cash_teller_nonce=nonce-123",
+        cookie: "pip_teller_nonce=nonce-123",
       }),
     );
     const payload = await response.json();
@@ -151,7 +151,7 @@ describe("POST /api/providers/teller/enrollment", () => {
         institutionName: "Northstar Bank",
       },
     );
-    expect(response.headers.get("set-cookie")).toContain("free_cash_teller_nonce=");
+    expect(response.headers.get("set-cookie")).toContain("pip_teller_nonce=");
   });
 
   it("redacts secret-shaped internal errors before returning them", async () => {
@@ -166,7 +166,7 @@ describe("POST /api/providers/teller/enrollment", () => {
 
     const response = await POST(
       jsonRequest(validEnrollmentBody({ nonce: "nonce-123" }), {
-        cookie: "free_cash_teller_nonce=nonce-123",
+        cookie: "pip_teller_nonce=nonce-123",
       }),
     );
     const payload = await response.json();
@@ -182,7 +182,7 @@ describe("POST /api/providers/teller/enrollment", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

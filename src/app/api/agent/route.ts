@@ -10,7 +10,7 @@ import {
 import { recordAgentChatTurnSafely } from "@/lib/data/agent-chat-turns";
 import {
   deleteCurrentUserFinancialData,
-  markFreeCashSnapshotsStaleForUser,
+  markPipCashSnapshotsStaleForUser,
   upsertUserSettings,
 } from "@/lib/data/financial-repository";
 import { runManualSync, ManualSyncRateLimitError } from "@/lib/data/manual-sync";
@@ -23,15 +23,15 @@ import { loadSyncStatusForUser, type SyncStatus } from "@/lib/data/sync-status";
 import {
   runAIAgent,
   toAgentErrorPayload,
-  type SpendableAgentActions,
-  type SpendableAgentOnboardingState,
-  type SpendableAgentActionResult,
+  type PipAgentActions,
+  type PipAgentOnboardingState,
+  type PipAgentActionResult,
 } from "@/lib/agent/ai-agent";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 import {
   getDisplayedSpendableCashTodayCents,
   getSpendableCashTodayState,
-} from "@/lib/free-cash/spendable-cash-today";
+} from "@/lib/pip-cash/spendable-cash-today";
 import type { FakeDataScenario } from "@/lib/fake-data";
 import type { FinancialProviderName, PlaidConnectSession } from "@/lib/providers/FinancialDataProvider";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
@@ -110,10 +110,10 @@ type EventContext = {
 
 type RouteAgentContext = {
   eventContext: EventContext | null;
-  onboardingState: SpendableAgentOnboardingState;
+  onboardingState: PipAgentOnboardingState;
   snapshot?: FinancialSnapshot;
   syncStatus: SyncStatus | null;
-  actions?: SpendableAgentActions;
+  actions?: PipAgentActions;
 };
 
 export async function POST(request: Request) {
@@ -151,14 +151,14 @@ export async function POST(request: Request) {
     );
 
     if (parsed.data.requestKind !== "prompt_chips") {
-      const routeResult = routeContext.snapshot ? calculateFreeCash(routeContext.snapshot) : null;
+      const routeResult = routeContext.snapshot ? calculatePipCash(routeContext.snapshot) : null;
 
       await Promise.all([
         recordAgentEvents(routeContext.eventContext, {
           message: parsed.data.message,
           historyLength: parsed.data.history?.length ?? 0,
           response,
-          freeCashTodayCents: routeResult
+          pipCashTodayCents: routeResult
             ? getDisplayedSpendableCashTodayCents(routeResult)
             : null,
           isShortfall: routeResult ? getSpendableCashTodayState(routeResult) === "shortfall" : false,
@@ -391,9 +391,9 @@ async function loadSyncStatus(
 
 function createAgentActions(input: {
   eventContext: EventContext;
-  onboardingStatus: SpendableAgentOnboardingState["status"];
+  onboardingStatus: PipAgentOnboardingState["status"];
   syncStatus: SyncStatus | null;
-}): SpendableAgentActions {
+}): PipAgentActions {
   return {
     async saveProtectedSavings({ amountCents }) {
       const { supabase, userId } = input.eventContext;
@@ -413,7 +413,7 @@ function createAgentActions(input: {
         await upsertUserSettings(supabase, userId, {
           protectedSavingsMonthlyCents: amountCents,
         });
-        await markFreeCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId);
       }
 
       await recordProductEventSafely(supabase, userId, "settings_updated", {
@@ -486,7 +486,7 @@ function createAgentActions(input: {
         return {
           ok: true,
           status: result.status,
-          freeCashTodayCents: result.freeCashTodayCents,
+          pipCashTodayCents: result.pipCashTodayCents,
           clientAction: {
             type: "reload",
           },
@@ -509,7 +509,7 @@ function createAgentActions(input: {
   };
 }
 
-function toToolFailureResult(error: unknown, status: string): SpendableAgentActionResult {
+function toToolFailureResult(error: unknown, status: string): PipAgentActionResult {
   if (error instanceof ManualSyncRateLimitError) {
     return {
       ok: false,
@@ -547,7 +547,7 @@ async function recordAgentEvents(
     message: string;
     historyLength: number;
     response: AgentResponse;
-    freeCashTodayCents: number | null;
+    pipCashTodayCents: number | null;
     isShortfall?: boolean;
   },
 ) {
@@ -556,7 +556,7 @@ async function recordAgentEvents(
   }
 
   const cardTypes = input.response.cards.map((card) => card.type);
-  const eventNames = getRouteAgentEventNames(input.response, input.freeCashTodayCents, {
+  const eventNames = getRouteAgentEventNames(input.response, input.pipCashTodayCents, {
     isFollowUp: input.historyLength > 0,
     isShortfall: input.isShortfall,
   });
@@ -571,7 +571,7 @@ async function recordAgentEvents(
         messageLength: input.message.length,
         historyLength: input.historyLength,
         isFollowUp: input.historyLength > 0,
-        freeCashTodayCents: input.freeCashTodayCents,
+        pipCashTodayCents: input.pipCashTodayCents,
         guidance: input.response.audit.guidance
           ? input.response.audit.guidance as unknown as Json
           : null,
@@ -586,11 +586,11 @@ async function recordAgentEvents(
 
 function getRouteAgentEventNames(
   response: AgentResponse,
-  freeCashTodayCents: number | null,
+  pipCashTodayCents: number | null,
   context: { isFollowUp?: boolean; isShortfall?: boolean } = {},
 ): ProductEventName[] {
-  if (typeof freeCashTodayCents === "number") {
-    return getAgentProductEventNames(response, freeCashTodayCents, context);
+  if (typeof pipCashTodayCents === "number") {
+    return getAgentProductEventNames(response, pipCashTodayCents, context);
   }
 
   return context.isFollowUp

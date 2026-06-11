@@ -3,8 +3,8 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const DEFAULT_LIVE_BASE_URL = "https://free-cash-mayberrydt.netlify.app";
-const DEFAULT_STORAGE_STATE = "/tmp/spendable-live-auth.json";
+const DEFAULT_LIVE_BASE_URL = "https://pip-mayberrydt.netlify.app";
+const DEFAULT_STORAGE_STATE = "/tmp/pip-live-auth.json";
 
 export function captureLiveAuthState({
   argv = process.argv.slice(2),
@@ -14,17 +14,17 @@ export function captureLiveAuthState({
   spawn = spawnSync,
 } = {}) {
   const options = parseArgs(argv);
-  const baseUrl = options.baseUrl || env.SPENDABLE_LIVE_BASE_URL || DEFAULT_LIVE_BASE_URL;
-  const storageState = options.storageState || env.SPENDABLE_LIVE_STORAGE_STATE || DEFAULT_STORAGE_STATE;
+  const baseUrl = options.baseUrl || env.PIP_LIVE_BASE_URL || DEFAULT_LIVE_BASE_URL;
+  const storageState = options.storageState || env.PIP_LIVE_STORAGE_STATE || DEFAULT_STORAGE_STATE;
   const parsedBaseUrl = parseUrl(baseUrl);
 
   if (!parsedBaseUrl) {
-    stderr(`SPENDABLE_LIVE_BASE_URL is not a valid URL: ${baseUrl}`);
+    stderr(`PIP_LIVE_BASE_URL is not a valid URL: ${baseUrl}`);
     return 1;
   }
 
-  if (isLocalhost(parsedBaseUrl) && env.SPENDABLE_LIVE_ALLOW_LOCAL !== "1") {
-    stderr("Refusing to capture live auth state from localhost. Use production or set SPENDABLE_LIVE_ALLOW_LOCAL=1 intentionally.");
+  if (isLocalhost(parsedBaseUrl) && env.PIP_LIVE_ALLOW_LOCAL !== "1") {
+    stderr("Refusing to capture live auth state from localhost. Use production or set PIP_LIVE_ALLOW_LOCAL=1 intentionally.");
     return 1;
   }
 

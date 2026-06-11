@@ -9,7 +9,7 @@ const scriptPath = resolve(process.cwd(), "scripts/check-deployment-env.mjs");
 describe("check-deployment-env", () => {
   it("passes fake mode only when fake-data mode is explicit", async () => {
     const cwd = createTempProject(`
-FREE_CASH_SUPABASE_MODE=off
+PIP_SUPABASE_MODE=off
 `);
 
     const result = await runCheck(cwd, "--mode=fake");
@@ -22,8 +22,8 @@ FREE_CASH_SUPABASE_MODE=off
     const cwd = createTempProject(`
 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
-FREE_CASH_OPERATOR_TOKEN=operator-token
-FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_OPERATOR_TOKEN=operator-token
+PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=sandbox
@@ -47,15 +47,15 @@ PLAID_ENV=sandbox
   it("allows Netlify AI Gateway base URL instead of a direct OpenAI key", async () => {
     const cwd = createTempProject(`
 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
-NEXT_PUBLIC_SITE_URL=https://free-cash-mayberrydt.netlify.app
+NEXT_PUBLIC_SITE_URL=https://pip-mayberrydt.netlify.app
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
-FREE_CASH_OPERATOR_TOKEN=operator-token
-FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_OPERATOR_TOKEN=operator-token
+PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=production
-OPENAI_BASE_URL=https://free-cash.netlify.app/.netlify/ai
+OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
 `);
 
     const result = await runCheck(cwd, "--mode=beta");
@@ -67,11 +67,11 @@ OPENAI_BASE_URL=https://free-cash.netlify.app/.netlify/ai
   it("allows Netlify AI Gateway explicit injected variables without a direct OpenAI key", async () => {
     const cwd = createTempProject(`
 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
-NEXT_PUBLIC_SITE_URL=https://free-cash-mayberrydt.netlify.app
+NEXT_PUBLIC_SITE_URL=https://pip-mayberrydt.netlify.app
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
-FREE_CASH_OPERATOR_TOKEN=operator-token
-FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_OPERATOR_TOKEN=operator-token
+PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=production
@@ -91,13 +91,13 @@ NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
-FREE_CASH_OPERATOR_TOKEN=operator-token
-FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_OPERATOR_TOKEN=operator-token
+PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=production
 PLAID_REDIRECT_URI=http://localhost:3000/plaid/oauth
-OPENAI_BASE_URL=https://free-cash.netlify.app/.netlify/ai
+OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
 `);
 
     const result = await runCheck(cwd, "--mode=beta");
@@ -114,15 +114,15 @@ OPENAI_BASE_URL=https://free-cash.netlify.app/.netlify/ai
     const cwd = createTempProject(`
 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
-NEXT_PUBLIC_SITE_URL=https://free-cash-mayberrydt.netlify.app
+NEXT_PUBLIC_SITE_URL=https://pip-mayberrydt.netlify.app
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
-FREE_CASH_OPERATOR_TOKEN=operator-token
-FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_OPERATOR_TOKEN=operator-token
+PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=production
-PLAID_REDIRECT_URI=https://preview--free-cash-mayberrydt.netlify.app/plaid/oauth
-OPENAI_BASE_URL=https://free-cash.netlify.app/.netlify/ai
+PLAID_REDIRECT_URI=https://preview--pip-mayberrydt.netlify.app/plaid/oauth
+OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
 `);
 
     const result = await runCheck(cwd, "--mode=beta");
@@ -135,7 +135,7 @@ OPENAI_BASE_URL=https://free-cash.netlify.app/.netlify/ai
 });
 
 function createTempProject(envFile: string): string {
-  const cwd = mkdtempSync(join(tmpdir(), "free-cash-env-check-"));
+  const cwd = mkdtempSync(join(tmpdir(), "pip-env-check-"));
   writeFileSync(join(cwd, ".env"), envFile.trimStart());
   return cwd;
 }

@@ -1,15 +1,15 @@
-import { classifyTransaction } from "@/lib/free-cash/classify";
+import { classifyTransaction } from "@/lib/pip-cash/classify";
 import {
   addDays,
   daysInMonth,
   formatDateParts,
   isWithinInclusiveWindow,
   parseDateParts,
-} from "@/lib/free-cash/date-window";
+} from "@/lib/pip-cash/date-window";
 import {
   annotateCreditCardPaymentMatches,
-} from "@/lib/free-cash/dedupe-credit-card-payments";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+} from "@/lib/pip-cash/dedupe-credit-card-payments";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 import type {
   Account,
   FinancialSnapshot,
@@ -84,7 +84,7 @@ export type SpendableCashForecast = {
 };
 
 export function buildSpendingBreakdown(snapshot: FinancialSnapshot): SpendingBreakdown {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const transactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts);
   const windowTransactions = transactions.filter((transaction) =>
     isWithinInclusiveWindow(transaction.date, result.window),
@@ -153,10 +153,10 @@ export function buildSpendableCashForecast(
   input: { horizonDays?: number } = {},
 ): SpendableCashForecast {
   const horizonDays = clampForecastHorizon(input.horizonDays);
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const metric = result.spendableCashToday;
   const currentSpendableCashCents =
-    metric?.spendableCashTodayCents ?? Math.max(0, result.freeCashTodayCents);
+    metric?.spendableCashTodayCents ?? Math.max(0, result.pipCashTodayCents);
   const recurringActivity = buildRecurringActivity(snapshot, {
     horizonDays,
   });
@@ -193,10 +193,10 @@ export function buildSpendableCashForecast(
       accounts: applyProjectedCashDelta(snapshot.accounts, projectedCashDeltaCents),
       transactions: [...snapshot.transactions, ...projectedTransactions],
     };
-    const projectedResult = calculateFreeCash(projectedSnapshot);
+    const projectedResult = calculatePipCash(projectedSnapshot);
     const projectedMetric = projectedResult.spendableCashToday;
     const projectedSpendableCashCents =
-      projectedMetric?.spendableCashTodayCents ?? Math.max(0, projectedResult.freeCashTodayCents);
+      projectedMetric?.spendableCashTodayCents ?? Math.max(0, projectedResult.pipCashTodayCents);
 
     points.push({
       date,

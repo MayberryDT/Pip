@@ -34,8 +34,8 @@ export function runDeploymentEnvCheck({
       );
     }
 
-    if (effectiveEnv.FREE_CASH_SUPABASE_MODE === "off") {
-      warnings.push("FREE_CASH_SUPABASE_MODE=off disables real Supabase data.");
+    if (effectiveEnv.PIP_SUPABASE_MODE === "off") {
+      warnings.push("PIP_SUPABASE_MODE=off disables real Supabase data.");
     }
 
     if (effectiveEnv.PLAID_ENV === "sandbox") {
@@ -76,14 +76,14 @@ export function runDeploymentEnvCheck({
 }
 
 const requiredByMode = {
-  fake: ["FREE_CASH_SUPABASE_MODE"],
+  fake: ["PIP_SUPABASE_MODE"],
   beta: [
     "NEXT_PUBLIC_SITE_URL",
     "NEXT_PUBLIC_SUPABASE_URL",
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",
     "SUPABASE_SERVICE_ROLE_KEY",
-    "FREE_CASH_OPERATOR_TOKEN",
-    "FREE_CASH_PROVIDER_TOKEN_KEY_BASE64",
+    "PIP_OPERATOR_TOKEN",
+    "PIP_PROVIDER_TOKEN_KEY_BASE64",
     "PLAID_CLIENT_ID",
     "PLAID_SECRET",
     "PLAID_ENV",

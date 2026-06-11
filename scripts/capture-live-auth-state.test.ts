@@ -36,8 +36,8 @@ describe("live auth state capture helper", () => {
           "codegen",
           "--channel",
           "chrome",
-          "https://free-cash-mayberrydt.netlify.app",
-          "--save-storage=/tmp/spendable-live-auth.json",
+          "https://pip-mayberrydt.netlify.app",
+          "--save-storage=/tmp/pip-live-auth.json",
         ],
         env: {},
         stdio: "inherit",
@@ -78,7 +78,7 @@ describe("live auth state capture helper", () => {
     const result = captureLiveAuthState({
       argv: [],
       env: {
-        SPENDABLE_LIVE_BASE_URL: "http://localhost:3000",
+        PIP_LIVE_BASE_URL: "http://localhost:3000",
       },
       stdout: output.stdout,
       stderr: output.stderr,

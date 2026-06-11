@@ -72,7 +72,7 @@ describe("POST /api/providers/connect", () => {
   });
 
   it("returns 503 when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await POST(jsonRequest({ provider: "plaid" }));
 
@@ -209,7 +209,7 @@ describe("POST /api/providers/connect", () => {
         nonce: "nonce-123",
       },
     });
-    expect(response.headers.get("set-cookie")).toContain("free_cash_teller_nonce=nonce-123");
+    expect(response.headers.get("set-cookie")).toContain("pip_teller_nonce=nonce-123");
     expect(response.headers.get("set-cookie")).toContain("HttpOnly");
     expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,
@@ -245,7 +245,7 @@ describe("POST /api/providers/connect", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

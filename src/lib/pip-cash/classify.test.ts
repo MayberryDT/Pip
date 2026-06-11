@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyTransaction } from "@/lib/free-cash/classify";
+import { classifyTransaction } from "@/lib/pip-cash/classify";
 import type { Transaction } from "@/lib/types";
 
 describe("classifyTransaction", () => {

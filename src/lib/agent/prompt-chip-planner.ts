@@ -10,9 +10,9 @@ import type { SyncStatus } from "@/lib/data/sync-status";
 import {
   getDisplayedSpendableCashTodayCents,
   getSpendableCashTodayState,
-} from "@/lib/free-cash/spendable-cash-today";
+} from "@/lib/pip-cash/spendable-cash-today";
 import { formatMoney } from "@/lib/money";
-import type { FreeCashResult } from "@/lib/types";
+import type { PipCashResult } from "@/lib/types";
 
 export type PromptChipFamilyId =
   | "ai-what-number-means"
@@ -44,7 +44,7 @@ export type PromptChipFamilyId =
   | "ai-how-it-works";
 
 export type PromptChipPlanInput = {
-  result: FreeCashResult | null;
+  result: PipCashResult | null;
   message: string;
   history?: ConversationHistoryItem[];
   shownCards?: Array<{
@@ -85,7 +85,7 @@ type ChipDefinition = {
 };
 
 type PromptChipRenderContext = {
-  result: FreeCashResult;
+  result: PipCashResult;
 };
 
 const starterChipFamilyIds = [
@@ -267,7 +267,7 @@ export function getReadyPromptChipCatalog(): PromptChip[] {
   return Object.values(readyChipCatalog).map((chip) => toPromptChip(chip));
 }
 
-export function getDefaultReadyPromptChips(result: FreeCashResult): PromptChip[] {
+export function getDefaultReadyPromptChips(result: PipCashResult): PromptChip[] {
   return planPromptChips({
     result,
     message: "",

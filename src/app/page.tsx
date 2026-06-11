@@ -1,4 +1,4 @@
-import { FreeCashHome } from "@/components/FreeCashHome";
+import { PipHome } from "@/components/PipHome";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -14,20 +14,20 @@ export default async function Home({
   const connectionNotice = getConnectionNotice(params?.plaid);
 
   if (devOnboardingState === "guest") {
-    return <FreeCashHome authState={{ status: "guest" }} authNotice={authNotice} />;
+    return <PipHome authState={{ status: "guest" }} authNotice={authNotice} />;
   }
 
   if (devOnboardingState === "test") {
-    return <FreeCashHome authState={{ status: "guest" }} authNotice={authNotice} devOnboardingFlow />;
+    return <PipHome authState={{ status: "guest" }} authNotice={authNotice} devOnboardingFlow />;
   }
 
   if (devOnboardingState === "consent") {
-    return <FreeCashHome authState={{ status: "needs-consent", email: "tester@example.com" }} />;
+    return <PipHome authState={{ status: "needs-consent", email: "tester@example.com" }} />;
   }
 
   if (devOnboardingState === "ready") {
     return (
-      <FreeCashHome
+      <PipHome
         authState={{ status: "ready", email: "tester@example.com" }}
         connectionNotice={connectionNotice}
         enableAccountControls
@@ -36,7 +36,7 @@ export default async function Home({
   }
 
   if (!isSupabaseConfigured()) {
-    return <FreeCashHome />;
+    return <PipHome />;
   }
 
   const supabase = await createSupabaseServerClient();
@@ -56,15 +56,15 @@ export default async function Home({
   }
 
   if (!user) {
-    return <FreeCashHome authState={{ status: "guest" }} authNotice={authNotice} />;
+    return <PipHome authState={{ status: "guest" }} authNotice={authNotice} />;
   }
 
   if (!hasConsented) {
-    return <FreeCashHome authState={{ status: "needs-consent", email: user.email ?? "" }} />;
+    return <PipHome authState={{ status: "needs-consent", email: user.email ?? "" }} />;
   }
 
   return (
-    <FreeCashHome
+    <PipHome
       authState={{ status: "ready", email: user.email ?? "" }}
       connectionNotice={connectionNotice}
       enableAccountControls

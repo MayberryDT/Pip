@@ -7,7 +7,7 @@ import {
 } from "@/lib/agent/conversation-state";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import { fakeSnapshot, getFakeSnapshot } from "@/lib/fake-data";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 
 describe("conversation state", () => {
   it("classifies core Pip conversation jobs from user language", () => {
@@ -52,14 +52,14 @@ describe("conversation state", () => {
       ],
       shownCards: [
         {
-          type: "free_cash_explanation",
+          type: "pip_cash_explanation",
           title: "Why this number changed",
         },
       ],
-      lastToolNames: ["get_free_cash_drivers"],
+      lastToolNames: ["get_pip_cash_drivers"],
       responseCards: [
         {
-          type: "free_cash_explanation",
+          type: "pip_cash_explanation",
           title: "Why this number changed",
           summary: "Income and spending are the main drivers.",
           drivers: [],
@@ -67,7 +67,7 @@ describe("conversation state", () => {
           dataStates: [],
         },
       ],
-      responseToolNames: ["get_free_cash_drivers"],
+      responseToolNames: ["get_pip_cash_drivers"],
     });
 
     expect(summary.currentJob).toBe("explain_number");
@@ -80,7 +80,7 @@ describe("conversation state", () => {
   });
 
   it("summarizes financial, sync, and onboarding state for downstream planners", () => {
-    const result = calculateFreeCash(fakeSnapshot);
+    const result = calculatePipCash(fakeSnapshot);
     const syncStatus: SyncStatus = {
       institutions: [],
       hasStaleInstitution: true,
@@ -126,7 +126,7 @@ describe("conversation state", () => {
   it("recognizes negative Spendable Cash Today state", () => {
     const summary = summarizeConversationState({
       message: "",
-      result: calculateFreeCash(getFakeSnapshot("negative")),
+      result: calculatePipCash(getFakeSnapshot("negative")),
     });
 
     expect(summary.isNegativeSpendableCash).toBe(true);

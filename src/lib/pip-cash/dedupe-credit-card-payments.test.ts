@@ -3,7 +3,7 @@ import {
   annotateCreditCardPaymentMatches,
   findUnmatchedCreditCardPayments,
   isDedupedCreditCardPayment,
-} from "@/lib/free-cash/dedupe-credit-card-payments";
+} from "@/lib/pip-cash/dedupe-credit-card-payments";
 import type { Account, Transaction } from "@/lib/types";
 
 const accounts: Account[] = [

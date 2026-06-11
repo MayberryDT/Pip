@@ -52,7 +52,7 @@ export function PlaidOAuthResume() {
   }, []);
 
   return (
-    <main className="free-cash-app-shell flex min-h-svh items-center justify-center px-5 py-8 text-ink">
+    <main className="pip-app-shell flex min-h-svh items-center justify-center px-5 py-8 text-ink">
       <section className="w-full max-w-md text-center">
         <PipAvatar size="lg" expression="neutral" ariaLabel="Pip" className="mx-auto" />
         <p className="font-display mt-4 text-[3rem] leading-none text-moss">Pip</p>

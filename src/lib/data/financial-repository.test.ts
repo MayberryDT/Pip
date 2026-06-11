@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getCurrentAppDate,
-  loadCachedFreeCashResultForUser,
-  markFreeCashSnapshotsStaleForUser,
+  loadCachedPipCashResultForUser,
+  markPipCashSnapshotsStaleForUser,
   mapAccountRow,
   mapTransactionRow,
   mapUserSettingsRow,
 } from "@/lib/data/financial-repository";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { fakeSnapshot } from "@/lib/fake-data";
 import type { Database } from "@/lib/supabase/database.types";
 import type { AccountRow, TransactionRow, UserSettingsRow } from "@/lib/supabase/database.types";
@@ -94,10 +94,10 @@ describe("financial repository row mapping", () => {
     });
   });
 
-  it("loads the latest non-stale cached Free Cash result", async () => {
+  it("loads the latest non-stale cached PIP cash result", async () => {
     const conditions: Array<[string, unknown]> = [];
-    const cachedResult = calculateFreeCash(fakeSnapshot);
-    const supabase = createFreeCashSnapshotsClient({
+    const cachedResult = calculatePipCash(fakeSnapshot);
+    const supabase = createPipCashSnapshotsClient({
       resultRows: [
         {
           result: cachedResult,
@@ -106,8 +106,8 @@ describe("financial repository row mapping", () => {
       conditions,
     });
 
-    await expect(loadCachedFreeCashResultForUser(supabase, "user-1")).resolves.toMatchObject({
-      freeCashTodayCents: 4300,
+    await expect(loadCachedPipCashResultForUser(supabase, "user-1")).resolves.toMatchObject({
+      pipCashTodayCents: 4300,
     });
     expect(conditions).toEqual([
       ["user_id", "user-1"],
@@ -116,10 +116,10 @@ describe("financial repository row mapping", () => {
     ]);
   });
 
-  it("can load a cached Free Cash result for a specific app date", async () => {
+  it("can load a cached PIP cash result for a specific app date", async () => {
     const conditions: Array<[string, unknown]> = [];
-    const cachedResult = calculateFreeCash(fakeSnapshot);
-    const supabase = createFreeCashSnapshotsClient({
+    const cachedResult = calculatePipCash(fakeSnapshot);
+    const supabase = createPipCashSnapshotsClient({
       resultRows: [
         {
           result: cachedResult,
@@ -128,8 +128,8 @@ describe("financial repository row mapping", () => {
       conditions,
     });
 
-    await expect(loadCachedFreeCashResultForUser(supabase, "user-1", "2026-06-08")).resolves.toMatchObject({
-      freeCashTodayCents: 4300,
+    await expect(loadCachedPipCashResultForUser(supabase, "user-1", "2026-06-08")).resolves.toMatchObject({
+      pipCashTodayCents: 4300,
     });
     expect(conditions).toEqual([
       ["user_id", "user-1"],
@@ -138,29 +138,29 @@ describe("financial repository row mapping", () => {
     ]);
   });
 
-  it("returns null when a cached Free Cash result is malformed", async () => {
-    const supabase = createFreeCashSnapshotsClient({
+  it("returns null when a cached PIP cash result is malformed", async () => {
+    const supabase = createPipCashSnapshotsClient({
       resultRows: [
         {
           result: {
-            freeCashTodayCents: 4300,
+            pipCashTodayCents: 4300,
           },
         },
       ],
     });
 
-    await expect(loadCachedFreeCashResultForUser(supabase, "user-1")).resolves.toBeNull();
+    await expect(loadCachedPipCashResultForUser(supabase, "user-1")).resolves.toBeNull();
   });
 
-  it("marks active cached Free Cash snapshots stale after preference changes", async () => {
+  it("marks active cached PIP cash snapshots stale after preference changes", async () => {
     const conditions: Array<[string, unknown]> = [];
     const updates: Record<string, unknown>[] = [];
-    const supabase = createFreeCashSnapshotsClient({
+    const supabase = createPipCashSnapshotsClient({
       conditions,
       updates,
     });
 
-    await markFreeCashSnapshotsStaleForUser(supabase, "user-1");
+    await markPipCashSnapshotsStaleForUser(supabase, "user-1");
 
     expect(updates).toEqual([
       {
@@ -174,14 +174,14 @@ describe("financial repository row mapping", () => {
   });
 });
 
-function createFreeCashSnapshotsClient(input: {
+function createPipCashSnapshotsClient(input: {
   resultRows?: Array<{ result: unknown }>;
   conditions?: Array<[string, unknown]>;
   updates?: Record<string, unknown>[];
 }): SupabaseClient<Database> {
   return {
     from(tableName: string) {
-      expect(tableName).toBe("free_cash_snapshots");
+      expect(tableName).toBe("pip_cash_snapshots");
 
       const query = {
         select() {

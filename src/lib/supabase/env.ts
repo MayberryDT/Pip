@@ -6,7 +6,7 @@ export class SupabaseConfigError extends Error {
 }
 
 export function isSupabaseConfigured(): boolean {
-  if (process.env.FREE_CASH_SUPABASE_MODE === "off") {
+  if (process.env.PIP_SUPABASE_MODE === "off") {
     return false;
   }
 

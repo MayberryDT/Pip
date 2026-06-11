@@ -20,4 +20,51 @@ describe("AgentThread", () => {
     expect(markup).toContain('aria-label="Pip"');
     expect(markup).toContain("Thinking");
   });
+
+  it("uses a branded safe fallback for failed turns", () => {
+    const markup = renderToStaticMarkup(
+      <AgentThread
+        thread={[
+          {
+            id: "failed",
+            userText: "Why this number?",
+          },
+        ]}
+      />,
+    );
+    const visibleText = markup.replace(/<[^>]*>/g, " ");
+
+    expect(markup).toContain('aria-label="Pip"');
+    expect(visibleText).toContain("I couldn’t answer that cleanly. Try again.");
+    expect(visibleText).not.toContain("AI request failed");
+  });
+
+  it("keeps the assistant response visible when a client action fails", () => {
+    const markup = renderToStaticMarkup(
+      <AgentThread
+        thread={[
+          {
+            id: "action-failed",
+            userText: "Connect my data",
+            response: {
+              message: "I’ll open Plaid now.",
+              cards: [],
+              promptChips: [],
+              usedTools: ["start_plaid_link"],
+              responseMode: "update_context",
+              audit: {
+                toolNames: ["start_plaid_link"],
+                usedModel: true,
+              },
+            },
+            errorText: "Plaid failed to load.",
+          },
+        ]}
+      />,
+    );
+    const visibleText = markup.replace(/<[^>]*>/g, " ");
+
+    expect(visibleText).toContain("I’ll open Plaid now.");
+    expect(visibleText).toContain("Plaid failed to load.");
+  });
 });

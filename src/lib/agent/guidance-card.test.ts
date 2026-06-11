@@ -4,11 +4,11 @@ import {
   getBlockedGuidanceLanguage,
   validateGuidanceCardDraft,
 } from "@/lib/agent/guidance-card";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
-import { buildFinancialGuidanceContext } from "@/lib/free-cash/guidance-context";
-import { overspendingSpendableSnapshot } from "@/lib/fake-data";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
+import { buildFinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
+import { overspendingPipSnapshot } from "@/lib/fake-data";
 
-const context = buildFinancialGuidanceContext(calculateFreeCash(overspendingSpendableSnapshot));
+const context = buildFinancialGuidanceContext(calculatePipCash(overspendingPipSnapshot));
 
 describe("guidance card validation", () => {
   it("accepts a concise evidence-backed guidance card", () => {

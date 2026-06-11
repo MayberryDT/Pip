@@ -15,17 +15,17 @@ Open http://localhost:3000.
 
 ## Netlify
 
-The project is linked to `free-cash-mayberrydt` on Netlify.
+The project is linked to `pip-mayberrydt` on Netlify.
 
-- Site URL: https://free-cash-mayberrydt.netlify.app
-- Latest verified production deploy: https://6a265f4336389d2a1930a78b--free-cash-mayberrydt.netlify.app
-- Latest verified draft deploy: https://6a23aec6c0e9cfd227824f80--free-cash-mayberrydt.netlify.app
-- Netlify is configured for real beta mode with Supabase, Netlify AI Gateway/OpenAI, and Plaid sandbox env. Fake-data preview deploys remain available with `FREE_CASH_DEPLOY_MODE=fake npm run deploy:netlify`.
+- Site URL: https://pip-mayberrydt.netlify.app
+- Latest verified production deploy: https://6a265f4336389d2a1930a78b--pip-mayberrydt.netlify.app
+- Latest verified draft deploy: https://6a23aec6c0e9cfd227824f80--pip-mayberrydt.netlify.app
+- Netlify is configured for real beta mode with Supabase, Netlify AI Gateway/OpenAI, and Plaid sandbox env. Fake-data preview deploys remain available with `PIP_DEPLOY_MODE=fake npm run deploy:netlify`.
 - `npm run deploy:netlify` hides local `.env*` files during the local Netlify build, skips stale function cache reuse, and checks generated function bundles for accidental env-file inclusion.
 
 ## AI Agent
 
-`/api/agent` uses the official OpenAI Agents SDK on top of the Responses API. Pip can answer conversationally without a tool, call deterministic app tools when it needs setup state or financial facts, and decide whether to show a card, update context, or ask a clarification. The internal Free Cash engine still owns all money math.
+`/api/agent` uses the official OpenAI Agents SDK on top of the Responses API. Pip can answer conversationally without a tool, call deterministic app tools when it needs setup state or financial facts, and decide whether to show a card, update context, or ask a clarification. The internal PIP cash engine still owns all money math.
 
 Agent tools return deterministic financial facts and available typed cards. The model may choose when to call tools and how to explain the result, but it does not emit card selectors or card payloads in final structured output. The server derives final cards only from tool-produced card objects before returning them to the UI. Conversation state is bounded to recent messages, recent shown card types/titles, and recent tool names so the agent can avoid repeating the same card.
 
@@ -35,7 +35,7 @@ Explicit prompt-chip actions such as "Why this number?", "Show the math", "Show 
 
 The agent also generates the next prompt chips in its structured output. The server trims, dedupes, and validates those chips before returning them, and only permits protected setup chip ids such as `get-signed-up`, `connect-data`, `use-default-savings`, and `set-250-savings` when the current onboarding state makes that action valid. Initial and invalid-chip states may still fall back to contextual defaults, but normal post-response chips should be model-authored.
 
-Local direct OpenAI calls default to `gpt-5-nano`. In Netlify runtime, the app prefers the injected `NETLIFY_AI_GATEWAY_BASE_URL` and `NETLIFY_AI_GATEWAY_KEY` values over direct provider keys, so deployed AI routes through Netlify AI Gateway. `OPENAI_BASE_URL` is treated as Netlify AI Gateway by default; set `FREE_CASH_AI_TRANSPORT=custom-openai-compatible` only when intentionally pointing at a non-Netlify gateway.
+Local direct OpenAI calls default to `gpt-5-nano`. In Netlify runtime, the app prefers the injected `NETLIFY_AI_GATEWAY_BASE_URL` and `NETLIFY_AI_GATEWAY_KEY` values over direct provider keys, so deployed AI routes through Netlify AI Gateway. `OPENAI_BASE_URL` is treated as Netlify AI Gateway by default; set `PIP_AI_TRANSPORT=custom-openai-compatible` only when intentionally pointing at a non-Netlify gateway.
 
 Local behavior:
 
@@ -46,7 +46,7 @@ Local behavior:
 Optional override:
 
 ```bash
-FREE_CASH_AI_MODEL=gpt-5-nano
+PIP_AI_MODEL=gpt-5-nano
 ```
 
 ## Data Foundation
@@ -56,7 +56,7 @@ The app runs without Supabase credentials by using fake scenarios. When Supabase
 Use this switch when you want the local prototype to ignore configured Supabase credentials and show the fake one-number flow:
 
 ```bash
-FREE_CASH_SUPABASE_MODE=off
+PIP_SUPABASE_MODE=off
 ```
 
 Supabase env:
@@ -65,7 +65,7 @@ Supabase env:
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
-FREE_CASH_OPERATOR_TOKEN=
+PIP_OPERATOR_TOKEN=
 ```
 
 The first database migration lives at `supabase/migrations/20260605000000_free_cash_foundation.sql`. It creates user-scoped financial tables, RLS policies, a private provider-credentials table, sync/event tables, and the authenticated delete-data function.
@@ -87,8 +87,8 @@ Google signup flow:
 - `/api/events` records authenticated beta product events such as Spendable Cash Today views and prompt-chip taps.
 - `/api/agent` records server-derived beta events for agent questions, follow-ups, purchase simulations, true-balance reveals, missing-card nudges, and negative Spendable Cash Today follow-ups.
 - `/api/operator/overview` is a bearer-token-protected server route for beta operations. It summarizes stale connections, partial/failed syncs, and product-proof event counts without adding an in-app dashboard.
-- `/api/operator/agent-chats` is a bearer-token-protected review route for recent agent turns. Supabase-backed beta runs read `agent_chat_turns`; local development without Supabase reads `/tmp/spendable-agent-chat-turns.jsonl`.
-- The authenticated home screen reads `/api/free-cash` so the top number follows stored Supabase data after a manual sync.
+- `/api/operator/agent-chats` is a bearer-token-protected review route for recent agent turns. Supabase-backed beta runs read `agent_chat_turns`; local development without Supabase reads `/tmp/pip-agent-chat-turns.jsonl`.
+- The authenticated home screen reads `/api/pip-cash` so the top number follows stored Supabase data after a manual sync.
 - Authenticated users without cached or synced financial rows get a connect-data state; fake `$43` prototype data is only used for unauthenticated or Supabase-disabled prototype flows.
 - `/api/missing-card-preferences` suppresses repeated missing-card nudges for an issuer the user intentionally omits.
 - `/privacy`, `/terms`, and `/support` provide the minimum private-beta legal and support affordances.
@@ -103,13 +103,13 @@ PLAID_PRODUCTS=transactions
 PLAID_COUNTRY_CODES=US
 PLAID_CLIENT_NAME=Pip
 PLAID_DAYS_REQUESTED=90
-PLAID_REDIRECT_URI=https://free-cash-mayberrydt.netlify.app/plaid/oauth
-FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=
+PLAID_REDIRECT_URI=https://pip-mayberrydt.netlify.app/plaid/oauth
+PIP_PROVIDER_TOKEN_KEY_BASE64=
 ```
 
 Plaid OAuth redirect setup:
 
-- Production Netlify: `PLAID_REDIRECT_URI=https://free-cash-mayberrydt.netlify.app/plaid/oauth`
+- Production Netlify: `PLAID_REDIRECT_URI=https://pip-mayberrydt.netlify.app/plaid/oauth`
 - Local development: `PLAID_REDIRECT_URI=http://localhost:3000/plaid/oauth`
 - The same URI must be added to the Plaid Dashboard redirect URI allowlist for the active Plaid environment.
 
@@ -124,7 +124,7 @@ TELLER_ENVIRONMENT=sandbox
 TELLER_PRODUCTS=transactions,balance
 TELLER_CERTIFICATE_PEM=
 TELLER_PRIVATE_KEY_PEM=
-FREE_CASH_PROVIDER_TOKEN_KEY_BASE64=
+PIP_PROVIDER_TOKEN_KEY_BASE64=
 ```
 
 Fake scenario URLs:
@@ -143,7 +143,7 @@ npm run build
 npm run check:deployment
 npm run check:netlify-bundle
 npm audit --omit=dev
-# Requires SPENDABLE_LIVE_STORAGE_STATE from a Google session.
+# Requires PIP_LIVE_STORAGE_STATE from a Google session.
 npm run test:e2e:live:final
 npm run check:prd-complete
 # Opens capture first, then runs the final live smoke and completion gate.
@@ -156,28 +156,28 @@ Live authenticated onboarding smoke uses the deployed Netlify site and a saved P
 
 ```bash
 npm run capture:live-auth
-SPENDABLE_LIVE_STORAGE_STATE=/tmp/spendable-live-auth.json npm run check:live-smoke
-SPENDABLE_LIVE_STORAGE_STATE=/tmp/spendable-live-auth.json npm run test:e2e:live
+PIP_LIVE_STORAGE_STATE=/tmp/pip-live-auth.json npm run check:live-smoke
+PIP_LIVE_STORAGE_STATE=/tmp/pip-live-auth.json npm run test:e2e:live
 ```
 
-`npm run capture:live-auth` opens Playwright against production and saves to `/tmp/spendable-live-auth.json` by default. Override the target or file path with `-- --base-url=https://... --storage-state=/tmp/other-state.json` when needed.
+`npm run capture:live-auth` opens Playwright against production and saves to `/tmp/pip-live-auth.json` by default. Override the target or file path with `-- --base-url=https://... --storage-state=/tmp/other-state.json` when needed.
 
 That smoke expects the Google user to complete OAuth, consent, Plaid sandbox connection, manual sync, and return to the same Pip screen with a real Spendable Cash Today number. It fails if the saved session is still at the guest, consent, or connect-data stage. When Plaid automation is enabled, it also requires successful `/api/providers/plaid/exchange` and `/api/sync/manual` responses, then verifies `/api/sync/status` shows a connected Plaid institution, a succeeded Plaid sync run, and nonzero synced account and transaction counts before asking the AI why the number changed.
 
 To let the smoke attempt the Plaid Sandbox Link step itself after Google OAuth, save storage state after signing in with a Google user and run:
 
 ```bash
-SPENDABLE_LIVE_STORAGE_STATE=/tmp/spendable-live-auth.json \
+PIP_LIVE_STORAGE_STATE=/tmp/pip-live-auth.json \
 npm run test:e2e:live:final
 ```
 
-When the final command passes, it writes a proof summary to `/tmp/spendable-live-proof.json` by default. Override with `SPENDABLE_LIVE_PROOF_REPORT=/tmp/other-proof.json` if needed. The report records the production URL, latest verified deploy URL/id from this README, storage-state path, Plaid automation requirement, and pass timestamp without storing cookies or provider tokens.
+When the final command passes, it writes a proof summary to `/tmp/pip-live-proof.json` by default. Override with `PIP_LIVE_PROOF_REPORT=/tmp/other-proof.json` if needed. The report records the production URL, latest verified deploy URL/id from this README, storage-state path, Plaid automation requirement, and pass timestamp without storing cookies or provider tokens.
 
 `npm run check:prd-complete` is intentionally the last gate. It fails until the proof report exists and confirms the production `npm run test:e2e:live:final` run passed against the latest verified deploy with Plaid automation required and enabled.
 
-The Plaid automation defaults to the official Sandbox credentials `user_good` / `pass_good` and institution `First Platypus Bank`. Override with `SPENDABLE_LIVE_PLAID_INSTITUTION`, `SPENDABLE_LIVE_PLAID_USERNAME`, or `SPENDABLE_LIVE_PLAID_PASSWORD` if Plaid changes the sandbox UI or the configured products need another institution.
+The Plaid automation defaults to the official Sandbox credentials `user_good` / `pass_good` and institution `First Platypus Bank`. Override with `PIP_LIVE_PLAID_INSTITUTION`, `PIP_LIVE_PLAID_USERNAME`, or `PIP_LIVE_PLAID_PASSWORD` if Plaid changes the sandbox UI or the configured products need another institution.
 
-For the shortest final proof path, run `npm run prove:prd`. It opens the auth capture browser, then runs live-smoke preflight, `npm run test:e2e:live:final`, and `npm run check:prd-complete` in order. If `/tmp/spendable-live-auth.json` already exists, use `npm run prove:prd -- --skip-capture`.
+For the shortest final proof path, run `npm run prove:prd`. It opens the auth capture browser, then runs live-smoke preflight, `npm run test:e2e:live:final`, and `npm run check:prd-complete` in order. If `/tmp/pip-live-auth.json` already exists, use `npm run prove:prd -- --skip-capture`.
 
 `npm run check:deployment` validates the required non-public and public environment variable names for a real beta deploy without printing secret values. Use `npm run check:deployment -- --mode=fake` only for fake-data preview deploys.
 

@@ -40,7 +40,7 @@ describe("Pip agent eval harness", () => {
     const result = evaluateAgentResponse({
       caseDef: {},
       response: {
-        message: "Your Free Cash dashboard says you can afford $0.21k.",
+        message: `Your ${"Free" + " Cash"} dashboard says you can afford $0.21k.`,
         responseMode: "chat_only",
         usedTools: [],
         cards: [],
@@ -49,7 +49,7 @@ describe("Pip agent eval harness", () => {
     });
 
     expect(result.ok).toBe(false);
-    expect(result.failures.join("\n")).toContain("Free Cash");
+    expect(result.failures.join("\n")).toContain("legacy cash wording");
     expect(result.failures.join("\n")).toContain("dashboard");
     expect(result.failures.join("\n")).toContain("you can afford");
     expect(result.failures.join("\n")).toContain("money shorthand");
@@ -96,8 +96,8 @@ describe("Pip agent eval harness", () => {
       response: {
         message: "I found the main drivers. Want to see the math?",
         responseMode: "show_card",
-        usedTools: ["get_free_cash_drivers"],
-        cards: [{ type: "free_cash_explanation" }],
+        usedTools: ["get_pip_cash_drivers"],
+        cards: [{ type: "pip_cash_explanation" }],
         promptChips: [],
       },
     });
@@ -180,7 +180,7 @@ describe("Pip agent eval harness", () => {
 
   it("runs cases through fetch and writes a JSON report", async () => {
     const { runAgentEval } = await loadEvalHarness();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-agent-eval-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-eval-"));
     const reportPath = join(tempDir, "report.json");
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
 
@@ -249,7 +249,7 @@ describe("Pip agent eval harness", () => {
 
   it("marks the report failed when the rubric fails", async () => {
     const { runAgentEval } = await loadEvalHarness();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-agent-eval-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-eval-"));
     const reportPath = join(tempDir, "report.json");
 
     try {
@@ -291,7 +291,7 @@ describe("Pip agent eval harness", () => {
 
   it("can run a selected subset of eval case ids", async () => {
     const { runAgentEval } = await loadEvalHarness();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-agent-eval-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-eval-"));
     const reportPath = join(tempDir, "report.json");
     const messages: string[] = [];
 

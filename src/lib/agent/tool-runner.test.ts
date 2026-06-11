@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { runAgentTool } from "@/lib/agent/tool-runner";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { fakeSnapshot } from "@/lib/fake-data";
 import type { FinancialSnapshot } from "@/lib/types";
 
 describe("agent tool runner", () => {
   it("returns deterministic explanation, simulation, balances, math, and missing-card cards", () => {
-    const result = calculateFreeCash(fakeSnapshot);
+    const result = calculatePipCash(fakeSnapshot);
 
-    expect(runAgentTool("explain_free_cash", {}, fakeSnapshot).cards[0]).toMatchObject({
-      type: "free_cash_explanation",
+    expect(runAgentTool("explain_pip_cash", {}, fakeSnapshot).cards[0]).toMatchObject({
+      type: "pip_cash_explanation",
       title: "Spendable Cash Today",
     });
     expect(runAgentTool("simulate_purchase", { amount_cents: 5000 }, fakeSnapshot).cards[0]).toMatchObject({

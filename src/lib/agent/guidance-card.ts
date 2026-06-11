@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentCard } from "@/lib/agent/card-types";
-import type { FinancialGuidanceContext } from "@/lib/free-cash/guidance-context";
+import type { FinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
 
 export type GuidanceCardDraft = {
   title: string;

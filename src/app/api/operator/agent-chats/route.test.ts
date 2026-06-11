@@ -34,7 +34,7 @@ describe("GET /api/operator/agent-chats", () => {
   });
 
   it("requires the configured operator bearer token", async () => {
-    vi.stubEnv("FREE_CASH_OPERATOR_TOKEN", "operator-secret");
+    vi.stubEnv("PIP_OPERATOR_TOKEN", "operator-secret");
 
     const response = await GET(jsonRequest("wrong-token"));
 
@@ -46,8 +46,8 @@ describe("GET /api/operator/agent-chats", () => {
   });
 
   it("loads local chat turns when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_OPERATOR_TOKEN", "operator-secret");
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_OPERATOR_TOKEN", "operator-secret");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.loadLocalOperatorAgentChats.mockResolvedValue([
       {
         id: "turn-1",
@@ -78,7 +78,7 @@ describe("GET /api/operator/agent-chats", () => {
 
   it("loads Supabase chat turns through the server-side admin client", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("FREE_CASH_OPERATOR_TOKEN", "operator-secret");
+    vi.stubEnv("PIP_OPERATOR_TOKEN", "operator-secret");
     const admin = { kind: "admin" };
     routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
     routeMocks.loadOperatorAgentChats.mockResolvedValue([
@@ -112,7 +112,7 @@ describe("GET /api/operator/agent-chats", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

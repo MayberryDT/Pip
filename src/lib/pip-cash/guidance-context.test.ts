@@ -1,18 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
-import { buildFinancialGuidanceContext } from "@/lib/free-cash/guidance-context";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
+import { buildFinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
 import {
-  cashGuardrailSpendableSnapshot,
-  healthySpendableSnapshot,
-  lowConfidenceSpendableSnapshot,
-  missingCardSpendableSnapshot,
-  overspendingSpendableSnapshot,
-  shortfallSpendableSnapshot,
+  cashGuardrailPipSnapshot,
+  healthyPipSnapshot,
+  lowConfidencePipSnapshot,
+  missingCardPipSnapshot,
+  overspendingPipSnapshot,
+  shortfallPipSnapshot,
 } from "@/lib/fake-data";
 
 describe("financial guidance context", () => {
   it("builds V2 evidence without relying on legacy rolling surplus", () => {
-    const result = calculateFreeCash(overspendingSpendableSnapshot);
+    const result = calculatePipCash(overspendingPipSnapshot);
     const context = buildFinancialGuidanceContext(result);
     const evidenceIds = context.evidence.map((evidence) => evidence.id);
 
@@ -46,19 +46,19 @@ describe("financial guidance context", () => {
   });
 
   it.each([
-    ["healthy", healthySpendableSnapshot, "recent-spending-light"],
-    ["shortfall", shortfallSpendableSnapshot, "shortfall"],
-    ["low confidence", lowConfidenceSpendableSnapshot, "low-confidence"],
-    ["missing card", missingCardSpendableSnapshot, "missing-card"],
-    ["cash guardrail", cashGuardrailSpendableSnapshot, "cash-guardrail"],
+    ["healthy", healthyPipSnapshot, "recent-spending-light"],
+    ["shortfall", shortfallPipSnapshot, "shortfall"],
+    ["low confidence", lowConfidencePipSnapshot, "low-confidence"],
+    ["missing card", missingCardPipSnapshot, "missing-card"],
+    ["cash guardrail", cashGuardrailPipSnapshot, "cash-guardrail"],
   ])("adds conditional evidence for %s state", (_name, snapshot, expectedEvidenceId) => {
-    const context = buildFinancialGuidanceContext(calculateFreeCash(snapshot));
+    const context = buildFinancialGuidanceContext(calculatePipCash(snapshot));
 
     expect(context.evidence.map((evidence) => evidence.id)).toContain(expectedEvidenceId);
   });
 
   it("exposes directional possible moves without final advice copy", () => {
-    const context = buildFinancialGuidanceContext(calculateFreeCash(shortfallSpendableSnapshot));
+    const context = buildFinancialGuidanceContext(calculatePipCash(shortfallPipSnapshot));
 
     expect(context.possibleMoves).toEqual(
       expect.arrayContaining([

@@ -22,7 +22,7 @@ afterEach(() => {
 
 describe("GET /api/usage", () => {
   it("returns 503 when Supabase is disabled", async () => {
-    vi.stubEnv("FREE_CASH_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await GET();
 
@@ -53,7 +53,7 @@ describe("GET /api/usage", () => {
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
     routeMocks.loadUsageCountersForUser.mockResolvedValue({
       periodStart: "2026-06-01T00:00:00.000Z",
-      freeCashViewCount: 5,
+      pipCashViewCount: 5,
       promptChipSelectionCount: 2,
       aiQuestionCount: 2,
       agentFollowUpCount: 1,
@@ -62,7 +62,7 @@ describe("GET /api/usage", () => {
       trueBalanceRevealCount: 1,
       missingCardNudgeShownCount: 1,
       missingCardSuppressionCount: 0,
-      negativeFreeCashFollowUpCount: 1,
+      negativePipCashFollowUpCount: 1,
       providerSyncCount: 3,
       partialProviderSyncCount: 1,
       failedProviderSyncCount: 1,
@@ -72,12 +72,12 @@ describe("GET /api/usage", () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
-      freeCashViewCount: 5,
+      pipCashViewCount: 5,
       promptChipSelectionCount: 2,
       aiQuestionCount: 2,
       agentFollowUpCount: 1,
       missingCardNudgeShownCount: 1,
-      negativeFreeCashFollowUpCount: 1,
+      negativePipCashFollowUpCount: 1,
       partialProviderSyncCount: 1,
       failedProviderSyncCount: 1,
     });
@@ -86,7 +86,7 @@ describe("GET /api/usage", () => {
 });
 
 function enableSupabaseEnv() {
-  vi.stubEnv("FREE_CASH_SUPABASE_MODE", "");
+  vi.stubEnv("PIP_SUPABASE_MODE", "");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }

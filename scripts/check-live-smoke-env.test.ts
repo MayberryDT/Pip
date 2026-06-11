@@ -16,7 +16,7 @@ describe("live authenticated smoke preflight", () => {
     });
 
     expect(result).toBe(1);
-    expect(output.errors.join("\n")).toContain("SPENDABLE_LIVE_STORAGE_STATE must point");
+    expect(output.errors.join("\n")).toContain("PIP_LIVE_STORAGE_STATE must point");
   });
 
   it("fails when the configured storage-state file does not exist", async () => {
@@ -24,7 +24,7 @@ describe("live authenticated smoke preflight", () => {
     const output = createOutputCapture();
     const result = runLiveSmokeEnvCheck({
       env: {
-        SPENDABLE_LIVE_STORAGE_STATE: "/tmp/spendable-missing-state.json",
+        PIP_LIVE_STORAGE_STATE: "/tmp/pip-missing-state.json",
       },
       stdout: output.stdout,
       stderr: output.stderr,
@@ -37,7 +37,7 @@ describe("live authenticated smoke preflight", () => {
 
   it("rejects localhost base URLs unless explicitly allowed", async () => {
     const runLiveSmokeEnvCheck = await loadRunLiveSmokeEnvCheck();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-live-smoke-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-live-smoke-"));
     const storageState = join(tempDir, "state.json");
     writeStorageState(storageState);
 
@@ -45,8 +45,8 @@ describe("live authenticated smoke preflight", () => {
       const output = createOutputCapture();
       const result = runLiveSmokeEnvCheck({
         env: {
-          SPENDABLE_LIVE_STORAGE_STATE: storageState,
-          SPENDABLE_LIVE_BASE_URL: "http://localhost:3000",
+          PIP_LIVE_STORAGE_STATE: storageState,
+          PIP_LIVE_BASE_URL: "http://localhost:3000",
         },
         stdout: output.stdout,
         stderr: output.stderr,
@@ -62,7 +62,7 @@ describe("live authenticated smoke preflight", () => {
 
   it("fails when the configured storage-state file is empty", async () => {
     const runLiveSmokeEnvCheck = await loadRunLiveSmokeEnvCheck();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-live-smoke-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-live-smoke-"));
     const storageState = join(tempDir, "state.json");
     writeFileSync(storageState, JSON.stringify({ cookies: [], origins: [] }));
 
@@ -70,7 +70,7 @@ describe("live authenticated smoke preflight", () => {
       const output = createOutputCapture();
       const result = runLiveSmokeEnvCheck({
         env: {
-          SPENDABLE_LIVE_STORAGE_STATE: storageState,
+          PIP_LIVE_STORAGE_STATE: storageState,
         },
         stdout: output.stdout,
         stderr: output.stderr,
@@ -86,7 +86,7 @@ describe("live authenticated smoke preflight", () => {
 
   it("fails when the configured storage-state file is not a Playwright state shape", async () => {
     const runLiveSmokeEnvCheck = await loadRunLiveSmokeEnvCheck();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-live-smoke-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-live-smoke-"));
     const storageState = join(tempDir, "state.json");
     writeFileSync(storageState, "{}");
 
@@ -94,7 +94,7 @@ describe("live authenticated smoke preflight", () => {
       const output = createOutputCapture();
       const result = runLiveSmokeEnvCheck({
         env: {
-          SPENDABLE_LIVE_STORAGE_STATE: storageState,
+          PIP_LIVE_STORAGE_STATE: storageState,
         },
         stdout: output.stdout,
         stderr: output.stderr,
@@ -111,7 +111,7 @@ describe("live authenticated smoke preflight", () => {
 
   it("passes for an existing storage-state file and production base URL", async () => {
     const runLiveSmokeEnvCheck = await loadRunLiveSmokeEnvCheck();
-    const tempDir = mkdtempSync(join(tmpdir(), "spendable-live-smoke-"));
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-live-smoke-"));
     const storageState = join(tempDir, "state.json");
     writeStorageState(storageState);
 
@@ -119,8 +119,8 @@ describe("live authenticated smoke preflight", () => {
       const output = createOutputCapture();
       const result = runLiveSmokeEnvCheck({
         env: {
-          SPENDABLE_LIVE_STORAGE_STATE: storageState,
-          SPENDABLE_LIVE_COMPLETE_PLAID: "1",
+          PIP_LIVE_STORAGE_STATE: storageState,
+          PIP_LIVE_COMPLETE_PLAID: "1",
         },
         stdout: output.stdout,
         stderr: output.stderr,
@@ -155,7 +155,7 @@ function writeStorageState(path: string) {
       cookies: [],
       origins: [
         {
-          origin: "https://free-cash-mayberrydt.netlify.app",
+          origin: "https://pip-mayberrydt.netlify.app",
           localStorage: [
             {
               name: "sb-qevvmulexfoebjmlxbts-auth-token",

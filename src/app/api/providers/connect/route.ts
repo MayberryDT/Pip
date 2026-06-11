@@ -60,7 +60,7 @@ export async function POST(request: Request) {
     const response = NextResponse.json(session);
 
     if (session.connect?.kind === "teller" && session.connect.nonce) {
-      response.cookies.set("free_cash_teller_nonce", session.connect.nonce, {
+      response.cookies.set("pip_teller_nonce", session.connect.nonce, {
         httpOnly: true,
         maxAge: 600,
         path: "/",

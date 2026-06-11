@@ -1,24 +1,24 @@
 import { z } from "zod";
 import type { AgentResponse } from "@/lib/agent/card-types";
 import { getSuggestedPrompts } from "@/lib/agent/suggested-prompts";
-import { calculateFreeCash } from "@/lib/free-cash/engine";
-import { summarizeFreeCash } from "@/lib/free-cash/explanation";
+import { calculatePipCash } from "@/lib/pip-cash/engine";
+import { summarizePipCash } from "@/lib/pip-cash/explanation";
 import {
   getDisplayedSpendableCashTodayCents,
   simulateSpendablePurchase,
-} from "@/lib/free-cash/spendable-cash-today";
+} from "@/lib/pip-cash/spendable-cash-today";
 import {
   buildRecurringActivity,
   buildSpendableCashForecast,
   buildSpendingBreakdown,
-} from "@/lib/free-cash/insights";
-import { buildFinancialGuidanceContext } from "@/lib/free-cash/guidance-context";
+} from "@/lib/pip-cash/insights";
+import { buildFinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
 import { fakeSnapshot } from "@/lib/fake-data";
 import { formatMoney } from "@/lib/money";
 import type { FinancialSnapshot } from "@/lib/types";
 
 export const agentToolNames = [
-  "explain_free_cash",
+  "explain_pip_cash",
   "simulate_purchase",
   "show_true_balances",
   "show_recent_transactions",
@@ -38,7 +38,7 @@ export const agentToolNames = [
 export type AgentToolName = (typeof agentToolNames)[number];
 
 export function buildFinancialGuidanceToolResult(snapshot: FinancialSnapshot) {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
 
   return {
     context: buildFinancialGuidanceContext(result),
@@ -69,8 +69,8 @@ export function runAgentTool(
   snapshot: FinancialSnapshot = fakeSnapshot,
 ): AgentResponse {
   switch (toolName) {
-    case "explain_free_cash":
-      return explainFreeCash(snapshot);
+    case "explain_pip_cash":
+      return explainPipCash(snapshot);
     case "simulate_purchase": {
       const args = simulatePurchaseArgsSchema.parse(rawArgs ?? {});
       return simulatePurchase(args.amount_cents, snapshot);
@@ -139,13 +139,13 @@ function baseResponse(toolName: AgentToolName, cards: AgentResponse["cards"]): P
   };
 }
 
-function explainFreeCash(snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
-  const summary = summarizeFreeCash(result);
+function explainPipCash(snapshot: FinancialSnapshot): AgentResponse {
+  const result = calculatePipCash(snapshot);
+  const summary = summarizePipCash(result);
 
   const cards: AgentResponse["cards"] = [
     {
-      type: "free_cash_explanation",
+      type: "pip_cash_explanation",
       title: "Spendable Cash Today",
       summary,
       drivers: result.spendableCashToday?.drivers ?? result.drivers,
@@ -158,17 +158,17 @@ function explainFreeCash(snapshot: FinancialSnapshot): AgentResponse {
     message: "",
     cards,
     promptChips: getSuggestedPrompts(result),
-    ...baseResponse("explain_free_cash", cards),
+    ...baseResponse("explain_pip_cash", cards),
   };
 }
 
 function simulatePurchase(amountCents: number, snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const simulation = simulateSpendablePurchase(amountCents, snapshot, {
     before: result.spendableCashToday,
     warnings: result.warnings,
     dataStates: result.dataStates,
-    legacyRollingDailySurplusCents: result.freeCashTodayCents,
+    legacyRollingDailySurplusCents: result.pipCashTodayCents,
     legacyRollingNetCents: result.rollingNetCents,
   });
 
@@ -196,7 +196,7 @@ function simulatePurchase(amountCents: number, snapshot: FinancialSnapshot): Age
 }
 
 function showTrueBalances(snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
 
   const cards: AgentResponse["cards"] = [
     {
@@ -215,7 +215,7 @@ function showTrueBalances(snapshot: FinancialSnapshot): AgentResponse {
 }
 
 function showRecentTransactions(limit: number, snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const recentTransactions = snapshot.transactions
     .filter((transaction) => transaction.date >= result.window.startDate)
     .sort((a, b) => b.date.localeCompare(a.date))
@@ -238,7 +238,7 @@ function showRecentTransactions(limit: number, snapshot: FinancialSnapshot): Age
 }
 
 function showSpendingBreakdown(snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const breakdown = buildSpendingBreakdown(snapshot);
   const cards: AgentResponse["cards"] = [
     {
@@ -261,7 +261,7 @@ function showSpendingBreakdown(snapshot: FinancialSnapshot): AgentResponse {
 }
 
 function showRecurringActivity(snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const recurringActivity = buildRecurringActivity(snapshot);
   const cards: AgentResponse["cards"] = [
     {
@@ -285,7 +285,7 @@ function showSpendableCashForecast(
   horizonDays: number,
   snapshot: FinancialSnapshot,
 ): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const forecast = buildSpendableCashForecast(snapshot, {
     horizonDays,
   });
@@ -324,7 +324,7 @@ function getFinancialGuidanceContext(snapshot: FinancialSnapshot): AgentResponse
 }
 
 function defineSpendableCash(snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const metric = result.spendableCashToday;
 
   return {
@@ -338,7 +338,7 @@ function defineSpendableCash(snapshot: FinancialSnapshot): AgentResponse {
 }
 
 function detectMissingCard(snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const warning = result.warnings.find((item) => item.id === "missing-card");
 
   const cards: AgentResponse["cards"] = [
@@ -366,7 +366,7 @@ function detectMissingCard(snapshot: FinancialSnapshot): AgentResponse {
 }
 
 function showMath(snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const metric = result.spendableCashToday;
 
   const cards: AgentResponse["cards"] = [
@@ -398,7 +398,7 @@ function composeInsightCard(
   topic: z.infer<typeof insightCardArgsSchema>["topic"],
   snapshot: FinancialSnapshot,
 ): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const card = topic === "payday_impact"
     ? buildPaydayImpactCard(result)
     : buildSpendableFactorsCard(result);
@@ -412,7 +412,7 @@ function composeInsightCard(
   };
 }
 
-function buildPaydayImpactCard(result: ReturnType<typeof calculateFreeCash>): Extract<AgentResponse["cards"][number], { type: "insight_card" }> {
+function buildPaydayImpactCard(result: ReturnType<typeof calculatePipCash>): Extract<AgentResponse["cards"][number], { type: "insight_card" }> {
   const metric = result.spendableCashToday;
 
   if (metric) {
@@ -494,20 +494,20 @@ function buildPaydayImpactCard(result: ReturnType<typeof calculateFreeCash>): Ex
       {
         id: "today",
         label: "Today",
-        amountCents: result.freeCashTodayCents,
+        amountCents: result.pipCashTodayCents,
         detail: "After income, spending, and protected savings.",
-        tone: toneForAmount(result.freeCashTodayCents),
+        tone: toneForAmount(result.pipCashTodayCents),
       },
     ],
     footer: "Payday helps most while it stays inside the rolling window.",
   };
 }
 
-function buildSpendableFactorsCard(result: ReturnType<typeof calculateFreeCash>): Extract<AgentResponse["cards"][number], { type: "insight_card" }> {
+function buildSpendableFactorsCard(result: ReturnType<typeof calculatePipCash>): Extract<AgentResponse["cards"][number], { type: "insight_card" }> {
   return {
     type: "insight_card",
     title: "What affects today",
-    summary: summarizeFreeCash(result),
+    summary: summarizePipCash(result),
     rows: (result.spendableCashToday?.drivers ?? result.drivers).slice(0, 6).map((driver) => ({
       id: driver.id,
       label: driver.label,
@@ -520,7 +520,7 @@ function buildSpendableFactorsCard(result: ReturnType<typeof calculateFreeCash>)
 }
 
 function showPatternAssumptions(snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const metric = result.spendableCashToday;
   const rows = metric
     ? [
@@ -575,14 +575,14 @@ function showPatternAssumptions(snapshot: FinancialSnapshot): AgentResponse {
 }
 
 function showRecentSpendingPressure(snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
   const metric = result.spendableCashToday;
   const cards: AgentResponse["cards"] = [
     {
       type: "insight_card",
       title: "Recent spending pressure",
       summary: metric
-        ? summarizeFreeCash(result)
+        ? summarizePipCash(result)
         : "I need a current Spendable Cash result before I can compare recent spending pace.",
       rows: metric
         ? [
@@ -641,7 +641,7 @@ function toneForAmount(amountCents: number): "positive" | "negative" | "neutral"
 }
 
 function answerUnrelated(snapshot: FinancialSnapshot): AgentResponse {
-  const result = calculateFreeCash(snapshot);
+  const result = calculatePipCash(snapshot);
 
   return {
     message: "",

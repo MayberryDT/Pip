@@ -23,7 +23,7 @@ describe("agent product event derivation", () => {
       "agent_question_asked",
       "agent_follow_up_asked",
       "purchase_simulation_requested",
-      "negative_free_cash_follow_up",
+      "negative_pip_cash_follow_up",
     ]);
   });
 
@@ -151,7 +151,7 @@ describe("agent product event derivation", () => {
     } as unknown as Parameters<typeof recordProductEventSafely>[0];
 
     try {
-      await recordProductEventSafely(supabase, "user-1", "free_cash_viewed", {});
+      await recordProductEventSafely(supabase, "user-1", "pip_cash_viewed", {});
 
       expect(warn).toHaveBeenCalledWith(
         "Product event logging failed.",

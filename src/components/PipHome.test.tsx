@@ -1,14 +1,14 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { FreeCashHome, __freeCashHomeTestHooks } from "@/components/FreeCashHome";
+import { PipHome, __pipHomeTestHooks } from "@/components/PipHome";
 import type { PromptChip } from "@/lib/agent/card-types";
 
-describe("FreeCashHome", () => {
+describe("PipHome", () => {
   it("keeps the Pip home surface to one number, assistant intro, and the agent input", () => {
-    const markup = renderToStaticMarkup(<FreeCashHome />);
+    const markup = renderToStaticMarkup(<PipHome />);
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
-    expect(countOccurrences(markup, 'data-testid="free-cash-number"')).toBe(1);
+    expect(countOccurrences(markup, 'data-testid="pip-cash-number"')).toBe(1);
     expect(countOccurrences(markup, 'data-testid="agent-thread"')).toBe(1);
     expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(1);
     expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(1);
@@ -32,7 +32,7 @@ describe("FreeCashHome", () => {
   });
 
   it("keeps fake prototype data out of the authenticated real-data shell before backend data loads", () => {
-    const markup = renderToStaticMarkup(<FreeCashHome enableAccountControls />);
+    const markup = renderToStaticMarkup(<PipHome enableAccountControls />);
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
     expect(markup).toContain("$--");
@@ -45,7 +45,7 @@ describe("FreeCashHome", () => {
 
   it("shows Plaid OAuth completion as a same-screen Pip message", () => {
     const markup = renderToStaticMarkup(
-      <FreeCashHome
+      <PipHome
         authState={{ status: "ready", email: "tester@example.com" }}
         connectionNotice="plaid-connected"
         enableAccountControls
@@ -59,7 +59,7 @@ describe("FreeCashHome", () => {
   });
 
   it("keeps guest onboarding inside the Pip screen without showing fake Spendable Cash", () => {
-    const markup = renderToStaticMarkup(<FreeCashHome authState={{ status: "guest" }} />);
+    const markup = renderToStaticMarkup(<PipHome authState={{ status: "guest" }} />);
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
     expect(visibleText).toContain("Pip");
@@ -76,7 +76,7 @@ describe("FreeCashHome", () => {
 
   it("keeps failed Google auth on the same Pip screen", () => {
     const markup = renderToStaticMarkup(
-      <FreeCashHome authNotice="auth-error" authState={{ status: "guest" }} />,
+      <PipHome authNotice="auth-error" authState={{ status: "guest" }} />,
     );
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
@@ -87,7 +87,7 @@ describe("FreeCashHome", () => {
 
   it("keeps consent onboarding inside the Pip screen", () => {
     const markup = renderToStaticMarkup(
-      <FreeCashHome authState={{ status: "needs-consent", email: "tester@example.com" }} />,
+      <PipHome authState={{ status: "needs-consent", email: "tester@example.com" }} />,
     );
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
@@ -120,11 +120,59 @@ describe("FreeCashHome", () => {
     ];
 
     expect(
-      __freeCashHomeTestHooks.getNextVisiblePromptChips([], currentChips, lastNonEmptyChips),
+      __pipHomeTestHooks.getNextVisiblePromptChips([], currentChips, lastNonEmptyChips),
     ).toEqual(currentChips);
     expect(
-      __freeCashHomeTestHooks.getNextVisiblePromptChips([], [], lastNonEmptyChips),
+      __pipHomeTestHooks.getNextVisiblePromptChips([], [], lastNonEmptyChips),
     ).toEqual(lastNonEmptyChips);
+  });
+
+  it("maps agent failures to short PIP-safe visible messages", () => {
+    expect(
+      __pipHomeTestHooks.getSafeAgentFailureMessage({
+        code: "missing-openai-config",
+        status: 503,
+      }),
+    ).toBe("I can’t reach the answer service right now. Try again in a moment.");
+    expect(
+      __pipHomeTestHooks.getSafeAgentFailureMessage({
+        code: "invalid-agent-output",
+        status: 502,
+      }),
+    ).toBe("I couldn’t answer that cleanly. Try again, or ask for the math.");
+    expect(
+      __pipHomeTestHooks.getSafeAgentFailureMessage({
+        code: "authentication-required",
+        status: 401,
+      }),
+    ).toBe("I need your setup finished before I can answer that.");
+  });
+
+  it("does not expose provider diagnostics in visible agent error text", () => {
+    const error = new __pipHomeTestHooks.AgentRequestError({
+      code: "missing-openai-config",
+      status: 503,
+      message: __pipHomeTestHooks.getSafeAgentFailureMessage({
+        code: "missing-openai-config",
+        status: 503,
+      }),
+    });
+    const visibleMessage = __pipHomeTestHooks.getAgentErrorText(error);
+
+    expect(visibleMessage).toBe("I can’t reach the answer service right now. Try again in a moment.");
+    expect(visibleMessage).not.toMatch(/OPENAI_API_KEY|Netlify AI Gateway|sk-/);
+    expect(__pipHomeTestHooks.getAgentErrorText(new Error("sk-secret OPENAI_API_KEY missing"))).toBe(
+      "I couldn’t answer that cleanly. Try again.",
+    );
+  });
+
+  it("keeps Plaid client action errors specific without exposing unrelated details", () => {
+    expect(__pipHomeTestHooks.getClientActionErrorText(new Error("Plaid failed to load."))).toBe(
+      "Plaid failed to load.",
+    );
+    expect(__pipHomeTestHooks.getClientActionErrorText(new Error("provider_token=secret failed"))).toBe(
+      "I couldn’t finish that action. Try again.",
+    );
   });
 });
 
