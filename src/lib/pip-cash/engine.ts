@@ -19,12 +19,17 @@ import {
   isDedupedCreditCardPayment,
 } from "@/lib/pip-cash/dedupe-credit-card-payments";
 import { calculateSpendableCashToday } from "@/lib/pip-cash/spendable-cash-today";
+import { toPipCashSnapshot } from "@/lib/pip-cash/account-filters";
 
 const MATERIAL_PENDING_THRESHOLD_CENTS = 2000;
 
 export function calculatePipCash(snapshot: FinancialSnapshot): PipCashResult {
+  const pipCashSnapshot = toPipCashSnapshot(snapshot);
   const window = buildRollingCalendarWindow(snapshot.settings.asOfDate);
-  const transactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts);
+  const transactions = annotateCreditCardPaymentMatches(
+    pipCashSnapshot.transactions,
+    pipCashSnapshot.accounts,
+  );
   const windowTransactions = transactions.filter((transaction) =>
     isWithinInclusiveWindow(transaction.date, window),
   );
@@ -76,10 +81,10 @@ export function calculatePipCash(snapshot: FinancialSnapshot): PipCashResult {
     windowTransactions,
     allTransactions: transactions,
     window,
-    accounts: snapshot.accounts,
+    accounts: pipCashSnapshot.accounts,
   });
   const warnings = buildWarnings(windowTransactions, snapshot.settings.suppressedMissingCardIssuers);
-  const dataStates = buildDataStates(windowTransactions, snapshot.accounts);
+  const dataStates = buildDataStates(windowTransactions, pipCashSnapshot.accounts);
 
   return {
     pipCashTodayCents,
@@ -93,7 +98,7 @@ export function calculatePipCash(snapshot: FinancialSnapshot): PipCashResult {
     warnings,
     dataStates,
     trueBalances: snapshot.accounts.map(toBalanceSummary),
-    spendableCashToday: calculateSpendableCashToday(snapshot, {
+    spendableCashToday: calculateSpendableCashToday(pipCashSnapshot, {
       legacyRollingDailySurplusCents: pipCashTodayCents,
       legacyRollingNetCents: rollingNetCents,
       warnings,
@@ -348,5 +353,8 @@ function toBalanceSummary(account: Account): AccountBalanceSummary {
     balanceCents: account.balanceCents,
     availableBalanceCents: account.availableBalanceCents,
     lastFour: account.lastFour,
+    active: account.active,
+    includedInPipCash: account.includedInPipCash,
+    isProtectedSavings: account.isProtectedSavings,
   };
 }

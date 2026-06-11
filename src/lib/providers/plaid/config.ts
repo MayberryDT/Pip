@@ -5,7 +5,7 @@ import {
   PlaidEnvironments,
   Products,
 } from "plaid";
-import type { PlaidConnectSession } from "@/lib/providers/FinancialDataProvider";
+import type { PlaidConnectSession, PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
 import { ProviderUnavailableError } from "@/lib/providers/provider-errors";
 
 export type PlaidEnvironment = "sandbox" | "production";
@@ -98,6 +98,8 @@ export async function createPlaidConnectSession(input: {
   config?: PlaidConfig;
   client?: PlaidClient;
   accessToken?: string;
+  mode?: PlaidLinkMode;
+  institutionId?: string;
 }): Promise<{
   provider: "plaid";
   status: "ready" | "unavailable";
@@ -116,7 +118,7 @@ export async function createPlaidConnectSession(input: {
   }
 
   const client = input.client ?? createPlaidClient(config);
-  const mode = input.accessToken ? "repair" : "connect";
+  const mode: PlaidLinkMode = input.accessToken ? input.mode ?? "repair" : "connect";
   const response = await client.linkTokenCreate({
     client_name: config.clientName,
     language: "en",
@@ -128,6 +130,13 @@ export async function createPlaidConnectSession(input: {
     ...(input.accessToken
       ? {
           access_token: input.accessToken,
+          ...(mode === "account_selection"
+            ? {
+                update: {
+                  account_selection_enabled: true,
+                },
+              }
+            : {}),
         }
       : {
           products: config.products,
@@ -140,13 +149,19 @@ export async function createPlaidConnectSession(input: {
   return {
     provider: "plaid",
     status: "ready",
-    message: mode === "repair" ? "Plaid repair is ready." : "Plaid Link is ready.",
+    message:
+      mode === "connect"
+        ? "Plaid Link is ready."
+        : mode === "repair"
+          ? "Plaid repair is ready."
+          : "Plaid update is ready.",
     connect: {
       kind: "plaid",
       linkToken: response.data.link_token,
       environment: config.environment,
-      products: mode === "repair" ? [] : config.products,
+      products: mode === "connect" ? config.products : [],
       mode,
+      institutionId: input.institutionId,
     },
   };
 }

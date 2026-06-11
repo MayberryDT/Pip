@@ -11,7 +11,12 @@ import {
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { fakeSnapshot } from "@/lib/fake-data";
 import type { Database } from "@/lib/supabase/database.types";
-import type { AccountRow, TransactionRow, UserSettingsRow } from "@/lib/supabase/database.types";
+import type {
+  AccountPreferenceRow,
+  AccountRow,
+  TransactionRow,
+  UserSettingsRow,
+} from "@/lib/supabase/database.types";
 
 describe("financial repository row mapping", () => {
   it("maps Supabase settings rows into engine settings", () => {
@@ -43,6 +48,7 @@ describe("financial repository row mapping", () => {
       available_balance_cents: 12000,
       last_four: "1042",
       is_protected_savings: false,
+      active: true,
       raw_provider_data: {},
       created_at: "2026-06-05T00:00:00.000Z",
       updated_at: "2026-06-05T00:00:00.000Z",
@@ -57,6 +63,49 @@ describe("financial repository row mapping", () => {
       availableBalanceCents: 12000,
       lastFour: "1042",
       isProtectedSavings: false,
+      active: true,
+      includedInPipCash: true,
+      hiddenReason: undefined,
+      userLabel: undefined,
+    });
+  });
+
+  it("resolves account preferences over synced account defaults", () => {
+    const row: AccountRow = {
+      id: "account-1",
+      user_id: "user-1",
+      institution_id: "institution-1",
+      provider_account_id: "provider-account-1",
+      name: "Savings",
+      institution_name: "Northstar Bank",
+      kind: "savings",
+      balance_cents: 50000,
+      available_balance_cents: null,
+      last_four: null,
+      is_protected_savings: true,
+      active: true,
+      raw_provider_data: {},
+      created_at: "2026-06-05T00:00:00.000Z",
+      updated_at: "2026-06-05T00:00:00.000Z",
+    };
+    const preference: AccountPreferenceRow = {
+      id: "preference-1",
+      user_id: "user-1",
+      account_id: "account-1",
+      include_in_pip_cash: false,
+      is_protected_savings_override: false,
+      user_label: "Vacation",
+      hidden_reason: "user_excluded",
+      created_at: "2026-06-05T00:00:00.000Z",
+      updated_at: "2026-06-05T00:00:00.000Z",
+    };
+
+    expect(mapAccountRow(row, preference)).toMatchObject({
+      id: "account-1",
+      includedInPipCash: false,
+      isProtectedSavings: false,
+      userLabel: "Vacation",
+      hiddenReason: "user_excluded",
     });
   });
 
@@ -94,7 +143,7 @@ describe("financial repository row mapping", () => {
     });
   });
 
-  it("loads the latest non-stale cached PIP cash result", async () => {
+  it("loads the latest non-stale cached Pip Cash result", async () => {
     const conditions: Array<[string, unknown]> = [];
     const cachedResult = calculatePipCash(fakeSnapshot);
     const supabase = createPipCashSnapshotsClient({
@@ -116,7 +165,7 @@ describe("financial repository row mapping", () => {
     ]);
   });
 
-  it("can load a cached PIP cash result for a specific app date", async () => {
+  it("can load a cached Pip Cash result for a specific app date", async () => {
     const conditions: Array<[string, unknown]> = [];
     const cachedResult = calculatePipCash(fakeSnapshot);
     const supabase = createPipCashSnapshotsClient({
@@ -138,7 +187,7 @@ describe("financial repository row mapping", () => {
     ]);
   });
 
-  it("returns null when a cached PIP cash result is malformed", async () => {
+  it("returns null when a cached Pip Cash result is malformed", async () => {
     const supabase = createPipCashSnapshotsClient({
       resultRows: [
         {
@@ -152,7 +201,7 @@ describe("financial repository row mapping", () => {
     await expect(loadCachedPipCashResultForUser(supabase, "user-1")).resolves.toBeNull();
   });
 
-  it("marks active cached PIP cash snapshots stale after preference changes", async () => {
+  it("marks active cached Pip Cash snapshots stale after preference changes", async () => {
     const conditions: Array<[string, unknown]> = [];
     const updates: Record<string, unknown>[] = [];
     const supabase = createPipCashSnapshotsClient({

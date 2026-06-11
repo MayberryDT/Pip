@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "NEXT_PRIVATE_BUILD_WORKER=0 next build --webpack",
     "start": "next start",
     "test": "vitest run",
     "test:e2e": "playwright test",
@@ -14,9 +14,11 @@
     "prove:prd": "node scripts/prove-prd-complete.mjs",
     "test:watch": "vitest",
     "check:deployment": "node scripts/check-deployment-env.mjs",
+    "check:db-schema-names": "node scripts/check-db-schema-names.mjs",
     "check:live-smoke": "node scripts/check-live-smoke-env.mjs",
     "check:netlify-bundle": "node scripts/check-netlify-bundle.mjs",
     "check:prd-complete": "node scripts/check-prd-complete.mjs",
+    "proof:in-app-browser": "node scripts/write-in-app-browser-proof.mjs",
     "deploy:netlify": "node scripts/safe-netlify-deploy.mjs",
     "eval:agent": "node scripts/eval-agent.mjs",
     "analyze:agent-conversations": "node scripts/analyze-agent-conversations.mjs"

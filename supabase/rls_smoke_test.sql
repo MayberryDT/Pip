@@ -92,6 +92,26 @@ values
     20000
   );
 
+insert into public.account_preferences (
+  user_id,
+  account_id,
+  include_in_pip_cash,
+  hidden_reason
+)
+values
+  (
+    '00000000-0000-0000-0000-00000000a101',
+    '00000000-0000-0000-0000-00000000e101',
+    true,
+    null
+  ),
+  (
+    '00000000-0000-0000-0000-00000000b202',
+    '00000000-0000-0000-0000-00000000f202',
+    false,
+    'user_excluded'
+  );
+
 insert into public.transactions (
   user_id,
   account_id,
@@ -222,6 +242,12 @@ with attempted_cross_user_account_update as (
   where user_id = '00000000-0000-0000-0000-00000000b202'
   returning id
 ),
+attempted_cross_user_account_preference_update as (
+  update public.account_preferences
+  set include_in_pip_cash = true
+  where user_id = '00000000-0000-0000-0000-00000000b202'
+  returning id
+),
 attempted_cross_user_transaction_delete as (
   delete from public.transactions
   where user_id = '00000000-0000-0000-0000-00000000b202'
@@ -238,6 +264,7 @@ select
   (select count(*) from public.user_settings) as visible_user_settings,
   (select count(*) from public.connected_institutions) as visible_connected_institutions,
   (select count(*) from public.accounts) as visible_accounts,
+  (select count(*) from public.account_preferences) as visible_account_preferences,
   (select count(*) from public.transactions) as visible_transactions,
   (select count(*) from public.sync_runs) as visible_sync_runs,
   (select count(*) from public.pip_cash_snapshots) as visible_pip_cash_snapshots,
@@ -245,8 +272,10 @@ select
   (select count(*) from public.product_events) as visible_product_events,
   (select count(*) from public.data_deletion_requests) as visible_data_deletion_requests,
   (select count(*) from public.accounts where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_accounts,
+  (select count(*) from public.account_preferences where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_account_preferences,
   (select count(*) from public.transactions where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_transactions,
   (select count(*) from attempted_cross_user_account_update) as cross_user_account_updates,
+  (select count(*) from attempted_cross_user_account_preference_update) as cross_user_account_preference_updates,
   (select count(*) from attempted_cross_user_transaction_delete) as cross_user_transaction_deletes,
   (select count(*) from attempted_cross_user_event_delete) as cross_user_event_deletes;
 

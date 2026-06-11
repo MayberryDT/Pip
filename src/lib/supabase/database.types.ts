@@ -99,6 +99,7 @@ export type Database = {
           user_id: string;
           provider: Database["public"]["Enums"]["financial_provider"];
           institution_name: string;
+          provider_institution_id: string | null;
           status: Database["public"]["Enums"]["connection_status"];
           last_successful_sync_at: string | null;
           stale_after: string | null;
@@ -111,6 +112,7 @@ export type Database = {
           user_id: string;
           provider: Database["public"]["Enums"]["financial_provider"];
           institution_name: string;
+          provider_institution_id?: string | null;
           status?: Database["public"]["Enums"]["connection_status"];
           last_successful_sync_at?: string | null;
           stale_after?: string | null;
@@ -120,6 +122,8 @@ export type Database = {
           updated_at?: string;
         };
         Update: {
+          institution_name?: string;
+          provider_institution_id?: string | null;
           status?: Database["public"]["Enums"]["connection_status"];
           last_successful_sync_at?: string | null;
           stale_after?: string | null;
@@ -142,6 +146,7 @@ export type Database = {
           available_balance_cents: number | null;
           last_four: string | null;
           is_protected_savings: boolean;
+          active: boolean;
           raw_provider_data: Json;
           created_at: string;
           updated_at: string;
@@ -157,6 +162,7 @@ export type Database = {
           available_balance_cents?: number | null;
           last_four?: string | null;
           is_protected_savings?: boolean;
+          active?: boolean;
           raw_provider_data?: Json;
         };
         Update: {
@@ -167,7 +173,40 @@ export type Database = {
           available_balance_cents?: number | null;
           last_four?: string | null;
           is_protected_savings?: boolean;
+          active?: boolean;
           raw_provider_data?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      account_preferences: {
+        Row: {
+          id: string;
+          user_id: string;
+          account_id: string;
+          include_in_pip_cash: boolean;
+          is_protected_savings_override: boolean | null;
+          user_label: string | null;
+          hidden_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          account_id: string;
+          include_in_pip_cash?: boolean;
+          is_protected_savings_override?: boolean | null;
+          user_label?: string | null;
+          hidden_reason?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          include_in_pip_cash?: boolean;
+          is_protected_savings_override?: boolean | null;
+          user_label?: string | null;
+          hidden_reason?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -367,6 +406,94 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      marketing_waitlist: {
+        Row: {
+          id: string;
+          normalized_email: string;
+          display_email: string;
+          source_page: string;
+          referrer: string | null;
+          utm_source: string | null;
+          utm_medium: string | null;
+          utm_campaign: string | null;
+          consent_text_version: string;
+          status: string;
+          created_at: string;
+          last_submitted_at: string;
+        };
+        Insert: {
+          id?: string;
+          normalized_email: string;
+          display_email: string;
+          source_page: string;
+          referrer?: string | null;
+          utm_source?: string | null;
+          utm_medium?: string | null;
+          utm_campaign?: string | null;
+          consent_text_version: string;
+          status?: string;
+          created_at?: string;
+          last_submitted_at?: string;
+        };
+        Update: {
+          display_email?: string;
+          source_page?: string;
+          referrer?: string | null;
+          utm_source?: string | null;
+          utm_medium?: string | null;
+          utm_campaign?: string | null;
+          consent_text_version?: string;
+          status?: string;
+          last_submitted_at?: string;
+        };
+        Relationships: [];
+      };
+      marketing_events: {
+        Row: {
+          id: string;
+          event_name: string;
+          properties: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          event_name: string;
+          properties?: Json;
+          created_at?: string;
+        };
+        Update: never;
+        Relationships: [];
+      };
+      marketing_content_drafts: {
+        Row: {
+          id: string;
+          source: string;
+          slug: string | null;
+          title: string | null;
+          payload: Json;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          source: string;
+          slug?: string | null;
+          title?: string | null;
+          payload?: Json;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          slug?: string | null;
+          title?: string | null;
+          payload?: Json;
+          status?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       agent_chat_turns: {
         Row: {
           id: string;
@@ -428,4 +555,5 @@ export type Database = {
 
 export type UserSettingsRow = Database["public"]["Tables"]["user_settings"]["Row"];
 export type AccountRow = Database["public"]["Tables"]["accounts"]["Row"];
+export type AccountPreferenceRow = Database["public"]["Tables"]["account_preferences"]["Row"];
 export type TransactionRow = Database["public"]["Tables"]["transactions"]["Row"];

@@ -72,12 +72,15 @@ export class PlaidProvider implements FinancialDataProvider {
   async createConnectSession(
     userId: string,
     options: {
-      mode?: "connect" | "repair";
+      mode?: "connect" | "repair" | "account_selection";
       institutionId?: string;
     } = {},
   ): Promise<ConnectSession> {
-    if (options.mode === "repair") {
-      return this.createRepairConnectSession(userId, options.institutionId);
+    if (options.mode === "repair" || options.mode === "account_selection") {
+      return this.createUpdateConnectSession(userId, {
+        mode: options.mode,
+        institutionId: options.institutionId,
+      });
     }
 
     return createPlaidConnectSession({
@@ -87,14 +90,17 @@ export class PlaidProvider implements FinancialDataProvider {
     });
   }
 
-  async createRepairConnectSession(
+  async createUpdateConnectSession(
     userId: string,
-    institutionId?: string,
+    options: {
+      mode: "repair" | "account_selection";
+      institutionId?: string;
+    },
   ): Promise<ConnectSession> {
-    const credential = institutionId
+    const credential = options.institutionId
       ? await this.institutionCredentialLoader({
           userId,
-          institutionId,
+          institutionId: options.institutionId,
         })
       : await this.credentialLoader(userId);
 
@@ -110,6 +116,8 @@ export class PlaidProvider implements FinancialDataProvider {
       config: this.config,
       client: this.client,
       accessToken: credential.accessToken,
+      mode: options.mode,
+      institutionId: credential.institutionId,
     });
   }
 
@@ -119,6 +127,7 @@ export class PlaidProvider implements FinancialDataProvider {
     return {
       provider: "plaid",
       institutionId: credential.institutionId,
+      providerInstitutionId: credential.providerInstitutionId,
       institutionName: credential.institutionName,
       status: "connected",
     };
@@ -219,6 +228,7 @@ export class PlaidProvider implements FinancialDataProvider {
       connection: {
         provider: "plaid",
         institutionId: credential.institutionId,
+        providerInstitutionId: credential.providerInstitutionId,
         institutionName: credential.institutionName,
         status: "connected",
       },
@@ -394,7 +404,7 @@ function getPlaidErrorMapping(errorCode: string): {
     case "NO_ACCOUNTS":
       return {
         status: "failed",
-        message: "Plaid did not return an eligible account. Reconnect and select the accounts Spendable should use.",
+        message: "Plaid did not return an eligible account. Reconnect and choose the accounts Pip should use.",
         repairRequired: true,
       };
     case "PRODUCT_NOT_READY":

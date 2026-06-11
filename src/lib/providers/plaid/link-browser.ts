@@ -132,7 +132,7 @@ export function getPersistedPlaidLinkSession(): PlaidLinkResumeState | null {
       if (typeof parsed.linkToken === "string" && parsed.linkToken.trim()) {
         return {
           linkToken: parsed.linkToken,
-          mode: parsed.mode === "repair" ? "repair" : "connect",
+          mode: isPlaidLinkMode(parsed.mode) ? parsed.mode : "connect",
         };
       }
     } catch {
@@ -153,6 +153,10 @@ export function clearPersistedPlaidLinkToken() {
   } catch {
     // Ignore browsers that block localStorage in embedded contexts.
   }
+}
+
+function isPlaidLinkMode(value: unknown): value is PlaidConnectSession["mode"] {
+  return value === "connect" || value === "repair" || value === "account_selection";
 }
 
 function persistPlaidLinkSession(session: PlaidLinkResumeState) {

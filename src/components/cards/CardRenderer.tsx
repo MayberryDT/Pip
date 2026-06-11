@@ -3,6 +3,7 @@ import {
   ArrowDownRight,
   Calculator,
   CalendarClock,
+  CheckCircle2,
   CreditCard,
   EyeOff,
   Landmark,
@@ -16,9 +17,11 @@ import { formatMoney, formatMoneyWithCents } from "@/lib/money";
 
 export function CardRenderer({
   card,
+  onSubmitPrompt,
   onSuppressMissingCard,
 }: {
   card: AgentCard;
+  onSubmitPrompt?: (prompt: string) => void;
   onSuppressMissingCard?: (issuerName: string) => void;
 }) {
   switch (card.type) {
@@ -91,6 +94,68 @@ export function CardRenderer({
                 <p className="shrink-0 text-sm font-semibold text-ink">
                   {formatMoneyWithCents(balance.balanceCents)}
                 </p>
+              </div>
+            ))}
+          </div>
+        </CardShell>
+      );
+
+    case "account_connections":
+      return (
+        <CardShell icon={<Landmark aria-hidden="true" size={18} />} title={card.title}>
+          <div className="space-y-3">
+            {card.institutions.length === 0 ? (
+              <p className="text-sm leading-6 text-ink/[0.66]">
+                I do not see a connected bank or card yet.
+              </p>
+            ) : card.institutions.map((institution) => (
+              <div key={institution.institutionId} className="space-y-2 rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-ink">
+                      {institution.institutionName}
+                    </p>
+                    <p className="text-xs font-semibold uppercase tracking-normal text-taupe">
+                      {formatInstitutionStatus(institution.status)}
+                    </p>
+                  </div>
+                  {institution.status === "connected" || institution.status === "mocked" ? (
+                    <CheckCircle2 aria-hidden="true" className="shrink-0 text-moss" size={16} />
+                  ) : (
+                    <AlertTriangle aria-hidden="true" className="shrink-0 text-coral" size={16} />
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  {institution.accounts.map((account) => (
+                    <div key={account.accountId} className="flex items-start gap-2">
+                      <span className="mt-1 text-xs text-taupe" aria-hidden="true">
+                        {account.active && account.includedInPipCash ? "✓" : "○"}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold text-ink">
+                          {account.name}{account.lastFour ? ` ...${account.lastFour}` : ""}
+                        </p>
+                        <p className="text-xs leading-5 text-ink/[0.58]">
+                          {account.warning ?? account.roleLabel}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {institution.actions.length > 0 && onSubmitPrompt ? (
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    {institution.actions.map((action) => (
+                      <button
+                        key={action.id}
+                        type="button"
+                        className={getAccountActionClassName(action.style)}
+                        onClick={() => onSubmitPrompt(action.prompt)}
+                      >
+                        {action.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             ))}
           </div>
@@ -414,6 +479,40 @@ function stanceClass(stance: Extract<AgentCard, { type: "guidance_card" }>["stan
     case "uncertain":
       return "border-taupe/20 bg-taupe/[0.08] text-taupe";
   }
+}
+
+function formatInstitutionStatus(
+  status: Extract<AgentCard, { type: "account_connections" }>["institutions"][number]["status"],
+): string {
+  switch (status) {
+    case "connected":
+      return "Connected";
+    case "mocked":
+      return "Mock data";
+    case "stale":
+      return "Needs refresh";
+    case "failed":
+      return "Needs repair";
+    case "revoked":
+      return "Access revoked";
+  }
+}
+
+function getAccountActionClassName(
+  style: Extract<AgentCard, { type: "account_connections" }>["institutions"][number]["actions"][number]["style"],
+): string {
+  const base =
+    "focus-ring inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold";
+
+  if (style === "danger") {
+    return `${base} border-coral/30 bg-coral/[0.08] text-coral`;
+  }
+
+  if (style === "primary") {
+    return `${base} border-moss/25 bg-moss/[0.1] text-moss`;
+  }
+
+  return `${base} border-line bg-porcelain/[0.62] text-ink`;
 }
 
 function MoneyRow({

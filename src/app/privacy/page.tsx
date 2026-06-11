@@ -1,4 +1,12 @@
+import type { Metadata } from "next";
 import { LegalShell } from "@/components/LegalShell";
+import { buildMarketingMetadata } from "@/lib/marketing/metadata";
+
+export const metadata: Metadata = buildMarketingMetadata({
+  title: "Privacy",
+  description: "Review what Pip stores, how provider credentials are handled, and how data deletion works.",
+  path: "/privacy",
+});
 
 export default function PrivacyPage() {
   return (

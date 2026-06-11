@@ -171,7 +171,7 @@ button {
 .pip-metric-subtitle {
   margin: 0.7rem auto 0;
   max-width: 20rem;
-  color: hsl(var(--ink) / 0.62);
+  color: rgba(46, 45, 42, 0.62);
   font-size: 0.95rem;
   font-weight: 650;
   line-height: 1.35;

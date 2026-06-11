@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import type { AgentResponse } from "@/lib/agent/card-types";
+import type { AgentCard, AgentResponse } from "@/lib/agent/card-types";
 import {
   AuthenticationRequiredError,
   getCurrentFinancialSnapshot,
@@ -9,8 +9,14 @@ import {
 } from "@/lib/data/current-snapshot";
 import { recordAgentChatTurnSafely } from "@/lib/data/agent-chat-turns";
 import {
+  type ConnectedAccountsResult,
   deleteCurrentUserFinancialData,
+  loadConnectedAccountsForUser,
+  loadInstitutionForUser,
   markPipCashSnapshotsStaleForUser,
+  removeInstitutionForUser,
+  upsertAccountInclusionPreference,
+  upsertAccountProtectedSavingsPreference,
   upsertUserSettings,
 } from "@/lib/data/financial-repository";
 import { runManualSync, ManualSyncRateLimitError } from "@/lib/data/manual-sync";
@@ -33,12 +39,18 @@ import {
   getSpendableCashTodayState,
 } from "@/lib/pip-cash/spendable-cash-today";
 import type { FakeDataScenario } from "@/lib/fake-data";
-import type { FinancialProviderName, PlaidConnectSession } from "@/lib/providers/FinancialDataProvider";
+import type {
+  ConnectSession,
+  FinancialProviderName,
+  PlaidConnectSession,
+  PlaidLinkMode,
+} from "@/lib/providers/FinancialDataProvider";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import {
   getFinancialDataProvider,
   ProviderUnavailableError,
 } from "@/lib/providers/provider-registry";
+import { getSafeErrorMessage, sanitizeSensitiveText } from "@/lib/security/error-messages";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/database.types";
@@ -429,12 +441,73 @@ function createAgentActions(input: {
         },
       };
     },
-    async startPlaidLink() {
+    async getConnectedAccounts() {
+      const { supabase, userId } = input.eventContext;
+      const result = await loadConnectedAccountsForUser(supabase, userId);
+      const card = buildAccountConnectionsCard(result);
+
+      await recordProductEventSafely(supabase, userId, "account_connections_viewed", {
+        institutionCount: result.institutions.length,
+        accountCount: result.institutions.reduce(
+          (total, institution) => total + institution.accounts.length,
+          0,
+        ),
+        repairRequired: result.institutions.some((institution) => institution.needsRepair),
+      });
+
+      return {
+        ok: true,
+        status: "account_connections_loaded",
+        cards: [card],
+      };
+    },
+    async startPlaidLink(actionInput = {}) {
       const { supabase, userId } = input.eventContext;
       const providerName: FinancialProviderName = "plaid";
       const provider = getFinancialDataProvider(providerName);
-      const connectRequest = getPlaidConnectRequest(input.syncStatus);
-      const session = await provider.createConnectSession(userId, connectRequest);
+      const connectRequest = await getPlaidConnectRequest(supabase, {
+        userId,
+        syncStatus: input.syncStatus,
+        mode: actionInput.mode,
+        institutionId: actionInput.institutionId,
+        institutionName: actionInput.institutionName,
+      });
+
+      if (connectRequest.needsSelection) {
+        return {
+          ok: false,
+          status: connectRequest.status,
+          message: connectRequest.message,
+          cards: [buildAccountConnectionsCard(connectRequest.accounts)],
+        };
+      }
+
+      let session: ConnectSession;
+
+      try {
+        session = await provider.createConnectSession(userId, connectRequest);
+      } catch (error) {
+        const errorDetails = getProviderConnectErrorDetails(error);
+
+        await recordProductEventSafely(supabase, userId, "connect_session_failed", {
+          provider: providerName,
+          status: "error",
+          mode: connectRequest.mode,
+          institutionId: connectRequest.institutionId ?? null,
+          errorName: getThrownErrorName(error),
+          errorCode: errorDetails.errorCode,
+          errorType: errorDetails.errorType,
+          errorRequestId: errorDetails.errorRequestId,
+          errorKeys: errorDetails.errorKeys,
+          errorMessage: errorDetails.message,
+        });
+
+        return {
+          ok: false,
+          status: "plaid_unavailable",
+          message: errorDetails.message,
+        };
+      }
 
       await recordProductEventSafely(
         supabase,
@@ -444,6 +517,7 @@ function createAgentActions(input: {
           provider: providerName,
           status: session.status,
           mode: connectRequest.mode,
+          institutionId: connectRequest.institutionId ?? null,
         },
       );
 
@@ -462,6 +536,169 @@ function createAgentActions(input: {
         clientAction: {
           type: "open_plaid",
           plaid: session.connect,
+        },
+      };
+    },
+    async setAccountInclusion({ accountId, accountName, includeInPipCash }) {
+      const { supabase, userId } = input.eventContext;
+      const resolved = await resolveAccountTarget(supabase, {
+        userId,
+        accountId,
+        accountName,
+      });
+
+      if (resolved.needsSelection) {
+        return {
+          ok: false,
+          status: resolved.status,
+          message: resolved.message,
+          cards: [buildAccountConnectionsCard(resolved.accounts)],
+        };
+      }
+
+      const account = await upsertAccountInclusionPreference(supabase, {
+        userId,
+        accountId: resolved.accountId,
+        includeInPipCash,
+      });
+      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await recordProductEventSafely(supabase, userId, "account_inclusion_updated", {
+        accountId: resolved.accountId,
+        accountKind: account.kind,
+        institutionName: account.institutionName,
+        includeInPipCash,
+      });
+
+      return {
+        ok: true,
+        status: includeInPipCash ? "account_included" : "account_excluded",
+        clientAction: {
+          type: "reload",
+        },
+      };
+    },
+    async setAccountProtectedSavings({ accountId, accountName, isProtectedSavings }) {
+      const { supabase, userId } = input.eventContext;
+      const resolved = await resolveAccountTarget(supabase, {
+        userId,
+        accountId,
+        accountName,
+      });
+
+      if (resolved.needsSelection) {
+        return {
+          ok: false,
+          status: resolved.status,
+          message: resolved.message,
+          cards: [buildAccountConnectionsCard(resolved.accounts)],
+        };
+      }
+
+      const account = await upsertAccountProtectedSavingsPreference(supabase, {
+        userId,
+        accountId: resolved.accountId,
+        isProtectedSavings,
+      });
+      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await recordProductEventSafely(supabase, userId, "account_protected_savings_updated", {
+        accountId: resolved.accountId,
+        accountKind: account.kind,
+        institutionName: account.institutionName,
+        isProtectedSavings,
+      });
+
+      return {
+        ok: true,
+        status: isProtectedSavings ? "account_marked_protected" : "account_unmarked_protected",
+        clientAction: {
+          type: "reload",
+        },
+      };
+    },
+    async requestRemoveInstitutionConfirmation({ institutionId, institutionName }) {
+      const { supabase, userId } = input.eventContext;
+      const resolved = await resolveInstitutionTarget(supabase, {
+        userId,
+        institutionId,
+        institutionName,
+      });
+
+      if (resolved.needsSelection) {
+        return {
+          ok: false,
+          status: resolved.status,
+          message: resolved.message,
+          cards: [buildAccountConnectionsCard(resolved.accounts)],
+        };
+      }
+
+      const institution = await loadInstitutionForUser(supabase, {
+        userId,
+        institutionId: resolved.institutionId,
+      });
+      const exactConfirmation = getInstitutionRemovalConfirmation(institution.institution_name);
+
+      await recordProductEventSafely(supabase, userId, "institution_removal_requested", {
+        institutionId: institution.id,
+        institutionName: institution.institution_name,
+        provider: institution.provider,
+      });
+
+      return {
+        ok: true,
+        status: "confirmation_required",
+        exactConfirmation,
+        message: `To remove ${institution.institution_name}, type ${exactConfirmation}.`,
+      };
+    },
+    async removeInstitution({ institutionId, institutionName, confirmationText }) {
+      const { supabase, userId } = input.eventContext;
+      const resolved = await resolveInstitutionTarget(supabase, {
+        userId,
+        institutionId,
+        institutionName,
+      });
+
+      if (resolved.needsSelection) {
+        return {
+          ok: false,
+          status: resolved.status,
+          message: resolved.message,
+          cards: [buildAccountConnectionsCard(resolved.accounts)],
+        };
+      }
+
+      const institution = await loadInstitutionForUser(supabase, {
+        userId,
+        institutionId: resolved.institutionId,
+      });
+      const exactConfirmation = getInstitutionRemovalConfirmation(institution.institution_name);
+
+      if (confirmationText.trim() !== exactConfirmation) {
+        return {
+          ok: false,
+          status: "confirmation_required",
+          exactConfirmation,
+          message: `Type ${exactConfirmation} to remove ${institution.institution_name}.`,
+        };
+      }
+
+      const removed = await removeInstitutionForUser(supabase, {
+        userId,
+        institutionId: institution.id,
+      });
+      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await recordProductEventSafely(supabase, userId, "institution_removed", {
+        institutionId: removed.id,
+        institutionName: removed.institution_name,
+        provider: removed.provider,
+      });
+
+      return {
+        ok: true,
+        status: "institution_removed",
+        clientAction: {
+          type: "reload",
         },
       };
     },
@@ -577,6 +814,7 @@ async function recordAgentEvents(
           : null,
         guidanceState: input.response.audit.guidance?.state ?? null,
         guidanceStance: input.response.audit.guidance?.stance ?? null,
+        guidanceSource: input.response.audit.guidance?.guidanceSource ?? null,
         guidanceValidationOutcome: input.response.audit.guidance?.validationOutcome ?? null,
         guidanceEvidenceIds: input.response.audit.guidance?.evidenceIds?.join(",") ?? null,
       }),
@@ -598,22 +836,295 @@ function getRouteAgentEventNames(
     : ["agent_question_asked"];
 }
 
-function getPlaidConnectRequest(syncStatus: SyncStatus | null): {
-  mode: "connect" | "repair";
-  institutionId?: string;
-} {
-  const repairInstitution = getRepairablePlaidInstitution(syncStatus);
+type PlaidConnectRequest =
+  | {
+      needsSelection?: false;
+      mode: PlaidLinkMode;
+      institutionId?: string;
+    }
+  | {
+      needsSelection: true;
+      status: string;
+      message: string;
+      accounts: ConnectedAccountsResult;
+    };
 
-  if (repairInstitution) {
+async function getPlaidConnectRequest(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    syncStatus: SyncStatus | null;
+    mode?: PlaidLinkMode;
+    institutionId?: string;
+    institutionName?: string;
+  },
+): Promise<PlaidConnectRequest> {
+  if (!input.mode || input.mode === "connect") {
+    if (input.mode === "connect") {
+      return {
+        mode: "connect",
+      };
+    }
+
+    const repairableInstitutions = getRepairablePlaidInstitutions(input.syncStatus);
+
+    if (repairableInstitutions.length === 1) {
+      return {
+        mode: "repair",
+        institutionId: repairableInstitutions[0].id,
+      };
+    }
+
+    if (repairableInstitutions.length > 1) {
+      const accounts = await loadConnectedAccountsForUser(supabase, input.userId);
+
+      return {
+        needsSelection: true,
+        status: "institution_choice_required",
+        message: "Choose which institution to reconnect.",
+        accounts,
+      };
+    }
+
     return {
-      mode: "repair",
-      institutionId: repairInstitution.id,
+      mode: "connect",
+    };
+  }
+
+  const resolved = await resolveInstitutionTarget(supabase, {
+    userId: input.userId,
+    institutionId: input.institutionId,
+    institutionName: input.institutionName,
+    provider: "plaid",
+    allowSingleDefault: true,
+  });
+
+  if (resolved.needsSelection) {
+    return resolved;
+  }
+
+  return {
+    mode: input.mode,
+    institutionId: resolved.institutionId,
+  };
+}
+
+function buildAccountConnectionsCard(result: ConnectedAccountsResult): AgentCard {
+  return {
+    type: "account_connections",
+    title: "Account connections",
+    institutions: result.institutions.map((institution, index) => ({
+      institutionId: institution.institutionId,
+      institutionName: institution.institutionName,
+      provider: institution.provider,
+      status: institution.status,
+      lastSuccessfulSyncAt: institution.lastSuccessfulSyncAt,
+      accounts: institution.accounts,
+      actions: buildAccountConnectionActions(institution, index),
+    })),
+  };
+}
+
+function buildAccountConnectionActions(
+  institution: ConnectedAccountsResult["institutions"][number],
+  index: number,
+): Extract<AgentCard, { type: "account_connections" }>["institutions"][number]["actions"] {
+  const actions: Extract<AgentCard, { type: "account_connections" }>["institutions"][number]["actions"] = [];
+
+  if (index === 0) {
+    actions.push({
+      id: "add-account",
+      label: "Add account",
+      prompt: "Add account",
+      style: "primary",
+    });
+  }
+
+  if (institution.needsRepair) {
+    actions.push({
+      id: `repair-${institution.institutionId}`,
+      label: "Reconnect",
+      prompt: `Reconnect ${institution.institutionName}`,
+      style: "primary",
+    });
+  }
+
+  if (institution.provider === "plaid") {
+    actions.push({
+      id: `change-${institution.institutionId}`,
+      label: "Change accounts",
+      prompt: `Change ${institution.institutionName} accounts`,
+      style: "secondary",
+    });
+  }
+
+  actions.push({
+    id: `remove-${institution.institutionId}`,
+    label: "Remove",
+    prompt: `Remove ${institution.institutionName}`,
+    style: "danger",
+  });
+
+  return actions;
+}
+
+type InstitutionResolution =
+  | {
+      needsSelection?: false;
+      institutionId: string;
+    }
+  | {
+      needsSelection: true;
+      status: string;
+      message: string;
+      accounts: ConnectedAccountsResult;
+    };
+
+async function resolveInstitutionTarget(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    institutionId?: string;
+    institutionName?: string;
+    provider?: FinancialProviderName;
+    allowSingleDefault?: boolean;
+  },
+): Promise<InstitutionResolution> {
+  const accounts = await loadConnectedAccountsForUser(supabase, input.userId);
+  const institutions = accounts.institutions.filter((institution) =>
+    input.provider ? institution.provider === input.provider : true,
+  );
+
+  if (input.institutionId) {
+    const institution = institutions.find((candidate) => candidate.institutionId === input.institutionId);
+
+    if (institution) {
+      return {
+        institutionId: institution.institutionId,
+      };
+    }
+  }
+
+  const target = normalizeTarget(input.institutionName);
+
+  if (target) {
+    const matches = institutions.filter((institution) =>
+      normalizeTarget(institution.institutionName).includes(target),
+    );
+
+    if (matches.length === 1) {
+      return {
+        institutionId: matches[0].institutionId,
+      };
+    }
+
+    return {
+      needsSelection: true,
+      status: matches.length > 1 ? "ambiguous_institution" : "institution_not_found",
+      message: matches.length > 1
+        ? "More than one institution matched that name."
+        : "I could not find that institution.",
+      accounts,
+    };
+  }
+
+  if (input.allowSingleDefault && institutions.length === 1) {
+    return {
+      institutionId: institutions[0].institutionId,
     };
   }
 
   return {
-    mode: "connect",
+    needsSelection: true,
+    status: "institution_choice_required",
+    message: "Choose which institution to use.",
+    accounts,
   };
+}
+
+type AccountResolution =
+  | {
+      needsSelection?: false;
+      accountId: string;
+    }
+  | {
+      needsSelection: true;
+      status: string;
+      message: string;
+      accounts: ConnectedAccountsResult;
+    };
+
+async function resolveAccountTarget(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    accountId?: string;
+    accountName?: string;
+  },
+): Promise<AccountResolution> {
+  const accounts = await loadConnectedAccountsForUser(supabase, input.userId);
+  const accountList = accounts.institutions.flatMap((institution) =>
+    institution.accounts.map((account) => ({
+      ...account,
+      institutionName: institution.institutionName,
+    })),
+  );
+
+  if (input.accountId) {
+    const account = accountList.find((candidate) => candidate.accountId === input.accountId);
+
+    if (account) {
+      return {
+        accountId: account.accountId,
+      };
+    }
+  }
+
+  const target = normalizeTarget(input.accountName);
+
+  if (target) {
+    const matches = accountList.filter((account) => {
+      const accountName = normalizeTarget(account.name);
+      const institutionName = normalizeTarget(account.institutionName);
+
+      return accountName.includes(target) || `${institutionName} ${accountName}`.includes(target);
+    });
+
+    if (matches.length === 1) {
+      return {
+        accountId: matches[0].accountId,
+      };
+    }
+
+    return {
+      needsSelection: true,
+      status: matches.length > 1 ? "ambiguous_account" : "account_not_found",
+      message: matches.length > 1
+        ? "More than one account matched that name."
+        : "I could not find that account.",
+      accounts,
+    };
+  }
+
+  return {
+    needsSelection: true,
+    status: "account_choice_required",
+    message: "Choose which account to use.",
+    accounts,
+  };
+}
+
+function normalizeTarget(value: string | undefined): string {
+  return (value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getInstitutionRemovalConfirmation(institutionName: string): string {
+  return `REMOVE ${institutionName.trim().toUpperCase()}`;
 }
 
 function getRefreshProvider(syncStatus: SyncStatus | null): FinancialProviderName | null {
@@ -628,13 +1139,116 @@ function getRefreshProvider(syncStatus: SyncStatus | null): FinancialProviderNam
   return null;
 }
 
-function getRepairablePlaidInstitution(syncStatus: SyncStatus | null) {
-  return syncStatus?.institutions.find((institution) => {
+function getProviderErrorCode(error: unknown): string | null {
+  if (error instanceof ProviderUnavailableError || error instanceof ProviderSyncError) {
+    return error.code;
+  }
+
+  return null;
+}
+
+function getProviderConnectErrorDetails(error: unknown): {
+  errorCode: string | null;
+  errorType: string | null;
+  errorRequestId: string | null;
+  errorKeys: string | null;
+  message: string;
+} {
+  const responsePayload = getErrorResponsePayload(error);
+  const directPayload = getDirectErrorPayload(error);
+  const payload = responsePayload ?? directPayload;
+  const errorCode =
+    getStringField(payload, "error_code") ??
+    getStringField(payload, "code") ??
+    getProviderErrorCode(error);
+  const errorType = getStringField(payload, "error_type");
+  const errorRequestId = getStringField(payload, "request_id");
+  const plaidMessage =
+    getStringField(payload, "display_message") ?? getStringField(payload, "error_message");
+  const directMessage = getStringField(directPayload, "message");
+  const stringMessage = typeof error === "string" && error.trim() ? error : null;
+  const errorKeys = payload ? Object.keys(payload).slice(0, 12).join(",") : null;
+
+  if (errorCode && plaidMessage) {
+    return {
+      errorCode,
+      errorType,
+      errorRequestId,
+      errorKeys,
+      message: sanitizeSensitiveText(`Plaid ${errorCode}: ${plaidMessage}`).slice(0, 240),
+    };
+  }
+
+  if (directMessage || stringMessage) {
+    return {
+      errorCode,
+      errorType,
+      errorRequestId,
+      errorKeys,
+      message: sanitizeSensitiveText(directMessage ?? stringMessage ?? "").slice(0, 240),
+    };
+  }
+
+  return {
+    errorCode,
+    errorType,
+    errorRequestId,
+    errorKeys,
+    message: getSafeErrorMessage(error, "Plaid connect session failed."),
+  };
+}
+
+function getErrorResponsePayload(error: unknown): Record<string, unknown> | null {
+  if (!error || typeof error !== "object" || !("response" in error)) {
+    return null;
+  }
+
+  const response = (error as { response?: unknown }).response;
+
+  if (!response || typeof response !== "object" || !("data" in response)) {
+    return null;
+  }
+
+  const data = (response as { data?: unknown }).data;
+
+  return data && typeof data === "object" && !Array.isArray(data)
+    ? data as Record<string, unknown>
+    : null;
+}
+
+function getDirectErrorPayload(error: unknown): Record<string, unknown> | null {
+  return error && typeof error === "object" && !Array.isArray(error)
+    ? error as Record<string, unknown>
+    : null;
+}
+
+function getStringField(payload: Record<string, unknown> | null, key: string): string | null {
+  const value = payload?.[key];
+
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
+function getThrownErrorName(error: unknown): string | null {
+  if (error instanceof Error) {
+    return error.name;
+  }
+
+  return getStringField(getDirectErrorPayload(error), "name");
+}
+
+function getRepairablePlaidInstitutions(syncStatus: SyncStatus | null) {
+  return (syncStatus?.institutions ?? []).filter((institution) => {
     if (institution.provider !== "plaid") {
       return false;
     }
 
-    return isRepairablePlaidErrorCode(institution.errorCode) || institution.status === "revoked";
+    return (
+      institution.isStale ||
+      institution.status === "failed" ||
+      institution.status === "stale" ||
+      institution.status === "revoked" ||
+      isRepairablePlaidErrorCode(institution.errorCode)
+    );
   });
 }
 

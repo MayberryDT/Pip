@@ -47,7 +47,7 @@ PLAID_ENV=sandbox
   it("allows Netlify AI Gateway base URL instead of a direct OpenAI key", async () => {
     const cwd = createTempProject(`
 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
-NEXT_PUBLIC_SITE_URL=https://pip-mayberrydt.netlify.app
+NEXT_PUBLIC_SITE_URL=https://spendwithpip.com
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
 PIP_OPERATOR_TOKEN=operator-token
@@ -67,7 +67,7 @@ OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
   it("allows Netlify AI Gateway explicit injected variables without a direct OpenAI key", async () => {
     const cwd = createTempProject(`
 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
-NEXT_PUBLIC_SITE_URL=https://pip-mayberrydt.netlify.app
+NEXT_PUBLIC_SITE_URL=https://spendwithpip.com
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
 PIP_OPERATOR_TOKEN=operator-token
@@ -105,7 +105,7 @@ OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
 
     expect(result.status).toBe(1);
     expect(output).toContain(
-      "- NEXT_PUBLIC_SITE_URL must be the production Netlify origin, not localhost.",
+      "- NEXT_PUBLIC_SITE_URL must be the production app origin, not localhost.",
     );
     expect(output).toContain("- PLAID_REDIRECT_URI must not point to localhost in beta mode.");
   });
@@ -114,14 +114,14 @@ OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
     const cwd = createTempProject(`
 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
-NEXT_PUBLIC_SITE_URL=https://pip-mayberrydt.netlify.app
+NEXT_PUBLIC_SITE_URL=https://spendwithpip.com
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
 PIP_OPERATOR_TOKEN=operator-token
 PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=production
-PLAID_REDIRECT_URI=https://preview--pip-mayberrydt.netlify.app/plaid/oauth
+PLAID_REDIRECT_URI=https://preview--spendwithpip.netlify.app/plaid/oauth
 OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
 `);
 

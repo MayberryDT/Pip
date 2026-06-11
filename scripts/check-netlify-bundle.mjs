@@ -10,6 +10,7 @@ export function runNetlifyBundleCheck({
   stderr = console.error,
 } = {}) {
   const forbiddenEntries = [];
+  const missingEntries = [];
 
   for (const directory of [".netlify/functions-internal", ".netlify/functions"]) {
     const absoluteDirectory = join(cwd, directory);
@@ -36,6 +37,8 @@ export function runNetlifyBundleCheck({
     }
   }
 
+  missingEntries.push(...findMissingNextServerStaticEntries(cwd));
+
   if (forbiddenEntries.length > 0) {
     stderr("Netlify function artifacts include forbidden env files:");
     for (const entry of forbiddenEntries) {
@@ -44,7 +47,16 @@ export function runNetlifyBundleCheck({
     return 1;
   }
 
+  if (missingEntries.length > 0) {
+    stderr("Netlify Next server handler is missing required static assets:");
+    for (const entry of missingEntries) {
+      stderr(`- ${entry}`);
+    }
+    return 1;
+  }
+
   stdout("No env files found in Netlify function artifacts.");
+  stdout("Netlify Next server handler includes .next/static assets.");
   return 0;
 }
 
@@ -80,6 +92,39 @@ function isForbiddenEnvPath(filePath) {
   const name = basename(filePath);
 
   return name !== ".env.example" && /^\.env(?:\.|$)/.test(name);
+}
+
+function findMissingNextServerStaticEntries(cwd) {
+  const handlerDirectory = join(cwd, ".netlify/functions-internal/___netlify-server-handler");
+  const sourceStaticDirectory = join(cwd, ".next/static");
+  const handlerStaticDirectory = join(handlerDirectory, ".next/static");
+  const handlerZip = join(cwd, ".netlify/functions/___netlify-server-handler.zip");
+  const missingEntries = [];
+
+  if (!existsSync(handlerDirectory) || !existsSync(sourceStaticDirectory)) {
+    return missingEntries;
+  }
+
+  if (!hasFiles(handlerStaticDirectory)) {
+    missingEntries.push(".netlify/functions-internal/___netlify-server-handler/.next/static");
+  }
+
+  if (existsSync(handlerZip)) {
+    const zipEntries = listZipEntries(handlerZip, cwd);
+    if (!zipEntries.some((entry) => entry.startsWith(".next/static/"))) {
+      missingEntries.push(".netlify/functions/___netlify-server-handler.zip:.next/static");
+    }
+  }
+
+  return missingEntries;
+}
+
+function hasFiles(directory) {
+  if (!existsSync(directory)) {
+    return false;
+  }
+
+  return findFiles(directory).length > 0;
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

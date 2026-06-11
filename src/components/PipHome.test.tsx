@@ -43,6 +43,24 @@ describe("PipHome", () => {
     expect(markup).not.toContain("Data controls");
   });
 
+  it("pins account management as the first live ready-state prompt chip", () => {
+    const chips = __pipHomeTestHooks.getDefaultPromptChips(
+      { status: "ready", email: "tester@example.com" },
+      true,
+      __pipHomeTestHooks.getDemoPipCashResult(),
+    );
+
+    expect(chips.slice(0, 3).map((chip) => chip.id)).toEqual([
+      "manage-accounts",
+      "ai-what-number-means",
+      "ai-why-today",
+    ]);
+    expect(chips[0]).toMatchObject({
+      label: "Manage accounts",
+      prompt: "Show connected accounts",
+    });
+  });
+
   it("shows Plaid OAuth completion as a same-screen Pip message", () => {
     const markup = renderToStaticMarkup(
       <PipHome

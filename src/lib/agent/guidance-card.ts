@@ -133,6 +133,7 @@ export function getBlockedGuidanceDomain(text: string): string | null {
   const normalized = normalizeText(text);
   const patterns: Array<[RegExp, string]> = [
     [/\b(bitcoin|crypto|cryptocurrency|ethereum|token)\b/, "crypto"],
+    [/\b(buy|sell|hold|invest in)\b.{0,32}\b(nvidia|nvda|tesla|tsla|apple|aapl|microsoft|msft)\b/, "securities"],
     [/\b(buy|sell|hold)\b.{0,32}\b(stocks?|shares?|etf|fund|securities?)\b|\binvest in\b.{0,32}\b(stocks?|shares?|etf|fund|securities?)\b|\bshares? of\b/, "securities"],
     [/\b(tax|taxes|deduct|deduction|write[- ]?off|irs)\b/, "tax"],
     [/\b(legal|lawyer|sue|lawsuit)\b/, "legal"],

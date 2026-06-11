@@ -7,11 +7,13 @@ import { recordProductEvent } from "@/lib/data/product-events";
 import type {
   FinancialDataProvider,
   FinancialProviderName,
+  ProviderInstitutionSyncFailure,
   ProviderInstitutionSyncResult,
   ProviderInstitutionSyncSuccess,
 } from "@/lib/providers/FinancialDataProvider";
 import { ProviderSyncError, type ProviderConnectionStatus } from "@/lib/providers/provider-errors";
 import { getFinancialDataProvider, ProviderUnavailableError } from "@/lib/providers/provider-registry";
+import { sanitizeSensitiveText } from "@/lib/security/error-messages";
 import type { Account, FinancialSnapshot, Transaction } from "@/lib/types";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
@@ -83,7 +85,11 @@ export async function runManualSync(
     const failures = syncResults.filter((result) => result.type === "failure");
 
     if (successes.length === 0) {
-      throw failures[0]?.error ?? new Error("Provider sync returned no connected institutions.");
+      const firstFailure = failures[0];
+
+      throw firstFailure
+        ? toProviderSyncError(input.provider, firstFailure)
+        : new Error("Provider sync returned no connected institutions.");
     }
 
     const settings = await upsertDefaultSettings(supabase, input.userId, now);
@@ -98,6 +104,7 @@ export async function runManualSync(
         provider: input.provider,
         institutionId: success.connection.institutionId,
         institutionName: success.connection.institutionName,
+        providerInstitutionId: success.connection.providerInstitutionId,
         status: success.connection.status,
         now,
       });
@@ -329,6 +336,7 @@ async function upsertInstitution(
     provider: FinancialProviderName;
     institutionId?: string;
     institutionName: string;
+    providerInstitutionId?: string;
     status: "connected" | "mocked";
     now: Date;
   },
@@ -351,6 +359,8 @@ async function upsertInstitution(
 
   const staleAfter = new Date(input.now.getTime() + STALE_AFTER_MS).toISOString();
   const payload = {
+    institution_name: input.institutionName,
+    provider_institution_id: input.providerInstitutionId ?? existing?.provider_institution_id ?? null,
     status: input.status,
     last_successful_sync_at: input.now.toISOString(),
     stale_after: staleAfter,
@@ -375,13 +385,12 @@ async function upsertInstitution(
   }
 
   const { data, error } = await supabase
-    .from("connected_institutions")
-    .insert({
-      user_id: input.userId,
-      provider: input.provider,
-      institution_name: input.institutionName,
-      ...payload,
-    })
+      .from("connected_institutions")
+      .insert({
+        user_id: input.userId,
+        provider: input.provider,
+        ...payload,
+      })
     .select("*")
     .single();
 
@@ -400,6 +409,32 @@ async function upsertAccounts(
     accounts: Account[];
   },
 ): Promise<Map<string, string>> {
+  const providerAccountIds = new Set(input.accounts.map((account) => account.id));
+  const { data: existingAccounts, error: existingError } = await supabase
+    .from("accounts")
+    .select("id, provider_account_id")
+    .eq("user_id", input.userId)
+    .eq("institution_id", input.institutionId);
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  const inactiveAccountIds = (existingAccounts ?? [])
+    .filter((account) => !providerAccountIds.has(account.provider_account_id))
+    .map((account) => account.id);
+
+  if (inactiveAccountIds.length > 0) {
+    await markAccountsInactive(supabase, {
+      userId: input.userId,
+      accountIds: inactiveAccountIds,
+    });
+  }
+
+  if (input.accounts.length === 0) {
+    return new Map();
+  }
+
   const rows = input.accounts.map((account) => ({
     user_id: input.userId,
     institution_id: input.institutionId,
@@ -411,6 +446,7 @@ async function upsertAccounts(
     available_balance_cents: account.availableBalanceCents ?? null,
     last_four: account.lastFour ?? null,
     is_protected_savings: account.isProtectedSavings ?? false,
+    active: true,
     raw_provider_data: {} satisfies Json,
   }));
   const { data, error } = await supabase
@@ -425,6 +461,46 @@ async function upsertAccounts(
   }
 
   return new Map((data ?? []).map((row) => [row.provider_account_id, row.id]));
+}
+
+async function markAccountsInactive(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    accountIds: string[];
+  },
+) {
+  const now = new Date().toISOString();
+  const { error: accountError } = await supabase
+    .from("accounts")
+    .update({
+      active: false,
+      updated_at: now,
+    })
+    .eq("user_id", input.userId)
+    .in("id", input.accountIds);
+
+  if (accountError) {
+    throw accountError;
+  }
+
+  const preferenceRows = input.accountIds.map((accountId) => ({
+    user_id: input.userId,
+    account_id: accountId,
+    include_in_pip_cash: false,
+    hidden_reason: "provider_unselected",
+    updated_at: now,
+  }));
+
+  const { error: preferenceError } = await supabase
+    .from("account_preferences")
+    .upsert(preferenceRows, {
+      onConflict: "user_id,account_id",
+    });
+
+  if (preferenceError) {
+    throw preferenceError;
+  }
 }
 
 async function upsertTransactions(
@@ -594,6 +670,9 @@ async function recordProviderFailure(
     ...mappedFailure,
     institutionId: mappedFailure.institutionId ?? input.institutionId,
     institutionName: mappedFailure.institutionName ?? input.institutionName,
+    status:
+      mappedFailure.status ??
+      (input.institutionId || input.institutionName ? "failed" : undefined),
   };
 
   await markInstitutionSyncFailure(supabase, {
@@ -697,6 +776,12 @@ function getProviderFailure(provider: FinancialProviderName, error: unknown): Pr
     };
   }
 
+  const structuredProviderError = getStructuredProviderError(provider, error);
+
+  if (structuredProviderError) {
+    return structuredProviderError;
+  }
+
   return {
     provider,
     code: "manual-sync-error",
@@ -705,10 +790,147 @@ function getProviderFailure(provider: FinancialProviderName, error: unknown): Pr
   };
 }
 
+function toProviderSyncError(
+  provider: FinancialProviderName,
+  failure: ProviderInstitutionSyncFailure,
+): ProviderSyncError {
+  const mappedFailure = getProviderFailure(provider, failure.error);
+
+  return new ProviderSyncError({
+    provider: mappedFailure.provider,
+    code: mappedFailure.code,
+    message: mappedFailure.message,
+    status: mappedFailure.status ?? "failed",
+    institutionId: mappedFailure.institutionId ?? failure.institutionId,
+    institutionName: mappedFailure.institutionName ?? failure.institutionName,
+    repairRequired: mappedFailure.repairRequired,
+  });
+}
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
-    return error.message.slice(0, 240);
+    return sanitizeSyncErrorMessage(error.message);
   }
 
-  return "Unknown sync error.";
+  const payload = getErrorPayload(error);
+  const message = getStringField(payload, "message") ??
+    getStringField(payload, "error_message") ??
+    getStringField(payload, "display_message") ??
+    (typeof error === "string" && error.trim() ? error : null);
+
+  return sanitizeSyncErrorMessage(message ?? "Unknown sync error.");
+}
+
+function getStructuredProviderError(
+  provider: FinancialProviderName,
+  error: unknown,
+): ProviderFailure | null {
+  const payload = getErrorPayload(error);
+  const rawCode = getStringField(payload, "error_code") ?? getStringField(payload, "code");
+  const rawMessage =
+    getStringField(payload, "display_message") ??
+    getStringField(payload, "error_message") ??
+    getStringField(payload, "message");
+
+  if (!rawCode && !rawMessage) {
+    return null;
+  }
+
+  const code = rawCode ? normalizeProviderErrorCode(rawCode) : "manual-sync-error";
+  const plaidMapping = provider === "plaid" && rawCode ? getPlaidFailureMapping(rawCode) : null;
+  const message = plaidMapping?.message ??
+    (rawMessage
+      ? sanitizeSyncErrorMessage(rawMessage)
+      : sanitizeSyncErrorMessage(`${provider} sync failed with ${rawCode}.`));
+
+  return {
+    provider,
+    code,
+    message,
+    status: plaidMapping?.status ?? (rawCode ? "failed" : undefined),
+    repairRequired: plaidMapping?.repairRequired ?? false,
+  };
+}
+
+function getPlaidFailureMapping(errorCode: string): {
+  status: ProviderConnectionStatus;
+  message?: string;
+  repairRequired: boolean;
+} {
+  switch (errorCode.trim().toUpperCase().replace(/-/g, "_")) {
+    case "ITEM_LOGIN_REQUIRED":
+    case "INVALID_CREDENTIALS":
+    case "INVALID_MFA":
+    case "ITEM_LOCKED":
+    case "MFA_NOT_SUPPORTED":
+    case "USER_SETUP_REQUIRED":
+      return {
+        status: "failed",
+        message: "Plaid needs this bank connection repaired. Reconnect the bank to refresh access.",
+        repairRequired: true,
+      };
+    case "INVALID_ACCESS_TOKEN":
+    case "ITEM_NOT_FOUND":
+    case "USER_PERMISSION_REVOKED":
+    case "USER_ACCOUNT_REVOKED":
+    case "ACCESS_NOT_GRANTED":
+      return {
+        status: "revoked",
+        message: "Plaid access for this bank was revoked. Reconnect the bank to continue syncing.",
+        repairRequired: true,
+      };
+    case "NO_ACCOUNTS":
+      return {
+        status: "failed",
+        message: "Plaid did not return an eligible account. Reconnect and choose the accounts Pip should use.",
+        repairRequired: true,
+      };
+    case "PRODUCT_NOT_READY":
+      return {
+        status: "stale",
+        message: "Plaid is still preparing this bank's transaction data. Try syncing again in a few minutes.",
+        repairRequired: false,
+      };
+    case "TRANSACTIONS_SYNC_MUTATION_DURING_PAGINATION":
+      return {
+        status: "stale",
+        message: "Plaid transaction data changed during sync. Try syncing again.",
+        repairRequired: false,
+      };
+    default:
+      return {
+        status: "failed",
+        repairRequired: false,
+      };
+  }
+}
+
+function getErrorPayload(error: unknown): Record<string, unknown> | null {
+  const direct = asRecord(error);
+  const response = asRecord(direct?.response);
+  const data = asRecord(response?.data);
+
+  return data ?? direct;
+}
+
+function getStringField(payload: Record<string, unknown> | null, key: string): string | null {
+  const value = payload?.[key];
+
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+
+  return value as Record<string, unknown>;
+}
+
+function normalizeProviderErrorCode(errorCode: string): string {
+  return errorCode.trim().toLowerCase().replace(/_/g, "-").slice(0, 120);
+}
+
+function sanitizeSyncErrorMessage(message: string): string {
+  return sanitizeSensitiveText(message).slice(0, 240);
 }

@@ -10,7 +10,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
   provider: z.enum(["mock", "teller", "plaid"]),
-  reason: z.enum(["manual", "repair"]).default("manual"),
+  reason: z.enum(["manual", "repair", "account_selection"]).default("manual"),
 });
 
 export async function POST(request: Request) {
@@ -87,10 +87,10 @@ async function shouldBypassRateLimitForRepair(
   input: {
     userId: string;
     provider: FinancialProviderName;
-    reason: "manual" | "repair";
+    reason: "manual" | "repair" | "account_selection";
   },
 ): Promise<boolean> {
-  if (input.reason !== "repair") {
+  if (input.reason !== "repair" && input.reason !== "account_selection") {
     return false;
   }
 

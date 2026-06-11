@@ -4,7 +4,15 @@ import type {
   SpendingBreakdown,
   SpendingBreakdownGroup,
 } from "@/lib/pip-cash/insights";
-import type { AccountBalanceSummary, PipCashDriver, PipCashResult, RollingWindow, Transaction } from "@/lib/types";
+import type {
+  AccountBalanceSummary,
+  AccountKind,
+  PipCashDriver,
+  PipCashResult,
+  RollingWindow,
+  Transaction,
+} from "@/lib/types";
+import type { PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
 
 export type PromptChip = {
   id: string;
@@ -17,7 +25,8 @@ export type PlaidClientActionConfig = {
   linkToken: string;
   environment: "sandbox" | "production";
   products: string[];
-  mode: "connect" | "repair";
+  mode: PlaidLinkMode;
+  institutionId?: string;
 };
 
 export type AgentClientAction =
@@ -146,6 +155,34 @@ export type AgentCard =
       type: "connect_account";
       title: string;
       detail: string;
+    }
+  | {
+      type: "account_connections";
+      title: string;
+      institutions: Array<{
+        institutionId: string;
+        institutionName: string;
+        provider: "plaid" | "teller" | "mock";
+        status: "connected" | "mocked" | "stale" | "failed" | "revoked";
+        lastSuccessfulSyncAt?: string | null;
+        accounts: Array<{
+          accountId: string;
+          name: string;
+          kind: AccountKind;
+          lastFour?: string;
+          includedInPipCash: boolean;
+          isProtectedSavings: boolean;
+          active: boolean;
+          roleLabel: string;
+          warning?: string;
+        }>;
+        actions: Array<{
+          id: string;
+          label: string;
+          prompt: string;
+          style: "primary" | "secondary" | "danger";
+        }>;
+      }>;
     };
 
 export type AgentResponse = {
@@ -162,6 +199,7 @@ export type AgentResponse = {
     transport?: "netlify-ai-gateway" | "openai-direct" | "custom-openai-compatible";
     guidance?: {
       validationOutcome: "not_requested" | "context_built" | "shown" | "repaired" | "rejected";
+      guidanceSource?: "model_draft" | "deterministic_fallback" | "none";
       metricVersion?: "v2";
       state?: string;
       confidence?: string;

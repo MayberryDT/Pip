@@ -12,6 +12,7 @@ import {
 } from "@/lib/agent/ai-agent";
 import { createMockModelClient } from "../../../tests/helpers/mock-agent-runtime";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
+import { buildFinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
 import { fakeSnapshot } from "@/lib/fake-data";
 
 afterEach(() => {
@@ -86,6 +87,7 @@ describe("runAIAgent", () => {
     });
     expect(response.audit.guidance).toMatchObject({
       validationOutcome: "context_built",
+      guidanceSource: "none",
       metricVersion: "v2",
     });
   });
@@ -119,10 +121,46 @@ describe("runAIAgent", () => {
     expect(response.message.toLowerCase()).toContain("my read");
     expect(response.audit.guidance).toMatchObject({
       validationOutcome: "shown",
+      guidanceSource: "model_draft",
       metricVersion: "v2",
       state: expect.any(String),
       evidenceIds: expect.arrayContaining(["spendable-today"]),
     });
+  });
+
+  it("allows model-authored guidance text without forcing a deterministic card", () => {
+    const selection = __agentTestHooks.selectGuidanceCard(
+      {
+        message: "My read: you look steady with the main holds already counted.",
+        responseMode: "guidance",
+        promptChips: [],
+      },
+      createGuidanceSelectorContext(),
+    );
+
+    expect(selection).toEqual({
+      card: null,
+      rejectionReason: null,
+      guidanceSource: "none",
+    });
+  });
+
+  it("uses deterministic guidance cards only for fallback final output", () => {
+    const selection = __agentTestHooks.selectGuidanceCard(
+      {
+        message: "My read: I used the reliable fallback read.",
+        responseMode: "guidance",
+        promptChips: [],
+      },
+      createGuidanceSelectorContext({ fallbackFinalOutput: true }),
+    );
+
+    expect(selection.card).toMatchObject({
+      type: "guidance_card",
+      title: "My read",
+    });
+    expect(selection.rejectionReason).toBeNull();
+    expect(selection.guidanceSource).toBe("deterministic_fallback");
   });
 
   it("combines purchase simulation with guidance context for bank-balance assumption prompts", async () => {
@@ -485,6 +523,38 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("routes brand-new bank prompts to connect instead of repair", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Add another brand new bank with Plaid. Do not repair the existing bank.",
+      }),
+    ).toMatchObject({
+      toolName: "start_new_account_connection",
+      requireCard: false,
+    });
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Repair my bank connection",
+      }),
+    ).toMatchObject({
+      toolName: "repair_account_connection",
+      requireCard: false,
+    });
+  });
+
+  it("routes the manage accounts prompt chip straight to connected accounts", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Show connected accounts",
+        selectedPromptChipId: "manage-accounts",
+      }),
+    ).toMatchObject({
+      toolName: "get_connected_accounts",
+      requireCard: true,
+    });
+  });
+
   it("can discuss broad finance topics without pretending to show a card", async () => {
     const response = await runAIAgent(
       { message: "Let's talk about credit cards" },
@@ -587,25 +657,25 @@ describe("runAIAgent", () => {
     });
   });
 
-  it("lets oversized model guidance drafts reach the guidance validator", () => {
-    const parsed = agentFinalOutputSchema.parse({
-      message: "My read: the rows need trimming.",
-      responseMode: "guidance",
-      guidanceCardDraft: {
-        title: "My read",
-        stance: "watch",
-        summary: "Recent spending is running hot.",
-        rows: Array.from({ length: 4 }, (_, index) => ({
-          label: `Row ${index + 1}`,
-          detail: "Recent everyday spending is ahead of pace.",
-          tone: "warning",
-          evidenceIds: ["recent-spending-hot"],
-        })),
-      },
-      promptChips: [],
-    });
-
-    expect(parsed.guidanceCardDraft?.rows).toHaveLength(4);
+  it("rejects oversized model guidance drafts at the final output boundary", () => {
+    expect(() =>
+      agentFinalOutputSchema.parse({
+        message: "My read: the rows need trimming.",
+        responseMode: "guidance",
+        guidanceCardDraft: {
+          title: "My read",
+          stance: "watch",
+          summary: "Recent spending is running hot.",
+          rows: Array.from({ length: 4 }, (_, index) => ({
+            label: `Row ${index + 1}`,
+            detail: "Recent everyday spending is ahead of pace.",
+            tone: "warning",
+            evidenceIds: ["recent-spending-hot"],
+          })),
+        },
+        promptChips: [],
+      }),
+    ).toThrow();
   });
 
   it("allows model-authored guidance card drafts only through the typed draft field", () => {
@@ -833,19 +903,22 @@ describe("runAIAgent", () => {
   });
 
   it("accepts longer human-facing prompt chip labels at the schema boundary", () => {
-    expect(
-      agentFinalOutputSchema.parse({
-        message: "I can answer that.",
-        responseMode: "chat_only",
-        promptChips: [
-          {
-            id: "ai-spending-basic",
-            label: "How should I think about spending?",
-            prompt: "How should I think about spending?",
-          },
-        ],
-      }).promptChips[0]?.label,
-    ).toBe("How should I think about spending?");
+    const parsed = agentFinalOutputSchema.parse({
+      message: "I can answer that.",
+      responseMode: "chat_only",
+      promptChips: [
+        {
+          id: "ai-spending-basic",
+          label: "How should I think about spending?",
+          prompt: "How should I think about spending?",
+        },
+      ],
+    });
+    const firstChip = (parsed.promptChips ?? [])[0];
+
+    expect(typeof firstChip === "object" ? firstChip.label : firstChip).toBe(
+      "How should I think about spending?",
+    );
   });
 
   it("keeps broad personal-finance education chat-only", async () => {
@@ -1140,3 +1213,24 @@ describe("AI model configuration", () => {
     ).toBe("netlify-ai-gateway");
   });
 });
+
+function createGuidanceSelectorContext(
+  options: { fallbackFinalOutput?: boolean } = {},
+) {
+  return {
+    inputMessage: "How am I doing?",
+    requestKind: "chat",
+    onboardingState: { status: "ready", hasFinancialData: true },
+    conversationState: { shownCards: [], lastToolNames: [], promptChips: [] },
+    forcedTool: {
+      toolName: "get_financial_guidance_context",
+      args: {},
+      requireCard: true,
+    },
+    usedTools: ["get_financial_guidance_context"],
+    availableCards: [],
+    availablePromptChips: [],
+    guidanceContext: buildFinancialGuidanceContext(calculatePipCash(fakeSnapshot)),
+    fallbackFinalOutput: options.fallbackFinalOutput,
+  } as Parameters<typeof __agentTestHooks.selectGuidanceCard>[1];
+}

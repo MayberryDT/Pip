@@ -5,7 +5,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { runLiveSmokeEnvCheck } from "./check-live-smoke-env.mjs";
 
-const DEFAULT_LIVE_BASE_URL = "https://pip-mayberrydt.netlify.app";
+const DEFAULT_LIVE_BASE_URL = "https://spendwithpip.com";
 const DEFAULT_PROOF_REPORT = "/tmp/pip-live-proof.json";
 
 export function runLiveSmoke({
@@ -82,7 +82,7 @@ function writeProofReport({ path, env, requiresPlaid, stdout }) {
     plaidAutomationEnabled: env.PIP_LIVE_COMPLETE_PLAID === "1",
     command: "npm run test:e2e:live:final",
     evidence:
-      "The live Playwright smoke passed against production with authenticated session, Plaid exchange/sync/status checks, Spendable Cash Today number, and deployed AI tool usage assertions.",
+      "The live Playwright smoke passed against production with authenticated session, Plaid exchange/sync/status checks, /api/pip-cash and /api/free-cash assertions, visible Spendable Cash Today rebrand checks, guidance-path assertions, and deployed AI tool usage assertions.",
   };
 
   writeFileSync(path, `${JSON.stringify(report, null, 2)}\n`);
@@ -105,7 +105,7 @@ function extractDeployId(url) {
     return null;
   }
 
-  const match = url.match(/^https:\/\/([a-f0-9]+)--pip-mayberrydt\.netlify\.app/);
+  const match = url.match(/^https:\/\/([a-f0-9]+)--spendwithpip\.netlify\.app/);
 
   return match?.[1] ?? null;
 }

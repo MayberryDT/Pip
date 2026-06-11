@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import {
+  cpSync,
   copyFileSync,
   existsSync,
-  mkdirSync,
   mkdtempSync,
   readdirSync,
   rmSync,
@@ -15,17 +15,28 @@ import { basename, join } from "node:path";
 const root = process.cwd();
 const backupDirectory = mkdtempSync(join(tmpdir(), "pip-netlify-env-"));
 const movedFiles = [];
+let deployStatus = 0;
 
 try {
   hideLocalEnvFiles();
   cleanGeneratedNetlifyArtifacts();
-  run("netlify", ["deploy", "--build", ...getDeployArgs(process.argv.slice(2))], getModeEnv());
+  deployStatus = run("netlify", ["build", "--context", getBuildContext(process.argv.slice(2))], getModeEnv());
+  if (deployStatus === 0) {
+    deployStatus = prepareGeneratedNetlifyArtifacts();
+  }
+  if (deployStatus === 0) {
+    deployStatus = run(
+      "netlify",
+      ["deploy", "--no-build", "--dir", ".netlify/static", "--functions", ".netlify/functions", ...getDeployArgs(process.argv.slice(2))],
+      getModeEnv(),
+    );
+  }
 } finally {
   restoreLocalEnvFiles();
   rmSync(backupDirectory, { recursive: true, force: true });
 }
 
-run("node", ["scripts/check-netlify-bundle.mjs"]);
+exitOnFailure(deployStatus);
 
 function hideLocalEnvFiles() {
   for (const fileName of readdirSync(root)) {
@@ -64,9 +75,48 @@ function cleanGeneratedNetlifyArtifacts() {
   }
 }
 
-function run(command, args, extraEnv = {}) {
+function prepareGeneratedNetlifyArtifacts() {
+  const staticCopyStatus = copyNextStaticIntoServerFunction();
+  if (staticCopyStatus !== 0) {
+    return staticCopyStatus;
+  }
+
+  rmSync(join(root, ".netlify/static/cache"), {
+    recursive: true,
+    force: true,
+  });
+
+  return run("node", ["scripts/check-netlify-bundle.mjs"]);
+}
+
+function copyNextStaticIntoServerFunction() {
+  const handlerDirectory = join(root, ".netlify/functions-internal/___netlify-server-handler");
+  const source = join(root, ".next/static");
+  const target = join(handlerDirectory, ".next/static");
+  const zipPath = join(root, ".netlify/functions/___netlify-server-handler.zip");
+
+  if (!existsSync(handlerDirectory)) {
+    return 0;
+  }
+
+  if (!existsSync(source)) {
+    console.error("Netlify Next server handler exists, but .next/static was not generated.");
+    return 1;
+  }
+
+  rmSync(target, { recursive: true, force: true });
+  cpSync(source, target, { recursive: true });
+
+  if (!existsSync(zipPath)) {
+    return 0;
+  }
+
+  return run("zip", ["-qr", zipPath, ".next/static"], {}, handlerDirectory);
+}
+
+function run(command, args, extraEnv = {}, cwd = root) {
   const result = spawnSync(command, args, {
-    cwd: root,
+    cwd,
     env: {
       ...process.env,
       ...extraEnv,
@@ -74,17 +124,31 @@ function run(command, args, extraEnv = {}) {
     stdio: "inherit",
   });
 
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+  return result.status ?? 1;
+}
+
+function exitOnFailure(status) {
+  if (status !== 0) {
+    process.exit(status);
   }
 }
 
 function getDeployArgs(args) {
-  if (args.includes("--skip-functions-cache")) {
-    return args;
+  return args.filter((arg) => arg !== "--build" && arg !== "--skip-functions-cache");
+}
+
+function getBuildContext(args) {
+  const contextFlagIndex = args.findIndex((arg) => arg === "--context");
+  if (contextFlagIndex >= 0 && args[contextFlagIndex + 1]) {
+    return args[contextFlagIndex + 1];
   }
 
-  return ["--skip-functions-cache", ...args];
+  const inlineContext = args.find((arg) => arg.startsWith("--context="));
+  if (inlineContext) {
+    return inlineContext.slice("--context=".length);
+  }
+
+  return args.includes("--prod") || args.includes("--prod-if-unlocked") ? "production" : "deploy-preview";
 }
 
 function getModeEnv() {

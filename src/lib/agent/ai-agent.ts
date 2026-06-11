@@ -40,6 +40,7 @@ import {
   getSpendableCashTodayState,
 } from "@/lib/pip-cash/spendable-cash-today";
 import { formatMoney, formatMoneyWithCents } from "@/lib/money";
+import type { PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
 import type { FinancialSnapshot } from "@/lib/types";
 
 export const PIP_AI_MODEL = "gpt-5-nano";
@@ -89,6 +90,8 @@ export type PipAgentActionResult = {
   message?: string;
   protectedSavingsMonthlyCents?: number;
   pipCashTodayCents?: number;
+  exactConfirmation?: string;
+  cards?: AgentCard[];
   clientActionType?: AgentClientAction["type"];
   clientAction?: AgentClientAction;
 };
@@ -97,7 +100,31 @@ export type PipAgentActions = {
   saveProtectedSavings?: (input: {
     amountCents: number;
   }) => Promise<PipAgentActionResult>;
-  startPlaidLink?: () => Promise<PipAgentActionResult>;
+  getConnectedAccounts?: () => Promise<PipAgentActionResult>;
+  startPlaidLink?: (input?: {
+    mode?: PlaidLinkMode;
+    institutionId?: string;
+    institutionName?: string;
+  }) => Promise<PipAgentActionResult>;
+  setAccountInclusion?: (input: {
+    accountId?: string;
+    accountName?: string;
+    includeInPipCash: boolean;
+  }) => Promise<PipAgentActionResult>;
+  setAccountProtectedSavings?: (input: {
+    accountId?: string;
+    accountName?: string;
+    isProtectedSavings: boolean;
+  }) => Promise<PipAgentActionResult>;
+  requestRemoveInstitutionConfirmation?: (input: {
+    institutionId?: string;
+    institutionName?: string;
+  }) => Promise<PipAgentActionResult>;
+  removeInstitution?: (input: {
+    institutionId?: string;
+    institutionName?: string;
+    confirmationText: string;
+  }) => Promise<PipAgentActionResult>;
   refreshFinancialData?: () => Promise<PipAgentActionResult>;
   deleteUserData?: () => Promise<PipAgentActionResult>;
 };
@@ -137,6 +164,7 @@ type PipAgentContext = {
   availablePromptChips: PromptChip[];
   guidanceContext?: FinancialGuidanceContext;
   guidanceCardRejectionReason?: string;
+  fallbackFinalOutput?: boolean;
   clientAction?: AgentClientAction;
 };
 
@@ -145,6 +173,14 @@ type DeterministicAgentToolName =
   | "start_google_oauth"
   | "save_protected_savings"
   | "start_plaid_link"
+  | "get_connected_accounts"
+  | "start_new_account_connection"
+  | "repair_account_connection"
+  | "start_account_selection_update"
+  | "set_account_inclusion"
+  | "set_account_protected_savings"
+  | "request_remove_institution_confirmation"
+  | "remove_institution"
   | "refresh_financial_data"
   | "request_delete_data_confirmation"
   | "delete_user_data"
@@ -179,6 +215,23 @@ type AgentResponseRepair = {
 const emptyToolParameters = z.object({});
 const saveProtectedSavingsParameters = z.object({
   amount_cents: z.number().int().min(0).max(10_000_000),
+});
+const institutionTargetParameters = z.object({
+  institution_id: z.string().min(1).max(120).optional(),
+  institution_name: z.string().min(1).max(160).optional(),
+});
+const accountInclusionParameters = z.object({
+  account_id: z.string().min(1).max(120).optional(),
+  account_name: z.string().min(1).max(160).optional(),
+  include_in_pip_cash: z.boolean(),
+});
+const protectedSavingsAccountParameters = z.object({
+  account_id: z.string().min(1).max(120).optional(),
+  account_name: z.string().min(1).max(160).optional(),
+  is_protected_savings: z.boolean(),
+});
+const removeInstitutionParameters = institutionTargetParameters.extend({
+  confirmation_text: z.string().min(1).max(160),
 });
 const simulatePurchaseParameters = z.object({
   amount_cents: z.number().int().positive().max(1000000),
@@ -308,6 +361,12 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
 
   if (!normalized) {
     return undefined;
+  }
+
+  const accountManagementTool = getAccountManagementForcedTool(message, normalized);
+
+  if (accountManagementTool) {
+    return accountManagementTool;
   }
 
   if (amountCents === null && isFinancialGuidancePrompt(normalized)) {
@@ -512,6 +571,14 @@ function getForcedPromptChipTool(
     };
   }
 
+  if (selectedPromptChipId === "manage-accounts") {
+    return {
+      toolName: "get_connected_accounts",
+      args: {},
+      requireCard: true,
+    };
+  }
+
   if (selectedPromptChipId === "use-default-savings") {
     return {
       toolName: "save_protected_savings",
@@ -701,6 +768,253 @@ function createPipTools() {
         }
 
         return applyActionResult(context, await context.actions.startPlaidLink());
+      },
+    }),
+    tool<typeof emptyToolParameters, PipAgentContext>({
+      name: "get_connected_accounts",
+      description:
+        "Show connected institutions and accounts, including whether accounts are active, included in Spendable Cash Today, protected savings, excluded, or need repair.",
+      parameters: emptyToolParameters,
+      strict: true,
+      async execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_connected_accounts");
+
+        const unavailable = getAccountManagementUnavailableResult(context);
+
+        if (unavailable) {
+          return unavailable;
+        }
+
+        if (!context.actions?.getConnectedAccounts) {
+          return {
+            ok: false,
+            status: "account_management_unavailable",
+            message: "Account management is not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.getConnectedAccounts());
+      },
+    }),
+    tool<typeof emptyToolParameters, PipAgentContext>({
+      name: "start_new_account_connection",
+      description:
+        "Start Plaid connect mode to add another bank or card institution. Use when the user wants to add or connect a new account, bank, or card.",
+      parameters: emptyToolParameters,
+      strict: true,
+      async execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "start_new_account_connection");
+
+        const unavailable = getAccountManagementUnavailableResult(context);
+
+        if (unavailable) {
+          return unavailable;
+        }
+
+        if (!context.actions?.startPlaidLink) {
+          return {
+            ok: false,
+            status: "plaid_unavailable",
+            message: "Plaid is not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.startPlaidLink({
+          mode: "connect",
+        }));
+      },
+    }),
+    tool<typeof institutionTargetParameters, PipAgentContext>({
+      name: "repair_account_connection",
+      description:
+        "Open Plaid update mode to repair one existing institution. Use when the user asks to reconnect, fix, repair, or restore a specific bank connection.",
+      parameters: institutionTargetParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "repair_account_connection", input, institutionTargetParameters);
+        recordTool(context, "repair_account_connection");
+
+        const unavailable = getAccountManagementUnavailableResult(context);
+
+        if (unavailable) {
+          return unavailable;
+        }
+
+        if (!context.actions?.startPlaidLink) {
+          return {
+            ok: false,
+            status: "plaid_unavailable",
+            message: "Plaid is not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.startPlaidLink({
+          mode: "repair",
+          institutionId: toolInput.institution_id,
+          institutionName: toolInput.institution_name,
+        }));
+      },
+    }),
+    tool<typeof institutionTargetParameters, PipAgentContext>({
+      name: "start_account_selection_update",
+      description:
+        "Open Plaid update mode with account selection enabled for an existing institution. Use when the user wants to change which accounts Pip can see at one bank.",
+      parameters: institutionTargetParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "start_account_selection_update", input, institutionTargetParameters);
+        recordTool(context, "start_account_selection_update");
+
+        const unavailable = getAccountManagementUnavailableResult(context);
+
+        if (unavailable) {
+          return unavailable;
+        }
+
+        if (!context.actions?.startPlaidLink) {
+          return {
+            ok: false,
+            status: "plaid_unavailable",
+            message: "Plaid is not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.startPlaidLink({
+          mode: "account_selection",
+          institutionId: toolInput.institution_id,
+          institutionName: toolInput.institution_name,
+        }));
+      },
+    }),
+    tool<typeof accountInclusionParameters, PipAgentContext>({
+      name: "set_account_inclusion",
+      description:
+        "Include or exclude one account from Spendable Cash Today without disconnecting the provider. Use when the user says ignore, stop using, use again, include, or exclude a specific account.",
+      parameters: accountInclusionParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "set_account_inclusion", input, accountInclusionParameters);
+        recordTool(context, "set_account_inclusion");
+
+        const unavailable = getAccountManagementUnavailableResult(context);
+
+        if (unavailable) {
+          return unavailable;
+        }
+
+        if (!context.actions?.setAccountInclusion) {
+          return {
+            ok: false,
+            status: "account_management_unavailable",
+            message: "Account preferences are not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.setAccountInclusion({
+          accountId: toolInput.account_id,
+          accountName: toolInput.account_name,
+          includeInPipCash: toolInput.include_in_pip_cash,
+        }));
+      },
+    }),
+    tool<typeof protectedSavingsAccountParameters, PipAgentContext>({
+      name: "set_account_protected_savings",
+      description:
+        "Set or unset protected-savings treatment for one account. Use when the user asks to make an account protected savings or to stop treating a savings account as protected.",
+      parameters: protectedSavingsAccountParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "set_account_protected_savings", input, protectedSavingsAccountParameters);
+        recordTool(context, "set_account_protected_savings");
+
+        const unavailable = getAccountManagementUnavailableResult(context);
+
+        if (unavailable) {
+          return unavailable;
+        }
+
+        if (!context.actions?.setAccountProtectedSavings) {
+          return {
+            ok: false,
+            status: "account_management_unavailable",
+            message: "Account preferences are not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.setAccountProtectedSavings({
+          accountId: toolInput.account_id,
+          accountName: toolInput.account_name,
+          isProtectedSavings: toolInput.is_protected_savings,
+        }));
+      },
+    }),
+    tool<typeof institutionTargetParameters, PipAgentContext>({
+      name: "request_remove_institution_confirmation",
+      description:
+        "Return the exact confirmation required before removing one institution. Use before removing a bank/card institution unless the user already typed the exact confirmation.",
+      parameters: institutionTargetParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "request_remove_institution_confirmation", input, institutionTargetParameters);
+        recordTool(context, "request_remove_institution_confirmation");
+
+        const unavailable = getAccountManagementUnavailableResult(context);
+
+        if (unavailable) {
+          return unavailable;
+        }
+
+        if (!context.actions?.requestRemoveInstitutionConfirmation) {
+          return {
+            ok: false,
+            status: "account_management_unavailable",
+            message: "Institution removal is not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.requestRemoveInstitutionConfirmation({
+          institutionId: toolInput.institution_id,
+          institutionName: toolInput.institution_name,
+        }));
+      },
+    }),
+    tool<typeof removeInstitutionParameters, PipAgentContext>({
+      name: "remove_institution",
+      description:
+        "Remove one institution only when the user has typed the exact confirmation returned by request_remove_institution_confirmation.",
+      parameters: removeInstitutionParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "remove_institution", input, removeInstitutionParameters);
+        recordTool(context, "remove_institution");
+
+        const unavailable = getAccountManagementUnavailableResult(context);
+
+        if (unavailable) {
+          return unavailable;
+        }
+
+        if (!context.actions?.removeInstitution) {
+          return {
+            ok: false,
+            status: "account_management_unavailable",
+            message: "Institution removal is not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.removeInstitution({
+          institutionId: toolInput.institution_id,
+          institutionName: toolInput.institution_name,
+          confirmationText: toolInput.confirmation_text,
+        }));
       },
     }),
     tool<typeof emptyToolParameters, PipAgentContext>({
@@ -1325,6 +1639,13 @@ function createPipInstructions(runContext: {
     "Do not mention dashboards, pages, tabs, sections, navigation, budgeting apps, expense tracking, or financial planning.",
     "Never calculate money yourself. Use tools for any current financial fact, balance, transaction, driver, data-quality status, or purchase simulation.",
     "Use tools for setup and account actions. Do not pretend an action happened unless the matching tool returned ok.",
+    "You can help users manage connected accounts through tools. Use account tools when the user asks what accounts are connected, wants to add a bank/card, repair a connection, change selected accounts, exclude or include an account, mark protected savings, or remove an institution.",
+    "Account management stays chat-owned. Do not mention settings pages, dashboards, menus, tabs, or separate account screens.",
+    "Use get_connected_accounts when the user asks what is connected, when an account/institution target is unclear, or when more than one target could match.",
+    "Use start_new_account_connection for adding a new bank or card. Use repair_account_connection for reconnecting one stale or broken institution. Use start_account_selection_update for changing which accounts Pip can see at an existing institution.",
+    "Use set_account_inclusion when the user wants to ignore, exclude, include, or use an account again without disconnecting its institution.",
+    "Use set_account_protected_savings when the user wants to mark or unmark a specific account as protected savings.",
+    "For institution removal, call request_remove_institution_confirmation first. Only call remove_institution when the latest user message matches the exact confirmation text.",
     "For greetings, do not mention forecasts, cards, views, breakdowns, transactions, or app features. Just invite one simple next question.",
     "Use get_onboarding_state when the user's setup state matters or when you are unsure what step they are on.",
     "If a guest wants to sign up, continue, start, or connect data, call start_google_oauth.",
@@ -1554,7 +1875,11 @@ function applyActionResult(
   context: PipAgentContext,
   result: PipAgentActionResult,
 ): PipAgentActionResult {
-  const { clientAction, ...safeResult } = result;
+  const { cards, clientAction, ...safeResult } = result;
+
+  if (cards?.length) {
+    addAvailableCards(context, cards);
+  }
 
   if (clientAction && clientAction.type !== "none") {
     context.clientAction = clientAction;
@@ -1564,6 +1889,26 @@ function applyActionResult(
     ...safeResult,
     clientActionType: clientAction?.type ?? result.clientActionType,
   };
+}
+
+function getAccountManagementUnavailableResult(context: PipAgentContext): Record<string, unknown> | null {
+  if (context.onboardingState.status === "guest") {
+    return {
+      ok: false,
+      status: "sign_in_required",
+      message: "The user must sign in with Google before account management is available.",
+    };
+  }
+
+  if (context.onboardingState.status === "needs-consent") {
+    return {
+      ok: false,
+      status: "protected_savings_required",
+      message: "The user must choose protected savings before account management is available.",
+    };
+  }
+
+  return null;
 }
 
 function noFinancialDataToolResult(context: PipAgentContext) {
@@ -1616,7 +1961,7 @@ function buildAgentResponse(
   const parsed = parseAgentFinalOutput(finalOutput, context);
   const rawUsedTools = uniqueStrings(context.usedTools);
   const guidanceSelection = input.requestKind === "prompt_chips"
-    ? { card: null, rejectionReason: null }
+    ? { card: null, rejectionReason: null, guidanceSource: "none" as const }
     : selectGuidanceCard(parsed, context);
   const cards = input.requestKind === "prompt_chips"
     ? []
@@ -1743,6 +2088,8 @@ function createFallbackFinalOutput(context: PipAgentContext): AgentFinalOutput |
     return null;
   }
 
+  context.fallbackFinalOutput = true;
+
   return {
     message: createFallbackFinalMessage(context),
     responseMode: shouldReturnGuidanceCard(context)
@@ -1859,6 +2206,7 @@ function normalizeRawPromptChips(
 type GuidanceCardSelection = {
   card: Extract<AgentCard, { type: "guidance_card" }> | null;
   rejectionReason: string | null;
+  guidanceSource: "model_draft" | "deterministic_fallback" | "none";
 };
 
 function selectGuidanceCard(
@@ -1866,16 +2214,22 @@ function selectGuidanceCard(
   context: PipAgentContext,
 ): GuidanceCardSelection {
   if (!parsed.guidanceCardDraft) {
-    if (shouldReturnGuidanceCard(context) && context.guidanceContext) {
+    if (
+      context.fallbackFinalOutput &&
+      shouldReturnGuidanceCard(context) &&
+      context.guidanceContext
+    ) {
       return {
         card: createDeterministicGuidanceCard(context.guidanceContext),
         rejectionReason: null,
+        guidanceSource: "deterministic_fallback",
       };
     }
 
     return {
       card: null,
       rejectionReason: null,
+      guidanceSource: "none",
     };
   }
 
@@ -1886,6 +2240,7 @@ function selectGuidanceCard(
     return {
       card: null,
       rejectionReason: reason,
+      guidanceSource: "none",
     };
   }
 
@@ -1895,15 +2250,25 @@ function selectGuidanceCard(
     return {
       card: result.card,
       rejectionReason: null,
+      guidanceSource: "model_draft",
     };
   }
 
   context.guidanceCardRejectionReason = result.reason;
 
   if (context.repair?.reason === "invalid_guidance_card") {
+    if (shouldReturnGuidanceCard(context) && context.guidanceContext) {
+      return {
+        card: createDeterministicGuidanceCard(context.guidanceContext),
+        rejectionReason: result.reason,
+        guidanceSource: "deterministic_fallback",
+      };
+    }
+
     return {
       card: null,
       rejectionReason: result.reason,
+      guidanceSource: "none",
     };
   }
 
@@ -2171,7 +2536,8 @@ function buildGuidanceAudit(
     ? uniqueStrings(guidanceCard.rows.flatMap((row) => row.evidenceIds))
     : guidanceContext.evidence.map((evidence) => evidence.id);
   const validationOutcome = guidanceCard
-    ? context.repair?.reason === "invalid_guidance_card"
+    ? context.repair?.reason === "invalid_guidance_card" &&
+        selection.guidanceSource === "model_draft"
       ? "repaired"
       : "shown"
     : selection.rejectionReason || context.guidanceCardRejectionReason
@@ -2180,6 +2546,7 @@ function buildGuidanceAudit(
 
   return {
     validationOutcome,
+    guidanceSource: selection.guidanceSource,
     metricVersion: guidanceContext.metricVersion,
     state: guidanceContext.currentRead.state,
     confidence: guidanceContext.currentRead.confidence,
@@ -3278,6 +3645,224 @@ function getAffirmativeFollowUpTool(
   return undefined;
 }
 
+function getAccountManagementForcedTool(
+  rawMessage: string,
+  normalized: string,
+): ForcedAgentTool | undefined {
+  const exactRemovalTarget = extractExactRemoveConfirmationTarget(rawMessage);
+
+  if (exactRemovalTarget) {
+    return {
+      toolName: "remove_institution",
+      args: {
+        institution_name: exactRemovalTarget,
+        confirmation_text: rawMessage.trim(),
+      },
+      requireCard: false,
+    };
+  }
+
+  if (isConnectedAccountsPrompt(normalized)) {
+    return {
+      toolName: "get_connected_accounts",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (isAccountSelectionPrompt(normalized)) {
+    return {
+      toolName: "start_account_selection_update",
+      args: {
+        institution_name: extractInstitutionTarget(normalized),
+      },
+      requireCard: false,
+    };
+  }
+
+  if (isAddAccountConnectionPrompt(normalized)) {
+    return {
+      toolName: "start_new_account_connection",
+      args: {},
+      requireCard: false,
+    };
+  }
+
+  if (isRepairConnectionPrompt(normalized)) {
+    return {
+      toolName: "repair_account_connection",
+      args: {
+        institution_name: extractInstitutionTarget(normalized),
+      },
+      requireCard: false,
+    };
+  }
+
+  const inclusionIntent = getAccountInclusionIntent(normalized);
+
+  if (inclusionIntent) {
+    return {
+      toolName: "set_account_inclusion",
+      args: {
+        account_name: inclusionIntent.accountName,
+        include_in_pip_cash: inclusionIntent.include,
+      },
+      requireCard: false,
+    };
+  }
+
+  const protectedSavingsIntent = getProtectedSavingsAccountIntent(normalized);
+
+  if (protectedSavingsIntent) {
+    return {
+      toolName: "set_account_protected_savings",
+      args: {
+        account_name: protectedSavingsIntent.accountName,
+        is_protected_savings: protectedSavingsIntent.protected,
+      },
+      requireCard: false,
+    };
+  }
+
+  if (isRemoveInstitutionRequest(normalized)) {
+    return {
+      toolName: "request_remove_institution_confirmation",
+      args: {
+        institution_name: extractInstitutionTarget(normalized),
+      },
+      requireCard: false,
+    };
+  }
+
+  return undefined;
+}
+
+function extractExactRemoveConfirmationTarget(message: string): string | null {
+  const trimmed = message.trim();
+  const match = /^REMOVE\s+(.+)$/.exec(trimmed);
+
+  if (!match || trimmed !== trimmed.toUpperCase()) {
+    return null;
+  }
+
+  return match[1].trim();
+}
+
+function isConnectedAccountsPrompt(normalized: string): boolean {
+  return (
+    /\b(show|list|what|which)\b.{0,30}\b(connected )?(accounts?|banks?|cards?|institutions?)\b/.test(normalized) ||
+    /\bwhat is pip using\b/.test(normalized) ||
+    /\bwhat accounts affect today'?s number\b/.test(normalized) ||
+    /\bwhich accounts are used\b/.test(normalized)
+  );
+}
+
+function isAddAccountConnectionPrompt(normalized: string): boolean {
+  return (
+    /\b(add|connect|link)\b.{0,28}\b(another|new|second|my)\b.{0,28}\b(account|bank|card|credit card|amex|chase|wells fargo|capital one)\b/.test(normalized) ||
+    /^(add|connect|link) (account|bank|card|credit card)$/.test(normalized)
+  );
+}
+
+function isRepairConnectionPrompt(normalized: string): boolean {
+  if (/\b(do not|don't|dont|not)\s+(reconnect|repair|fix|restore)\b/.test(normalized)) {
+    return false;
+  }
+
+  return /\b(reconnect|repair|fix|restore)\b.{0,40}\b(bank|connection|account|institution|chase|wells fargo|capital one|amex)\b/.test(normalized);
+}
+
+function isAccountSelectionPrompt(normalized: string): boolean {
+  return (
+    /\bchange\b.{0,40}\b(which )?accounts\b/.test(normalized) ||
+    /\b(add|select|remove)\b.{0,30}\b(account|card|checking|savings)\b.{0,20}\bfrom\b/.test(normalized) ||
+    /\bforgot to select\b/.test(normalized)
+  );
+}
+
+function getAccountInclusionIntent(normalized: string): { include: boolean; accountName?: string } | null {
+  const excludeMatch = /^(ignore|exclude|hide|stop using|don'?t use|do not use)\s+(.+)$/.exec(normalized);
+
+  if (excludeMatch) {
+    return {
+      include: false,
+      accountName: cleanupAccountTarget(excludeMatch[2]),
+    };
+  }
+
+  const includeMatch = /^(use|include|start using)\s+(.+?)(?: again)?$/.exec(normalized);
+
+  if (includeMatch && /\b(account|checking|savings|card|that|this|business|shared)\b/.test(includeMatch[2])) {
+    return {
+      include: true,
+      accountName: cleanupAccountTarget(includeMatch[2]),
+    };
+  }
+
+  return null;
+}
+
+function getProtectedSavingsAccountIntent(normalized: string): { protected: boolean; accountName?: string } | null {
+  const unsetMatch = /^(don'?t|do not|stop)\s+treat(?:ing)?\s+(.+?)\s+as protected/.exec(normalized);
+
+  if (unsetMatch) {
+    return {
+      protected: false,
+      accountName: cleanupAccountTarget(unsetMatch[2]),
+    };
+  }
+
+  const setMatch = /^(make|mark|set)\s+(.+?)\s+(?:as |my )?protected savings/.exec(normalized);
+
+  if (setMatch) {
+    return {
+      protected: true,
+      accountName: cleanupAccountTarget(setMatch[2]),
+    };
+  }
+
+  return null;
+}
+
+function isRemoveInstitutionRequest(normalized: string): boolean {
+  return (
+    /\b(remove|disconnect|unlink)\b.{0,30}\b(bank|institution|connection|chase|wells fargo|capital one|amex)\b/.test(normalized) &&
+    !/\b(account|checking|savings|card)\b.{0,20}\bfrom\b/.test(normalized)
+  );
+}
+
+function extractInstitutionTarget(normalized: string): string | undefined {
+  const patterns = [
+    /\b(?:reconnect|repair|fix|restore|remove|disconnect|unlink)\s+(.+)$/,
+    /\bchange\b.{0,20}\b(.+?)\s+accounts\b/,
+    /\bfrom\s+(.+)$/,
+  ];
+
+  for (const pattern of patterns) {
+    const match = pattern.exec(normalized);
+
+    if (match?.[1]) {
+      return cleanupAccountTarget(match[1]);
+    }
+  }
+
+  return undefined;
+}
+
+function cleanupAccountTarget(value: string): string {
+  return value
+    .replace(/\bpip\b/g, "")
+    .replace(/\bcan see\b/g, "")
+    .replace(/\bfrom today'?s number\b/g, "")
+    .replace(/\bin today'?s number\b/g, "")
+    .replace(/\bgoing forward\b/g, "")
+    .replace(/\bagain\b/g, "")
+    .replace(/\bmy\b/g, "")
+    .replace(/\bthat account\b/g, "")
+    .replace(/\bthis account\b/g, "")
+    .trim();
+}
+
 function isAffirmativeFollowUp(normalized: string): boolean {
   return /^(yes|yeah|yep|ok|okay|sure|do that|yes do that|show me|please do|that)$/.test(normalized);
 }
@@ -3512,7 +4097,13 @@ function hasRepairablePlaidInstitution(syncStatus: SyncStatus | null | undefined
   return Boolean(
     syncStatus?.institutions.some((institution) =>
       institution.provider === "plaid" &&
-      (institution.status === "revoked" || isRepairablePlaidErrorCode(institution.errorCode)),
+      (
+        institution.isStale ||
+        institution.status === "failed" ||
+        institution.status === "stale" ||
+        institution.status === "revoked" ||
+        isRepairablePlaidErrorCode(institution.errorCode)
+      ),
     ),
   );
 }
@@ -3570,5 +4161,6 @@ export const __agentTestHooks = {
   guardVisibleFinalMessage,
   normalizeAgentFinalOutput,
   repairUnsupportedCardPromises,
+  selectGuidanceCard,
   selectPromptChips,
 };

@@ -92,6 +92,25 @@ describe("guidance card validation", () => {
     });
   });
 
+  it("rejects more than three guidance rows", () => {
+    const result = validateGuidanceCardDraft({
+      title: "My read",
+      stance: "watch",
+      summary: "Recent spending is the main pressure.",
+      rows: Array.from({ length: 4 }, (_, index) => ({
+        label: `Reason ${index + 1}`,
+        detail: "Recent everyday spending is ahead of pace.",
+        tone: "warning",
+        evidenceIds: ["recent-spending-hot"],
+      })),
+    }, context);
+
+    expect(result).toEqual({
+      ok: false,
+      reason: "invalid guidance card shape",
+    });
+  });
+
   it("rejects rows without valid evidence", () => {
     const result = validateGuidanceCardDraft({
       title: "My read",
@@ -116,19 +135,42 @@ describe("guidance card validation", () => {
   it.each([
     ["You can afford it.", "you can afford"],
     ["This is safe to spend.", "safe to spend"],
+    ["This is financial advice.", "financial advice"],
     ["I recommend opening this card.", "i recommend"],
   ])("rejects blocked language: %s", (summary, reason) => {
     expect(getBlockedGuidanceLanguage(summary)).toBe(reason);
   });
 
   it.each([
+    ["You can afford it.", "blocked guidance language: you can afford"],
+    ["This is safe to spend.", "blocked guidance language: safe to spend"],
+    ["This is financial advice.", "blocked guidance language: financial advice"],
+  ])("rejects blocked language through the validator: %s", (summary, reason) => {
+    expect(validateGuidanceCardDraft(createDraft({ summary }), context)).toEqual({
+      ok: false,
+      reason,
+    });
+  });
+
+  it.each([
     ["Buy this stock today.", "securities"],
     ["Buy Bitcoin today.", "crypto"],
+    ["Invest in Nvidia today.", "securities"],
     ["Write this off on taxes.", "tax"],
     ["File bankruptcy now.", "bankruptcy"],
     ["Open this balance transfer card.", "specific product"],
   ])("rejects blocked domains: %s", (summary, reason) => {
     expect(getBlockedGuidanceDomain(summary)).toBe(reason);
+  });
+
+  it.each([
+    ["Buy Bitcoin today.", "blocked guidance domain: crypto"],
+    ["Invest in Nvidia today.", "blocked guidance domain: securities"],
+  ])("rejects blocked domains through the validator: %s", (summary, reason) => {
+    expect(validateGuidanceCardDraft(createDraft({ summary }), context)).toEqual({
+      ok: false,
+      reason,
+    });
   });
 
   it("rejects unsupported dollar amounts", () => {
@@ -152,3 +194,20 @@ describe("guidance card validation", () => {
     });
   });
 });
+
+function createDraft(overrides: Record<string, unknown> = {}) {
+  return {
+    title: "My read",
+    stance: "watch",
+    summary: "Recent spending is the main pressure.",
+    rows: [
+      {
+        label: "Main pressure",
+        detail: "Recent everyday spending is ahead of pace.",
+        tone: "warning",
+        evidenceIds: ["recent-spending-hot"],
+      },
+    ],
+    ...overrides,
+  };
+}

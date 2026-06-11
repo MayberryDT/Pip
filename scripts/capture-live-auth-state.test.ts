@@ -36,7 +36,7 @@ describe("live auth state capture helper", () => {
           "codegen",
           "--channel",
           "chrome",
-          "https://pip-mayberrydt.netlify.app",
+          "https://spendwithpip.com",
           "--save-storage=/tmp/pip-live-auth.json",
         ],
         env: {},
@@ -69,6 +69,50 @@ describe("live auth state capture helper", () => {
       "https://deploy.example",
       "--save-storage=/tmp/custom-auth.json",
     ]);
+  });
+
+  it("can use a persistent Chrome profile for resumable auth capture", async () => {
+    const captureLiveAuthState = await loadCaptureLiveAuthState();
+    const output = createOutputCapture();
+    const spawnCapture = createSpawnCapture();
+    const result = captureLiveAuthState({
+      argv: ["--user-data-dir", "/tmp/pip-live-auth-profile"],
+      env: {},
+      stdout: output.stdout,
+      stderr: output.stderr,
+      spawn: spawnCapture.spawn,
+    });
+
+    expect(result).toBe(0);
+    expect(output.logs.join("\n")).toContain("Chrome user data dir: /tmp/pip-live-auth-profile");
+    expect(spawnCapture.calls[0].args).toEqual([
+      "playwright",
+      "codegen",
+      "--channel",
+      "chrome",
+      "--user-data-dir=/tmp/pip-live-auth-profile",
+      "https://spendwithpip.com",
+      "--save-storage=/tmp/pip-live-auth.json",
+    ]);
+  });
+
+  it("accepts a persistent Chrome profile from the environment", async () => {
+    const captureLiveAuthState = await loadCaptureLiveAuthState();
+    const spawnCapture = createSpawnCapture();
+    const result = captureLiveAuthState({
+      argv: [],
+      env: {
+        PIP_LIVE_AUTH_USER_DATA_DIR: "/tmp/env-pip-live-auth-profile",
+      },
+      stdout: () => undefined,
+      stderr: () => undefined,
+      spawn: spawnCapture.spawn,
+    });
+
+    expect(result).toBe(0);
+    expect(spawnCapture.calls[0].args).toContain(
+      "--user-data-dir=/tmp/env-pip-live-auth-profile",
+    );
   });
 
   it("refuses localhost capture unless explicitly allowed", async () => {

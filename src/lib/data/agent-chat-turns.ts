@@ -70,7 +70,7 @@ export async function recordAgentChatTurn(
     client_action: response?.clientAction?.type ?? null,
     model: response?.audit.model ?? null,
     transport: response?.audit.transport ?? null,
-    request_metadata: input.requestMetadata ?? {},
+    request_metadata: buildRequestMetadata(input),
   });
 
   if (error) {
@@ -164,7 +164,7 @@ async function appendLocalAgentChatTurn(input: AgentChatTurnInput) {
     clientAction: response?.clientAction?.type ?? null,
     model: response?.audit.model ?? null,
     transport: response?.audit.transport ?? null,
-    requestMetadata: input.requestMetadata ?? {},
+    requestMetadata: buildRequestMetadata(input),
     createdAt: new Date().toISOString(),
   };
 
@@ -177,6 +177,26 @@ function summarizePromptChips(response: AgentResponse | undefined): Json {
     label: chip.label,
     prompt: chip.prompt,
   }));
+}
+
+function buildRequestMetadata(input: AgentChatTurnInput): Json {
+  const metadata = isJsonObject(input.requestMetadata)
+    ? { ...input.requestMetadata }
+    : {};
+  const guidance = input.response?.audit.guidance;
+
+  if (guidance) {
+    metadata.guidanceSource = guidance.guidanceSource ?? null;
+    metadata.guidanceValidationOutcome = guidance.validationOutcome;
+    metadata.guidanceStance = guidance.stance ?? null;
+    metadata.guidanceEvidenceIds = guidance.evidenceIds ?? [];
+  }
+
+  return metadata;
+}
+
+function isJsonObject(value: Json | undefined): value is { [key: string]: Json | undefined } {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function createLocalTurnId(): string {

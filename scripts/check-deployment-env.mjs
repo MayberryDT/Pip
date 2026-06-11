@@ -3,6 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { checkDbSchemaNames } from "./check-db-schema-names.mjs";
 
 export function runDeploymentEnvCheck({
   argv = process.argv,
@@ -48,7 +49,7 @@ export function runDeploymentEnvCheck({
     if (!siteOrigin) {
       addUnique(missing, "NEXT_PUBLIC_SITE_URL");
     } else if (isLocalhostUrl(siteOrigin)) {
-      addUnique(missing, "NEXT_PUBLIC_SITE_URL must be the production Netlify origin, not localhost.");
+      addUnique(missing, "NEXT_PUBLIC_SITE_URL must be the production app origin, not localhost.");
     }
 
     if (plaidRedirectUri && isLocalhostUrl(plaidRedirectUri)) {
@@ -68,6 +69,17 @@ export function runDeploymentEnvCheck({
     }
     printWarnings(warnings, warn);
     return 1;
+  }
+
+  const schemaStatus = checkDbSchemaNames({
+    cwd,
+    stdout,
+    stderr,
+    skipWhenProjectFilesMissing: true,
+  });
+
+  if (schemaStatus !== 0) {
+    return schemaStatus;
   }
 
   stdout(`Deployment env check passed for ${mode} mode.`);

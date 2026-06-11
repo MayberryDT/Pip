@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -22,11 +23,14 @@ describe("Netlify deployment secret boundary", () => {
     expect(packageJson.scripts["check:netlify-bundle"]).toBe("node scripts/check-netlify-bundle.mjs");
     expect(safeDeployScript).toContain("hideLocalEnvFiles");
     expect(safeDeployScript).toContain("restoreLocalEnvFiles");
-    expect(safeDeployScript).toContain("--skip-functions-cache");
+    expect(safeDeployScript).toContain("copyNextStaticIntoServerFunction");
+    expect(safeDeployScript).toContain("--no-build");
+    expect(safeDeployScript).toContain(".netlify/static");
     expect(safeDeployScript).toContain("PIP_DEPLOY_MODE");
     expect(safeDeployScript).toContain("scripts/check-netlify-bundle.mjs");
     expect(bundleCheckScript).toContain("unzip");
     expect(bundleCheckScript).toContain("Netlify function artifacts include forbidden env files");
+    expect(bundleCheckScript).toContain("Netlify Next server handler is missing required static assets");
     expect(netlifyIgnore).toContain(".env");
     expect(netlifyIgnore).toContain(".env.*");
   });
@@ -61,4 +65,40 @@ describe("Netlify deployment secret boundary", () => {
       },
     );
   });
+
+  it("fails when the generated Next server handler omits .next/static assets", async () => {
+    const cwd = mkdtempSync(join(tmpdir(), "pip-netlify-bundle-"));
+    mkdirSync(join(cwd, ".next/static/chunks"), { recursive: true });
+    mkdirSync(join(cwd, ".netlify/functions-internal/___netlify-server-handler/.next"), {
+      recursive: true,
+    });
+    writeFileSync(join(cwd, ".next/static/chunks/app.js"), "console.log('ok');");
+
+    try {
+      const runNetlifyBundleCheck = await loadNetlifyBundleCheck();
+      const errors: string[] = [];
+
+      expect(
+        runNetlifyBundleCheck({
+          cwd,
+          stdout: () => undefined,
+          stderr: (line) => errors.push(line),
+        }),
+      ).toBe(1);
+      expect(errors.join("\n")).toContain("missing required static assets");
+      expect(errors.join("\n")).toContain(".next/static");
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
 });
+
+async function loadNetlifyBundleCheck() {
+  const module = await import(pathToFileURL(join(process.cwd(), "scripts/check-netlify-bundle.mjs")).href);
+
+  return module.runNetlifyBundleCheck as (input: {
+    cwd: string;
+    stdout: (line: string) => void;
+    stderr: (line: string) => void;
+  }) => number;
+}

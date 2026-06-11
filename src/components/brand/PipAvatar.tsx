@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import type { PipMascotProps } from "@/components/brand/PipMascot";
 
 type PipAvatarSize = "xs" | "sm" | "md" | "lg";
@@ -35,15 +34,16 @@ export function PipAvatar({
       role="img"
       aria-label={ariaLabel}
     >
-      <Image
+      <img
         src="/brand/pip-profile-clean.png"
         alt=""
         aria-hidden="true"
         width={160}
         height={160}
-        sizes="80px"
         className="h-full w-full scale-[1.12] rounded-full object-cover"
         draggable={false}
+        loading="lazy"
+        decoding="async"
       />
     </span>
   );

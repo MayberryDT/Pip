@@ -88,7 +88,7 @@ describe("PlaidProvider contract", () => {
   });
 
   it("returns connected institution metadata from stored Plaid credentials", async () => {
-    await expect(provider.handleConnectCallback({ userId: "user_1" })).resolves.toEqual({
+    await expect(provider.handleConnectCallback({ userId: "user_1" })).resolves.toMatchObject({
       provider: "plaid",
       institutionId: "institution_1",
       institutionName: "Plaid Bank",
@@ -140,6 +140,57 @@ describe("PlaidProvider contract", () => {
     });
     expect(linkTokenCreate).toHaveBeenCalledWith(expect.objectContaining({
       access_token: "access-token",
+    }));
+  });
+
+  it("creates Plaid update-mode sessions with account selection enabled", async () => {
+    const linkTokenCreate = vi.fn().mockResolvedValue({
+      data: {
+        link_token: "link-selection-123",
+      },
+    });
+    const selectionProvider = new PlaidProvider({
+      client: {
+        linkTokenCreate,
+        itemPublicTokenExchange: vi.fn(),
+        accountsGet: vi.fn(),
+        transactionsSync: vi.fn(),
+      } as unknown as PlaidClient,
+      config: getPlaidConfig({
+        PLAID_CLIENT_ID: "client-id",
+        PLAID_SECRET: "secret",
+      }),
+      institutionCredentialLoader: async () => ({
+        institutionId: "institution_1",
+        userId: "user_1",
+        itemId: "item_1",
+        accessToken: "access-token",
+        institutionName: "Plaid Bank",
+        environment: "sandbox",
+      }),
+    });
+
+    await expect(
+      selectionProvider.createConnectSession("user_1", {
+        mode: "account_selection",
+        institutionId: "institution_1",
+      }),
+    ).resolves.toMatchObject({
+      provider: "plaid",
+      status: "ready",
+      connect: {
+        kind: "plaid",
+        linkToken: "link-selection-123",
+        mode: "account_selection",
+        products: [],
+        institutionId: "institution_1",
+      },
+    });
+    expect(linkTokenCreate).toHaveBeenCalledWith(expect.objectContaining({
+      access_token: "access-token",
+      update: {
+        account_selection_enabled: true,
+      },
     }));
   });
 

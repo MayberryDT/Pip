@@ -61,7 +61,7 @@ describe("Plaid normalization", () => {
     });
   });
 
-  it("flips Plaid transaction signs into the PIP cash convention", () => {
+  it("flips Plaid transaction signs into the Pip Cash convention", () => {
     expect(
       normalizePlaidTransaction({
         transaction_id: "tx_coffee",

@@ -56,9 +56,12 @@ export async function POST(request: Request) {
     });
     const admin = createSupabaseAdminClient();
     institutionName = parsed.data.metadata?.institution?.name ?? "Plaid institution";
+    const providerInstitutionId = parsed.data.metadata?.institution?.institution_id;
     const institution = await upsertPlaidInstitution(admin, {
       userId: user.id,
       institutionName,
+      providerInstitutionId,
+      itemId: exchange.data.item_id,
     });
 
     await storePlaidCredential({
@@ -69,15 +72,18 @@ export async function POST(request: Request) {
       accessToken: exchange.data.access_token,
       institutionName,
       environment: config.environment,
+      providerInstitutionId,
     });
     await recordProductEventSafely(admin, user.id, "connect_session_created", {
       provider: "plaid",
       status: "item-exchanged",
       institutionName,
+      providerInstitutionId,
     });
     await recordProductEventSafely(admin, user.id, "plaid_exchange_succeeded", {
       provider: "plaid",
       institutionName,
+      providerInstitutionId,
     });
 
     return NextResponse.json({
@@ -103,21 +109,42 @@ async function upsertPlaidInstitution(
   input: {
     userId: string;
     institutionName: string;
+    providerInstitutionId?: string;
+    itemId: string;
   },
 ) {
-  const { data: existing, error: findError } = await supabase
-    .from("connected_institutions")
-    .select("*")
+  const { data: existingCredential, error: credentialFindError } = await supabase
+    .schema("private")
+    .from("provider_credentials")
+    .select("institution_id")
     .eq("user_id", input.userId)
     .eq("provider", "plaid")
-    .eq("institution_name", input.institutionName)
+    .eq("plaid_item_id", input.itemId)
     .maybeSingle();
 
-  if (findError) {
-    throw findError;
+  if (credentialFindError) {
+    throw credentialFindError;
   }
 
+  const existingInstitutionId = existingCredential?.institution_id;
+  const existingInstitutionResult = existingInstitutionId
+    ? await supabase
+        .from("connected_institutions")
+        .select("*")
+        .eq("user_id", input.userId)
+        .eq("provider", "plaid")
+        .eq("id", existingInstitutionId)
+        .maybeSingle()
+    : null;
+
+  if (existingInstitutionResult?.error) {
+    throw existingInstitutionResult.error;
+  }
+
+  const existing = existingInstitutionResult?.data ?? null;
   const payload = {
+    institution_name: input.institutionName,
+    provider_institution_id: input.providerInstitutionId ?? existing?.provider_institution_id ?? null,
     status: "connected" as const,
     error_code: null,
     error_message: null,
@@ -144,7 +171,6 @@ async function upsertPlaidInstitution(
     .insert({
       user_id: input.userId,
       provider: "plaid",
-      institution_name: input.institutionName,
       ...payload,
     })
     .select("*")

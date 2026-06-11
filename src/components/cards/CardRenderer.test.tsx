@@ -40,6 +40,18 @@ describe("CardRenderer", () => {
     button?.props.onClick();
     expect(suppressedIssuers).toEqual(["Capital One"]);
   });
+
+  it("submits account card action prompts through chat", () => {
+    const prompts: string[] = [];
+    const element = CardRenderer({
+      card: accountConnectionsCard(),
+      onSubmitPrompt: (prompt) => prompts.push(prompt),
+    });
+    const button = findElementByType(element, "button");
+
+    button?.props.onClick();
+    expect(prompts).toEqual(["Add account"]);
+  });
 });
 
 function findElementByType(node: ReactNode, type: string): any {
@@ -400,5 +412,67 @@ function getRenderableCards(): Array<{
         "Ask me in chat to connect Plaid or repair a stale bank connection.",
       ],
     },
+    {
+      name: "account_connections",
+      card: accountConnectionsCard(),
+      expectedText: [
+        "Account connections",
+        "Chase",
+        "Everyday Checking",
+        "Used in today",
+        "Capital One",
+        "Needs repair",
+      ],
+    },
   ];
+}
+
+function accountConnectionsCard(): AgentCard {
+  return {
+    type: "account_connections",
+    title: "Account connections",
+    institutions: [
+      {
+        institutionId: "institution-1",
+        institutionName: "Chase",
+        provider: "plaid",
+        status: "connected",
+        accounts: [
+          {
+            accountId: "account-1",
+            name: "Everyday Checking",
+            kind: "checking",
+            lastFour: "1042",
+            includedInPipCash: true,
+            isProtectedSavings: false,
+            active: true,
+            roleLabel: "Used in today's number",
+          },
+        ],
+        actions: [
+          {
+            id: "add-account",
+            label: "Add account",
+            prompt: "Add account",
+            style: "primary",
+          },
+        ],
+      },
+      {
+        institutionId: "institution-2",
+        institutionName: "Capital One",
+        provider: "plaid",
+        status: "failed",
+        accounts: [],
+        actions: [
+          {
+            id: "repair-institution-2",
+            label: "Reconnect",
+            prompt: "Reconnect Capital One",
+            style: "primary",
+          },
+        ],
+      },
+    ],
+  };
 }

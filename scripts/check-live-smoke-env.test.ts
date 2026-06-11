@@ -60,6 +60,35 @@ describe("live authenticated smoke preflight", () => {
     }
   });
 
+  it.each([
+    "https://free-cash-mayberrydt.netlify.app",
+    "https://pip-mayberrydt.netlify.app",
+  ])("rejects legacy Netlify hostname %s", async (baseUrl) => {
+    const runLiveSmokeEnvCheck = await loadRunLiveSmokeEnvCheck();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-live-smoke-"));
+    const storageState = join(tempDir, "state.json");
+    writeStorageState(storageState);
+
+    try {
+      const output = createOutputCapture();
+      const result = runLiveSmokeEnvCheck({
+        env: {
+          PIP_LIVE_STORAGE_STATE: storageState,
+          PIP_LIVE_BASE_URL: baseUrl,
+        },
+        stdout: output.stdout,
+        stderr: output.stderr,
+        warn: output.warn,
+      });
+
+      expect(result).toBe(1);
+      expect(output.errors.join("\n")).toContain("legacy Netlify hostname");
+      expect(output.errors.join("\n")).toContain("spendwithpip");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("fails when the configured storage-state file is empty", async () => {
     const runLiveSmokeEnvCheck = await loadRunLiveSmokeEnvCheck();
     const tempDir = mkdtempSync(join(tmpdir(), "pip-live-smoke-"));
@@ -155,7 +184,7 @@ function writeStorageState(path: string) {
       cookies: [],
       origins: [
         {
-          origin: "https://pip-mayberrydt.netlify.app",
+          origin: "https://spendwithpip.com",
           localStorage: [
             {
               name: "sb-qevvmulexfoebjmlxbts-auth-token",

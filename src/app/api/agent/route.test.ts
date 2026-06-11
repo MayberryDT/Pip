@@ -4,6 +4,7 @@ import { fakeSnapshot } from "@/lib/fake-data";
 
 const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
+  getFinancialDataProvider: vi.fn(),
   getCurrentFinancialSnapshot: vi.fn(),
   recordAgentChatTurnSafely: vi.fn(),
   recordProductEventSafely: vi.fn(),
@@ -35,6 +36,17 @@ vi.mock("@/lib/data/product-events", async (importOriginal) => {
 vi.mock("@/lib/data/agent-chat-turns", () => ({
   recordAgentChatTurnSafely: routeMocks.recordAgentChatTurnSafely,
 }));
+
+vi.mock("@/lib/providers/provider-registry", async () => {
+  const errors = await vi.importActual<typeof import("@/lib/providers/provider-errors")>(
+    "@/lib/providers/provider-errors",
+  );
+
+  return {
+    getFinancialDataProvider: routeMocks.getFinancialDataProvider,
+    ProviderUnavailableError: errors.ProviderUnavailableError,
+  };
+});
 
 vi.mock("@/lib/agent/ai-agent", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/agent/ai-agent")>();
@@ -340,6 +352,137 @@ describe("POST /api/agent", () => {
         messageLength: "Can I spend $50?".length,
       }),
     );
+  });
+
+  it("records guidance source in authenticated product events", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
+      cards: [
+        {
+          type: "guidance_card",
+          title: "My read",
+          stance: "watch",
+          summary: "Recent spending is running hot.",
+          rows: [
+            {
+              label: "Main pressure",
+              detail: "Recent everyday spending is ahead of pace.",
+              tone: "warning",
+              evidenceIds: ["recent-spending-hot"],
+            },
+          ],
+        },
+      ],
+      usedTools: ["get_financial_guidance_context"],
+      responseMode: "guidance",
+      audit: {
+        toolNames: ["get_financial_guidance_context"],
+        usedModel: true,
+        guidance: {
+          validationOutcome: "shown",
+          guidanceSource: "model_draft",
+          metricVersion: "v2",
+          stance: "watch",
+          evidenceIds: ["recent-spending-hot"],
+        },
+      },
+    }));
+
+    const response = await POST(jsonRequest({ message: "How am I doing?" }));
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "financial_guidance_card_drafted",
+      expect.objectContaining({
+        guidanceSource: "model_draft",
+        guidanceValidationOutcome: "shown",
+        guidanceStance: "watch",
+        guidanceEvidenceIds: "recent-spending-hot",
+      }),
+    );
+  });
+
+  it("records redacted Plaid connect failures from agent actions", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    const plaidError = Object.assign(
+      new Error("Request failed with status code 400"),
+      {
+        name: "AxiosError",
+        response: {
+          data: {
+            error_code: "INVALID_FIELD",
+            error_type: "INVALID_REQUEST",
+            error_message:
+              "secret must be a properly formatted string, not PLAID_SECRET=provider-secret",
+            request_id: "plaid-request-1",
+          },
+        },
+      },
+    );
+    const createConnectSession = vi.fn().mockRejectedValue(plaidError);
+    routeMocks.getFinancialDataProvider.mockReturnValue({
+      createConnectSession,
+    });
+    routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockImplementation(async (input) => {
+      const result = await input.actions?.startPlaidLink?.({
+        mode: "connect",
+      });
+
+      return createAgentResponse({
+        message: result?.message,
+        usedTools: ["start_new_account_connection"],
+        responseMode: "clarify",
+        audit: {
+          toolNames: ["start_new_account_connection"],
+          usedModel: true,
+        },
+      });
+    });
+
+    const response = await POST(jsonRequest({ message: "Add a new bank" }));
+    const payload = await response.json();
+    const safeMessage =
+      "Plaid INVALID_FIELD: secret must be a properly formatted string, not PLAID_SECRET=[redacted]";
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      message: safeMessage,
+      usedTools: ["start_new_account_connection"],
+    });
+    expect(createConnectSession).toHaveBeenCalledWith("user-1", {
+      mode: "connect",
+    });
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "connect_session_failed",
+      expect.objectContaining({
+        provider: "plaid",
+        status: "error",
+        mode: "connect",
+        institutionId: null,
+        errorName: "AxiosError",
+        errorCode: "INVALID_FIELD",
+        errorType: "INVALID_REQUEST",
+        errorRequestId: "plaid-request-1",
+        errorKeys: "error_code,error_type,error_message,request_id",
+        errorMessage: safeMessage,
+      }),
+    );
+    expect(JSON.stringify(routeMocks.recordProductEventSafely.mock.calls)).not.toContain(
+      "provider-secret",
+    );
+    expect(JSON.stringify(payload)).not.toContain("provider-secret");
   });
 
   it("passes authenticated no-data state into the agent without answering from fake rows", async () => {

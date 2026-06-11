@@ -15,9 +15,11 @@ const defaultAgentErrorText = "I couldn’t answer that cleanly. Try again.";
 
 export function AgentThread({
   thread,
+  onSubmitPrompt,
   onSuppressMissingCard,
 }: {
   thread: AgentThreadItem[];
+  onSubmitPrompt?: (prompt: string) => void;
   onSuppressMissingCard?: (issuerName: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -72,6 +74,7 @@ export function AgentThread({
                   <CardRenderer
                     key={`${item.id}-${card.type}-${index}`}
                     card={card}
+                    onSubmitPrompt={onSubmitPrompt}
                     onSuppressMissingCard={onSuppressMissingCard}
                   />
                 ))}

@@ -1,5 +1,7 @@
 import type { Account, AccountBalanceSummary, Transaction } from "@/lib/types";
 
+export type PlaidLinkMode = "connect" | "repair" | "account_selection";
+
 export type ConnectSession = {
   provider: "mock" | "teller" | "plaid";
   status: "ready" | "unavailable";
@@ -21,12 +23,14 @@ export type PlaidConnectSession = {
   linkToken: string;
   environment: "sandbox" | "production";
   products: string[];
-  mode: "connect" | "repair";
+  mode: PlaidLinkMode;
+  institutionId?: string;
 };
 
 export type ConnectedInstitution = {
   provider: "mock" | "teller" | "plaid";
   institutionId?: string;
+  providerInstitutionId?: string;
   institutionName: string;
   status: "connected" | "mocked";
 };
@@ -57,7 +61,7 @@ export interface FinancialDataProvider {
   createConnectSession(
     userId: string,
     options?: {
-      mode?: "connect" | "repair";
+      mode?: PlaidLinkMode;
       institutionId?: string;
     },
   ): Promise<ConnectSession>;

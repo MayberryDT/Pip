@@ -3,7 +3,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-const DEFAULT_LIVE_BASE_URL = "https://pip-mayberrydt.netlify.app";
+const DEFAULT_LIVE_BASE_URL = "https://spendwithpip.com";
 
 export function runLiveSmokeEnvCheck({
   env = process.env,
@@ -34,6 +34,8 @@ export function runLiveSmokeEnvCheck({
     errors.push(`PIP_LIVE_BASE_URL is not a valid URL: ${baseUrl}`);
   } else if (isLocalhost(parsedBaseUrl) && env.PIP_LIVE_ALLOW_LOCAL !== "1") {
     errors.push("PIP_LIVE_BASE_URL points to localhost. Use production or set PIP_LIVE_ALLOW_LOCAL=1 intentionally.");
+  } else if (isLegacyNetlifyHost(parsedBaseUrl)) {
+    errors.push("PIP_LIVE_BASE_URL points to a legacy Netlify hostname. Use https://spendwithpip.com.");
   }
 
   if (env.PIP_LIVE_COMPLETE_PLAID !== "1") {
@@ -98,6 +100,10 @@ function parseUrl(value) {
 
 function isLocalhost(url) {
   return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
+}
+
+function isLegacyNetlifyHost(url) {
+  return /(^|--)(free-cash-mayberrydt|pip-mayberrydt)\.netlify\.app$/i.test(url.hostname);
 }
 
 function printWarnings(warnings, warn) {

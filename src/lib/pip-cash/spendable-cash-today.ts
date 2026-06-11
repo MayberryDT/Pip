@@ -4,6 +4,7 @@ import {
   annotateCreditCardPaymentMatches,
   isDedupedCreditCardPayment,
 } from "@/lib/pip-cash/dedupe-credit-card-payments";
+import { toPipCashSnapshot } from "@/lib/pip-cash/account-filters";
 import type {
   Account,
   ClassifiedSpendableTransaction,
@@ -57,6 +58,7 @@ export function calculateSpendableCashToday(
     dataStates?: FinancialDataState[];
   } = {},
 ): SpendableCashTodayResult {
+  snapshot = toPipCashSnapshot(snapshot);
   const asOfDate = snapshot.settings.asOfDate;
   const currentMonthStartDate = startOfMonth(asOfDate);
   const currentMonthElapsedDays = parseDateParts(asOfDate).day;

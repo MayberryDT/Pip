@@ -43,6 +43,12 @@ type ThreadItem = {
   isPending?: boolean;
 };
 
+const accountManagementPromptChip: PromptChip = {
+  id: "manage-accounts",
+  label: "Manage accounts",
+  prompt: "Show connected accounts",
+};
+
 export type PipAuthState =
   | {
       status: "guest";
@@ -303,8 +309,12 @@ export function PipHome({
           return;
         }
 
-        setChips(response.promptChips);
-        setChipHistory((current) => mergePromptChipHistory(current, response.promptChips));
+        const nextPromptChips = liveAccountControlsEnabled
+          ? withAccountManagementPromptChip(response.promptChips)
+          : response.promptChips;
+
+        setChips(nextPromptChips);
+        setChipHistory((current) => mergePromptChipHistory(current, nextPromptChips));
         setPromptChipRefreshSequence(0);
       })
       .catch(() => undefined);
@@ -368,18 +378,21 @@ export function PipHome({
             : item,
         ),
       );
+      const responsePromptChips = liveAccountControlsEnabled
+        ? withAccountManagementPromptChip(response.promptChips)
+        : response.promptChips;
       const nextVisibleChips = getNextVisiblePromptChips(
-        response.promptChips,
+        responsePromptChips,
         chips,
         lastNonEmptyChipsRef.current,
       );
 
       setChips(nextVisibleChips);
       setChipHistory((current) =>
-        mergePromptChipHistory(current, chips, nextVisibleChips, response.promptChips),
+        mergePromptChipHistory(current, chips, nextVisibleChips, responsePromptChips),
       );
 
-      if (response.promptChips.length < 3) {
+      if (responsePromptChips.length < 3) {
         setPromptChipRefreshSequence((current) => current + 1);
       }
 
@@ -537,6 +550,7 @@ export function PipHome({
           ) : (
             <AgentThread
               thread={thread}
+              onSubmitPrompt={submitPrompt}
               onSuppressMissingCard={liveAccountControlsEnabled ? suppressMissingCardNudge : undefined}
             />
           )}
@@ -640,6 +654,9 @@ export function PipHome({
       environment: plaid.environment,
       surface: "chat",
     });
+    await trackPlaidAccountManagementEvent(plaid, "started", {
+      surface: "chat",
+    });
 
     let connection;
 
@@ -663,11 +680,26 @@ export function PipHome({
         surface: "chat",
         errorMessage: getClientErrorMessage(error),
       });
+      await trackPlaidAccountManagementEvent(plaid, "failed", {
+        surface: "chat",
+        errorMessage: getClientErrorMessage(error),
+      });
       throw error;
     }
 
-    if (plaid.mode === "repair") {
-      await runPlaidRefreshWithTelemetry("repair");
+    if (plaid.mode === "repair" || plaid.mode === "account_selection") {
+      try {
+        await runPlaidRefreshWithTelemetry(plaid.mode);
+        await trackPlaidAccountManagementEvent(plaid, "succeeded", {
+          surface: "chat",
+        });
+      } catch (error) {
+        await trackPlaidAccountManagementEvent(plaid, "failed", {
+          surface: "chat",
+          errorMessage: getClientErrorMessage(error),
+        });
+        throw error;
+      }
       return;
     }
 
@@ -675,6 +707,10 @@ export function PipHome({
       await trackPlaidClientEvent("plaid_exchange_failed", {
         mode: plaid.mode ?? "connect",
         environment: plaid.environment,
+        surface: "chat",
+        errorMessage: "Plaid did not return a public token.",
+      });
+      await trackPlaidAccountManagementEvent(plaid, "failed", {
         surface: "chat",
         errorMessage: "Plaid did not return a public token.",
       });
@@ -714,13 +750,34 @@ export function PipHome({
         institutionId: connection.metadata.institution?.institution_id ?? null,
         errorMessage: getClientErrorMessage(error),
       });
+      await trackPlaidAccountManagementEvent(plaid, "failed", {
+        surface: "chat",
+        institutionName: connection.metadata.institution?.name ?? null,
+        institutionId: connection.metadata.institution?.institution_id ?? null,
+        errorMessage: getClientErrorMessage(error),
+      });
       throw error;
     }
 
-    await runPlaidRefreshWithTelemetry("manual");
+    try {
+      await runPlaidRefreshWithTelemetry("manual");
+      await trackPlaidAccountManagementEvent(plaid, "succeeded", {
+        surface: "chat",
+        institutionName: connection.metadata.institution?.name ?? null,
+        institutionId: connection.metadata.institution?.institution_id ?? null,
+      });
+    } catch (error) {
+      await trackPlaidAccountManagementEvent(plaid, "failed", {
+        surface: "chat",
+        institutionName: connection.metadata.institution?.name ?? null,
+        institutionId: connection.metadata.institution?.institution_id ?? null,
+        errorMessage: getClientErrorMessage(error),
+      });
+      throw error;
+    }
   }
 
-  async function runPlaidRefreshWithTelemetry(reason: "manual" | "repair") {
+  async function runPlaidRefreshWithTelemetry(reason: "manual" | "repair" | "account_selection") {
     try {
       await runRefreshFromChat("plaid", reason);
       await trackPlaidClientEvent("plaid_sync_succeeded", {
@@ -737,7 +794,10 @@ export function PipHome({
     }
   }
 
-  async function runRefreshFromChat(provider: FinancialProvider, reason: "manual" | "repair" = "manual") {
+  async function runRefreshFromChat(
+    provider: FinancialProvider,
+    reason: "manual" | "repair" | "account_selection" = "manual",
+  ) {
     const response = await fetch("/api/sync/manual", {
       method: "POST",
       headers: {
@@ -947,7 +1007,18 @@ function getDefaultPromptChips(
     });
   }
 
+  if (enableAccountControls && result) {
+    return withAccountManagementPromptChip(getSuggestedPrompts(result));
+  }
+
   return result ? getSuggestedPrompts(result) : [];
+}
+
+function withAccountManagementPromptChip(chips: PromptChip[]): PromptChip[] {
+  return [
+    accountManagementPromptChip,
+    ...chips.filter((chip) => chip.id !== accountManagementPromptChip.id),
+  ].slice(0, 3);
 }
 
 function getErrorMessage(payload: unknown, fallback: string): string {
@@ -1163,10 +1234,13 @@ function getClientActionErrorText(error: unknown): string {
 
 export const __pipHomeTestHooks = {
   AgentRequestError,
+  getDefaultPromptChips,
+  getDemoPipCashResult: () => calculatePipCash(getFakeSnapshot("default")),
   getAgentErrorText,
   getClientActionErrorText,
   getNextVisiblePromptChips,
   getSafeAgentFailureMessage,
+  withAccountManagementPromptChip,
 };
 
 function getPlaidEventProperties(
@@ -1199,6 +1273,44 @@ async function trackPlaidLinkEvent(
   surface: "chat" | "oauth_resume",
 ) {
   await trackProductEvent("plaid_link_event", getPlaidEventProperties(eventName, metadata, plaid, surface));
+}
+
+async function trackPlaidAccountManagementEvent(
+  plaid: PlaidClientActionConfig,
+  outcome: "started" | "succeeded" | "failed",
+  properties: Record<string, string | number | boolean | null>,
+) {
+  const eventName = getPlaidAccountManagementEventName(plaid.mode ?? "connect", outcome);
+
+  if (!eventName) {
+    return;
+  }
+
+  await trackProductEvent(eventName, {
+    ...properties,
+    mode: plaid.mode ?? "connect",
+    environment: plaid.environment,
+    institutionId: properties.institutionId ?? plaid.institutionId ?? null,
+  });
+}
+
+function getPlaidAccountManagementEventName(
+  mode: PlaidClientActionConfig["mode"],
+  outcome: "started" | "succeeded" | "failed",
+): string | null {
+  if (mode === "connect") {
+    return `account_connection_${outcome}`;
+  }
+
+  if (mode === "repair") {
+    return `account_repair_${outcome}`;
+  }
+
+  if (mode === "account_selection") {
+    return `account_selection_${outcome}`;
+  }
+
+  return null;
 }
 
 async function trackPlaidClientEvent(

@@ -4,7 +4,7 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   page,
 }) => {
   await routeAgentThroughMockModel(page);
-  await page.goto("/");
+  await page.goto("/app");
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
@@ -135,7 +135,7 @@ test("mobile viewport keeps the one-number layout from overlapping or overflowin
     height: 740,
   });
   await routeAgentThroughMockModel(page);
-  await page.goto("/");
+  await page.goto("/app");
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
@@ -215,7 +215,7 @@ test("chat send feels responsive while the agent is thinking", async ({ page }) 
       }),
     });
   });
-  await page.goto("/");
+  await page.goto("/app");
   await page.waitForLoadState("networkidle");
 
   await page.getByLabel("Ask Pip").fill("hi");
@@ -241,7 +241,7 @@ test("guest onboarding starts Google OAuth from the Pip screen", async ({ page }
       body: "<html><body>Google OAuth handoff reached.</body></html>",
     });
   });
-  await page.goto("/?onboarding=guest");
+  await page.goto("/app?onboarding=guest");
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByText("Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today.")).toBeVisible();
@@ -268,7 +268,7 @@ test("consent onboarding stays on the Pip screen before loading the number", asy
     });
   });
 
-  await page.goto("/?onboarding=consent");
+  await page.goto("/app?onboarding=consent");
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByText("Let’s set aside a little cushion first.")).toBeVisible();
@@ -291,7 +291,7 @@ test("consent onboarding stays on the Pip screen before loading the number", asy
 
 test("dev test onboarding walks a fresh local user through setup", async ({ page }) => {
   await routeAgentThroughMockModel(page);
-  await page.goto("/?onboarding=test");
+  await page.goto("/app?onboarding=test");
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByText("Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today.")).toBeVisible();
@@ -370,7 +370,7 @@ test("connect data does not leave the chat stuck while Plaid is loading", async 
     };
   });
 
-  await page.goto("/?onboarding=ready");
+  await page.goto("/app?onboarding=ready");
   await page.waitForLoadState("networkidle");
 
   await expect(
@@ -491,7 +491,7 @@ test("connect data completes Plaid exchange and syncs back to the same Pip scree
     };
   });
 
-  await page.goto("/?onboarding=ready");
+  await page.goto("/app?onboarding=ready");
   await page.waitForLoadState("networkidle");
 
   await expect(
@@ -577,7 +577,7 @@ test("live data loading does not wipe same-screen onboarding chat cards", async 
     });
   });
 
-  await page.goto("/?onboarding=ready");
+  await page.goto("/app?onboarding=ready");
   await page.waitForLoadState("domcontentloaded");
 
   await page.getByLabel("Ask Pip").fill("Tell me how Pip works");

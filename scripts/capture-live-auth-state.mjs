@@ -3,7 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-const DEFAULT_LIVE_BASE_URL = "https://pip-mayberrydt.netlify.app";
+const DEFAULT_LIVE_BASE_URL = "https://spendwithpip.com";
 const DEFAULT_STORAGE_STATE = "/tmp/pip-live-auth.json";
 
 export function captureLiveAuthState({
@@ -16,6 +16,7 @@ export function captureLiveAuthState({
   const options = parseArgs(argv);
   const baseUrl = options.baseUrl || env.PIP_LIVE_BASE_URL || DEFAULT_LIVE_BASE_URL;
   const storageState = options.storageState || env.PIP_LIVE_STORAGE_STATE || DEFAULT_STORAGE_STATE;
+  const userDataDir = options.userDataDir || env.PIP_LIVE_AUTH_USER_DATA_DIR;
   const parsedBaseUrl = parseUrl(baseUrl);
 
   if (!parsedBaseUrl) {
@@ -31,11 +32,24 @@ export function captureLiveAuthState({
   stdout("Opening Playwright codegen for Pip live auth capture.");
   stdout(`Base URL: ${baseUrl}`);
   stdout(`Storage state output: ${storageState}`);
+  if (userDataDir) {
+    stdout(`Chrome user data dir: ${userDataDir}`);
+  }
   stdout("Sign in with any Google account, wait until Pip returns to the app, then close the browser window.");
+
+  const codegenArgs = [
+    "playwright",
+    "codegen",
+    "--channel",
+    "chrome",
+    ...(userDataDir ? [`--user-data-dir=${userDataDir}`] : []),
+    baseUrl,
+    `--save-storage=${storageState}`,
+  ];
 
   const result = spawn(
     "npx",
-    ["playwright", "codegen", "--channel", "chrome", baseUrl, `--save-storage=${storageState}`],
+    codegenArgs,
     {
       env,
       stdio: "inherit",
@@ -61,6 +75,11 @@ function parseArgs(argv) {
       index += 1;
     } else if (arg.startsWith("--storage-state=")) {
       options.storageState = arg.slice("--storage-state=".length);
+    } else if (arg === "--user-data-dir") {
+      options.userDataDir = argv[index + 1];
+      index += 1;
+    } else if (arg.startsWith("--user-data-dir=")) {
+      options.userDataDir = arg.slice("--user-data-dir=".length);
     }
   }
 

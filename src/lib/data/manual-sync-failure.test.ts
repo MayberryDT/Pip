@@ -297,6 +297,89 @@ describe("manual sync provider failures", () => {
     );
   });
 
+  it("preserves institution metadata and sanitizes raw provider errors when every Plaid institution fails", async () => {
+    const now = new Date("2026-06-05T12:00:00.000Z");
+    const rawProviderError = {
+      response: {
+        data: {
+          error_code: "INVALID_FIELD",
+          error_message: "PLAID_SECRET=provider-secret access_token=provider-token",
+          request_id: "request-1",
+        },
+      },
+    };
+    const captures = createCaptures();
+    const supabase = createManualSyncClient(captures);
+
+    mocks.getFinancialDataProvider.mockReturnValue({
+      createConnectSession: vi.fn(),
+      handleConnectCallback: vi.fn(),
+      syncAccounts: vi.fn(),
+      syncTransactions: vi.fn(),
+      syncBalances: vi.fn(),
+      syncConnectedInstitutions: vi.fn().mockResolvedValue([
+        {
+          type: "failure",
+          institutionId: "institution-failed",
+          institutionName: "Plaid Bank",
+          error: rawProviderError,
+        },
+      ]),
+    });
+
+    await expect(
+      runManualSync(supabase, {
+        userId: "user-1",
+        provider: "plaid",
+        now,
+      }),
+    ).rejects.toMatchObject({
+      name: "ProviderSyncError",
+      code: "invalid-field",
+      message: "PLAID_SECRET=[redacted] access_token=[redacted]",
+      status: "failed",
+      institutionId: "institution-failed",
+      institutionName: "Plaid Bank",
+      repairRequired: false,
+    });
+
+    expect(captures.syncRunUpdates[0]?.payload).toMatchObject({
+      status: "failed",
+      institution_id: "institution-failed",
+      error_code: "invalid-field",
+      error_message: "PLAID_SECRET=[redacted] access_token=[redacted]",
+    });
+    expect(captures.institutionUpdates[0]).toMatchObject({
+      payload: {
+        status: "failed",
+        stale_after: now.toISOString(),
+        error_code: "invalid-field",
+        error_message: "PLAID_SECRET=[redacted] access_token=[redacted]",
+        updated_at: now.toISOString(),
+      },
+      conditions: [
+        ["user_id", "user-1"],
+        ["provider", "plaid"],
+        ["id", "institution-failed"],
+      ],
+    });
+    expect(mocks.recordProductEvent).toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "manual_sync_failed",
+      {
+        provider: "plaid",
+        error: "PLAID_SECRET=[redacted] access_token=[redacted]",
+        errorCode: "invalid-field",
+        repairRequired: false,
+        institutionId: "institution-failed",
+        institutionName: "Plaid Bank",
+      },
+    );
+    expect(JSON.stringify(captures)).not.toContain("provider-secret");
+    expect(JSON.stringify(mocks.recordProductEvent.mock.calls)).not.toContain("provider-token");
+  });
+
   it("keeps successful institutions usable when another connected Plaid institution fails", async () => {
     const now = new Date("2026-06-05T12:00:00.000Z");
     const providerError = new ProviderSyncError({

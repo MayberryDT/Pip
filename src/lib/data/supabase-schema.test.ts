@@ -24,6 +24,7 @@ describe("Supabase financial-data schema", () => {
       "user_settings",
       "connected_institutions",
       "accounts",
+      "account_preferences",
       "transactions",
       "pip_cash_snapshots",
       "sync_runs",
@@ -41,6 +42,7 @@ describe("Supabase financial-data schema", () => {
       user_settings: ["select", "insert", "update", "delete"],
       connected_institutions: ["select", "insert", "update", "delete"],
       accounts: ["select", "insert", "update", "delete"],
+      account_preferences: ["select", "insert", "update", "delete"],
       transactions: ["select", "insert", "update", "delete"],
       pip_cash_snapshots: ["select", "insert", "update", "delete"],
       sync_runs: ["select", "insert", "update", "delete"],
@@ -90,6 +92,7 @@ describe("Supabase financial-data schema", () => {
     expect(allMigrations).toContain("grant execute on function public.delete_current_user_financial_data() to authenticated;");
     expect(allMigrations).toContain("delete from public.product_events where user_id = current_user_id;");
     expect(allMigrations).toContain("delete from public.sync_runs where user_id = current_user_id;");
+    expect(allMigrations).toContain("delete from public.account_preferences where user_id = current_user_id;");
     expect(allMigrations).toContain("delete from public.transactions where user_id = current_user_id;");
     expect(allMigrations).toContain("delete from public.connected_institutions where user_id = current_user_id;");
     expect(migration).toContain(
@@ -114,6 +117,25 @@ describe("Supabase financial-data schema", () => {
     expect(restrictBetaRpcMigration).toContain(
       "revoke all on function public.accept_current_user_invite() from public, anon, authenticated;",
     );
+  });
+
+  it("adds server-written marketing tables without direct public policies", () => {
+    [
+      "marketing_waitlist",
+      "marketing_events",
+      "marketing_content_drafts",
+    ].forEach((tableName) => {
+      expect(allMigrations).toContain(`create table if not exists public.${tableName}`);
+      expect(allMigrations).toContain(`alter table public.${tableName} enable row level security;`);
+      expect(normalizeSql(allMigrations)).not.toContain(
+        normalizeSql(`on public.${tableName} for insert to anon`),
+      );
+      expect(normalizeSql(allMigrations)).not.toContain(
+        normalizeSql(`on public.${tableName} for insert to authenticated`),
+      );
+    });
+    expect(allMigrations).toContain("'waitlist_signup_succeeded'");
+    expect(allMigrations).toContain("'distribb_webhook_received'");
   });
 
   it("creates sync logs and stale connection fields for provider operations", () => {
@@ -150,6 +172,7 @@ describe("Supabase financial-data schema", () => {
       "user_settings",
       "connected_institutions",
       "accounts",
+      "account_preferences",
       "transactions",
       "sync_runs",
       "pip_cash_snapshots",

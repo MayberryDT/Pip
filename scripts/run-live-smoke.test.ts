@@ -39,6 +39,7 @@ describe("live authenticated smoke runner", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "pip-live-runner-"));
     const storageState = join(tempDir, "state.json");
     const proofReport = join(tempDir, "proof.json");
+    const latestDeploy = readLatestVerifiedDeploy();
     writeStorageState(storageState);
 
     try {
@@ -73,10 +74,9 @@ describe("live authenticated smoke runner", () => {
       expect(output.logs.join("\n")).toContain("proof report written");
       expect(JSON.parse(readFileSync(proofReport, "utf8"))).toMatchObject({
         status: "passed",
-        baseUrl: "https://pip-mayberrydt.netlify.app",
-        latestVerifiedDeployUrl:
-          "https://6a265f4336389d2a1930a78b--pip-mayberrydt.netlify.app",
-        latestVerifiedDeployId: "6a265f4336389d2a1930a78b",
+        baseUrl: "https://spendwithpip.com",
+        latestVerifiedDeployUrl: latestDeploy.url,
+        latestVerifiedDeployId: latestDeploy.id,
         storageStatePath: storageState,
         plaidAutomationRequired: true,
         plaidAutomationEnabled: true,
@@ -137,7 +137,7 @@ function writeStorageState(path: string) {
       cookies: [],
       origins: [
         {
-          origin: "https://pip-mayberrydt.netlify.app",
+          origin: "https://spendwithpip.com",
           localStorage: [
             {
               name: "sb-qevvmulexfoebjmlxbts-auth-token",
@@ -148,6 +148,23 @@ function writeStorageState(path: string) {
       ],
     }),
   );
+}
+
+function readLatestVerifiedDeploy() {
+  const readme = readFileSync(join(process.cwd(), "README.md"), "utf8");
+  const match = readme.match(/Latest verified production deploy:\s+(https:\/\/\S+)/);
+
+  if (!match) {
+    throw new Error("README.md does not include the latest verified production deploy.");
+  }
+
+  const id = match[1].match(/^https:\/\/([a-f0-9]+)--spendwithpip\.netlify\.app/)?.[1];
+
+  if (!id) {
+    throw new Error("README.md latest verified production deploy is not a Netlify deploy URL.");
+  }
+
+  return { url: match[1], id };
 }
 
 function createSpawnCapture(status = 0) {

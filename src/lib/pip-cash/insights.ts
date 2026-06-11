@@ -10,6 +10,7 @@ import {
   annotateCreditCardPaymentMatches,
 } from "@/lib/pip-cash/dedupe-credit-card-payments";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
+import { toPipCashSnapshot } from "@/lib/pip-cash/account-filters";
 import type {
   Account,
   FinancialSnapshot,
@@ -84,6 +85,7 @@ export type SpendableCashForecast = {
 };
 
 export function buildSpendingBreakdown(snapshot: FinancialSnapshot): SpendingBreakdown {
+  snapshot = toPipCashSnapshot(snapshot);
   const result = calculatePipCash(snapshot);
   const transactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts);
   const windowTransactions = transactions.filter((transaction) =>
@@ -116,6 +118,7 @@ export function buildRecurringActivity(
   snapshot: FinancialSnapshot,
   input: { horizonDays?: number } = {},
 ): RecurringActivity {
+  snapshot = toPipCashSnapshot(snapshot);
   const asOfDate = snapshot.settings.asOfDate;
   const horizonDays = input.horizonDays ?? RECURRING_CARD_HORIZON_DAYS;
   const transactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts)
@@ -152,6 +155,7 @@ export function buildSpendableCashForecast(
   snapshot: FinancialSnapshot,
   input: { horizonDays?: number } = {},
 ): SpendableCashForecast {
+  snapshot = toPipCashSnapshot(snapshot);
   const horizonDays = clampForecastHorizon(input.horizonDays);
   const result = calculatePipCash(snapshot);
   const metric = result.spendableCashToday;
@@ -240,6 +244,7 @@ function estimateLegacyEverydaySpendCents(
   snapshot: FinancialSnapshot,
   window: RollingWindow,
 ): number {
+  snapshot = toPipCashSnapshot(snapshot);
   const transactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts);
   const windowTransactions = transactions.filter((transaction) =>
     isWithinInclusiveWindow(transaction.date, window),

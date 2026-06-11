@@ -31,7 +31,7 @@ describe("POST /api/auth/sign-in", () => {
   it("returns 503 when Supabase is disabled", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
-    const response = await POST(jsonRequest({ email: "mayberrydt@gmail.com" }));
+    const response = await POST(jsonRequest({ email: "test.user@example.com" }));
 
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
@@ -41,20 +41,20 @@ describe("POST /api/auth/sign-in", () => {
 
   it("normalizes any valid email and sends the magic link to the callback route", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://pip-mayberrydt.netlify.app");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://spendwithpip.com");
     const supabase = createSupabaseClient();
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
-    const response = await POST(jsonRequest({ email: " MayberryDT@gmail.COM " }));
+    const response = await POST(jsonRequest({ email: " Test.User@example.COM " }));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       status: "sent",
     });
     expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
-      email: "mayberrydt@gmail.com",
+      email: "test.user@example.com",
       options: {
-        emailRedirectTo: "https://pip-mayberrydt.netlify.app/auth/callback",
+        emailRedirectTo: "https://spendwithpip.com/auth/callback?next=%2Fapp",
         shouldCreateUser: true,
       },
     });
@@ -67,9 +67,9 @@ describe("POST /api/auth/sign-in", () => {
 
     const response = await POST(
       jsonRequest(
-        { email: "mayberrydt@gmail.com" },
+        { email: "test.user@example.com" },
         {
-          "x-forwarded-host": "pip-mayberrydt.netlify.app",
+          "x-forwarded-host": "spendwithpip.com",
           "x-forwarded-proto": "https",
         },
       ),
@@ -77,9 +77,9 @@ describe("POST /api/auth/sign-in", () => {
 
     expect(response.status).toBe(200);
     expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
-      email: "mayberrydt@gmail.com",
+      email: "test.user@example.com",
       options: {
-        emailRedirectTo: "https://pip-mayberrydt.netlify.app/auth/callback",
+        emailRedirectTo: "https://spendwithpip.com/auth/callback?next=%2Fapp",
         shouldCreateUser: true,
       },
     });
@@ -87,15 +87,15 @@ describe("POST /api/auth/sign-in", () => {
 
   it("uses forwarded production headers before a Netlify deploy-prime URL", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("DEPLOY_PRIME_URL", "https://main--pip-mayberrydt.netlify.app");
+    vi.stubEnv("DEPLOY_PRIME_URL", "https://main--spendwithpip.netlify.app");
     const supabase = createSupabaseClient();
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
     const response = await POST(
       jsonRequest(
-        { email: "mayberrydt@gmail.com" },
+        { email: "test.user@example.com" },
         {
-          "x-forwarded-host": "pip-mayberrydt.netlify.app",
+          "x-forwarded-host": "spendwithpip.com",
           "x-forwarded-proto": "https",
         },
       ),
@@ -103,9 +103,9 @@ describe("POST /api/auth/sign-in", () => {
 
     expect(response.status).toBe(200);
     expect(supabase.auth.signInWithOtp).toHaveBeenCalledWith({
-      email: "mayberrydt@gmail.com",
+      email: "test.user@example.com",
       options: {
-        emailRedirectTo: "https://pip-mayberrydt.netlify.app/auth/callback",
+        emailRedirectTo: "https://spendwithpip.com/auth/callback?next=%2Fapp",
         shouldCreateUser: true,
       },
     });

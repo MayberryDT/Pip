@@ -5,7 +5,7 @@ import type { Transaction } from "@/lib/types";
 describe("classifyTransaction", () => {
   it.each([
     ["refund from a merchant return", tx({ description: "RETURN REFUND REI", amountCents: 4200 }), "refund"],
-    ["peer transfer text", tx({ description: "VENMO Tyler cashout", amountCents: 3500 }), "transfer"],
+    ["peer transfer text", tx({ description: "VENMO Alex cashout", amountCents: 3500 }), "transfer"],
     [
       "messy card autopay",
       tx({

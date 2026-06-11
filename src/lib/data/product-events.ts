@@ -33,6 +33,21 @@ export const productEventNames = [
   "manual_sync_succeeded",
   "manual_sync_partial",
   "manual_sync_failed",
+  "account_connections_viewed",
+  "account_connection_started",
+  "account_connection_succeeded",
+  "account_connection_failed",
+  "account_repair_started",
+  "account_repair_succeeded",
+  "account_repair_failed",
+  "account_selection_started",
+  "account_selection_succeeded",
+  "account_selection_failed",
+  "account_inclusion_updated",
+  "account_protected_savings_updated",
+  "institution_removal_requested",
+  "institution_removed",
+  "institution_removal_failed",
 ] as const;
 
 export type ProductEventName = (typeof productEventNames)[number];
@@ -48,6 +63,15 @@ export const clientReportedProductEventNames = [
   "plaid_exchange_failed",
   "plaid_sync_succeeded",
   "plaid_sync_failed",
+  "account_connection_started",
+  "account_connection_succeeded",
+  "account_connection_failed",
+  "account_repair_started",
+  "account_repair_succeeded",
+  "account_repair_failed",
+  "account_selection_started",
+  "account_selection_succeeded",
+  "account_selection_failed",
 ] as const;
 
 export type ClientReportedProductEventName = (typeof clientReportedProductEventNames)[number];
@@ -102,6 +126,10 @@ export function getAgentProductEventNames(
     names.add("true_balances_revealed");
   }
 
+  if (cardTypes.includes("account_connections")) {
+    names.add("account_connections_viewed");
+  }
+
   if (cardTypes.includes("missing_card_nudge")) {
     names.add("missing_card_nudge_shown");
   }
@@ -119,11 +147,17 @@ export function getAgentProductEventNames(
     }
   }
 
-  if (response.audit.guidance?.validationOutcome === "shown") {
+  if (
+    response.audit.guidance?.validationOutcome === "shown" &&
+    response.audit.guidance?.guidanceSource === "model_draft"
+  ) {
     names.add("financial_guidance_card_drafted");
   }
 
-  if (response.audit.guidance?.validationOutcome === "repaired") {
+  if (
+    response.audit.guidance?.validationOutcome === "repaired" &&
+    response.audit.guidance?.guidanceSource === "model_draft"
+  ) {
     names.add("financial_guidance_card_drafted");
     names.add("financial_guidance_card_repaired");
   }

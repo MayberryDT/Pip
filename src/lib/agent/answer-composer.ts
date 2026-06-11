@@ -254,6 +254,11 @@ function composeCardBackedAnswer(
         message: "I checked the connection state.",
         answerPatternId: "connect-account",
       };
+    case "account_connections":
+      return {
+        message: "I found the accounts connected to Pip.",
+        answerPatternId: "account-connections",
+      };
   }
 }
 

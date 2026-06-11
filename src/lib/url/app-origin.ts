@@ -1,9 +1,9 @@
 export function getAppOrigin(request: Request, env: Record<string, string | undefined> = process.env): string {
   return (
-    normalizeOrigin(env.NEXT_PUBLIC_SITE_URL) ??
-    normalizeOrigin(env.URL) ??
+    getCurrentOrigin(env.NEXT_PUBLIC_SITE_URL) ??
+    getCurrentOrigin(env.URL) ??
     getForwardedOrigin(request) ??
-    normalizeOrigin(env.DEPLOY_PRIME_URL) ??
+    getCurrentOrigin(env.DEPLOY_PRIME_URL) ??
     new URL(request.url).origin
   );
 }
@@ -52,5 +52,25 @@ function normalizeOrigin(rawUrl: string | undefined): string | null {
     return new URL(urlWithProtocol).origin;
   } catch {
     return null;
+  }
+}
+
+function getCurrentOrigin(rawUrl: string | undefined): string | null {
+  const origin = normalizeOrigin(rawUrl);
+
+  if (!origin || isLegacyNetlifyOrigin(origin)) {
+    return null;
+  }
+
+  return origin;
+}
+
+function isLegacyNetlifyOrigin(origin: string): boolean {
+  try {
+    const { hostname } = new URL(origin);
+
+    return /(^|--)(free-cash-mayberrydt|pip-mayberrydt)\.netlify\.app$/i.test(hostname);
+  } catch {
+    return false;
   }
 }

@@ -2,11 +2,11 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    id: "/",
+    id: "/app",
     name: "Pip",
     short_name: "Pip",
     description: "Spendable cash for everyday life.",
-    start_url: "/",
+    start_url: "/app",
     scope: "/",
     display: "standalone",
     display_override: ["standalone", "minimal-ui"],

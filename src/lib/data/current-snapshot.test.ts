@@ -89,7 +89,7 @@ describe("getCurrentPipCashResult", () => {
     expect(mocks.loadFinancialSnapshotForUser).toHaveBeenCalledWith(supabase, "user-1");
   });
 
-  it("does not fall back to fake PIP cash for authenticated users without financial rows", async () => {
+  it("does not fall back to fake Pip Cash for authenticated users without financial rows", async () => {
     const supabase = createSupabaseClient({ id: "user-1" });
 
     mocks.isSupabaseConfigured.mockReturnValue(true);

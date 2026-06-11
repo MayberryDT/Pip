@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-describe("PIP cash deep-module boundary", () => {
+describe("Pip Cash deep-module boundary", () => {
   it("keeps deterministic money math isolated from providers, routes, databases, and AI", () => {
     const moduleFiles = findSourceFiles(join(process.cwd(), "src/lib/pip-cash"));
 

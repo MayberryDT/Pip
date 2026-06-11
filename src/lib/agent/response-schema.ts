@@ -26,7 +26,8 @@ const plaidClientActionConfigSchema = z.object({
   linkToken: z.string(),
   environment: z.enum(["sandbox", "production"]),
   products: z.array(z.string()),
-  mode: z.enum(["connect", "repair"]),
+  mode: z.enum(["connect", "repair", "account_selection"]),
+  institutionId: z.string().optional(),
 });
 
 export const clientActionSchema = z.discriminatedUnion("type", [
@@ -78,6 +79,9 @@ const balanceSchema = z.object({
   balanceCents: z.number().int(),
   availableBalanceCents: z.number().int().optional(),
   lastFour: z.string().optional(),
+  active: z.boolean().optional(),
+  includedInPipCash: z.boolean().optional(),
+  isProtectedSavings: z.boolean().optional(),
 });
 
 const transactionSchema = z.object({
@@ -153,11 +157,40 @@ const guidanceCardRowSchema = z.object({
   evidenceIds: z.array(z.string().min(1).max(80)).min(1).max(4),
 });
 
+const accountConnectionActionSchema = z.object({
+  id: z.string().min(1).max(120),
+  label: z.string().min(1).max(40),
+  prompt: z.string().min(1).max(160),
+  style: z.enum(["primary", "secondary", "danger"]),
+});
+
+const accountConnectionAccountSchema = z.object({
+  accountId: z.string().min(1),
+  name: z.string().min(1).max(120),
+  kind: accountKindSchema,
+  lastFour: z.string().optional(),
+  includedInPipCash: z.boolean(),
+  isProtectedSavings: z.boolean(),
+  active: z.boolean(),
+  roleLabel: z.string().min(1).max(80),
+  warning: z.string().min(1).max(160).optional(),
+});
+
+const accountConnectionInstitutionSchema = z.object({
+  institutionId: z.string().min(1),
+  institutionName: z.string().min(1).max(160),
+  provider: z.enum(["plaid", "teller", "mock"]),
+  status: z.enum(["connected", "mocked", "stale", "failed", "revoked"]),
+  lastSuccessfulSyncAt: z.string().nullable().optional(),
+  accounts: z.array(accountConnectionAccountSchema),
+  actions: z.array(accountConnectionActionSchema).max(6),
+});
+
 export const guidanceCardDraftOutputSchema = z.object({
   title: z.string().min(1).max(48),
   stance: guidanceStanceSchema,
   summary: z.string().min(1).max(220),
-  rows: z.array(guidanceCardRowSchema).min(1).max(8),
+  rows: z.array(guidanceCardRowSchema).min(1).max(3),
   footer: z.string().min(1).max(140).optional(),
 });
 
@@ -267,6 +300,11 @@ export const cardSchema = z.discriminatedUnion("type", [
     title: z.string(),
     detail: z.string(),
   }),
+  z.object({
+    type: z.literal("account_connections"),
+    title: z.string().min(1).max(80),
+    institutions: z.array(accountConnectionInstitutionSchema),
+  }),
 ]);
 
 export const responseModeSchema = z.enum(["chat_only", "show_card", "update_context", "clarify", "guidance"]);
@@ -305,6 +343,7 @@ export const agentResponseSchema = z.object({
     guidance: z
       .object({
         validationOutcome: z.enum(["not_requested", "context_built", "shown", "repaired", "rejected"]),
+        guidanceSource: z.enum(["model_draft", "deterministic_fallback", "none"]).optional(),
         metricVersion: z.literal("v2").optional(),
         state: z.string().optional(),
         confidence: z.string().optional(),

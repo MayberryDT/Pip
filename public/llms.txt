@@ -1,0 +1,33 @@
+# Pip
+
+Pip is a cute daily money companion for everyday spending decisions.
+
+Core thesis:
+Your bank balance shows what exists. Pip shows what is actually okay to use today.
+
+Primary product concept:
+Spendable Cash Today is the one daily number Pip shows by default. It is meant to help users stop guessing from their bank balance without maintaining a budget, spreadsheet, or finance dashboard.
+
+Canonical public pages:
+- https://spendwithpip.com/
+- https://spendwithpip.com/how-it-works
+- https://spendwithpip.com/security
+- https://spendwithpip.com/blog
+- https://spendwithpip.com/privacy
+- https://spendwithpip.com/terms
+- https://spendwithpip.com/support
+
+Important boundaries:
+- Pip is not a bank replacement.
+- Pip does not move money.
+- Pip uses read-only account data in the beta.
+- Pip is not financial, tax, investment, credit, or legal advice.
+- Pip's public content should be product-led and plain English, not generic financial education.
+
+Primary content topics:
+- Spendable Cash Today
+- why bank balances can be misleading
+- no-budget spending
+- daily money habits
+- savings cushions
+- cute, low-pressure financial product design

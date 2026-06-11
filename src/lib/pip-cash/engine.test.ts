@@ -83,6 +83,87 @@ describe("calculatePipCash", () => {
     expect(result.pipCashTodayCents).toBe(0);
   });
 
+  it("ignores transactions from inactive or excluded accounts in Spendable Cash Today", () => {
+    const snapshot: FinancialSnapshot = {
+      settings: {
+        asOfDate: "2026-06-20",
+        protectedSavingsMonthlyCents: 0,
+      },
+      accounts: [
+        {
+          id: "checking",
+          name: "Everyday Checking",
+          institutionName: "Northstar Bank",
+          kind: "checking",
+          balanceCents: 100000,
+          active: true,
+          includedInPipCash: true,
+        },
+        {
+          id: "business-card",
+          name: "Business Card",
+          institutionName: "Northstar Bank",
+          kind: "credit_card",
+          balanceCents: -50000,
+          active: true,
+          includedInPipCash: false,
+        },
+        {
+          id: "old-checking",
+          name: "Old Checking",
+          institutionName: "Old Bank",
+          kind: "checking",
+          balanceCents: 50000,
+          active: false,
+          includedInPipCash: false,
+        },
+      ],
+      transactions: [
+        {
+          id: "income",
+          accountId: "checking",
+          date: "2026-06-05",
+          description: "Payroll",
+          amountCents: 100000,
+          kind: "income",
+        },
+        {
+          id: "excluded-purchase",
+          accountId: "business-card",
+          date: "2026-06-06",
+          description: "Business purchase",
+          amountCents: -50000,
+          kind: "purchase",
+        },
+        {
+          id: "inactive-purchase",
+          accountId: "old-checking",
+          date: "2026-06-07",
+          description: "Old account purchase",
+          amountCents: -25000,
+          kind: "purchase",
+        },
+      ],
+    };
+
+    const result = calculatePipCash(snapshot);
+
+    expect(result.incomeTotalCents).toBe(100000);
+    expect(result.spendingTotalCents).toBe(0);
+    expect(result.trueBalances).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          accountId: "business-card",
+          includedInPipCash: false,
+        }),
+        expect.objectContaining({
+          accountId: "old-checking",
+          active: false,
+        }),
+      ]),
+    );
+  });
+
   it("counts connected credit-card purchases while ignoring the matching settlement payment", () => {
     const cardPurchaseSnapshot: FinancialSnapshot = {
       settings: {
@@ -193,7 +274,7 @@ describe("calculatePipCash", () => {
     expect(result.rollingNetCents).toBe(60000);
   });
 
-  it("can return positive, zero, and negative PIP cash values", () => {
+  it("can return positive, zero, and negative Pip Cash values", () => {
     const baseSnapshot: FinancialSnapshot = {
       settings: {
         asOfDate: "2026-06-20",
@@ -236,7 +317,7 @@ describe("calculatePipCash", () => {
     ).toBeLessThan(0);
   });
 
-  it("allows negative PIP cash values", () => {
+  it("allows negative Pip Cash values", () => {
     const negativeSnapshot: FinancialSnapshot = {
       settings: {
         asOfDate: "2026-06-20",
@@ -306,7 +387,7 @@ describe("calculatePipCash", () => {
     );
   });
 
-  it("labels pending card purchases while including them in PIP cash", () => {
+  it("labels pending card purchases while including them in Pip Cash", () => {
     const pendingSnapshot: FinancialSnapshot = {
       settings: {
         asOfDate: "2026-06-20",

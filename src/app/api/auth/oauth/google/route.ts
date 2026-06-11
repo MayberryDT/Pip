@@ -8,14 +8,14 @@ export async function GET(request: Request) {
   const origin = getAppOrigin(request);
 
   if (!isSupabaseConfigured()) {
-    return NextResponse.redirect(buildAppUrl("/?auth=unconfigured", request));
+    return NextResponse.redirect(buildAppUrl("/app?auth=unconfigured", request));
   }
 
   const supabase = await createSupabaseServerClient();
   const next = getSafeNextPath(requestUrl.searchParams.get("next"));
   const redirectTo = new URL("/auth/callback", origin);
 
-  if (next !== "/") {
+  if (next !== "/app") {
     redirectTo.searchParams.set("next", next);
   }
 
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
   });
 
   if (error || !data.url) {
-    return NextResponse.redirect(buildAppUrl("/?auth=oauth-start-failed", request));
+    return NextResponse.redirect(buildAppUrl("/app?auth=oauth-start-failed", request));
   }
 
   return NextResponse.redirect(data.url);
@@ -36,7 +36,7 @@ export async function GET(request: Request) {
 
 function getSafeNextPath(next: string | null): string {
   if (!next || !next.startsWith("/") || next.startsWith("//")) {
-    return "/";
+    return "/app";
   }
 
   return next;

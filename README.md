@@ -15,23 +15,23 @@ Open http://localhost:3000.
 
 ## Netlify
 
-The project is linked to `pip-mayberrydt` on Netlify.
+The project is linked to `spendwithpip` on Netlify.
 
-- Site URL: https://pip-mayberrydt.netlify.app
-- Latest verified production deploy: https://6a265f4336389d2a1930a78b--pip-mayberrydt.netlify.app
-- Latest verified draft deploy: https://6a23aec6c0e9cfd227824f80--pip-mayberrydt.netlify.app
+- Site URL: https://spendwithpip.com/app
+- Latest verified production deploy: https://6a2ae4e6a29bc882e8359c2b--spendwithpip.netlify.app
+- Latest verified draft deploy: https://6a2a780edf4805a6c39e47e5--spendwithpip.netlify.app
 - Netlify is configured for real beta mode with Supabase, Netlify AI Gateway/OpenAI, and Plaid sandbox env. Fake-data preview deploys remain available with `PIP_DEPLOY_MODE=fake npm run deploy:netlify`.
-- `npm run deploy:netlify` hides local `.env*` files during the local Netlify build, skips stale function cache reuse, and checks generated function bundles for accidental env-file inclusion.
+- `npm run deploy:netlify` hides local `.env*` files during the local Netlify build, deploys the verified generated Netlify artifacts, and checks generated function bundles for accidental env-file inclusion and required Next static assets.
 
 ## AI Agent
 
-`/api/agent` uses the official OpenAI Agents SDK on top of the Responses API. Pip can answer conversationally without a tool, call deterministic app tools when it needs setup state or financial facts, and decide whether to show a card, update context, or ask a clarification. The internal PIP cash engine still owns all money math.
+`/api/agent` uses the official OpenAI Agents SDK on top of the Responses API. Pip can answer conversationally without a tool, call deterministic app tools when it needs setup state or financial facts, and decide whether to show a card, update context, or ask a clarification. The internal Pip Cash engine still owns all money math.
 
 Agent tools return deterministic financial facts and available typed cards. The model may choose when to call tools and how to explain the result, but it does not emit card selectors or card payloads in final structured output. The server derives final cards only from tool-produced card objects before returning them to the UI. Conversation state is bounded to recent messages, recent shown card types/titles, and recent tool names so the agent can avoid repeating the same card.
 
 Guest onboarding, protected-savings consent, Plaid connect/repair, manual refresh, and delete-data confirmation also go through `/api/agent`. The model writes the visible chat reply, while server tools perform deterministic side effects and may return a typed `clientAction` such as `oauth_redirect`, `open_plaid`, or `reload` for the browser to execute. The React app should not add a parallel regex/canned-response chat path.
 
-Explicit prompt-chip actions such as "Why this number?", "Show the math", "Show recent transactions", true/real balance requests, and specific purchase tests force the matching SDK tool call so the card is reliable, then the model writes the visible reply. Visible financial-agent replies are capped at 220 characters and 35 words, with instructions for fifth-grade reading level. If the SDK rejects the final structured assistant response, the response is too long, or the response violates Pip language rules, `/api/agent` asks the model for one stricter repair attempt. If that repair also fails, the route returns an error rather than substituting canned chat text.
+Explicit prompt-chip actions such as "Why this number?", "Show the math", "Show recent transactions", true/real balance requests, and specific purchase tests force the matching SDK tool call so the card is reliable, then the model writes the visible reply. Visible financial-agent replies are capped at 260 characters and 45 words, with instructions for fifth-grade reading level. If the SDK rejects the final structured assistant response, the response is too long, or the response violates Pip language rules, `/api/agent` asks the model for one stricter repair attempt. If that repair also fails, the route returns an error rather than substituting canned chat text.
 
 The agent also generates the next prompt chips in its structured output. The server trims, dedupes, and validates those chips before returning them, and only permits protected setup chip ids such as `get-signed-up`, `connect-data`, `use-default-savings`, and `set-250-savings` when the current onboarding state makes that action valid. Initial and invalid-chip states may still fall back to contextual defaults, but normal post-response chips should be model-authored.
 
@@ -68,7 +68,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 PIP_OPERATOR_TOKEN=
 ```
 
-The first database migration lives at `supabase/migrations/20260605000000_free_cash_foundation.sql`. It creates user-scoped financial tables, RLS policies, a private provider-credentials table, sync/event tables, and the authenticated delete-data function.
+The first database migration lives at `supabase/migrations/20260605000000_free_cash_foundation.sql`. It creates user-scoped financial tables, RLS policies, a private provider-credentials table, sync/event tables, and the authenticated delete-data function. Its snapshot table uses a historical name that is renamed to `pip_cash_snapshots` by a later rebrand migration.
 
 Google signup flow:
 
@@ -103,13 +103,13 @@ PLAID_PRODUCTS=transactions
 PLAID_COUNTRY_CODES=US
 PLAID_CLIENT_NAME=Pip
 PLAID_DAYS_REQUESTED=90
-PLAID_REDIRECT_URI=https://pip-mayberrydt.netlify.app/plaid/oauth
+PLAID_REDIRECT_URI=https://spendwithpip.com/plaid/oauth
 PIP_PROVIDER_TOKEN_KEY_BASE64=
 ```
 
 Plaid OAuth redirect setup:
 
-- Production Netlify: `PLAID_REDIRECT_URI=https://pip-mayberrydt.netlify.app/plaid/oauth`
+- Production Netlify: `PLAID_REDIRECT_URI=https://spendwithpip.com/plaid/oauth`
 - Local development: `PLAID_REDIRECT_URI=http://localhost:3000/plaid/oauth`
 - The same URI must be added to the Plaid Dashboard redirect URI allowlist for the active Plaid environment.
 
@@ -160,7 +160,7 @@ PIP_LIVE_STORAGE_STATE=/tmp/pip-live-auth.json npm run check:live-smoke
 PIP_LIVE_STORAGE_STATE=/tmp/pip-live-auth.json npm run test:e2e:live
 ```
 
-`npm run capture:live-auth` opens Playwright against production and saves to `/tmp/pip-live-auth.json` by default. Override the target or file path with `-- --base-url=https://... --storage-state=/tmp/other-state.json` when needed.
+`npm run capture:live-auth` opens Playwright against production and saves to `/tmp/pip-live-auth.json` by default. Override the target or file path with `-- --base-url=https://... --storage-state=/tmp/other-state.json` when needed. To keep a reusable Chrome profile for repeated auth attempts, add `-- --user-data-dir=/tmp/pip-live-auth-profile` or set `PIP_LIVE_AUTH_USER_DATA_DIR`.
 
 That smoke expects the Google user to complete OAuth, consent, Plaid sandbox connection, manual sync, and return to the same Pip screen with a real Spendable Cash Today number. It fails if the saved session is still at the guest, consent, or connect-data stage. When Plaid automation is enabled, it also requires successful `/api/providers/plaid/exchange` and `/api/sync/manual` responses, then verifies `/api/sync/status` shows a connected Plaid institution, a succeeded Plaid sync run, and nonzero synced account and transaction counts before asking the AI why the number changed.
 
@@ -173,7 +173,14 @@ npm run test:e2e:live:final
 
 When the final command passes, it writes a proof summary to `/tmp/pip-live-proof.json` by default. Override with `PIP_LIVE_PROOF_REPORT=/tmp/other-proof.json` if needed. The report records the production URL, latest verified deploy URL/id from this README, storage-state path, Plaid automation requirement, and pass timestamp without storing cookies or provider tokens.
 
-`npm run check:prd-complete` is intentionally the last gate. It fails until the proof report exists and confirms the production `npm run test:e2e:live:final` run passed against the latest verified deploy with Plaid automation required and enabled.
+If Google refuses the external Playwright auth browser, use the Codex in-app Browser for the authenticated proof. Capture structured evidence to `/tmp/pip-in-app-browser-evidence.json`, then run:
+
+```bash
+npm run proof:in-app-browser
+npm run check:prd-complete
+```
+
+`npm run check:prd-complete` is intentionally the last gate. It fails until the proof report exists and confirms either the production `npm run test:e2e:live:final` run passed against the latest verified deploy with Plaid automation required and enabled, or a Codex in-app Browser proof shows authenticated production `/api/sync/status`, `/api/pip-cash`, `/api/free-cash`, visible rebrand checks, driver-tool usage, and evidence-backed guidance.
 
 The Plaid automation defaults to the official Sandbox credentials `user_good` / `pass_good` and institution `First Platypus Bank`. Override with `PIP_LIVE_PLAID_INSTITUTION`, `PIP_LIVE_PLAID_USERNAME`, or `PIP_LIVE_PLAID_PASSWORD` if Plaid changes the sandbox UI or the configured products need another institution.
 

@@ -274,10 +274,11 @@ function toolResponse(
       usedModel: true,
       model: PIP_AI_MODEL,
       transport: getPipAiTransport(),
-      guidance: guidanceContext
-        ? {
-            validationOutcome: "context_built",
-            metricVersion: "v2",
+          guidance: guidanceContext
+            ? {
+                validationOutcome: "context_built",
+                guidanceSource: "none",
+                metricVersion: "v2",
             state: guidanceContext.currentRead.state,
             confidence: guidanceContext.currentRead.confidence,
             evidenceIds: guidanceContext.evidence.map((evidence) => evidence.id),
@@ -341,6 +342,7 @@ function guidanceResponse(input: RunAiAgentInput): AgentResponse {
       transport: getPipAiTransport(),
       guidance: {
         validationOutcome: "shown",
+        guidanceSource: "model_draft",
         metricVersion: "v2",
         state: guidance.currentRead.state,
         confidence: guidance.currentRead.confidence,

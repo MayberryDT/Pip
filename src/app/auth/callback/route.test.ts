@@ -18,23 +18,23 @@ afterEach(() => {
 });
 
 describe("GET /auth/callback", () => {
-  it("redirects home without auth params and avoids Supabase work", async () => {
+  it("redirects to the app without auth params and avoids Supabase work", async () => {
     enableSupabaseEnv();
 
     const response = await GET(new Request("http://localhost/auth/callback"));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/");
+    expect(response.headers.get("location")).toBe("http://localhost/app");
     expect(routeMocks.createSupabaseServerClient).not.toHaveBeenCalled();
   });
 
-  it("redirects home when Supabase is disabled", async () => {
+  it("redirects to the app when Supabase is disabled", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     const response = await GET(new Request("http://localhost/auth/callback?code=abc"));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/");
+    expect(response.headers.get("location")).toBe("http://localhost/app");
   });
 
   it("exchanges the code and respects a same-origin next path", async () => {
@@ -54,34 +54,34 @@ describe("GET /auth/callback", () => {
 
   it("redirects successful OAuth callbacks to the canonical public site origin", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://pip-mayberrydt.netlify.app");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://spendwithpip.com");
     const supabase = createSupabaseClient({ error: null });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
     const response = await GET(
       new Request(
-        "https://main--pip-mayberrydt.netlify.app/auth/callback?code=abc123&next=/welcome",
+        "https://main--spendwithpip.netlify.app/auth/callback?code=abc123&next=/welcome",
       ),
     );
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("https://pip-mayberrydt.netlify.app/welcome");
+    expect(response.headers.get("location")).toBe("https://spendwithpip.com/welcome");
     expect(supabase.auth.exchangeCodeForSession).toHaveBeenCalledWith("abc123");
   });
 
   it("redirects failed OAuth callbacks to the canonical public site origin", async () => {
     enableSupabaseEnv();
-    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://pip-mayberrydt.netlify.app");
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://spendwithpip.com");
     const supabase = createSupabaseClient({ error: new Error("bad code") });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
     const response = await GET(
-      new Request("https://main--pip-mayberrydt.netlify.app/auth/callback?code=bad"),
+      new Request("https://main--spendwithpip.netlify.app/auth/callback?code=bad"),
     );
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
-      "https://pip-mayberrydt.netlify.app/?auth=callback-failed",
+      "https://spendwithpip.com/app?auth=callback-failed",
     );
   });
 
@@ -92,14 +92,14 @@ describe("GET /auth/callback", () => {
 
     const response = await GET(
       new Request(
-        "http://localhost/auth/callback?email=mayberrydt%40gmail.com&token=123456&type=magiclink&next=/welcome",
+        "http://localhost/auth/callback?email=test.user%40example.com&token=123456&type=magiclink&next=/welcome",
       ),
     );
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("http://localhost/welcome");
     expect(supabase.auth.verifyOtp).toHaveBeenCalledWith({
-      email: "mayberrydt@gmail.com",
+      email: "test.user@example.com",
       token: "123456",
       type: "magiclink",
     });
@@ -116,7 +116,7 @@ describe("GET /auth/callback", () => {
     );
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/");
+    expect(response.headers.get("location")).toBe("http://localhost/app");
     expect(supabase.auth.verifyOtp).toHaveBeenCalledWith({
       token_hash: "hashed-token",
       type: "email",
@@ -135,8 +135,8 @@ describe("GET /auth/callback", () => {
       new Request("http://localhost/auth/callback?code=abc123&next=//evil.example"),
     );
 
-    expect(absoluteResponse.headers.get("location")).toBe("http://localhost/");
-    expect(protocolRelativeResponse.headers.get("location")).toBe("http://localhost/");
+    expect(absoluteResponse.headers.get("location")).toBe("http://localhost/app");
+    expect(protocolRelativeResponse.headers.get("location")).toBe("http://localhost/app");
   });
 
   it("redirects to an auth error if code exchange fails", async () => {
@@ -147,7 +147,7 @@ describe("GET /auth/callback", () => {
     const response = await GET(new Request("http://localhost/auth/callback?code=bad"));
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/?auth=callback-failed");
+    expect(response.headers.get("location")).toBe("http://localhost/app?auth=callback-failed");
     expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
 
@@ -157,11 +157,11 @@ describe("GET /auth/callback", () => {
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
     const response = await GET(
-      new Request("http://localhost/auth/callback?email=mayberrydt%40gmail.com&token=bad&type=magiclink"),
+      new Request("http://localhost/auth/callback?email=test.user%40example.com&token=bad&type=magiclink"),
     );
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/?auth=callback-failed");
+    expect(response.headers.get("location")).toBe("http://localhost/app?auth=callback-failed");
     expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
 });
@@ -181,7 +181,7 @@ function createSupabaseClient(input: { error: Error | null }) {
             ? null
             : {
                 id: "user-1",
-                email: "mayberrydt@gmail.com",
+                email: "test.user@example.com",
               },
         },
         error: input.error,
@@ -192,7 +192,7 @@ function createSupabaseClient(input: { error: Error | null }) {
             ? null
             : {
                 id: "user-1",
-                email: "mayberrydt@gmail.com",
+                email: "test.user@example.com",
               },
         },
         error: input.error,

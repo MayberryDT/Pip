@@ -131,6 +131,7 @@ describe("POST /api/providers/plaid/exchange", () => {
       accessToken: "access-sandbox-123",
       institutionName: "Northstar Bank",
       environment: "sandbox",
+      providerInstitutionId: "ins_1",
     });
     expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
       admin,
@@ -140,6 +141,7 @@ describe("POST /api/providers/plaid/exchange", () => {
         provider: "plaid",
         status: "item-exchanged",
         institutionName: "Northstar Bank",
+        providerInstitutionId: "ins_1",
       },
     );
   });
@@ -199,27 +201,40 @@ function createServerSupabase(user: { id: string } | null) {
 
 function createAdminSupabase() {
   const admin = {
+    schema: vi.fn((schemaName: string) => {
+      expect(schemaName).toBe("private");
+
+      return {
+        from: vi.fn((tableName: string) => {
+          expect(tableName).toBe("provider_credentials");
+
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                eq: vi.fn(() => ({
+                  eq: vi.fn(() => ({
+                    maybeSingle: vi.fn().mockResolvedValue({
+                      data: null,
+                      error: null,
+                    }),
+                  })),
+                })),
+              })),
+            })),
+          };
+        }),
+      };
+    }),
     from: vi.fn((tableName: string) => {
       expect(tableName).toBe("connected_institutions");
 
       return {
-        select: vi.fn(() => ({
-          eq: vi.fn(() => ({
-            eq: vi.fn(() => ({
-              eq: vi.fn(() => ({
-                maybeSingle: vi.fn().mockResolvedValue({
-                  data: null,
-                  error: null,
-                }),
-              })),
-            })),
-          })),
-        })),
         insert: vi.fn((payload: Record<string, unknown>) => {
           expect(payload).toMatchObject({
             user_id: "user-1",
             provider: "plaid",
             institution_name: "Northstar Bank",
+            provider_institution_id: "ins_1",
             status: "connected",
           });
 

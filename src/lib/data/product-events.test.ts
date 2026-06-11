@@ -79,6 +79,7 @@ describe("agent product event derivation", () => {
             usedModel: true,
             guidance: {
               validationOutcome: "shown",
+              guidanceSource: "model_draft",
               metricVersion: "v2",
               state: "overspending",
               confidence: "high",
@@ -118,6 +119,7 @@ describe("agent product event derivation", () => {
             usedModel: true,
             guidance: {
               validationOutcome: "rejected",
+              guidanceSource: "none",
               metricVersion: "v2",
               rejectionReason: "unknown evidence id",
             },
@@ -130,6 +132,46 @@ describe("agent product event derivation", () => {
       "financial_guidance_requested",
       "financial_guidance_context_built",
       "financial_guidance_card_rejected",
+    ]);
+  });
+
+  it("does not count deterministic fallback guidance cards as model-authored drafts", () => {
+    expect(
+      getAgentProductEventNames(
+        {
+          ...createAgentResponse({
+            type: "guidance_card",
+            title: "My read",
+            stance: "watch",
+            summary: "Fallback guidance based on deterministic evidence.",
+            rows: [
+              {
+                label: "Today",
+                detail: "The read is based on today's Spendable Cash evidence.",
+                tone: "neutral",
+                evidenceIds: ["spendable-today"],
+              },
+            ],
+          }),
+          usedTools: ["get_financial_guidance_context"],
+          responseMode: "guidance",
+          audit: {
+            toolNames: ["get_financial_guidance_context"],
+            usedModel: true,
+            guidance: {
+              validationOutcome: "shown",
+              guidanceSource: "deterministic_fallback",
+              metricVersion: "v2",
+            },
+          },
+        },
+        4300,
+      ),
+    ).toEqual([
+      "agent_question_asked",
+      "financial_guidance_requested",
+      "financial_guidance_context_built",
+      "financial_guidance_card_shown",
     ]);
   });
 

@@ -48,7 +48,7 @@ describe("PlaidOAuthResume", () => {
     await resumePlaidOAuthConnection({
       linkToken: "link-oauth-123",
       mode: "connect",
-      receivedRedirectUri: "https://pip-mayberrydt.netlify.app/plaid/oauth?oauth_state_id=state-1",
+      receivedRedirectUri: "https://spendwithpip.com/plaid/oauth?oauth_state_id=state-1",
     });
 
     expect(plaidMocks.openPlaidLink).toHaveBeenCalledWith(
@@ -57,7 +57,7 @@ describe("PlaidOAuthResume", () => {
         mode: "connect",
       },
       expect.objectContaining({
-        receivedRedirectUri: "https://pip-mayberrydt.netlify.app/plaid/oauth?oauth_state_id=state-1",
+        receivedRedirectUri: "https://spendwithpip.com/plaid/oauth?oauth_state_id=state-1",
         persistToken: false,
         onEvent: expect.any(Function),
       }),
@@ -105,7 +105,7 @@ describe("PlaidOAuthResume", () => {
     await resumePlaidOAuthConnection({
       linkToken: "link-repair-123",
       mode: "repair",
-      receivedRedirectUri: "https://pip-mayberrydt.netlify.app/plaid/oauth?oauth_state_id=state-1",
+      receivedRedirectUri: "https://spendwithpip.com/plaid/oauth?oauth_state_id=state-1",
     });
 
     expect(fetchMock).toHaveBeenCalledWith("/api/sync/manual", {

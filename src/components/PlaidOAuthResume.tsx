@@ -9,6 +9,7 @@ import {
   type PlaidConnection,
   type PlaidEventMetadata,
 } from "@/lib/providers/plaid/link-browser";
+import type { PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
 
 type ResumeState = "loading" | "error" | "success";
 
@@ -41,7 +42,7 @@ export function PlaidOAuthResume() {
         });
         setState("success");
         setMessage("Connected. I’m taking you back to Pip now.");
-        window.setTimeout(() => window.location.replace("/?plaid=connected"), 650);
+        window.setTimeout(() => window.location.replace("/app?plaid=connected"), 650);
       } catch (error) {
         setState("error");
         setMessage(error instanceof Error ? error.message : "Plaid could not finish connecting.");
@@ -71,7 +72,7 @@ export function PlaidOAuthResume() {
           {state === "error" ? (
             <a
               className="focus-ring mt-5 inline-flex min-h-11 items-center rounded-full border border-ink/10 bg-porcelain px-5 text-sm font-semibold text-ink"
-              href="/"
+              href="/app"
             >
               Back to Pip
             </a>
@@ -84,7 +85,7 @@ export function PlaidOAuthResume() {
 
 export async function resumePlaidOAuthConnection(input: {
   linkToken: string;
-  mode?: "connect" | "repair";
+  mode?: PlaidLinkMode;
   receivedRedirectUri: string;
 }) {
   const plaid = {
@@ -120,8 +121,8 @@ export async function resumePlaidOAuthConnection(input: {
     throw error;
   }
 
-  if (input.mode === "repair") {
-    await refreshPlaidDataWithTelemetry("repair");
+  if (input.mode === "repair" || input.mode === "account_selection") {
+    await refreshPlaidDataWithTelemetry(input.mode);
   } else {
     await exchangePlaidConnection(connection);
     await refreshPlaidDataWithTelemetry("manual");
@@ -172,7 +173,7 @@ async function exchangePlaidConnection(connection: PlaidConnection) {
   }
 }
 
-async function refreshPlaidDataWithTelemetry(reason: "manual" | "repair") {
+async function refreshPlaidDataWithTelemetry(reason: "manual" | "repair" | "account_selection") {
   try {
     await refreshPlaidData(reason);
     await trackPlaidClientEvent("plaid_sync_succeeded", {
@@ -189,7 +190,7 @@ async function refreshPlaidDataWithTelemetry(reason: "manual" | "repair") {
   }
 }
 
-async function refreshPlaidData(reason: "manual" | "repair") {
+async function refreshPlaidData(reason: "manual" | "repair" | "account_selection") {
   const response = await fetch("/api/sync/manual", {
     method: "POST",
     headers: {
@@ -227,7 +228,7 @@ function getClientErrorMessage(error: unknown): string {
 async function trackPlaidLinkEvent(
   eventName: string,
   metadata: PlaidEventMetadata | undefined,
-  mode: "connect" | "repair",
+  mode: PlaidLinkMode,
 ) {
   await trackPlaidClientEvent("plaid_link_event", {
     eventName: eventName.slice(0, 80),

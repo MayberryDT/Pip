@@ -8,6 +8,25 @@ const plaidInstitution = process.env.PIP_LIVE_PLAID_INSTITUTION ?? "First Platyp
 const plaidUsername = process.env.PIP_LIVE_PLAID_USERNAME ?? "user_good";
 const plaidPassword = process.env.PIP_LIVE_PLAID_PASSWORD ?? "pass_good";
 
+type LiveAgentPayload = {
+  responseMode?: string;
+  message?: string;
+  cards?: Array<{
+    type?: string;
+    rows?: Array<{
+      evidenceIds?: string[];
+    }>;
+  }>;
+  audit?: {
+    usedModel?: boolean;
+    toolNames?: string[];
+    guidance?: {
+      validationOutcome?: string;
+      evidenceIds?: string[];
+    };
+  };
+};
+
 test.describe("live authenticated onboarding smoke", () => {
   test.skip(
     !usableStorageState,
@@ -31,34 +50,93 @@ test.describe("live authenticated onboarding smoke", () => {
     await completeConsentIfNeeded(page);
 
     await completePlaidIfNeeded(page);
+    await assertPipCashApiRoutes(page);
 
     await expect(page.getByTestId("pip-cash-number")).not.toHaveText("$--", {
       timeout: 15_000,
     });
-    const responsePromise = page.waitForResponse((response) => {
-      if (!response.url().includes("/api/agent") || response.request().method() !== "POST") {
-        return false;
-      }
+    await expect(page.getByText("Spendable Cash Today", { exact: true })).toBeVisible();
+    await assertNoVisibleLegacyNames(page);
 
-      try {
-        const body = response.request().postDataJSON() as { requestKind?: string } | null;
-
-        return body?.requestKind !== "prompt_chips";
-      } catch {
-        return true;
-      }
-    });
+    const responsePromise = waitForAgentResponse(page);
     await page.getByLabel("Ask Pip").fill("Why this number?");
     await page.getByRole("button", { name: "Send" }).click();
     const response = await responsePromise;
-    const payload = await response.json();
+    const payload = await response.json() as LiveAgentPayload;
 
     expect(response.ok()).toBe(true);
     expect(payload.audit?.usedModel).toBe(true);
     expect(payload.audit?.toolNames).toContain("get_pip_cash_drivers");
     await expect(page.getByRole("heading", { name: "Why this number changed" })).toBeVisible();
+
+    const guidanceResponsePromise = waitForAgentResponse(page);
+    await page.getByLabel("Ask Pip").fill("How am I doing?");
+    await page.getByRole("button", { name: "Send" }).click();
+    const guidanceResponse = await guidanceResponsePromise;
+    const guidancePayload = await guidanceResponse.json() as LiveAgentPayload;
+
+    expect(guidanceResponse.ok()).toBe(true);
+    expect(guidancePayload.audit?.usedModel).toBe(true);
+    expect(guidancePayload.audit?.toolNames).toContain("get_financial_guidance_context");
+    expect(
+      guidancePayload.responseMode === "guidance" || Boolean(guidancePayload.audit?.guidance),
+    ).toBe(true);
+    assertNoBlockedGuidanceLanguage(guidancePayload);
+    assertGuidanceEvidenceBacked(guidancePayload);
   });
 });
+
+function waitForAgentResponse(page: Page) {
+  return page.waitForResponse((response) => {
+    if (!response.url().includes("/api/agent") || response.request().method() !== "POST") {
+      return false;
+    }
+
+    try {
+      const body = response.request().postDataJSON() as { requestKind?: string } | null;
+
+      return body?.requestKind !== "prompt_chips";
+    } catch {
+      return true;
+    }
+  });
+}
+
+async function assertNoVisibleLegacyNames(page: Page) {
+  const visibleText = await page.locator("body").innerText();
+
+  expect(visibleText).not.toMatch(/\bFree Cash\b/i);
+  expect(visibleText).not.toMatch(/\bPIP Cash Today\b/i);
+}
+
+function assertNoBlockedGuidanceLanguage(payload: LiveAgentPayload) {
+  const serialized = JSON.stringify({
+    message: payload.message,
+    cards: payload.cards,
+  });
+
+  expect(serialized).not.toMatch(/\bfinancial advice\b/i);
+  expect(serialized).not.toMatch(/\byou can afford\b/i);
+  expect(serialized).not.toMatch(/\bsafe to spend\b/i);
+  expect(serialized).not.toMatch(/\bbuy bitcoin\b/i);
+  expect(serialized).not.toMatch(/\binvest in nvidia\b/i);
+}
+
+function assertGuidanceEvidenceBacked(payload: LiveAgentPayload) {
+  const guidanceAudit = payload.audit?.guidance;
+
+  expect(guidanceAudit?.evidenceIds?.length ?? 0).toBeGreaterThan(0);
+
+  for (const card of payload.cards ?? []) {
+    if (card.type !== "guidance_card") {
+      continue;
+    }
+
+    for (const row of card.rows ?? []) {
+      expect(row.evidenceIds?.length ?? 0).toBeGreaterThan(0);
+    }
+  }
+}
 
 async function assertAuthenticatedSession(page: Page) {
   const syncStatusResponse = await page.request.get("/api/sync/status");
@@ -141,6 +219,24 @@ async function assertConnectedSyncStatus(page: Page) {
   });
   expect(syncStatus.latestSyncRun.accountCount).toBeGreaterThan(0);
   expect(syncStatus.latestSyncRun.transactionCount).toBeGreaterThan(0);
+}
+
+async function assertPipCashApiRoutes(page: Page) {
+  const canonicalResponse = await page.request.get("/api/pip-cash");
+  const compatibilityResponse = await page.request.get("/api/free-cash");
+
+  expect(canonicalResponse.ok()).toBe(true);
+  expect(compatibilityResponse.ok()).toBe(true);
+
+  const canonical = await canonicalResponse.json();
+  const compatibility = await compatibilityResponse.json();
+
+  expect(canonical).toMatchObject({
+    pipCashTodayCents: expect.any(Number),
+  });
+  expect(compatibility).toMatchObject({
+    pipCashTodayCents: canonical.pipCashTodayCents,
+  });
 }
 
 async function completePlaidSandboxLink(page: Page) {

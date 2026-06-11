@@ -3,9 +3,14 @@ import { PwaServiceWorkerRegistration } from "@/components/PwaServiceWorkerRegis
 import "./globals.css";
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://spendwithpip.com"),
   applicationName: "Pip",
-  title: "Pip",
-  description: "Spendable cash for everyday life.",
+  title: {
+    default: "Pip - The number your bank won't show you",
+    template: "%s | Pip",
+  },
+  description:
+    "Pip is a cute daily money companion that shows what is actually okay to use today.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -34,8 +39,9 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
   },
   openGraph: {
-    title: "Pip",
-    description: "The number your bank won't show you.",
+    title: "Pip - The number your bank won't show you",
+    description:
+      "Pip is a cute daily money companion that shows what is actually okay to use today.",
   },
   formatDetection: {
     telephone: false,

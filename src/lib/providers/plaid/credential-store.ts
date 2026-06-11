@@ -10,6 +10,7 @@ export type PlaidStoredCredential = {
   accessToken: string;
   institutionName: string;
   environment: string;
+  providerInstitutionId?: string;
   transactionCursor?: string;
 };
 
@@ -21,6 +22,7 @@ export async function storePlaidCredential(input: {
   accessToken: string;
   institutionName: string;
   environment: string;
+  providerInstitutionId?: string;
 }) {
   const supabase = input.supabase ?? createSupabaseAdminClient();
   const { error } = await supabase
@@ -39,6 +41,7 @@ export async function storePlaidCredential(input: {
         metadata: {
           institutionName: input.institutionName,
           environment: input.environment,
+          providerInstitutionId: input.providerInstitutionId,
         } satisfies Json,
         updated_at: new Date().toISOString(),
       },
@@ -175,6 +178,7 @@ function mapPlaidCredentialRow(row: PlaidCredentialRow | null): PlaidStoredCrede
     accessToken: decryptProviderToken(row.access_token_ciphertext),
     institutionName: metadata.institutionName,
     environment: metadata.environment,
+    providerInstitutionId: metadata.providerInstitutionId,
     transactionCursor: metadata.transactionCursor,
   };
 }
@@ -182,6 +186,7 @@ function mapPlaidCredentialRow(row: PlaidCredentialRow | null): PlaidStoredCrede
 function getMetadata(metadata: Json): {
   institutionName: string;
   environment: string;
+  providerInstitutionId?: string;
   transactionCursor?: string;
 } {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
@@ -197,6 +202,8 @@ function getMetadata(metadata: Json): {
         ? metadata.institutionName
         : "Plaid institution",
     environment: typeof metadata.environment === "string" ? metadata.environment : "unknown",
+    providerInstitutionId:
+      typeof metadata.providerInstitutionId === "string" ? metadata.providerInstitutionId : undefined,
     transactionCursor:
       typeof metadata.transactionCursor === "string" ? metadata.transactionCursor : undefined,
   };

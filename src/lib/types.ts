@@ -19,6 +19,10 @@ export type Account = {
   availableBalanceCents?: number;
   lastFour?: string;
   isProtectedSavings?: boolean;
+  active?: boolean;
+  includedInPipCash?: boolean;
+  userLabel?: string;
+  hiddenReason?: string;
 };
 
 export type Transaction = {
@@ -99,6 +103,9 @@ export type AccountBalanceSummary = {
   balanceCents: number;
   availableBalanceCents?: number;
   lastFour?: string;
+  active?: boolean;
+  includedInPipCash?: boolean;
+  isProtectedSavings?: boolean;
 };
 
 export type RollingWindow = {

@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
 const liveBaseURL =
-  process.env.PIP_LIVE_BASE_URL ?? "https://pip-mayberrydt.netlify.app";
+  process.env.PIP_LIVE_BASE_URL ?? "https://spendwithpip.com";
 
 export default defineConfig({
   testDir: "./tests/e2e",

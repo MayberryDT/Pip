@@ -14,7 +14,7 @@ const config: Config = {
         porcelain: "#FFFDF8",
         line: "#E8DDD1",
         taupe: "#A79B91",
-        moss: "#667B67",
+        moss: "#607461",
         river: "#7B8F96",
         coral: "#B96A58",
         gold: "#B49769",

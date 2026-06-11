@@ -120,6 +120,7 @@ create table public.transactions (
   unique (user_id, provider_transaction_id)
 );
 
+-- Historical name. Renamed to pip_cash_snapshots in a later rebrand migration.
 create table public.free_cash_snapshots (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,

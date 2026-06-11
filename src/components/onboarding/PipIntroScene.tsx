@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import type { ReactNode } from "react";
 
 export function PipIntroScene({
@@ -33,16 +32,17 @@ export function PipIntroScene({
         {actions ? <div className="mt-5">{actions}</div> : null}
       </section>
       <div className="assistant-intro-character" role="img" aria-label="Pip">
-        <Image
+        <img
           src="/brand/pip-waving.png"
           alt=""
           aria-hidden="true"
           width={416}
           height={484}
-          sizes="160px"
           className="assistant-intro-character-image"
           draggable={false}
-          priority={priority}
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : undefined}
+          decoding="async"
         />
       </div>
       {footer ? <div className="mt-2">{footer}</div> : null}
