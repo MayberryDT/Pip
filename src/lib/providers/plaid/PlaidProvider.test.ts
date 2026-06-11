@@ -320,6 +320,52 @@ describe("PlaidProvider contract", () => {
     });
   });
 
+  it("returns token decrypt failures as institution-tied repair failures", async () => {
+    const accountsGet = vi.fn();
+    const loadError = new ProviderSyncError({
+      provider: "plaid",
+      code: "provider-token-decrypt-failed",
+      message: "This Plaid connection needs to be reconnected before Pip can refresh it.",
+      status: "failed",
+      institutionId: "institution-wise",
+      institutionName: "Wise (US)",
+      repairRequired: true,
+    });
+    const providerWithBadCredential = new PlaidProvider({
+      client: {
+        linkTokenCreate: vi.fn(),
+        itemPublicTokenExchange: vi.fn(),
+        accountsGet,
+        transactionsSync: vi.fn(),
+      } as unknown as PlaidClient,
+      config: getPlaidConfig({
+        PLAID_CLIENT_ID: "client-id",
+        PLAID_SECRET: "secret",
+      }),
+      credentialsLoader: async () => [
+        {
+          institutionId: "institution-wise",
+          userId: "user_1",
+          itemId: "item-wise",
+          accessToken: "",
+          institutionName: "Wise (US)",
+          environment: "sandbox",
+          loadError,
+        },
+      ],
+    });
+
+    await expect(providerWithBadCredential.syncConnectedInstitutions("user_1")).resolves.toEqual([
+      {
+        type: "failure",
+        institutionId: "institution-wise",
+        institutionName: "Wise (US)",
+        error: loadError,
+      },
+    ]);
+    expect(accountsGet).not.toHaveBeenCalled();
+  });
+
   it("maps Plaid item repair errors to provider sync errors", async () => {
     const failingProvider = new PlaidProvider({
       client: {

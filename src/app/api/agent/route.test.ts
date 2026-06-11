@@ -485,6 +485,134 @@ describe("POST /api/agent", () => {
     expect(JSON.stringify(payload)).not.toContain("provider-secret");
   });
 
+  it("returns a deterministic Plaid redirect configuration message", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    const plaidError = Object.assign(
+      new Error("Request failed with status code 400"),
+      {
+        name: "AxiosError",
+        response: {
+          data: {
+            error_code: "INVALID_FIELD",
+            error_type: "INVALID_REQUEST",
+            error_message:
+              "OAuth redirect URI must be configured in the developer dashboard.",
+            request_id: "plaid-request-redirect",
+          },
+        },
+      },
+    );
+    const createConnectSession = vi.fn().mockRejectedValue(plaidError);
+    routeMocks.getFinancialDataProvider.mockReturnValue({
+      createConnectSession,
+    });
+    routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockImplementation(async (input) => {
+      const result = await input.actions?.startPlaidLink?.({
+        mode: "connect",
+      });
+
+      return createAgentResponse({
+        message: result?.message,
+        usedTools: ["start_new_account_connection"],
+        responseMode: "clarify",
+      });
+    });
+
+    const response = await POST(jsonRequest({ message: "I need to add a credit card" }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      message:
+        "Account linking is misconfigured right now. Plaid needs Pip's OAuth redirect URI allowlisted before new accounts can be added.",
+      usedTools: ["start_new_account_connection"],
+    });
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "connect_session_failed",
+      expect.objectContaining({
+        provider: "plaid",
+        status: "error",
+        handledStatus: "plaid_redirect_uri_not_allowed",
+        errorCode: "INVALID_FIELD",
+        errorType: "INVALID_REQUEST",
+        errorRequestId: "plaid-request-redirect",
+        errorMessage:
+          "Plaid INVALID_FIELD: OAuth redirect URI must be configured in the developer dashboard.",
+        userMessage:
+          "Account linking is misconfigured right now. Plaid needs Pip's OAuth redirect URI allowlisted before new accounts can be added.",
+      }),
+    );
+  });
+
+  it("passes a successful Plaid add-account session through as an open Plaid client action", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    const createConnectSession = vi.fn().mockResolvedValue({
+      provider: "plaid",
+      status: "ready",
+      message: "Plaid Link is ready.",
+      connect: {
+        kind: "plaid",
+        linkToken: "link-token-1",
+        environment: "sandbox",
+        products: ["transactions"],
+        mode: "connect",
+      },
+    });
+    routeMocks.getFinancialDataProvider.mockReturnValue({
+      createConnectSession,
+    });
+    routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockImplementation(async (input) => {
+      const result = await input.actions?.startPlaidLink?.({
+        mode: "connect",
+      });
+
+      return createAgentResponse({
+        message: result?.message,
+        usedTools: ["start_new_account_connection"],
+        responseMode: "update_context",
+        clientAction: result?.clientAction,
+      });
+    });
+
+    const response = await POST(jsonRequest({ message: "add a card" }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      clientAction: {
+        type: "open_plaid",
+        plaid: {
+          linkToken: "link-token-1",
+          mode: "connect",
+        },
+      },
+      usedTools: ["start_new_account_connection"],
+    });
+    expect(createConnectSession).toHaveBeenCalledWith("user-1", {
+      mode: "connect",
+    });
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "connect_session_created",
+      expect.objectContaining({
+        provider: "plaid",
+        status: "ready",
+        mode: "connect",
+      }),
+    );
+  });
+
   it("passes authenticated no-data state into the agent without answering from fake rows", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockRejectedValue(new NoFinancialDataError());

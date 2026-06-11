@@ -3758,9 +3758,14 @@ function isConnectedAccountsPrompt(normalized: string): boolean {
 }
 
 function isAddAccountConnectionPrompt(normalized: string): boolean {
+  if (/\b(do not|don't|dont|not)\s+(add|connect|link)\b/.test(normalized)) {
+    return false;
+  }
+
   return (
-    /\b(add|connect|link)\b.{0,28}\b(another|new|second|my)\b.{0,28}\b(account|bank|card|credit card|amex|chase|wells fargo|capital one)\b/.test(normalized) ||
-    /^(add|connect|link) (account|bank|card|credit card)$/.test(normalized)
+    /\b(add|connect|link)\b.{0,40}\b(another|new|second|my|a|an)?\b.{0,20}\b(account|bank|card|credit card|amex|chase|wells fargo|capital one)\b/.test(normalized) ||
+    /\b(i need|i want|want|need)\b.{0,24}\b(add|connect|link)\b.{0,40}\b(account|bank|card|credit card|amex|chase|wells fargo|capital one)\b/.test(normalized) ||
+    /^(add|connect|link) (an? |my |new |another )?(account|bank|card|credit card)$/.test(normalized)
   );
 }
 
@@ -3769,7 +3774,10 @@ function isRepairConnectionPrompt(normalized: string): boolean {
     return false;
   }
 
-  return /\b(reconnect|repair|fix|restore)\b.{0,40}\b(bank|connection|account|institution|chase|wells fargo|capital one|amex)\b/.test(normalized);
+  return (
+    /\b(reconnect|repair|fix|restore)\b.{0,40}\b(bank|connection|account|institution|chase|wells fargo|capital one|amex)\b/.test(normalized) ||
+    /^reconnect\s+.{2,80}$/.test(normalized)
+  );
 }
 
 function isAccountSelectionPrompt(normalized: string): boolean {
@@ -3825,9 +3833,17 @@ function getProtectedSavingsAccountIntent(normalized: string): { protected: bool
 }
 
 function isRemoveInstitutionRequest(normalized: string): boolean {
+  if (/\b(do not|don't|dont|not)\s+(remove|disconnect|unlink)\b/.test(normalized)) {
+    return false;
+  }
+
   return (
-    /\b(remove|disconnect|unlink)\b.{0,30}\b(bank|institution|connection|chase|wells fargo|capital one|amex)\b/.test(normalized) &&
-    !/\b(account|checking|savings|card)\b.{0,20}\bfrom\b/.test(normalized)
+    (
+      /\b(remove|disconnect|unlink)\b.{0,30}\b(bank|institution|connection|chase|wells fargo|capital one|amex)\b/.test(normalized) ||
+      /^(remove|disconnect|unlink)\s+.{2,80}$/.test(normalized)
+    ) &&
+    !/\b(account|checking|savings|card)\b.{0,20}\bfrom\b/.test(normalized) &&
+    !/\b(transaction|charge|purchase|merchant|bill|budget|category)\b/.test(normalized)
   );
 }
 

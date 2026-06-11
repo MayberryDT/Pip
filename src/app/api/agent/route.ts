@@ -494,18 +494,20 @@ function createAgentActions(input: {
           status: "error",
           mode: connectRequest.mode,
           institutionId: connectRequest.institutionId ?? null,
+          handledStatus: errorDetails.status,
           errorName: getThrownErrorName(error),
           errorCode: errorDetails.errorCode,
           errorType: errorDetails.errorType,
           errorRequestId: errorDetails.errorRequestId,
           errorKeys: errorDetails.errorKeys,
           errorMessage: errorDetails.message,
+          userMessage: errorDetails.userMessage,
         });
 
         return {
           ok: false,
-          status: "plaid_unavailable",
-          message: errorDetails.message,
+          status: errorDetails.status,
+          message: errorDetails.userMessage,
         };
       }
 
@@ -1148,11 +1150,13 @@ function getProviderErrorCode(error: unknown): string | null {
 }
 
 function getProviderConnectErrorDetails(error: unknown): {
+  status: "plaid_unavailable" | "plaid_redirect_uri_not_allowed";
   errorCode: string | null;
   errorType: string | null;
   errorRequestId: string | null;
   errorKeys: string | null;
   message: string;
+  userMessage: string;
 } {
   const responsePayload = getErrorResponsePayload(error);
   const directPayload = getDirectErrorPayload(error);
@@ -1170,32 +1174,75 @@ function getProviderConnectErrorDetails(error: unknown): {
   const errorKeys = payload ? Object.keys(payload).slice(0, 12).join(",") : null;
 
   if (errorCode && plaidMessage) {
-    return {
+    return withProviderConnectUserMessage({
       errorCode,
       errorType,
       errorRequestId,
       errorKeys,
       message: sanitizeSensitiveText(`Plaid ${errorCode}: ${plaidMessage}`).slice(0, 240),
-    };
+    });
   }
 
   if (directMessage || stringMessage) {
-    return {
+    return withProviderConnectUserMessage({
       errorCode,
       errorType,
       errorRequestId,
       errorKeys,
       message: sanitizeSensitiveText(directMessage ?? stringMessage ?? "").slice(0, 240),
-    };
+    });
   }
 
-  return {
+  return withProviderConnectUserMessage({
     errorCode,
     errorType,
     errorRequestId,
     errorKeys,
     message: getSafeErrorMessage(error, "Plaid connect session failed."),
+  });
+}
+
+function withProviderConnectUserMessage(details: {
+  errorCode: string | null;
+  errorType: string | null;
+  errorRequestId: string | null;
+  errorKeys: string | null;
+  message: string;
+}): {
+  status: "plaid_unavailable" | "plaid_redirect_uri_not_allowed";
+  errorCode: string | null;
+  errorType: string | null;
+  errorRequestId: string | null;
+  errorKeys: string | null;
+  message: string;
+  userMessage: string;
+} {
+  if (isPlaidRedirectUriError(details)) {
+    return {
+      ...details,
+      status: "plaid_redirect_uri_not_allowed",
+      userMessage:
+        "Account linking is misconfigured right now. Plaid needs Pip's OAuth redirect URI allowlisted before new accounts can be added.",
+    };
+  }
+
+  return {
+    ...details,
+    status: "plaid_unavailable",
+    userMessage: details.message,
   };
+}
+
+function isPlaidRedirectUriError(details: {
+  errorCode: string | null;
+  errorType: string | null;
+  message: string;
+}): boolean {
+  return (
+    details.errorCode?.toUpperCase() === "INVALID_FIELD" &&
+    details.errorType?.toUpperCase() === "INVALID_REQUEST" &&
+    /\boauth redirect uri\b|\bredirect_uri\b|\bredirect uri\b/i.test(details.message)
+  );
 }
 
 function getErrorResponsePayload(error: unknown): Record<string, unknown> | null {

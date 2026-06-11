@@ -111,6 +111,8 @@ export class PlaidProvider implements FinancialDataProvider {
       );
     }
 
+    assertCredentialLoaded(credential);
+
     return createPlaidConnectSession({
       userId,
       config: this.config,
@@ -193,6 +195,8 @@ export class PlaidProvider implements FinancialDataProvider {
     credential: PlaidStoredCredential,
   ): Promise<ProviderInstitutionSyncResult> {
     try {
+      assertCredentialLoaded(credential);
+
       return await this.syncCredential(credential);
     } catch (error) {
       return {
@@ -318,6 +322,8 @@ export class PlaidProvider implements FinancialDataProvider {
         );
       }
 
+      assertCredentialLoaded(credential);
+
       return credential;
     });
 
@@ -343,6 +349,15 @@ export class PlaidProvider implements FinancialDataProvider {
     } catch (error) {
       throw mapPlaidError(error, credential);
     }
+  }
+}
+
+function assertCredentialLoaded(credential: PlaidStoredCredential): asserts credential is PlaidStoredCredential & {
+  accessToken: string;
+  loadError?: undefined;
+} {
+  if (credential.loadError) {
+    throw credential.loadError;
   }
 }
 

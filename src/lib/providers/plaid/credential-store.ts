@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import type { Database, Json } from "@/lib/supabase/database.types";
+import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { decryptProviderToken, encryptProviderToken } from "@/lib/providers/teller/token-crypto";
 
 export type PlaidStoredCredential = {
@@ -12,6 +13,7 @@ export type PlaidStoredCredential = {
   environment: string;
   providerInstitutionId?: string;
   transactionCursor?: string;
+  loadError?: ProviderSyncError;
 };
 
 export async function storePlaidCredential(input: {
@@ -170,17 +172,49 @@ function mapPlaidCredentialRow(row: PlaidCredentialRow | null): PlaidStoredCrede
   }
 
   const metadata = getMetadata(row.metadata);
+  const decrypted = decryptPlaidAccessToken(row.access_token_ciphertext, {
+    institutionId: row.institution_id,
+    institutionName: metadata.institutionName,
+  });
 
   return {
     institutionId: row.institution_id,
     userId: row.user_id,
     itemId: row.plaid_item_id,
-    accessToken: decryptProviderToken(row.access_token_ciphertext),
+    accessToken: decrypted.accessToken,
     institutionName: metadata.institutionName,
     environment: metadata.environment,
     providerInstitutionId: metadata.providerInstitutionId,
     transactionCursor: metadata.transactionCursor,
+    ...(decrypted.loadError ? { loadError: decrypted.loadError } : {}),
   };
+}
+
+function decryptPlaidAccessToken(
+  ciphertext: string,
+  input: {
+    institutionId: string;
+    institutionName: string;
+  },
+): { accessToken: string; loadError?: ProviderSyncError } {
+  try {
+    return {
+      accessToken: decryptProviderToken(ciphertext),
+    };
+  } catch {
+    return {
+      accessToken: "",
+      loadError: new ProviderSyncError({
+        provider: "plaid",
+        code: "provider-token-decrypt-failed",
+        message: "This Plaid connection needs to be reconnected before Pip can refresh it.",
+        status: "failed",
+        institutionId: input.institutionId,
+        institutionName: input.institutionName,
+        repairRequired: true,
+      }),
+    };
+  }
 }
 
 function getMetadata(metadata: Json): {

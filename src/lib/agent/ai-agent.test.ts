@@ -543,6 +543,50 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("routes natural add-card account requests to Plaid connect", () => {
+    for (const message of [
+      "I need to add a credit card",
+      "No I want to add a credit card account",
+      "add a card",
+      "connect another card",
+    ]) {
+      expect(
+        __agentTestHooks.getForcedAgentTool({
+          message,
+        }),
+      ).toMatchObject({
+        toolName: "start_new_account_connection",
+        requireCard: false,
+      });
+    }
+  });
+
+  it("routes named institution remove and reconnect requests", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Remove Wise (US)",
+      }),
+    ).toMatchObject({
+      toolName: "request_remove_institution_confirmation",
+      args: {
+        institution_name: "wise (us)",
+      },
+      requireCard: false,
+    });
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Reconnect Wise (US)",
+      }),
+    ).toMatchObject({
+      toolName: "repair_account_connection",
+      args: {
+        institution_name: "wise (us)",
+      },
+      requireCard: false,
+    });
+  });
+
   it("routes the manage accounts prompt chip straight to connected accounts", () => {
     expect(
       __agentTestHooks.getForcedAgentTool({
