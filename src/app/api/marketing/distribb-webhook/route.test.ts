@@ -27,6 +27,41 @@ describe("POST /api/marketing/distribb-webhook", () => {
     expect(unauthorized.status).toBe(401);
   });
 
+  it("rejects invalid draft payloads", async () => {
+    vi.stubEnv("DISTRIBB_WEBHOOK_SECRET", "secret");
+
+    const response = await POST(
+      jsonRequest(
+        {
+          slug: "No Spaces Allowed",
+        },
+        "secret",
+      ),
+    );
+
+    expect(response.status).toBe(400);
+    expect(routeMocks.createSupabaseAdminClient).not.toHaveBeenCalled();
+  });
+
+  it("skips draft storage when Supabase is disabled locally", async () => {
+    vi.stubEnv("DISTRIBB_WEBHOOK_SECRET", "secret");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+
+    const response = await POST(
+      jsonRequest(
+        {
+          slug: "draft-from-distribb",
+          title: "Draft from Distribb",
+        },
+        "secret",
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({ status: "skipped" });
+    expect(routeMocks.createSupabaseAdminClient).not.toHaveBeenCalled();
+  });
+
   it("stores only a received draft payload", async () => {
     enableEnv();
     const insert = vi.fn().mockResolvedValue({ error: null });

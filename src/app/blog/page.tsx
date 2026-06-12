@@ -12,6 +12,8 @@ export const metadata: Metadata = buildMarketingMetadata({
   path: "/blog",
 });
 
+const categoryPills = ["Start here", "Bank balance", "Spendable Cash", "Cute finance", "No-budget habits"];
+
 export default function BlogIndexPage() {
   const articles = getPublishedArticles();
   const featured = getFeaturedArticle();
@@ -24,12 +26,19 @@ export default function BlogIndexPage() {
           <div className="mx-auto max-w-4xl">
             <p className="text-sm font-bold uppercase tracking-normal text-moss">Pip blog</p>
             <h1 className="font-display mt-4 text-5xl leading-[1] text-ink sm:text-6xl">
-              Money habits without the homework.
+              Tiny money habits, no homework.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/70">
-              Short, product-led articles about why bank balances mislead people and how one daily
-              number can make spending feel calmer.
+              Short, product-led reads about bank-balance guessing, cute money psychology, daily
+              spending signals, and why one number can work better than a budget.
             </p>
+            <div className="mt-7 flex flex-wrap gap-2" aria-label="Blog categories">
+              {categoryPills.map((category) => (
+                <span className="rounded-full border border-line bg-porcelain px-3 py-1 text-xs font-bold text-moss" key={category}>
+                  {category}
+                </span>
+              ))}
+            </div>
           </div>
         </section>
 

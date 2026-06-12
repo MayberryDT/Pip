@@ -1,8 +1,8 @@
 export const marketingSite = {
   name: "Pip",
-  defaultTitle: "Pip - The number your bank won't show you",
+  defaultTitle: "Pip - Before you spend, check one number",
   defaultDescription:
-    "Pip is a cute daily money companion that shows what is actually okay to use today. No budget. No dashboard. Just one number.",
+    "Pip is a cute daily money companion that shows Spendable Cash Today, one calm number for what's actually okay to use today. No budget. No dashboard.",
   domain: "spendwithpip.com",
   supportEmail: "support@spendwithpip.com",
   appPath: "/app",

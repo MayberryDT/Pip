@@ -73,8 +73,8 @@ export default function HowItWorksPage() {
             </h2>
             <div className="space-y-5 text-base leading-8 text-ink/70">
               <p>
-                Pip is not trying to make you manage a finance command center. The default behavior
-                is one daily signal and a simple way to ask for context.
+                Pip is not trying to make you manage a dashboard or spreadsheet. The default
+                behavior is one daily signal and a simple way to ask for context.
               </p>
               <p>
                 If you want to inspect balances or transactions, ask Pip. They are not the default

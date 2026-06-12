@@ -15,9 +15,11 @@ describe("marketing website pages", () => {
   it("renders the public root marketing homepage", () => {
     const html = renderToStaticMarkup(<MarketingHomePage />);
 
-    expect(html).toContain("The number your bank won");
+    expect(html).toContain("Before you spend, check Pip.");
     expect(html).toContain("Spendable Cash Today");
     expect(html).toContain("Join the beta");
+    expect(html).toContain("Read-only account data. Pip cannot move your money.");
+    expect(html).toContain("Your bank app shows the pile. Pip shows the spending number.");
   });
 
   it("keeps the product app available at /app", async () => {
@@ -38,7 +40,10 @@ describe("marketing website pages", () => {
   });
 
   it("renders the blog index and a published article page", async () => {
-    expect(renderToStaticMarkup(<BlogIndexPage />)).toContain("Money habits without the homework");
+    const blogHtml = renderToStaticMarkup(<BlogIndexPage />);
+
+    expect(blogHtml).toContain("Tiny money habits, no homework.");
+    expect(blogHtml).toContain("Start here");
 
     const article = await ArticlePage({
       params: Promise.resolve({
@@ -49,8 +54,26 @@ describe("marketing website pages", () => {
     const html = renderToStaticMarkup(article);
 
     expect(html).toContain("What is Spendable Cash Today?");
+    expect(html).toContain("In this article");
     expect(html).toContain("FAQ");
     expect(html).toContain("application/ld+json");
+    expect(html).toContain("BreadcrumbList");
+    expect(html).toContain("Join the beta and try Spendable Cash Today");
+  });
+
+  it("renders rich article blocks on published article pages", async () => {
+    const article = await ArticlePage({
+      params: Promise.resolve({
+        slug: "why-your-bank-balance-is-misleading",
+      }),
+    });
+
+    const html = renderToStaticMarkup(article);
+
+    expect(html).toContain("The short version");
+    expect(html).toContain("Why $900 might not mean $900");
+    expect(html).toContain("Bank balance vs Pip");
+    expect(html).toContain("Overspending often starts with one misleading number.");
   });
 
   it("includes public pages and published articles in sitemap only", () => {
@@ -80,5 +103,26 @@ describe("marketing website pages", () => {
     expect(llms).toContain("Spendable Cash Today");
     expect(llms).toContain("https://spendwithpip.com/security");
     expect(llms).toContain("Pip does not move money");
+  });
+
+  it("keeps old product names and overbroad positioning out of public marketing pages", async () => {
+    const article = await ArticlePage({
+      params: Promise.resolve({
+        slug: "meet-pip-cute-money-companion",
+      }),
+    });
+    const publicHtml = [
+      renderToStaticMarkup(<MarketingHomePage />),
+      renderToStaticMarkup(<BlogIndexPage />),
+      renderToStaticMarkup(<HowItWorksPage />),
+      renderToStaticMarkup(<SecurityPage />),
+      renderToStaticMarkup(article),
+    ].join("\n");
+
+    expect(publicHtml).not.toContain("Free Cash");
+    expect(publicHtml).not.toContain("PIP Cash Today");
+    expect(publicHtml).not.toContain("My Margin");
+    expect(publicHtml).not.toContain("finance command center");
+    expect(publicHtml).not.toContain("AI finance coach");
   });
 });

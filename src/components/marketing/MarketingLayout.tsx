@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { marketingSite } from "@/lib/marketing/site";
+import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { MarketingPageView } from "@/components/marketing/MarketingPageView";
 
 const navLinks = [
@@ -47,13 +48,14 @@ export function MarketingHeader() {
             App
           </Link>
         </nav>
-        <Link
+        <MarketingCtaLink
           className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-full bg-ink px-4 text-sm font-bold text-porcelain shadow-soft transition hover:bg-moss"
+          eventLabel="site_header_join_beta"
           href="#join-beta"
         >
           Join beta
           <ArrowRight aria-hidden="true" size={16} strokeWidth={2.4} />
-        </Link>
+        </MarketingCtaLink>
       </div>
       <nav
         className="mx-auto mt-3 flex max-w-6xl gap-3 overflow-x-auto pb-1 text-sm font-semibold text-ink/70 md:hidden"

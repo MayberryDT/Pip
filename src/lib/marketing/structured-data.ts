@@ -66,3 +66,21 @@ export function buildFaqJsonLd(faq: Article["faq"]): JsonLd | null {
     })),
   };
 }
+
+export function buildBreadcrumbJsonLd(
+  items: Array<{
+    name: string;
+    path: string;
+  }>,
+): JsonLd {
+  return {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: items.map((item, index) => ({
+      "@type": "ListItem",
+      position: index + 1,
+      name: item.name,
+      item: getCanonicalUrl(item.path),
+    })),
+  };
+}

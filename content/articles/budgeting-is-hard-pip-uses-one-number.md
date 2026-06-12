@@ -5,7 +5,7 @@ slug: "budgeting-is-hard-pip-uses-one-number"
 publishedAt: "2026-06-11"
 updatedAt: "2026-06-11"
 author: "Pip"
-status: "published"
+status: "draft"
 tags:
   - no-budget spending
   - daily money habits

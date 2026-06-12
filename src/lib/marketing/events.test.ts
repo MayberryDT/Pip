@@ -26,12 +26,14 @@ describe("marketing events", () => {
     expect(
       sanitizeMarketingProperties({
         page: "/blog",
+        href: "#join-beta",
         referrer: "https://example.com",
         rawIp: "203.0.113.8",
         secret: "nope",
       }),
     ).toEqual({
       page: "/blog",
+      href: "#join-beta",
       referrer: "https://example.com",
     });
   });

@@ -5,7 +5,7 @@ slug: "how-much-can-i-spend-today"
 publishedAt: "2026-06-11"
 updatedAt: "2026-06-11"
 author: "Pip"
-status: "published"
+status: "draft"
 tags:
   - spending habits
   - spendable cash

@@ -29,6 +29,7 @@ const allowedPropertyKeys = new Set([
   "utm_medium",
   "utm_campaign",
   "cta_label",
+  "href",
   "article_tags",
   "statusCode",
   "statusCodeClass",

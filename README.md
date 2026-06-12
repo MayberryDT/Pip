@@ -13,6 +13,28 @@ npm run dev
 
 Open http://localhost:3000.
 
+## Marketing Content
+
+The public marketing site lives at `/`; the authenticated/beta app stays behind `/app`.
+Marketing articles are version-controlled Markdown files with validated frontmatter and a small
+custom block syntax for product-led callouts, Pip says notes, money examples, comparisons, inline
+CTAs, pull quotes, and figures.
+
+Published articles must pass the content quality gates in the marketing content tests. Pillar
+articles need at least 900 body words; other published articles need at least 700. Published posts
+also need FAQ entries, related links, a useful H2 structure, and an inline CTA block. Short ideas and
+outlines should stay `draft` until expanded.
+
+Distribb is draft intake only. The webhook stores received payloads in `marketing_content_drafts`
+with `status: received`; it must not create public pages or publish article files directly. A human
+reviews the draft, rewrites it in Pip voice, adds examples/rich blocks/FAQ/CTA, converts it to an
+article file, and runs the content tests before publishing.
+
+Marketing launch rollback rule: if root marketing changes break `/app`, auth callbacks, provider
+OAuth returns, waitlist submission, public page rendering, or published article routing, restore the
+previous working route/content behavior before continuing polish work. The public site should never
+ship at the cost of blocking beta app access.
+
 ## Netlify
 
 The project is linked to `spendwithpip` on Netlify.
