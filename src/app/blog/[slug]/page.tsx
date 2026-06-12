@@ -10,10 +10,11 @@ import {
   JsonLd,
 } from "@/components/marketing/ArticleComponents";
 import { ArticleViewEvent } from "@/components/marketing/ArticleViewEvent";
+import { LaunchAccessForm } from "@/components/marketing/LaunchAccessForm";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
-import { WaitlistForm } from "@/components/marketing/WaitlistForm";
 import { getArticleBySlug, getPublishedArticles, getRelatedArticles } from "@/lib/marketing/content";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
+import { pipLaunch } from "@/lib/marketing/pricing";
 import { buildArticleJsonLd, buildBreadcrumbJsonLd, buildFaqJsonLd } from "@/lib/marketing/structured-data";
 
 type PageProps = {
@@ -122,14 +123,14 @@ export default async function ArticlePage({ params }: PageProps) {
           </div>
         </article>
 
-        <section className="bg-porcelain px-4 py-14 sm:px-6" id="join-beta">
+        <section className="bg-porcelain px-4 py-14 sm:px-6" id="launch-access">
           <div className="mx-auto max-w-3xl">
             <h2 className="font-display text-4xl leading-tight text-ink">Want the daily number?</h2>
             <p className="mt-4 text-base leading-7 text-ink/68">
-              Join the beta list and get a note when Pip is ready for more testers.
+              {pipLaunch.trialLine} {pipLaunch.appStoreLine}
             </p>
             <div className="mt-7">
-              <WaitlistForm sourcePage={`/blog/${article.slug}`} compact />
+              <LaunchAccessForm sourcePage={`/blog/${article.slug}`} compact />
             </div>
           </div>
         </section>

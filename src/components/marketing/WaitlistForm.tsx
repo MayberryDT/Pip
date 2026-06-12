@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { CheckCircle2, Loader2, Mail } from "lucide-react";
+import { pipLaunch } from "@/lib/marketing/pricing";
 
 type SubmitState = "idle" | "submitting" | "succeeded" | "failed";
 
@@ -16,7 +17,7 @@ export function WaitlistForm({
   const [email, setEmail] = useState("");
   const [state, setState] = useState<SubmitState>("idle");
   const [message, setMessage] = useState("");
-  const fieldId = useMemo(() => `waitlist-email-${sourcePage.replace(/[^a-z0-9]/gi, "-")}`, [sourcePage]);
+  const fieldId = useMemo(() => `launch-access-email-${sourcePage.replace(/[^a-z0-9]/gi, "-")}`, [sourcePage]);
 
   async function submitWaitlist(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -41,18 +42,14 @@ export function WaitlistForm({
     if (!response?.ok) {
       const payload = await response?.json().catch(() => null);
       setState("failed");
-      setMessage(
-        payload && typeof payload.error === "string"
-          ? payload.error
-          : "That did not go through. Try again in a moment.",
-      );
+      setMessage(payload && typeof payload.error === "string" ? payload.error : "That didn't go through. Try again in a moment.");
       void trackMarketingEvent("waitlist_signup_failed", { page: sourcePage, statusCode: response?.status ?? 0 });
       return;
     }
 
     setState("succeeded");
     setEmail("");
-    setMessage("You're on the list. I'll let you know when Pip is ready for more testers.");
+    setMessage("You're on the launch list. I'll let you know when Pip is ready.");
     void trackMarketingEvent("waitlist_signup_succeeded", { page: sourcePage });
   }
 
@@ -65,7 +62,7 @@ export function WaitlistForm({
       onSubmit={submitWaitlist}
     >
       <label className="text-sm font-bold text-ink/74" htmlFor={fieldId}>
-        Join the beta
+        {pipLaunch.primaryCta}
       </label>
       <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
         <div className="relative">
@@ -96,11 +93,11 @@ export function WaitlistForm({
           ) : state === "succeeded" ? (
             <CheckCircle2 aria-hidden="true" size={18} />
           ) : null}
-          {state === "submitting" ? "Joining" : state === "succeeded" ? "Joined" : "Join beta"}
+          {state === "submitting" ? "Sending" : state === "succeeded" ? "Sent" : pipLaunch.primaryCtaShort}
         </button>
       </div>
       <p className="mt-3 min-h-5 text-sm font-semibold text-ink/66" aria-live="polite">
-        {message || "No spam. Just beta access when Pip is ready for more testers."}
+        {message || "Get a note when Pip launches for iPhone and Android."}
       </p>
     </form>
   );

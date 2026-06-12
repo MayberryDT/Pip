@@ -100,9 +100,9 @@ If the number seems lower than expected, ask Pip why. The answer might be a bill
 The point is not to make every purchase feel heavy. The point is to make the default less misleading.
 
 :::cta
-Join the beta and try checking Pip before the next spending decision.
+Get launch access and try checking Pip before the next spending decision.
 :::
 
 ## Where to go next
 
-Read [Meet Pip](/blog/meet-pip-cute-money-companion) if you want to understand why the product is built around a softer companion. Read [What is Spendable Cash Today?](/blog/what-is-spendable-cash-today) if you want the exact product definition. Read [Pip security details](/security) if you want the read-only account connection boundary before joining.
+Read [Meet Pip](/blog/meet-pip-cute-money-companion) if you want to understand why the product is built around a softer companion. Read [What is Spendable Cash Today?](/blog/what-is-spendable-cash-today) if you want the exact product definition. Read [Pip security details](/security) if you want the read-only account connection boundary before connecting accounts.

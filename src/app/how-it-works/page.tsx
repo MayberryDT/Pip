@@ -1,18 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Landmark, MessageCircle, PiggyBank } from "lucide-react";
+import { ArrowRight, CreditCard, Landmark, MessageCircle, PiggyBank } from "lucide-react";
+import { LaunchAccessForm } from "@/components/marketing/LaunchAccessForm";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
-import { WaitlistForm } from "@/components/marketing/WaitlistForm";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
+import { pipLaunch, pipPricing } from "@/lib/marketing/pricing";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "How Pip Works",
   description:
-    "Pip connects read-only account data, protects savings, and turns the rest into one daily number: Spendable Cash Today.",
+    "Choose a plan, connect read-only account data, pick a savings cushion, and check one daily number before you spend.",
   path: "/how-it-works",
 });
 
 const steps = [
+  {
+    icon: CreditCard,
+    title: "Choose a plan",
+    copy: `Start with weekly or monthly access when Pip launches. Plans start at ${pipPricing.weekly.displayPrice}.`,
+  },
   {
     icon: Landmark,
     title: "Connect accounts",
@@ -20,13 +26,13 @@ const steps = [
   },
   {
     icon: PiggyBank,
-    title: "Protect savings first",
-    copy: "You choose a savings cushion, and Pip holds that back before it shows what is usable today.",
+    title: "Pick a cushion",
+    copy: "Choose the savings cushion Pip should protect before it shows what is usable today.",
   },
   {
     icon: MessageCircle,
-    title: "Ask only when needed",
-    copy: "The default is one number. If you want detail, ask why the number changed, whether a purchase fits today, or what recent spending did.",
+    title: "Check one number",
+    copy: "Open Pip, see Spendable Cash Today, and ask for detail only when you want the why.",
   },
 ];
 
@@ -42,13 +48,13 @@ export default function HowItWorksPage() {
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/70">
               Your bank balance shows what exists. Pip holds back the money already spoken for and
-              gives you Spendable Cash Today.
+              gives you Spendable Cash Today before the next purchase.
             </p>
           </div>
         </section>
 
         <section className="bg-porcelain px-4 py-16 sm:px-6">
-          <div className="mx-auto grid max-w-6xl gap-5 md:grid-cols-3">
+          <div className="mx-auto grid max-w-6xl gap-5 md:grid-cols-4">
             {steps.map((step, index) => {
               const Icon = step.icon;
 
@@ -80,25 +86,33 @@ export default function HowItWorksPage() {
                 If you want to inspect balances or transactions, ask Pip. They are not the default
                 screen because the default screen should shape the next spending decision.
               </p>
-              <Link
-                className="focus-ring inline-flex items-center gap-2 rounded-full text-sm font-bold text-moss hover:text-ink"
-                href="/security"
-              >
-                See the trust boundaries
-                <ArrowRight aria-hidden="true" size={16} />
-              </Link>
+              <div className="flex flex-wrap gap-3">
+                <Link
+                  className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-full bg-ink px-5 text-sm font-bold text-porcelain hover:bg-moss"
+                  href="/pricing"
+                >
+                  See pricing
+                  <ArrowRight aria-hidden="true" size={16} />
+                </Link>
+                <Link
+                  className="focus-ring inline-flex min-h-11 items-center rounded-full border border-line bg-porcelain px-5 text-sm font-bold text-ink hover:border-moss"
+                  href="/security"
+                >
+                  See trust boundaries
+                </Link>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="bg-porcelain px-4 py-16 sm:px-6" id="join-beta">
+        <section className="bg-porcelain px-4 py-16 sm:px-6" id="launch-access">
           <div className="mx-auto max-w-3xl">
             <h2 className="font-display text-4xl leading-tight text-ink">Try the daily-number habit.</h2>
             <p className="mt-4 text-base leading-7 text-ink/68">
-              Join the beta list and get access when Pip is ready for more testers.
+              {pipLaunch.trialLine} {pipLaunch.appStoreLine}
             </p>
             <div className="mt-7">
-              <WaitlistForm sourcePage="/how-it-works" compact />
+              <LaunchAccessForm sourcePage="/how-it-works" compact />
             </div>
           </div>
         </section>

@@ -1,6 +1,6 @@
 # Pip
 
-Pip is a cute daily money companion for everyday spending decisions.
+Pip is a paid cute daily money companion for everyday spending decisions.
 
 Core thesis:
 Before you spend, check Pip. Your bank balance shows what exists. Pip shows what is actually okay to use today.
@@ -8,9 +8,15 @@ Before you spend, check Pip. Your bank balance shows what exists. Pip shows what
 Primary product concept:
 Spendable Cash Today is the one daily number Pip shows by default. It is meant to help users stop guessing from their bank balance without maintaining a budget, spreadsheet, or finance dashboard.
 
+Launch pricing:
+- Weekly plan: $2.99/week.
+- Monthly plan: $7.99/month.
+- Pip is paid because money data should not be the product. Pip does not position itself as a permanent free product.
+
 Canonical public pages:
 - https://spendwithpip.com/
 - https://spendwithpip.com/how-it-works
+- https://spendwithpip.com/pricing
 - https://spendwithpip.com/security
 - https://spendwithpip.com/blog
 - https://spendwithpip.com/privacy
@@ -20,7 +26,7 @@ Canonical public pages:
 Important boundaries:
 - Pip is not a bank replacement.
 - Pip does not move money.
-- Pip uses read-only account data in the beta.
+- Pip uses read-only account data.
 - Pip is not financial, tax, investment, credit, or legal advice.
 - Pip's public content should be product-led and plain English, not generic financial education.
 

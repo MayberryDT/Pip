@@ -4,12 +4,21 @@ import { ArrowRight } from "lucide-react";
 import { marketingSite } from "@/lib/marketing/site";
 import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { MarketingPageView } from "@/components/marketing/MarketingPageView";
+import { pipLaunch } from "@/lib/marketing/pricing";
 
 const navLinks = [
   { href: "/how-it-works", label: "How it works" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/security", label: "Security" },
   { href: "/blog", label: "Blog" },
+] as const;
+
+const footerLinks = [
+  ...navLinks,
   { href: "/support", label: "Support" },
+  { href: "/privacy", label: "Privacy" },
+  { href: "/terms", label: "Terms" },
+  { href: marketingSite.appPath, label: "App" },
 ] as const;
 
 export function MarketingLayout({ children }: { children: ReactNode }) {
@@ -50,10 +59,11 @@ export function MarketingHeader() {
         </nav>
         <MarketingCtaLink
           className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-full bg-ink px-4 text-sm font-bold text-porcelain shadow-soft transition hover:bg-moss"
-          eventLabel="site_header_join_beta"
-          href="#join-beta"
+          eventLabel="site_header_get_launch_access"
+          eventProperties={{ intent: "launch_access" }}
+          href="/#launch-access"
         >
-          Join beta
+          {pipLaunch.primaryCta}
           <ArrowRight aria-hidden="true" size={16} strokeWidth={2.4} />
         </MarketingCtaLink>
       </div>
@@ -96,19 +106,17 @@ export function MarketingFooter() {
             className="h-11 w-auto object-contain"
           />
           <p className="mt-4 max-w-md text-sm leading-6 text-ink/66">
-            Pip is a cute daily money companion that shows Spendable Cash Today. No budget. No
-            dashboard. Just one calm number.
+            Your bank balance is not permission to spend. Pip gives you one calm number before the
+            next purchase.
           </p>
           <p className="mt-4 text-sm text-ink/66">{marketingSite.supportEmail}</p>
         </div>
         <div className="grid grid-cols-2 gap-3 text-sm font-semibold text-ink/70 sm:grid-cols-3">
-          {[...navLinks, { href: "/privacy", label: "Privacy" }, { href: "/terms", label: "Terms" }, { href: marketingSite.appPath, label: "App" }].map(
-            (link) => (
-              <Link className="focus-ring rounded-full hover:text-ink" href={link.href} key={`${link.href}-${link.label}`}>
-                {link.label}
-              </Link>
-            ),
-          )}
+          {footerLinks.map((link) => (
+            <Link className="focus-ring rounded-full hover:text-ink" href={link.href} key={`${link.href}-${link.label}`}>
+              {link.label}
+            </Link>
+          ))}
         </div>
       </div>
     </footer>

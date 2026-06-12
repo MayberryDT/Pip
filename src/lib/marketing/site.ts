@@ -2,7 +2,7 @@ export const marketingSite = {
   name: "Pip",
   defaultTitle: "Pip - Before you spend, check one number",
   defaultDescription:
-    "Pip is a cute daily money companion that shows Spendable Cash Today, one calm number for what's actually okay to use today. No budget. No dashboard.",
+    "Pip is a paid daily money companion that shows Spendable Cash Today, one calm number before you spend. Plans start at $2.99/week.",
   domain: "spendwithpip.com",
   supportEmail: "support@spendwithpip.com",
   appPath: "/app",
@@ -20,6 +20,11 @@ export const publicMarketingPages = [
     description: "See how Pip turns account data into Spendable Cash Today.",
   },
   {
+    path: "/pricing",
+    label: "Pricing",
+    description: "See Pip weekly and monthly launch pricing.",
+  },
+  {
     path: "/security",
     label: "Security",
     description: "Read the trust boundaries for account connection, data, and money movement.",
@@ -32,7 +37,7 @@ export const publicMarketingPages = [
   {
     path: "/support",
     label: "Support",
-    description: "Get private beta support and deletion guidance.",
+    description: "Get support for connection, billing, launch status, and deletion questions.",
   },
   {
     path: "/privacy",
@@ -42,7 +47,7 @@ export const publicMarketingPages = [
   {
     path: "/terms",
     label: "Terms",
-    description: "Review Pip beta terms and product boundaries.",
+    description: "Review Pip terms, product boundaries, subscription context, and no-money-movement limits.",
   },
 ] as const;
 

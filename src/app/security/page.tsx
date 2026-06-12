@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, Database, LockKeyhole, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowRight, BadgeDollarSign, Database, LockKeyhole, ShieldCheck, Trash2 } from "lucide-react";
+import { LaunchAccessForm } from "@/components/marketing/LaunchAccessForm";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
-import { WaitlistForm } from "@/components/marketing/WaitlistForm";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
+import { pipLaunch, pipPaidTrustLine } from "@/lib/marketing/pricing";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Security",
@@ -16,7 +17,7 @@ const securityFacts = [
   {
     icon: ShieldCheck,
     title: "Read-only account data",
-    copy: "Pip connects account and transaction data to calculate Spendable Cash Today. The beta product is an insight layer.",
+    copy: "Pip connects account and transaction data to calculate Spendable Cash Today. It is an insight layer, not a bank account.",
   },
   {
     icon: LockKeyhole,
@@ -31,7 +32,7 @@ const securityFacts = [
   {
     icon: Trash2,
     title: "Deletion path",
-    copy: "Beta users can ask Pip to delete stored financial data before leaving the product.",
+    copy: "You can ask Pip to delete stored financial data from the app when you want it cleared.",
   },
 ];
 
@@ -46,7 +47,7 @@ export default function SecurityPage() {
               Pip should feel cute, not careless.
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/70">
-              Pip asks for sensitive context, so the public site needs plain trust boundaries before
+              Pip asks for sensitive context, so the public site states the trust boundaries before
               anyone connects accounts.
             </p>
           </div>
@@ -70,22 +71,29 @@ export default function SecurityPage() {
 
         <section className="px-4 py-16 sm:px-6">
           <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[0.8fr_1fr]">
-            <h2 className="font-display text-4xl leading-tight text-ink sm:text-5xl">
-              What Pip stores in the beta.
-            </h2>
+            <div>
+              <BadgeDollarSign aria-hidden="true" className="text-moss" size={30} />
+              <h2 className="font-display mt-4 text-4xl leading-tight text-ink sm:text-5xl">
+                Paid because your data should not be the product.
+              </h2>
+            </div>
             <div className="space-y-5 text-base leading-8 text-ink/70">
               <p>
+                {pipPaidTrustLine} The launch pricing model is designed around direct user payment,
+                not ads, lead generation, or selling financial data.
+              </p>
+              <p>
                 Pip stores normalized financial data, account metadata, sync logs, user settings,
-                AI chat context needed for product behavior, and product events needed for beta
-                operations.
+                AI chat context needed for product behavior, and product events needed to operate
+                the app.
               </p>
               <p>
                 Pip does not store bank usernames or passwords. Raw provider payloads should stay
                 minimal and exist only where needed for troubleshooting or normalization.
               </p>
               <p>
-                The current terms say Pip is not financial, tax, investment, credit, or legal
-                advice. The number is a decision-support signal from available data.
+                Pip is not financial, tax, investment, credit, or legal advice. The number is a
+                decision-support signal from available data.
               </p>
               <div className="flex flex-wrap gap-3">
                 <Link
@@ -96,7 +104,7 @@ export default function SecurityPage() {
                   <ArrowRight aria-hidden="true" size={16} />
                 </Link>
                 <Link
-                  className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-full border border-line bg-porcelain px-5 text-sm font-bold text-ink hover:border-moss"
+                  className="focus-ring inline-flex min-h-11 items-center rounded-full border border-line bg-porcelain px-5 text-sm font-bold text-ink hover:border-moss"
                   href="/terms"
                 >
                   Read terms
@@ -106,14 +114,14 @@ export default function SecurityPage() {
           </div>
         </section>
 
-        <section className="bg-porcelain px-4 py-16 sm:px-6" id="join-beta">
+        <section className="bg-porcelain px-4 py-16 sm:px-6" id="launch-access">
           <div className="mx-auto max-w-3xl">
-            <h2 className="font-display text-4xl leading-tight text-ink">Join when the beta opens wider.</h2>
+            <h2 className="font-display text-4xl leading-tight text-ink">Get launch access to Pip.</h2>
             <p className="mt-4 text-base leading-7 text-ink/68">
-              Get a note when Pip is ready for more testers.
+              {pipLaunch.appStoreLine} Plans start at $2.99/week.
             </p>
             <div className="mt-7">
-              <WaitlistForm sourcePage="/security" compact />
+              <LaunchAccessForm sourcePage="/security" compact />
             </div>
           </div>
         </section>

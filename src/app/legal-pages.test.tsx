@@ -4,7 +4,7 @@ import PrivacyPage from "@/app/privacy/page";
 import SupportPage from "@/app/support/page";
 import TermsPage from "@/app/terms/page";
 
-describe("private-beta legal pages", () => {
+describe("public legal and support pages", () => {
   it("states the minimum privacy, deletion, and money-movement boundaries", () => {
     const privacy = renderToStaticMarkup(<PrivacyPage />);
     const terms = renderToStaticMarkup(<TermsPage />);
@@ -18,5 +18,7 @@ describe("private-beta legal pages", () => {
     expect(terms).toContain("does not initiate payments");
     expect(support).toContain("ask Pip in the chat to refresh data or repair the connection");
     expect(support).toContain("Ask Pip to delete data");
+    expect(support).toContain("Billing Support");
+    expect([privacy, terms, support].join("\n")).not.toMatch(/\b(?:beta|waitlist|tester|testers)\b|join-beta/i);
   });
 });

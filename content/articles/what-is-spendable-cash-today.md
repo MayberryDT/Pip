@@ -44,7 +44,7 @@ That distinction matters. A bank balance answers "How much exists here right now
 
 ## What it considers
 
-Pip is built around account data and a protected savings cushion. The product direction is to hold back bills, savings, recent spending pressure, and other visible constraints before showing the daily number. The exact calculation can evolve as Pip learns from real beta usage, but the public promise should stay simple: one calm number before you spend.
+Pip is built around account data and a protected savings cushion. The product direction is to hold back bills, savings, recent spending pressure, and other visible constraints before showing the daily number. The exact calculation can evolve as Pip learns from real usage, but the public promise should stay simple: one calm number before you spend.
 
 :::callout title="The useful default"
 Spendable Cash Today exists because the most visible number is not always the most useful number.
@@ -89,9 +89,9 @@ Use Spendable Cash Today as the first check before everyday spending. If the num
 This is intentionally smaller than a budget ritual. It should fit into the few seconds before a decision. The habit is not "review my whole financial life." The habit is "before you spend, check Pip."
 
 :::cta
-Join the beta and try Spendable Cash Today as your daily spending signal.
+Get launch access and try Spendable Cash Today as your daily spending signal.
 :::
 
 ## How to learn more
 
-Read [Why your bank balance is misleading](/blog/why-your-bank-balance-is-misleading) if you want the problem behind the number. Read [Meet Pip](/blog/meet-pip-cute-money-companion) if you want to understand why the product wraps the signal in a softer companion. Read [Pip security details](/security) before joining if you want the read-only data boundary.
+Read [Why your bank balance is misleading](/blog/why-your-bank-balance-is-misleading) if you want the problem behind the number. Read [Meet Pip](/blog/meet-pip-cute-money-companion) if you want to understand why the product wraps the signal in a softer companion. Read [Pip security details](/security) if you want the read-only data boundary.

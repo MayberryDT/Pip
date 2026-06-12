@@ -18,6 +18,7 @@ const supportedCustomBlockTypes = new Set([
   "quote",
   "figure",
 ]);
+const staleLaunchLanguagePattern = /\b(?:beta|waitlist|tester|testers)\b|join the beta|#join-beta/i;
 
 const faqSchema = z.object({
   question: z.string().trim().min(1),
@@ -295,6 +296,10 @@ export function getArticleQualityIssues(article: Article): string[] {
     issues.push("Expected an inline CTA block.");
   }
 
+  if (containsStaleLaunchLanguage(article.body)) {
+    issues.push("Published article body contains stale beta, waitlist, or tester launch language.");
+  }
+
   const h2Headings = article.headings.filter((heading) => heading.level === 2).map((heading) => heading.text);
 
   if (!h2Headings.some((heading) => heading.toLowerCase() !== "quick answer")) {
@@ -302,6 +307,10 @@ export function getArticleQualityIssues(article: Article): string[] {
   }
 
   return issues;
+}
+
+export function containsStaleLaunchLanguage(body: string): boolean {
+  return staleLaunchLanguagePattern.test(body);
 }
 
 function assertUniqueSlugs(articles: Article[]) {
@@ -511,8 +520,8 @@ function parseCustomBlock(lines: string[], startIndex: number): { block: Article
         block: {
           type: "inline-cta",
           body: requireBlockBody(rawType, body),
-          href: attributes.href ?? "#join-beta",
-          label: attributes.label ?? "Join the beta",
+          href: attributes.href ?? "#launch-access",
+          label: attributes.label ?? "Get launch access",
         },
         nextIndex,
       };

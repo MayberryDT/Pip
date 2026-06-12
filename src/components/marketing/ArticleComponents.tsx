@@ -4,6 +4,7 @@ import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { PipSays } from "@/components/marketing/PipSays";
 import type { Article, ArticleBodyBlock } from "@/lib/marketing/content";
 import { parseArticleBody } from "@/lib/marketing/content";
+import { pipLaunch } from "@/lib/marketing/pricing";
 
 export function ArticleCard({
   article,
@@ -119,7 +120,7 @@ export function ArticleBody({
       {blocks.map((block, index) => (
         <div key={`${block.type}-${index}`}>
           {renderBlock(block)}
-          {index === autoCtaIndex ? <InlineCtaCard body="Join the beta and try Spendable Cash Today." /> : null}
+          {index === autoCtaIndex ? <InlineCtaCard body="Get launch access and try Pip when it launches." /> : null}
         </div>
       ))}
     </div>
@@ -276,8 +277,8 @@ function ComparisonBlock({
 
 function InlineCtaCard({
   body,
-  href = "#join-beta",
-  label = "Join the beta",
+  href = "#launch-access",
+  label = pipLaunch.primaryCta,
 }: {
   body: string;
   href?: string;

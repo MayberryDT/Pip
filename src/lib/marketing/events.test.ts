@@ -8,7 +8,7 @@ describe("marketing events", () => {
         eventName: "waitlist_signup_succeeded",
         properties: {
           page: "/",
-          cta_label: "Join beta",
+          cta_label: "Get launch access",
         },
       }).success,
     ).toBe(true);
@@ -25,16 +25,26 @@ describe("marketing events", () => {
   it("drops unapproved properties before storage", () => {
     expect(
       sanitizeMarketingProperties({
-        page: "/blog",
-        href: "#join-beta",
+        page: "/pricing",
+        href: "#launch-access",
         referrer: "https://example.com",
+        intent: "launch_access",
+        selected_plan: "monthly",
+        price: "$7.99",
+        period: "month",
+        pricing_shown: true,
         rawIp: "203.0.113.8",
         secret: "nope",
       }),
     ).toEqual({
-      page: "/blog",
-      href: "#join-beta",
+      page: "/pricing",
+      href: "#launch-access",
       referrer: "https://example.com",
+      intent: "launch_access",
+      selected_plan: "monthly",
+      price: "$7.99",
+      period: "month",
+      pricing_shown: true,
     });
   });
 });

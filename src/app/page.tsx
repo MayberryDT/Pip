@@ -10,35 +10,48 @@ import {
   ReceiptText,
   ShieldCheck,
   Sparkles,
+  TrendingDown,
 } from "lucide-react";
+import { BehaviorComparison } from "@/components/marketing/BehaviorComparison";
+import { JsonLd } from "@/components/marketing/ArticleComponents";
+import { LaunchAccessForm } from "@/components/marketing/LaunchAccessForm";
 import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
 import { PipSays } from "@/components/marketing/PipSays";
-import { WaitlistForm } from "@/components/marketing/WaitlistForm";
-import { JsonLd } from "@/components/marketing/ArticleComponents";
+import { PricingCards } from "@/components/marketing/PricingCards";
 import { getPublishedArticles } from "@/lib/marketing/content";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
+import {
+  pipLaunch,
+  pipPaidTrustLine,
+  pipPricing,
+  pipSubscriptionCaveat,
+} from "@/lib/marketing/pricing";
 import { buildOrganizationJsonLd, buildWebSiteJsonLd } from "@/lib/marketing/structured-data";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Pip",
   description:
-    "Pip is a cute daily money companion that shows Spendable Cash Today, one calm number for what's actually okay to use today. No budget. No dashboard.",
+    "Pip is a cute daily spending companion that shows Spendable Cash Today: one calm number before you spend. Plans start at $2.99/week.",
   path: "/",
 });
 
 const howItWorks = [
   {
+    title: "Choose a plan",
+    copy: `Start weekly or monthly when Pip launches. Plans start at ${pipPricing.weekly.displayPrice}.`,
+  },
+  {
     title: "Connect accounts",
-    copy: "Pip reads balances and transactions through a read-only connection.",
+    copy: "Pip reads account and transaction data through a read-only connection.",
   },
   {
-    title: "Pick a savings cushion",
-    copy: "Choose what you want Pip to hold back before showing today's number.",
+    title: "Pick a cushion",
+    copy: "Choose what Pip should protect before showing today's number.",
   },
   {
-    title: "Check the daily number",
-    copy: "Open Pip, see Spendable Cash Today, and spend around that number.",
+    title: "Check one number",
+    copy: "Open Pip, see Spendable Cash Today, and spend around that signal.",
   },
 ];
 
@@ -55,9 +68,15 @@ const dailyNumberPoints = [
   },
   {
     title: "Recent spending included",
-    copy: "The number can react when spending pressure changes.",
+    copy: "Spend more than normal, and the number can tighten.",
     icon: Landmark,
   },
+];
+
+const pipReactionPoints = [
+  "Pip can perk up when spending is light.",
+  "Pip can get careful when spending runs hot.",
+  "Pip stays calm when today is tight.",
 ];
 
 const answerChips = [
@@ -72,7 +91,7 @@ const answerChips = [
 const trustFacts = [
   "Read-only account connection",
   "Pip cannot move money",
-  "Provider credentials stay server-side",
+  "No ads or data-selling model",
   "Delete your financial data",
 ];
 
@@ -104,25 +123,32 @@ export default function MarketingHomePage() {
                 Pip gives you one calm daily number: Spendable Cash Today.
               </p>
               <p className="mt-4 max-w-2xl text-base leading-7 text-ink/66">
-                It helps you stop guessing from your bank balance without building a budget,
-                spreadsheet, or finance dashboard.
+                Stop guessing from your bank balance without building a budget.
               </p>
-              <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+              <div className="mt-5 flex flex-wrap gap-2">
+                <span className="rounded-full border border-line bg-porcelain px-3 py-1 text-sm font-bold text-moss">
+                  {pipLaunch.appStoreLine}
+                </span>
+                <span className="rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-sm font-bold text-ink">
+                  Plans start at {pipPricing.weekly.displayPrice}
+                </span>
+              </div>
+              <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-center">
                 <MarketingCtaLink
                   className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-ink px-6 text-sm font-bold text-porcelain shadow-soft transition hover:bg-moss"
-                  eventLabel="home_hero_join_beta"
-                  href="#join-beta"
+                  eventLabel="home_hero_get_launch_access"
+                  eventProperties={{ intent: "launch_access", pricing_shown: true }}
+                  href="#launch-access"
                 >
-                  Join the beta
+                  {pipLaunch.primaryCta}
                   <ArrowRight aria-hidden="true" size={17} />
                 </MarketingCtaLink>
-                <MarketingCtaLink
-                  className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 rounded-full border border-line bg-porcelain px-6 text-sm font-bold text-ink transition hover:border-moss"
-                  eventLabel="home_hero_how_it_works"
+                <Link
+                  className="focus-ring inline-flex min-h-12 items-center justify-center rounded-full px-2 text-sm font-bold text-moss hover:text-ink"
                   href="/how-it-works"
                 >
-                  See how Pip works
-                </MarketingCtaLink>
+                  See how it works
+                </Link>
               </div>
               <p className="mt-4 text-sm font-bold text-ink/58">
                 Read-only account data. Pip cannot move your money.
@@ -153,7 +179,7 @@ export default function MarketingHomePage() {
                     </p>
                     <div className="mt-7 rounded-[0.5rem] border border-line bg-porcelain p-4">
                       <p className="text-sm font-bold text-ink">Ask Pip</p>
-                      <p className="mt-2 text-sm leading-6 text-ink/64">Why did today's number change?</p>
+                      <p className="mt-2 text-sm leading-6 text-ink/64">Can I spend $50?</p>
                     </div>
                   </div>
                 </div>
@@ -180,8 +206,8 @@ export default function MarketingHomePage() {
                 Your bank app shows the pile. Pip shows the spending number.
               </h2>
               <p className="mt-5 text-base leading-8 text-ink/70">
-                A balance can look like permission. Pip holds back bills, savings, and recent
-                spending pressure before showing what's actually useful today.
+                You open your bank app. It says $1,247. Your brain says, "I'm fine." But some of
+                that money already has a job.
               </p>
             </div>
             <div className="mt-10 grid gap-5 md:grid-cols-[1fr_auto_1fr] md:items-stretch">
@@ -190,7 +216,7 @@ export default function MarketingHomePage() {
                 <p className="font-display mt-4 text-6xl leading-none text-ink">$1,247</p>
                 <p className="mt-5 text-base font-bold text-ink">Looks like plenty.</p>
                 <p className="mt-2 text-sm leading-6 text-ink/64">
-                  But rent, subscriptions, and card spending may already be waiting.
+                  But it may include money already claimed by bills, savings, and card spending.
                 </p>
               </article>
               <div className="flex items-center justify-center text-sm font-bold uppercase tracking-normal text-moss md:px-2">
@@ -201,7 +227,7 @@ export default function MarketingHomePage() {
                 <p className="font-display mt-4 text-6xl leading-none text-ink">$84</p>
                 <p className="mt-5 text-base font-bold text-ink">Room for today.</p>
                 <p className="mt-2 text-sm leading-6 text-ink/64">
-                  After bills, savings, and your recent spending pattern are considered.
+                  This is the number to check before the next purchase.
                 </p>
               </article>
             </div>
@@ -213,13 +239,20 @@ export default function MarketingHomePage() {
             <div>
               <p className="text-sm font-bold uppercase tracking-normal text-moss">The daily number</p>
               <h2 className="font-display mt-3 text-4xl leading-tight text-ink sm:text-5xl">
-                One number for the daily spending moment.
+                One number for the moment right before you spend.
               </h2>
               <p className="mt-5 text-base leading-8 text-ink/70">
-                Most overspending does not start with a spreadsheet. It starts with one small
+                Most overspending does not start with a spreadsheet. It starts with a small
                 decision: lunch, a cart, a night out, a quick "I probably have enough." Pip gives
                 you a calmer default before that moment.
               </p>
+              <div className="mt-6 rounded-[0.5rem] border border-line bg-porcelain p-5">
+                <TrendingDown aria-hidden="true" className="text-moss" size={24} />
+                <p className="mt-3 text-sm font-bold leading-6 text-ink">
+                  If you spend lightly, Pip can give you more room. If you spend hot, tomorrow can
+                  feel tighter. That feedback loop is the habit.
+                </p>
+              </div>
             </div>
             <div className="grid gap-4 sm:grid-cols-3 lg:grid-cols-1">
               {dailyNumberPoints.map((point) => {
@@ -234,6 +267,24 @@ export default function MarketingHomePage() {
                 );
               })}
             </div>
+          </div>
+        </section>
+
+        <section className="bg-porcelain px-4 py-16 sm:px-6 lg:py-20">
+          <div className="mx-auto grid max-w-6xl gap-9 lg:grid-cols-[0.78fr_1fr]">
+            <div>
+              <h2 className="font-display text-4xl leading-tight text-ink sm:text-5xl">
+                Pip is not another budget app.
+              </h2>
+              <p className="mt-5 text-base leading-8 text-ink/70">
+                It replaces the moment where you open your bank app and guess.
+              </p>
+              <p className="mt-5 text-sm font-bold leading-6 text-ink/58">
+                Pip is not for people who want a full budgeting command center. Pip is for people
+                who want one useful signal before spending.
+              </p>
+            </div>
+            <BehaviorComparison />
           </div>
         </section>
 
@@ -253,15 +304,22 @@ export default function MarketingHomePage() {
             <div>
               <Sparkles aria-hidden="true" className="text-gold" size={28} />
               <h2 className="font-display mt-4 text-4xl leading-tight text-ink sm:text-5xl">
-                A tiny companion makes money feel less heavy.
+                Cute on purpose. Serious where it counts.
               </h2>
               <p className="mt-5 text-base leading-8 text-ink/70">
-                Pip is intentionally soft. Checking money should not feel like opening a judgment
-                machine. Pip gives a small daily signal, reacts calmly, and lets you ask for more
-                only when you want it.
+                Money apps often feel cold, heavy, or judgmental. Pip is softer because the daily
+                check needs to be repeatable. The character lowers the emotional pressure. The
+                number still has to be grounded in real account data.
               </p>
               <div className="mt-7 max-w-2xl">
                 <PipSays compact>Your balance is real. It's just not all open room.</PipSays>
+              </div>
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                {pipReactionPoints.map((point) => (
+                  <div className="rounded-[0.5rem] border border-line bg-porcelain p-4" key={point}>
+                    <p className="text-sm font-bold leading-6 text-ink/70">{point}</p>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
@@ -272,16 +330,16 @@ export default function MarketingHomePage() {
             <div className="max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-normal text-moss">How it works</p>
               <h2 className="font-display mt-3 text-4xl leading-tight text-ink sm:text-5xl">
-                Three steps. One daily signal.
+                A simple setup for one daily signal.
               </h2>
             </div>
-            <div className="mt-10 grid gap-4 md:grid-cols-3">
+            <div className="mt-10 grid gap-4 md:grid-cols-4">
               {howItWorks.map((step, index) => (
-                <article className="rounded-[0.5rem] border border-line bg-porcelain p-6" key={step.title}>
+                <article className="rounded-[0.5rem] border border-line bg-porcelain p-5" key={step.title}>
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-moss text-sm font-bold text-porcelain">
                     {index + 1}
                   </span>
-                  <h3 className="mt-5 text-xl font-bold text-ink">{step.title}</h3>
+                  <h3 className="mt-5 text-lg font-bold text-ink">{step.title}</h3>
                   <p className="mt-3 text-sm leading-6 text-ink/66">{step.copy}</p>
                 </article>
               ))}
@@ -289,7 +347,27 @@ export default function MarketingHomePage() {
           </div>
         </section>
 
-        <section className="bg-porcelain px-4 py-12 sm:px-6 lg:py-14">
+        <section className="bg-porcelain px-4 py-16 sm:px-6 lg:py-20" id="pricing">
+          <div className="mx-auto grid max-w-6xl gap-10 lg:grid-cols-[0.78fr_1fr]">
+            <div>
+              <p className="text-sm font-bold uppercase tracking-normal text-moss">Pricing</p>
+              <h2 className="font-display mt-3 text-4xl leading-tight text-ink sm:text-5xl">
+                Simple pricing for one daily number.
+              </h2>
+              <p className="mt-5 text-base leading-8 text-ink/70">{pipPaidTrustLine}</p>
+              <Link
+                className="focus-ring mt-6 inline-flex items-center gap-2 rounded-full text-sm font-bold text-moss hover:text-ink"
+                href="/pricing"
+              >
+                See pricing details
+                <ArrowRight aria-hidden="true" size={16} />
+              </Link>
+            </div>
+            <PricingCards eventSource="home_pricing" />
+          </div>
+        </section>
+
+        <section className="px-4 py-12 sm:px-6 lg:py-14">
           <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[0.8fr_1fr]">
             <div>
               <MessageCircle aria-hidden="true" className="text-river" size={30} />
@@ -297,8 +375,14 @@ export default function MarketingHomePage() {
                 Ask when you want the why.
               </h2>
               <p className="mt-5 text-base leading-8 text-ink/70">
-                The number comes first. The explanation is there when you ask.
+                The number comes first. The why is there when you ask.
               </p>
+              <div className="mt-5 max-w-md rounded-[0.5rem] border border-line bg-porcelain p-4">
+                <p className="text-sm font-bold text-ink">You: Can I spend $50?</p>
+                <p className="mt-2 text-sm leading-6 text-ink/66">
+                  Pip: It fits today, but it would make tomorrow tighter.
+                </p>
+              </div>
             </div>
             <div className="flex flex-wrap content-start gap-3">
               {answerChips.map((chip) => (
@@ -310,16 +394,16 @@ export default function MarketingHomePage() {
           </div>
         </section>
 
-        <section className="px-4 py-14 sm:px-6 lg:py-16">
+        <section className="bg-porcelain px-4 py-14 sm:px-6 lg:py-16">
           <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[0.8fr_1fr]">
             <div>
               <ShieldCheck aria-hidden="true" className="text-moss" size={32} />
               <h2 className="font-display mt-4 text-4xl leading-tight text-ink sm:text-5xl">
-                Cute does not mean careless.
+                Paid because your data should not be the product.
               </h2>
               <p className="mt-5 text-base leading-8 text-ink/70">
-                Pip uses read-only account data. It cannot move your money. Provider credentials
-                stay server-side. You can delete stored financial data before leaving the beta.
+                Pip uses read-only account data. It cannot move your money. The paid model keeps
+                incentives simple: no ads and no selling your financial data.
               </p>
               <Link
                 className="focus-ring mt-6 inline-flex items-center gap-2 rounded-full text-sm font-bold text-moss hover:text-ink"
@@ -331,7 +415,7 @@ export default function MarketingHomePage() {
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {trustFacts.map((fact) => (
-                <div className="rounded-[0.5rem] border border-line bg-porcelain p-5" key={fact}>
+                <div className="rounded-[0.5rem] border border-line bg-paper p-5" key={fact}>
                   <CheckCircle2 aria-hidden="true" className="text-moss" size={20} />
                   <p className="mt-3 text-sm font-bold leading-6 text-ink">{fact}</p>
                 </div>
@@ -340,7 +424,7 @@ export default function MarketingHomePage() {
           </div>
         </section>
 
-        <section className="bg-porcelain px-4 py-16 sm:px-6 lg:py-20">
+        <section className="px-4 py-16 sm:px-6 lg:py-20">
           <div className="mx-auto max-w-6xl">
             <div className="max-w-3xl">
               <HelpCircle aria-hidden="true" className="text-gold" size={28} />
@@ -354,7 +438,7 @@ export default function MarketingHomePage() {
             </div>
             <div className="mt-9 grid gap-4 md:grid-cols-3">
               {featuredArticles.map((article) => (
-                <article className="rounded-[0.5rem] border border-line bg-paper p-5" key={article.slug}>
+                <article className="rounded-[0.5rem] border border-line bg-porcelain p-5" key={article.slug}>
                   <p className="text-xs font-bold uppercase tracking-normal text-moss">{article.tags[0]}</p>
                   <h3 className="font-display mt-3 text-2xl leading-tight text-ink">
                     <Link className="focus-ring rounded hover:text-moss" href={`/blog/${article.slug}`}>
@@ -375,17 +459,16 @@ export default function MarketingHomePage() {
           </div>
         </section>
 
-        <section className="px-4 py-16 sm:px-6 lg:py-20" id="join-beta">
-          <div className="mx-auto max-w-4xl rounded-[0.5rem] border border-line bg-porcelain p-6 text-center shadow-soft sm:p-9">
+        <section className="bg-porcelain px-4 py-16 sm:px-6 lg:py-20" id="launch-access">
+          <div className="mx-auto max-w-4xl rounded-[0.5rem] border border-line bg-paper p-6 text-center shadow-soft sm:p-9">
             <h2 className="font-display text-4xl leading-tight text-ink sm:text-5xl">
-              Stop guessing from your bank balance.
+              Your bank balance is not permission to spend.
             </h2>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-ink/68">
-              Join the beta and try the daily number before Pip comes to the App Store and Google
-              Play.
+              {pipLaunch.productSentence} {pipLaunch.appStoreLine} {pipSubscriptionCaveat}
             </p>
             <div className="mt-8">
-              <WaitlistForm sourcePage="/" />
+              <LaunchAccessForm sourcePage="/" />
             </div>
           </div>
         </section>

@@ -7,6 +7,7 @@ import AppPage from "@/app/app/page";
 import BlogIndexPage from "@/app/blog/page";
 import ArticlePage from "@/app/blog/[slug]/page";
 import HowItWorksPage from "@/app/how-it-works/page";
+import PricingPage from "@/app/pricing/page";
 import SecurityPage from "@/app/security/page";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
@@ -17,9 +18,12 @@ describe("marketing website pages", () => {
 
     expect(html).toContain("Before you spend, check Pip.");
     expect(html).toContain("Spendable Cash Today");
-    expect(html).toContain("Join the beta");
+    expect(html).toContain("Get launch access");
+    expect(html).toContain("$2.99/week");
+    expect(html).toContain("$7.99/month");
     expect(html).toContain("Read-only account data. Pip cannot move your money.");
     expect(html).toContain("Your bank app shows the pile. Pip shows the spending number.");
+    expect(html).not.toContain("Join beta");
   });
 
   it("keeps the product app available at /app", async () => {
@@ -36,6 +40,7 @@ describe("marketing website pages", () => {
 
   it("renders required public support pages", () => {
     expect(renderToStaticMarkup(<HowItWorksPage />)).toContain("Pip turns money noise into one daily number");
+    expect(renderToStaticMarkup(<PricingPage />)).toContain("Simple pricing for one daily number");
     expect(renderToStaticMarkup(<SecurityPage />)).toContain("No money movement");
   });
 
@@ -58,7 +63,7 @@ describe("marketing website pages", () => {
     expect(html).toContain("FAQ");
     expect(html).toContain("application/ld+json");
     expect(html).toContain("BreadcrumbList");
-    expect(html).toContain("Join the beta and try Spendable Cash Today");
+    expect(html).toContain("Get launch access and try Spendable Cash Today");
   });
 
   it("renders rich article blocks on published article pages", async () => {
@@ -80,6 +85,7 @@ describe("marketing website pages", () => {
     const urls = sitemap().map((entry) => entry.url);
 
     expect(urls).toContain("https://spendwithpip.com/");
+    expect(urls).toContain("https://spendwithpip.com/pricing");
     expect(urls).toContain("https://spendwithpip.com/blog/what-is-spendable-cash-today");
     expect(urls).not.toContain("https://spendwithpip.com/app");
     expect(urls).not.toContain("https://spendwithpip.com/blog/daily-spending-allowance-vs-budget");
@@ -101,6 +107,7 @@ describe("marketing website pages", () => {
     const llms = readFileSync(join(process.cwd(), "public/llms.txt"), "utf8");
 
     expect(llms).toContain("Spendable Cash Today");
+    expect(llms).toContain("$2.99/week");
     expect(llms).toContain("https://spendwithpip.com/security");
     expect(llms).toContain("Pip does not move money");
   });
@@ -115,6 +122,7 @@ describe("marketing website pages", () => {
       renderToStaticMarkup(<MarketingHomePage />),
       renderToStaticMarkup(<BlogIndexPage />),
       renderToStaticMarkup(<HowItWorksPage />),
+      renderToStaticMarkup(<PricingPage />),
       renderToStaticMarkup(<SecurityPage />),
       renderToStaticMarkup(article),
     ].join("\n");
@@ -124,5 +132,6 @@ describe("marketing website pages", () => {
     expect(publicHtml).not.toContain("My Margin");
     expect(publicHtml).not.toContain("finance command center");
     expect(publicHtml).not.toContain("AI finance coach");
+    expect(publicHtml).not.toMatch(/\b(?:beta|waitlist|tester|testers)\b|join-beta/i);
   });
 });

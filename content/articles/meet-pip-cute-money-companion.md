@@ -76,7 +76,7 @@ That order matters. If the first screen becomes a dashboard, Pip loses the behav
 
 ## What Pip does not do
 
-Pip is not a full financial plan. It is not financial, tax, investment, credit, or legal advice. It does not promise that a purchase is safe. It does not move money in the beta. It does not ask you to maintain categories just to get the main answer.
+Pip is not a full financial plan. It is not financial, tax, investment, credit, or legal advice. It does not promise that a purchase is safe. It does not move money. It does not ask you to maintain categories just to get the main answer.
 
 Pip also should not shame you. A low number is not a moral judgment. A zero number does not mean the app is scolding you. It means today's signal is tight based on what Pip can see. That is useful information, especially if the alternative is checking a balance that looks bigger and spending from the wrong number.
 
@@ -91,9 +91,9 @@ Pip should also feel honest about uncertainty. It can only work from the account
 That is why the public website needs to treat Pip as both charming and serious. The charm makes the habit feel possible. The seriousness makes account connection reasonable. Together, they create the promise: before you spend, check Pip.
 
 :::cta
-Join the beta and try the daily-number habit before Pip comes to the App Store and Google Play.
+Get launch access and try the daily-number habit when Pip comes to the App Store and Google Play.
 :::
 
 ## Where to start
 
-If you want the product definition, read [What is Spendable Cash Today?](/blog/what-is-spendable-cash-today). If you want the problem Pip is replacing, read [Why your bank balance is misleading](/blog/why-your-bank-balance-is-misleading). If you want the trust boundary before joining, read [Pip security details](/security).
+If you want the product definition, read [What is Spendable Cash Today?](/blog/what-is-spendable-cash-today). If you want the problem Pip is replacing, read [Why your bank balance is misleading](/blog/why-your-bank-balance-is-misleading). If you want the trust boundary before connecting accounts, read [Pip security details](/security).

@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { ArticleCard } from "@/components/marketing/ArticleComponents";
+import { LaunchAccessForm } from "@/components/marketing/LaunchAccessForm";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
-import { WaitlistForm } from "@/components/marketing/WaitlistForm";
 import { getFeaturedArticle, getPublishedArticles } from "@/lib/marketing/content";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
+import { pipLaunch } from "@/lib/marketing/pricing";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Pip Blog",
@@ -53,14 +54,14 @@ export default function BlogIndexPage() {
           </div>
         </section>
 
-        <section className="px-4 py-16 sm:px-6" id="join-beta">
+        <section className="px-4 py-16 sm:px-6" id="launch-access">
           <div className="mx-auto max-w-3xl">
             <h2 className="font-display text-4xl leading-tight text-ink">Try the number behind the articles.</h2>
             <p className="mt-4 text-base leading-7 text-ink/68">
-              Join the beta list and get access when Pip is ready for more testers.
+              {pipLaunch.trialLine} {pipLaunch.appStoreLine}
             </p>
             <div className="mt-7">
-              <WaitlistForm sourcePage="/blog" compact />
+              <LaunchAccessForm sourcePage="/blog" compact />
             </div>
           </div>
         </section>

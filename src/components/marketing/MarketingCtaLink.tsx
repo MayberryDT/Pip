@@ -8,11 +8,13 @@ export function MarketingCtaLink({
   children,
   className,
   eventLabel,
+  eventProperties,
   href,
 }: {
   children: ReactNode;
   className: string;
   eventLabel: string;
+  eventProperties?: Record<string, string | number | boolean | null>;
   href: string;
 }) {
   return (
@@ -24,6 +26,7 @@ export function MarketingCtaLink({
           cta_label: eventLabel,
           href,
           page: window.location.pathname,
+          ...(eventProperties ?? {}),
         });
       }}
     >

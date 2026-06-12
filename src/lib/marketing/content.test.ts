@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateReadingTimeMinutes,
+  containsStaleLaunchLanguage,
+  getAllArticles,
   getArticleBySlug,
   getArticleQualityIssues,
   getFeaturedArticle,
@@ -17,6 +19,7 @@ describe("marketing content loader", () => {
 
     expect(articles).toHaveLength(3);
     expect(articles.map((article) => article.slug)).toContain("meet-pip-cute-money-companion");
+    expect(articles.map((article) => article.slug)).not.toContain("why-pip-is-paid");
     expect(articles.map((article) => article.slug)).not.toContain(
       "how-to-stop-overspending-without-tracking-every-purchase",
     );
@@ -67,7 +70,22 @@ Body`),
       expect(article.bodyWordCount).toBeGreaterThanOrEqual(pillarArticleSlugs.has(article.slug) ? 900 : 700);
       expect(article.hasInlineCta).toBe(true);
       expect(article.headings.some((heading) => heading.level === 2 && heading.text !== "Quick answer")).toBe(true);
+      expect(containsStaleLaunchLanguage(article.body), article.slug).toBe(false);
     }
+  });
+
+  it("keeps paid-launch article topics in draft until they are ready", () => {
+    const articles = getAllArticles();
+    const draftSlugs = articles.filter((article) => article.status === "draft").map((article) => article.slug);
+
+    expect(draftSlugs).toEqual(
+      expect.arrayContaining([
+        "why-pip-is-paid",
+        "why-your-money-app-should-not-be-free",
+        "weekly-pricing-for-a-daily-spending-app",
+        "bank-balance-vs-spending-number",
+      ]),
+    );
   });
 
   it("parses supported rich article blocks", () => {
@@ -94,7 +112,7 @@ Pip: Shows the daily signal.
 :::
 
 :::cta
-Join the beta.
+Get launch access.
 :::
 
 :::quote
