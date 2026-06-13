@@ -2,9 +2,10 @@ import Link from "next/link";
 import { ArrowRight, Clock3, Quote } from "lucide-react";
 import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { PipSays } from "@/components/marketing/PipSays";
+import { marketingAssets } from "@/lib/marketing/assets";
 import type { Article, ArticleBodyBlock } from "@/lib/marketing/content";
 import { parseArticleBody } from "@/lib/marketing/content";
-import { pipLaunch } from "@/lib/marketing/pricing";
+import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
 
 export function ArticleCard({
   article,
@@ -15,22 +16,22 @@ export function ArticleCard({
 }) {
   if (featured) {
     return (
-      <article className="grid gap-6 rounded-[0.5rem] border border-line bg-paper p-6 shadow-[0_18px_44px_rgba(60,50,40,0.08)] md:grid-cols-[1fr_auto] md:p-8">
+      <article className="grid gap-6 border-y border-line py-8 md:grid-cols-[minmax(0,1fr)_18rem]">
         <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-gold/20 px-3 py-1 text-xs font-bold uppercase tracking-normal text-ink">
+          <div className="flex flex-wrap items-start gap-4">
+            <span className="border-t border-gold pt-2 text-xs font-extrabold uppercase tracking-[0.08em] text-ink">
               Start here
             </span>
             {article.tags.slice(0, 3).map((tag) => (
               <span
-                className="rounded-full border border-line bg-porcelain px-3 py-1 text-xs font-bold text-moss"
+                className="border-t border-line pt-2 text-xs font-bold text-moss"
                 key={tag}
               >
                 {tag}
               </span>
             ))}
           </div>
-          <h2 className="font-display mt-5 max-w-3xl text-4xl leading-[1.05] text-ink sm:text-5xl">
+          <h2 className="swiss-type mt-5 max-w-3xl text-4xl font-extrabold leading-[1.05] text-ink sm:text-5xl">
             <Link className="focus-ring rounded hover:text-moss" href={`/blog/${article.slug}`}>
               {article.title}
             </Link>
@@ -44,7 +45,7 @@ export function ArticleCard({
             </span>
           </div>
           <Link
-            className="focus-ring mt-6 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-ink px-5 text-sm font-bold text-porcelain transition hover:bg-moss"
+            className="focus-ring mt-6 inline-flex min-h-11 items-center justify-center gap-2 bg-ink px-5 text-sm font-bold text-porcelain transition hover:bg-moss"
             href={`/blog/${article.slug}`}
           >
             Start reading
@@ -52,14 +53,14 @@ export function ArticleCard({
           </Link>
         </div>
         <img
-          src="/brand/pip-waving.png"
+          src={marketingAssets.articleCoverTemplate.src}
           alt=""
           aria-hidden="true"
-          width={416}
-          height={484}
+          width={marketingAssets.articleCoverTemplate.width}
+          height={marketingAssets.articleCoverTemplate.height}
           loading="lazy"
           decoding="async"
-          className="hidden h-44 w-auto self-end object-contain drop-shadow-[0_18px_28px_rgba(60,50,40,0.12)] md:block"
+          className="hidden h-full w-full self-stretch border border-line bg-porcelain object-contain md:block"
         />
       </article>
     );
@@ -67,12 +68,12 @@ export function ArticleCard({
 
   return (
     <article
-      className="rounded-[0.5rem] border border-line bg-porcelain p-5 shadow-[0_12px_34px_rgba(60,50,40,0.06)]"
+      className="border-t border-line pt-5"
     >
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-3">
         {article.tags.slice(0, 3).map((tag) => (
           <span
-            className="rounded-full border border-line bg-paper px-3 py-1 text-xs font-bold text-moss"
+            className="border-t border-line pt-2 text-xs font-bold text-moss"
             key={tag}
           >
             {tag}
@@ -80,7 +81,7 @@ export function ArticleCard({
         ))}
       </div>
       <h2
-        className="font-display mt-4 text-2xl leading-[1.05] text-ink"
+        className="swiss-type mt-4 text-2xl font-extrabold leading-[1.05] text-ink"
       >
         <Link className="focus-ring rounded hover:text-moss" href={`/blog/${article.slug}`}>
           {article.title}
@@ -94,10 +95,7 @@ export function ArticleCard({
           {article.readingTimeMinutes} min
         </span>
       </div>
-      <Link
-        className="focus-ring mt-5 inline-flex items-center gap-2 rounded-full text-sm font-bold text-moss hover:text-ink"
-        href={`/blog/${article.slug}`}
-      >
+      <Link className="focus-ring mt-5 inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink" href={`/blog/${article.slug}`}>
         Read article
         <ArrowRight aria-hidden="true" size={16} />
       </Link>
@@ -120,7 +118,7 @@ export function ArticleBody({
       {blocks.map((block, index) => (
         <div key={`${block.type}-${index}`}>
           {renderBlock(block)}
-          {index === autoCtaIndex ? <InlineCtaCard body="Get launch access and try Pip when it launches." /> : null}
+          {index === autoCtaIndex ? <InlineCtaCard body="Get Pip and check one daily number before you spend." /> : null}
         </div>
       ))}
     </div>
@@ -134,12 +132,12 @@ export function ArticleFaq({ faq }: { faq: Article["faq"] }) {
 
   return (
     <section className="mt-14 border-t border-line pt-10" aria-labelledby="article-faq">
-      <h2 className="font-display text-3xl leading-tight text-ink" id="article-faq">
+      <h2 className="swiss-type text-3xl font-extrabold leading-tight text-ink" id="article-faq">
         FAQ
       </h2>
       <div className="mt-6 grid gap-4">
         {faq.map((item) => (
-          <article className="rounded-[0.5rem] border border-line bg-porcelain p-5" key={item.question}>
+          <article className="border-t border-line pt-5" key={item.question}>
             <h3 className="text-base font-bold text-ink">{item.question}</h3>
             <p className="mt-2 text-sm leading-6 text-ink/66">{item.answer}</p>
           </article>
@@ -178,7 +176,7 @@ function renderBlock(block: ArticleBodyBlock) {
     case "heading":
       if (block.heading.level === 2) {
         return (
-          <h2 className="font-display pt-4 text-3xl leading-tight text-ink" id={block.heading.id}>
+          <h2 className="swiss-type pt-4 text-3xl font-extrabold leading-tight text-ink" id={block.heading.id}>
             {block.heading.text}
           </h2>
         );
@@ -224,7 +222,7 @@ function renderBlock(block: ArticleBodyBlock) {
 
 function ArticleCallout({ body, title }: { body: string; title?: string }) {
   return (
-    <aside className="max-w-2xl rounded-[0.5rem] border-l-4 border-moss bg-porcelain p-5 shadow-[0_12px_28px_rgba(60,50,40,0.05)]">
+    <aside className="max-w-2xl border-l-4 border-moss bg-porcelain p-5">
       {title ? <p className="text-sm font-bold uppercase tracking-normal text-moss">{title}</p> : null}
       <p className={["text-base leading-7 text-ink/74", title ? "mt-2" : ""].join(" ")}>{renderInlineText(body)}</p>
     </aside>
@@ -239,7 +237,7 @@ function MoneyExampleBlock({
   title?: string;
 }) {
   return (
-    <aside className="max-w-2xl rounded-[0.5rem] border border-line bg-paper p-5 shadow-[0_12px_28px_rgba(60,50,40,0.05)]">
+    <aside className="max-w-2xl border-t border-line bg-paper p-5">
       <p className="text-sm font-bold uppercase tracking-normal text-moss">{title ?? "Money example"}</p>
       <dl className="mt-4 divide-y divide-line font-mono text-sm">
         {rows.map((row) => (
@@ -261,11 +259,11 @@ function ComparisonBlock({
   title?: string;
 }) {
   return (
-    <aside className="max-w-3xl rounded-[0.5rem] border border-line bg-porcelain p-5 shadow-[0_12px_28px_rgba(60,50,40,0.05)]">
+    <aside className="max-w-3xl border-t border-line bg-porcelain p-5">
       {title ? <p className="text-sm font-bold uppercase tracking-normal text-moss">{title}</p> : null}
       <div className={["grid gap-4 md:grid-cols-2", title ? "mt-4" : ""].join(" ")}>
         {items.map((item) => (
-          <div className="rounded-[0.5rem] border border-line bg-paper p-4" key={item.label}>
+          <div className="border-t border-line bg-paper pt-4" key={item.label}>
             <p className="text-sm font-bold text-ink">{item.label}</p>
             <p className="mt-2 text-sm leading-6 text-ink/66">{renderInlineText(item.value)}</p>
           </div>
@@ -277,19 +275,20 @@ function ComparisonBlock({
 
 function InlineCtaCard({
   body,
-  href = "#launch-access",
-  label = pipLaunch.primaryCta,
+  href = getProductAccessHref(),
+  label = productAccess.primaryLabel,
 }: {
   body: string;
   href?: string;
   label?: string;
 }) {
   return (
-    <aside className="max-w-2xl rounded-[0.5rem] border border-moss/30 bg-moss/10 p-5 shadow-[0_12px_28px_rgba(60,50,40,0.05)]">
+    <aside className="max-w-2xl border-y border-moss/30 bg-moss/10 p-5">
       <p className="text-base font-bold leading-7 text-ink">{renderInlineText(body)}</p>
       <MarketingCtaLink
-        className="focus-ring mt-4 inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-moss px-5 text-sm font-bold text-porcelain transition hover:bg-ink"
+        className="focus-ring mt-4 inline-flex min-h-11 items-center justify-center gap-2 bg-moss px-5 text-sm font-bold text-porcelain transition hover:bg-ink"
         eventLabel="article_inline_cta"
+        eventProperties={{ intent: "get_pip" }}
         href={href}
       >
         {label}
@@ -303,7 +302,7 @@ function PullQuote({ body }: { body: string }) {
   return (
     <blockquote className="max-w-2xl border-y border-line py-6">
       <Quote aria-hidden="true" className="text-gold" size={24} />
-      <p className="font-display mt-3 text-3xl leading-tight text-ink">{renderInlineText(body)}</p>
+      <p className="swiss-type mt-3 text-3xl font-extrabold leading-tight text-ink">{renderInlineText(body)}</p>
     </blockquote>
   );
 }
@@ -325,7 +324,7 @@ function ArticleFigure({
     <figure className="max-w-2xl">
       <img
         alt={alt}
-        className="w-full rounded-[0.5rem] border border-line bg-porcelain object-cover"
+        className="w-full border border-line bg-porcelain object-contain"
         decoding="async"
         height={height}
         loading="lazy"

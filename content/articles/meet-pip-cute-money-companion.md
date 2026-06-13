@@ -91,7 +91,7 @@ Pip should also feel honest about uncertainty. It can only work from the account
 That is why the public website needs to treat Pip as both charming and serious. The charm makes the habit feel possible. The seriousness makes account connection reasonable. Together, they create the promise: before you spend, check Pip.
 
 :::cta
-Get launch access and try the daily-number habit when Pip comes to the App Store and Google Play.
+Get Pip and try the daily-number habit before the next spending decision.
 :::
 
 ## Where to start

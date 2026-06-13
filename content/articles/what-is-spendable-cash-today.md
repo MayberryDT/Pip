@@ -89,7 +89,7 @@ Use Spendable Cash Today as the first check before everyday spending. If the num
 This is intentionally smaller than a budget ritual. It should fit into the few seconds before a decision. The habit is not "review my whole financial life." The habit is "before you spend, check Pip."
 
 :::cta
-Get launch access and try Spendable Cash Today as your daily spending signal.
+Get Pip and try Spendable Cash Today as your daily spending signal.
 :::
 
 ## How to learn more

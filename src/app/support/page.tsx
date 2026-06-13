@@ -6,7 +6,7 @@ import { marketingSite } from "@/lib/marketing/site";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Support",
-  description: "Get Pip support for account connection, billing, launch status, and data deletion questions.",
+  description: "Get Pip support for account connection, billing, account data, and data deletion questions.",
   path: "/support",
 });
 
@@ -20,15 +20,16 @@ export default function SupportPage() {
           <a className="font-bold text-moss hover:text-ink" href={`mailto:${marketingSite.supportEmail}`}>
             {marketingSite.supportEmail}
           </a>
-          . Include the email address you use for Pip and a short description of what happened.
+          . Include the email address you use for Pip, the device or browser you are using, and a
+          short description of what happened.
         </p>
       </section>
 
       <section>
-        <h2 className="text-lg font-bold text-ink">Launch Status</h2>
+        <h2 className="text-lg font-bold text-ink">App Access</h2>
         <p className="mt-3">
-          Pip is preparing for paid launch on iPhone and Android. You can request launch access from
-          the homepage or pricing page.
+          Use Pip on the web from the App link in the site header. Native App Store and Google Play
+          links can be added when those listings are ready.
         </p>
       </section>
 
@@ -44,8 +45,8 @@ export default function SupportPage() {
       <section>
         <h2 className="text-lg font-bold text-ink">Billing Support</h2>
         <p className="mt-3">
-          Subscriptions will be managed through the app stores when Pip launches. Pip will provide
-          account-specific billing guidance after subscriptions are available.
+          Pip offers weekly and monthly plans. Subscriptions are managed wherever you start or
+          install Pip. Contact support if your account access does not match your subscription.
         </p>
       </section>
 
@@ -70,11 +71,14 @@ export default function SupportPage() {
       <section>
         <h2 className="text-lg font-bold text-ink">FAQ</h2>
         <h3 className="mt-3 font-bold text-ink">Can Pip move my money?</h3>
-        <p className="mt-2">No. Pip does not initiate payments, transfers, card payments, ACH transactions, or other money movement.</p>
+        <p className="mt-2">
+          No. Pip does not initiate payments, transfers, card payments, ACH transactions, or other
+          money movement.
+        </p>
         <h3 className="mt-4 font-bold text-ink">Where do I get pricing details?</h3>
         <p className="mt-2">
           See the <Link className="font-bold text-moss hover:text-ink" href="/pricing">pricing page</Link> for weekly
-          and monthly launch plans.
+          and monthly plans.
         </p>
       </section>
     </LegalShell>

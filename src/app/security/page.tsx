@@ -1,10 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BadgeDollarSign, Database, LockKeyhole, ShieldCheck, Trash2 } from "lucide-react";
-import { LaunchAccessForm } from "@/components/marketing/LaunchAccessForm";
+import { ArrowRight } from "lucide-react";
+import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
+import {
+  SwissFigure,
+  SwissKicker,
+  SwissNumber,
+  SwissRuleList,
+  SwissSection,
+  SwissText,
+  SwissTitle,
+} from "@/components/marketing/SwissGrid";
+import { marketingAssets } from "@/lib/marketing/assets";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
-import { pipLaunch, pipPaidTrustLine } from "@/lib/marketing/pricing";
+import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
+import { pipPaidTrustLine } from "@/lib/marketing/pricing";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Security",
@@ -15,24 +26,43 @@ export const metadata: Metadata = buildMarketingMetadata({
 
 const securityFacts = [
   {
-    icon: ShieldCheck,
     title: "Read-only account data",
     copy: "Pip connects account and transaction data to calculate Spendable Cash Today. It is an insight layer, not a bank account.",
   },
   {
-    icon: LockKeyhole,
     title: "No money movement",
     copy: "Pip does not initiate payments, transfers, card payments, ACH transactions, or other money movement.",
   },
   {
-    icon: Database,
     title: "Server-side credentials",
     copy: "Provider access credentials are handled server-side. Browser code receives short-lived connection artifacts only when needed.",
   },
   {
-    icon: Trash2,
+    title: "No ads or data selling",
+    copy: "Pip is paid directly, so the product does not need ads or financial-data resale.",
+  },
+  {
     title: "Deletion path",
     copy: "You can ask Pip to delete stored financial data from the app when you want it cleared.",
+  },
+];
+
+const paidTrustNotes = [
+  {
+    title: "Direct product model",
+    copy: `${pipPaidTrustLine} The pricing model is designed around direct user payment, not ads, lead generation, or selling financial data.`,
+  },
+  {
+    title: "Stored product data",
+    copy: "Pip stores normalized financial data, account metadata, sync logs, user settings, AI chat context needed for product behavior, and product events needed to operate the app.",
+  },
+  {
+    title: "Provider boundary",
+    copy: "Pip does not store bank usernames or passwords. Raw provider payloads should stay minimal and exist only where needed for troubleshooting or normalization.",
+  },
+  {
+    title: "Decision-support signal",
+    copy: "Pip is not financial, tax, investment, credit, or legal advice. The number is a decision-support signal from available data.",
   },
 ];
 
@@ -40,91 +70,83 @@ export default function SecurityPage() {
   return (
     <MarketingLayout>
       <main>
-        <section className="px-4 py-16 sm:px-6">
-          <div className="mx-auto max-w-4xl">
-            <p className="text-sm font-bold uppercase tracking-normal text-moss">Security</p>
-            <h1 className="font-display mt-4 text-5xl leading-[1] text-ink sm:text-6xl">
+        <SwissSection className="editorial-home-hero" folio="01 / Security">
+          <div className="col-span-12 lg:col-span-7">
+            <SwissKicker>Security</SwissKicker>
+            <SwissTitle className="mt-5" level={1} size="page">
               Pip should feel cute, not careless.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/70">
+            </SwissTitle>
+          </div>
+          <div className="col-span-12 lg:col-span-3 lg:col-start-10">
+            <SwissNumber label="trust boundaries stated before connection">05</SwissNumber>
+          </div>
+          <div className="col-span-12 lg:col-span-4">
+            <SwissText className="text-lg leading-8">
               Pip asks for sensitive context, so the public site states the trust boundaries before
               anyone connects accounts.
-            </p>
+            </SwissText>
           </div>
-        </section>
-
-        <section className="bg-porcelain px-4 py-16 sm:px-6">
-          <div className="mx-auto grid max-w-6xl gap-5 md:grid-cols-2">
-            {securityFacts.map((fact) => {
-              const Icon = fact.icon;
-
-              return (
-                <article className="rounded-[0.5rem] border border-line bg-paper p-6" key={fact.title}>
-                  <Icon aria-hidden="true" className="text-moss" size={28} />
-                  <h2 className="mt-5 text-2xl font-bold leading-tight text-ink">{fact.title}</h2>
-                  <p className="mt-3 text-sm leading-6 text-ink/66">{fact.copy}</p>
-                </article>
-              );
-            })}
+          <div className="col-span-12 lg:col-span-8">
+            <SwissFigure asset={marketingAssets.securityTrustIllustration} priority variant="wide" />
           </div>
-        </section>
+        </SwissSection>
 
-        <section className="px-4 py-16 sm:px-6">
-          <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[0.8fr_1fr]">
-            <div>
-              <BadgeDollarSign aria-hidden="true" className="text-moss" size={30} />
-              <h2 className="font-display mt-4 text-4xl leading-tight text-ink sm:text-5xl">
-                Paid because your data should not be the product.
-              </h2>
-            </div>
-            <div className="space-y-5 text-base leading-8 text-ink/70">
-              <p>
-                {pipPaidTrustLine} The launch pricing model is designed around direct user payment,
-                not ads, lead generation, or selling financial data.
-              </p>
-              <p>
-                Pip stores normalized financial data, account metadata, sync logs, user settings,
-                AI chat context needed for product behavior, and product events needed to operate
-                the app.
-              </p>
-              <p>
-                Pip does not store bank usernames or passwords. Raw provider payloads should stay
-                minimal and exist only where needed for troubleshooting or normalization.
-              </p>
-              <p>
-                Pip is not financial, tax, investment, credit, or legal advice. The number is a
-                decision-support signal from available data.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-full bg-ink px-5 text-sm font-bold text-porcelain hover:bg-moss"
-                  href="/privacy"
-                >
-                  Read privacy
-                  <ArrowRight aria-hidden="true" size={16} />
-                </Link>
-                <Link
-                  className="focus-ring inline-flex min-h-11 items-center rounded-full border border-line bg-porcelain px-5 text-sm font-bold text-ink hover:border-moss"
-                  href="/terms"
-                >
-                  Read terms
-                </Link>
-              </div>
-            </div>
+        <SwissSection folio="02 / Trust model" tone="porcelain">
+          <div className="col-span-12 lg:col-span-3">
+            <SwissKicker>Trust model</SwissKicker>
+            <SwissTitle className="mt-5" size="compact">
+              The boundaries are the product.
+            </SwissTitle>
           </div>
-        </section>
+          <div className="col-span-12 lg:col-span-9">
+            <SwissRuleList className="md:grid-cols-2 lg:grid-cols-5" items={securityFacts} />
+          </div>
+        </SwissSection>
 
-        <section className="bg-porcelain px-4 py-16 sm:px-6" id="launch-access">
-          <div className="mx-auto max-w-3xl">
-            <h2 className="font-display text-4xl leading-tight text-ink">Get launch access to Pip.</h2>
-            <p className="mt-4 text-base leading-7 text-ink/68">
-              {pipLaunch.appStoreLine} Plans start at $2.99/week.
-            </p>
-            <div className="mt-7">
-              <LaunchAccessForm sourcePage="/security" compact />
-            </div>
+        <SwissSection folio="03 / Paid trust model">
+          <div className="col-span-12 lg:col-span-6">
+            <SwissTitle size="section">
+              Paid because your data should not be the product.
+            </SwissTitle>
           </div>
-        </section>
+          <div className="col-span-12 lg:col-span-6">
+            <SwissRuleList className="md:grid-cols-2" items={paidTrustNotes} />
+          </div>
+          <div className="col-span-12 flex flex-wrap gap-3 lg:col-span-6 lg:col-start-7">
+            <Link
+              className="focus-ring inline-flex min-h-11 items-center gap-2 bg-ink px-5 text-sm font-bold text-porcelain hover:bg-moss"
+              href="/privacy"
+            >
+              Read privacy
+              <ArrowRight aria-hidden="true" size={16} />
+            </Link>
+            <Link
+              className="focus-ring inline-flex min-h-11 items-center border border-line bg-porcelain px-5 text-sm font-bold text-ink hover:border-moss"
+              href="/terms"
+            >
+              Read terms
+            </Link>
+          </div>
+        </SwissSection>
+
+        <SwissSection folio="04 / Start" tone="ink">
+          <div className="col-span-12 lg:col-span-7">
+            <SwissTitle size="section">
+              Check one number without giving Pip control of your money.
+            </SwissTitle>
+          </div>
+          <div className="col-span-12 lg:col-span-4 lg:col-start-9">
+            <MarketingCtaLink
+              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-porcelain px-6 text-sm font-bold text-ink transition hover:bg-paper"
+              eventLabel="security_get_pip"
+              eventProperties={{ intent: "get_pip" }}
+              href={getProductAccessHref()}
+            >
+              {productAccess.primaryLabel}
+              <ArrowRight aria-hidden="true" size={17} />
+            </MarketingCtaLink>
+          </div>
+        </SwissSection>
       </main>
     </MarketingLayout>
   );

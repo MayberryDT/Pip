@@ -1,11 +1,6 @@
-export const pipLaunch = {
-  status: "prelaunchPaid",
-  primaryCta: "Get launch access",
-  primaryCtaShort: "Get access",
-  appStoreLine: "Coming to iPhone and Android.",
-  productSentence: "One daily number before you spend.",
-  trialLine: "Try Pip when it launches. Plans start at $2.99/week.",
-};
+import { productAccess } from "@/lib/marketing/product-access";
+
+export const pipProductAccess = productAccess;
 
 export const pipPricing = {
   weekly: {
@@ -47,4 +42,4 @@ export const pipPaidTrustLine =
   "Pip is paid because your money data should not be the product.";
 
 export const pipSubscriptionCaveat =
-  "Subscriptions will be managed through the app stores when Pip launches.";
+  "Subscriptions are managed wherever you start or install Pip.";

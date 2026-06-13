@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { CheckCircle2, Loader2, Mail } from "lucide-react";
-import { pipLaunch } from "@/lib/marketing/pricing";
+import { productAccess } from "@/lib/marketing/product-access";
+import { trackMarketingEvent } from "@/components/marketing/trackMarketingEvent";
 
 type SubmitState = "idle" | "submitting" | "succeeded" | "failed";
 
@@ -49,7 +50,7 @@ export function WaitlistForm({
 
     setState("succeeded");
     setEmail("");
-    setMessage("You're on the launch list. I'll let you know when Pip is ready.");
+    setMessage("Thanks. Pip support has your request.");
     void trackMarketingEvent("waitlist_signup_succeeded", { page: sourcePage });
   }
 
@@ -62,7 +63,7 @@ export function WaitlistForm({
       onSubmit={submitWaitlist}
     >
       <label className="text-sm font-bold text-ink/74" htmlFor={fieldId}>
-        {pipLaunch.primaryCta}
+        {productAccess.primaryLabel}
       </label>
       <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
         <div className="relative">
@@ -93,30 +94,14 @@ export function WaitlistForm({
           ) : state === "succeeded" ? (
             <CheckCircle2 aria-hidden="true" size={18} />
           ) : null}
-          {state === "submitting" ? "Sending" : state === "succeeded" ? "Sent" : pipLaunch.primaryCtaShort}
+          {state === "submitting" ? "Sending" : state === "succeeded" ? "Sent" : productAccess.shortLabel}
         </button>
       </div>
       <p className="mt-3 min-h-5 text-sm font-semibold text-ink/66" aria-live="polite">
-        {message || "Get a note when Pip launches for iPhone and Android."}
+        {message || "Use Pip on the web now."}
       </p>
     </form>
   );
-}
-
-export async function trackMarketingEvent(
-  eventName: string,
-  properties: Record<string, string | number | boolean | null>,
-) {
-  await fetch("/api/marketing/events", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      eventName,
-      properties,
-    }),
-  }).catch(() => null);
 }
 
 function getAttribution() {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { trackMarketingEvent } from "@/components/marketing/WaitlistForm";
+import { trackMarketingEvent } from "@/components/marketing/trackMarketingEvent";
 
 export function MarketingPageView() {
   useEffect(() => {

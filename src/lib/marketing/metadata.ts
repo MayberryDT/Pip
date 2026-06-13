@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { marketingAssets } from "@/lib/marketing/assets";
 import { getCanonicalUrl, marketingSite } from "@/lib/marketing/site";
 
 export type MarketingMetadataInput = {
@@ -12,10 +13,12 @@ export type MarketingMetadataInput = {
 export function buildMarketingMetadata(input: MarketingMetadataInput): Metadata {
   const canonical = getCanonicalUrl(input.path);
   const title = input.title === marketingSite.name ? marketingSite.defaultTitle : `${input.title} | Pip`;
-  const image = input.image ?? "/brand/pip-profile-clean.png";
+  const image = input.image ?? marketingAssets.ogImage.src;
 
   return {
-    title,
+    title: {
+      absolute: title,
+    },
     description: input.description,
     alternates: {
       canonical,
@@ -29,7 +32,7 @@ export function buildMarketingMetadata(input: MarketingMetadataInput): Metadata 
       images: [
         {
           url: image,
-          alt: "Pip",
+          alt: "Pip product preview",
         },
       ],
     },

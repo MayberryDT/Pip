@@ -5,10 +5,10 @@ describe("marketing events", () => {
   it("allows the PRD-defined marketing event names", () => {
     expect(
       marketingEventSchema.safeParse({
-        eventName: "waitlist_signup_succeeded",
+        eventName: "marketing_cta_clicked",
         properties: {
           page: "/",
-          cta_label: "Get launch access",
+          cta_label: "Get Pip",
         },
       }).success,
     ).toBe(true);
@@ -26,9 +26,9 @@ describe("marketing events", () => {
     expect(
       sanitizeMarketingProperties({
         page: "/pricing",
-        href: "#launch-access",
+        href: "/app",
         referrer: "https://example.com",
-        intent: "launch_access",
+        intent: "get_pip",
         selected_plan: "monthly",
         price: "$7.99",
         period: "month",
@@ -38,9 +38,9 @@ describe("marketing events", () => {
       }),
     ).toEqual({
       page: "/pricing",
-      href: "#launch-access",
+      href: "/app",
       referrer: "https://example.com",
-      intent: "launch_access",
+      intent: "get_pip",
       selected_plan: "monthly",
       price: "$7.99",
       period: "month",

@@ -8,10 +8,14 @@ Before you spend, check Pip. Your bank balance shows what exists. Pip shows what
 Primary product concept:
 Spendable Cash Today is the one daily number Pip shows by default. It is meant to help users stop guessing from their bank balance without maintaining a budget, spreadsheet, or finance dashboard.
 
-Launch pricing:
+Pricing:
 - Weekly plan: $2.99/week.
 - Monthly plan: $7.99/month.
 - Pip is paid because money data should not be the product. Pip does not position itself as a permanent free product.
+
+Product access:
+- Pip is available through the web app path linked from the public site.
+- App Store and Google Play links can be added when native listings are ready.
 
 Canonical public pages:
 - https://spendwithpip.com/

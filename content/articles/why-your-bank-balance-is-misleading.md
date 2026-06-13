@@ -100,7 +100,7 @@ If the number seems lower than expected, ask Pip why. The answer might be a bill
 The point is not to make every purchase feel heavy. The point is to make the default less misleading.
 
 :::cta
-Get launch access and try checking Pip before the next spending decision.
+Get Pip and try checking one daily number before the next spending decision.
 :::
 
 ## Where to go next

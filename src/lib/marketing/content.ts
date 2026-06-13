@@ -18,7 +18,8 @@ const supportedCustomBlockTypes = new Set([
   "quote",
   "figure",
 ]);
-const staleLaunchLanguagePattern = /\b(?:beta|waitlist|tester|testers)\b|join the beta|#join-beta/i;
+const staleLaunchLanguagePattern =
+  /\b(?:beta|waitlist|tester|testers|launch access|launch list|notify me|request access)\b|join the beta|join the list|#join-beta|#launch-access|when pip launches|when it launches|coming soon to (?:iphone|android|the app store|google play)/i;
 
 const faqSchema = z.object({
   question: z.string().trim().min(1),
@@ -297,7 +298,7 @@ export function getArticleQualityIssues(article: Article): string[] {
   }
 
   if (containsStaleLaunchLanguage(article.body)) {
-    issues.push("Published article body contains stale beta, waitlist, or tester launch language.");
+    issues.push("Published article body contains stale prelaunch or list-collection language.");
   }
 
   const h2Headings = article.headings.filter((heading) => heading.level === 2).map((heading) => heading.text);
@@ -520,8 +521,8 @@ function parseCustomBlock(lines: string[], startIndex: number): { block: Article
         block: {
           type: "inline-cta",
           body: requireBlockBody(rawType, body),
-          href: attributes.href ?? "#launch-access",
-          label: attributes.label ?? "Get launch access",
+          href: attributes.href ?? "/app",
+          label: attributes.label ?? "Get Pip",
         },
         nextIndex,
       };

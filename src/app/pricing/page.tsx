@@ -1,12 +1,22 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, BadgeDollarSign, ShieldCheck, Sparkles } from "lucide-react";
-import { LaunchAccessForm } from "@/components/marketing/LaunchAccessForm";
+import { ArrowRight } from "lucide-react";
+import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
 import { PricingCards } from "@/components/marketing/PricingCards";
-import { buildMarketingMetadata } from "@/lib/marketing/metadata";
 import {
-  pipLaunch,
+  SwissFigure,
+  SwissKicker,
+  SwissNumber,
+  SwissRuleList,
+  SwissSection,
+  SwissText,
+  SwissTitle,
+} from "@/components/marketing/SwissGrid";
+import { marketingAssets } from "@/lib/marketing/assets";
+import { buildMarketingMetadata } from "@/lib/marketing/metadata";
+import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
+import {
   pipPaidTrustLine,
   pipPricing,
   pipPricingIncludedFeatures,
@@ -22,123 +32,144 @@ export const metadata: Metadata = buildMarketingMetadata({
 
 const pricingFaq = [
   {
-    question: "What do the plans cost?",
-    answer: `${pipPricing.weekly.displayPrice} or ${pipPricing.monthly.displayPrice}. The monthly plan is the better value for people who want Pip as a daily habit.`,
+    title: "What do the plans cost?",
+    copy: `${pipPricing.weekly.displayPrice} or ${pipPricing.monthly.displayPrice}. Monthly is the better value for people who want Pip as a daily habit.`,
   },
   {
-    question: "What is included?",
-    answer:
-      "Spendable Cash Today, read-only account connection, savings cushion support, Ask Pip explanations, purchase checks, account management, financial reads, and daily number updates.",
+    title: "Why is Pip paid?",
+    copy: "Pip uses sensitive money context. The paid model keeps incentives direct: no ads and no selling your financial data.",
   },
   {
-    question: "Why is Pip paid?",
-    answer:
-      "Pip uses sensitive money context. The paid model keeps incentives direct: no ads and no selling your financial data.",
+    title: "Who is weekly for?",
+    copy: "Weekly is for people who want the lowest commitment before making Pip a daily habit.",
   },
   {
-    question: "How will subscriptions be managed?",
-    answer: pipSubscriptionCaveat,
+    title: "Who is monthly for?",
+    copy: "Monthly is for people who want the best value and plan to check Pip before spending most days.",
   },
+  {
+    title: "How are subscriptions managed?",
+    copy: pipSubscriptionCaveat,
+  },
+];
+
+const notPip = [
+  "Not a bank account",
+  "Not a budgeting command center",
+  "Not a spreadsheet",
+  "Not financial, tax, legal, investment, or credit advice",
 ];
 
 export default function PricingPage() {
   return (
     <MarketingLayout>
       <main>
-        <section className="px-4 py-16 sm:px-6 lg:py-20">
-          <div className="mx-auto grid max-w-6xl items-start gap-10 lg:grid-cols-[0.78fr_1fr]">
-            <div>
-              <p className="text-sm font-bold uppercase tracking-normal text-moss">Pricing</p>
-              <h1 className="font-display mt-4 text-5xl leading-[1] text-ink sm:text-6xl">
-                Simple pricing for one daily number.
-              </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/70">
-                Pip helps you stop guessing from your bank balance before the next purchase. Plans
-                start at {pipPricing.weekly.displayPrice}.
-              </p>
-              <div className="mt-6 flex flex-wrap gap-2">
-                <span className="rounded-full border border-line bg-porcelain px-3 py-1 text-sm font-bold text-moss">
-                  {pipLaunch.appStoreLine}
-                </span>
-                <span className="rounded-full border border-gold/40 bg-gold/10 px-3 py-1 text-sm font-bold text-ink">
-                  {pipPricing.monthly.displayPrice} best value
-                </span>
-              </div>
-            </div>
+        <SwissSection className="editorial-home-hero" folio="01 / Pricing">
+          <div className="col-span-12 lg:col-span-6">
+            <SwissKicker>Pricing</SwissKicker>
+            <SwissTitle className="mt-5" level={1} size="page">
+              Simple pricing for one daily number.
+            </SwissTitle>
+          </div>
+          <div className="col-span-12 sm:col-span-6 lg:col-span-3 lg:col-start-7">
+            <SwissNumber className="pricing-number" label="weekly">{pipPricing.weekly.price}</SwissNumber>
+          </div>
+          <div className="col-span-12 sm:col-span-6 lg:col-span-3 lg:col-start-10">
+            <SwissNumber className="pricing-number" label="monthly">{pipPricing.monthly.price}</SwissNumber>
+          </div>
+          <div className="col-span-12 lg:col-span-4">
+            <SwissText className="text-lg leading-8">
+              Pip helps you stop guessing from your bank balance before the next purchase. Plans
+              start at {pipPricing.weekly.displayPrice}.
+            </SwissText>
+          </div>
+          <div className="col-span-12 lg:col-span-8">
             <PricingCards eventSource="pricing_page" showIncluded />
           </div>
-        </section>
+        </SwissSection>
 
-        <section className="bg-porcelain px-4 py-16 sm:px-6">
-          <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[0.8fr_1fr]">
-            <div>
-              <BadgeDollarSign aria-hidden="true" className="text-moss" size={30} />
-              <h2 className="font-display mt-4 text-4xl leading-tight text-ink sm:text-5xl">
-                Paid on purpose.
-              </h2>
-            </div>
-            <div className="space-y-5 text-base leading-8 text-ink/70">
-              <p>{pipPaidTrustLine}</p>
-              <p>
-                A money app should not need your attention for ads, offers, or data resale. Pip is
-                priced as a direct product so the core job can stay simple: one number before you
-                spend.
-              </p>
-              <Link
-                className="focus-ring inline-flex items-center gap-2 rounded-full text-sm font-bold text-moss hover:text-ink"
-                href="/security"
-              >
-                Read the security model
-                <ArrowRight aria-hidden="true" size={16} />
-              </Link>
-            </div>
+        <SwissSection folio="02 / Why paid" tone="porcelain">
+          <div className="col-span-12 lg:col-span-4">
+            <SwissFigure asset={marketingAssets.pricingIllustration} variant="poster" />
           </div>
-        </section>
+          <div className="col-span-12 lg:col-span-4">
+            <SwissKicker>Why paid</SwissKicker>
+            <SwissTitle className="mt-5" size="section">
+              Paid on purpose.
+            </SwissTitle>
+          </div>
+          <div className="col-span-12 lg:col-span-4">
+            <SwissText>{pipPaidTrustLine}</SwissText>
+            <SwissText className="mt-5">
+              A money app should not need your attention for ads, offers, or data resale. Pip is
+              priced as a direct product so the core job can stay simple: one number before you
+              spend.
+            </SwissText>
+            <Link
+              className="focus-ring mt-6 inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink"
+              href="/security"
+            >
+              Read the security model
+              <ArrowRight aria-hidden="true" size={16} />
+            </Link>
+          </div>
+        </SwissSection>
 
-        <section className="px-4 py-16 sm:px-6">
-          <div className="mx-auto max-w-6xl">
-            <div className="max-w-3xl">
-              <Sparkles aria-hidden="true" className="text-gold" size={28} />
-              <h2 className="font-display mt-4 text-4xl leading-tight text-ink sm:text-5xl">
-                What every plan includes.
-              </h2>
-            </div>
-            <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {pipPricingIncludedFeatures.map((feature) => (
-                <div className="rounded-[0.5rem] border border-line bg-porcelain p-5" key={feature}>
-                  <ShieldCheck aria-hidden="true" className="text-moss" size={20} />
-                  <p className="mt-3 text-sm font-bold leading-6 text-ink">{feature}</p>
-                </div>
-              ))}
-            </div>
+        <SwissSection folio="03 / Included">
+          <div className="col-span-12 lg:col-span-3">
+            <SwissKicker>Included</SwissKicker>
+            <SwissTitle className="mt-5" size="compact">
+              What every plan includes.
+            </SwissTitle>
           </div>
-        </section>
+          <div className="col-span-12 lg:col-span-9">
+            <SwissRuleList
+              className="sm:grid-cols-2 lg:grid-cols-4"
+              items={pipPricingIncludedFeatures.map((feature) => ({ title: feature, copy: "" }))}
+            />
+          </div>
+        </SwissSection>
 
-        <section className="bg-porcelain px-4 py-16 sm:px-6">
-          <div className="mx-auto max-w-4xl">
-            <h2 className="font-display text-4xl leading-tight text-ink sm:text-5xl">Pricing FAQ</h2>
-            <div className="mt-8 divide-y divide-line rounded-[0.5rem] border border-line bg-paper">
-              {pricingFaq.map((item) => (
-                <div className="p-5" key={item.question}>
-                  <h3 className="text-lg font-bold text-ink">{item.question}</h3>
-                  <p className="mt-2 text-sm leading-6 text-ink/66">{item.answer}</p>
-                </div>
-              ))}
-            </div>
+        <SwissSection folio="04 / Boundaries" tone="porcelain">
+          <div className="col-span-12 lg:col-span-4">
+            <SwissKicker>Boundaries</SwissKicker>
+            <SwissTitle className="mt-5" size="compact">
+              What Pip is not.
+            </SwissTitle>
           </div>
-        </section>
+          <div className="col-span-12 lg:col-span-8">
+            <SwissRuleList className="sm:grid-cols-2" items={notPip} />
+          </div>
+        </SwissSection>
 
-        <section className="px-4 py-16 sm:px-6" id="launch-access">
-          <div className="mx-auto max-w-3xl">
-            <h2 className="font-display text-4xl leading-tight text-ink">Get launch access.</h2>
-            <p className="mt-4 text-base leading-7 text-ink/68">
-              {pipLaunch.productSentence} {pipLaunch.appStoreLine}
-            </p>
-            <div className="mt-7">
-              <LaunchAccessForm sourcePage="/pricing" compact />
-            </div>
+        <SwissSection folio="05 / Questions">
+          <div className="col-span-12 lg:col-span-3">
+            <SwissKicker>FAQ</SwissKicker>
+            <SwissTitle className="mt-5" size="compact">
+              Pricing questions.
+            </SwissTitle>
           </div>
-        </section>
+          <div className="col-span-12 lg:col-span-9">
+            <SwissRuleList className="md:grid-cols-2" items={pricingFaq} />
+          </div>
+        </SwissSection>
+
+        <SwissSection folio="06 / Start" tone="ink">
+          <div className="col-span-12 lg:col-span-7">
+            <SwissTitle size="section">Start with one number before you spend.</SwissTitle>
+          </div>
+          <div className="col-span-12 lg:col-span-4 lg:col-start-9">
+            <MarketingCtaLink
+              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-porcelain px-6 text-sm font-bold text-ink transition hover:bg-paper"
+              eventLabel="pricing_final_get_pip"
+              eventProperties={{ intent: "get_pip" }}
+              href={getProductAccessHref()}
+            >
+              {productAccess.primaryLabel}
+              <ArrowRight aria-hidden="true" size={17} />
+            </MarketingCtaLink>
+          </div>
+        </SwissSection>
       </main>
     </MarketingLayout>
   );

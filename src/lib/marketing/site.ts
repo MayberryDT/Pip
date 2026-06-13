@@ -22,7 +22,7 @@ export const publicMarketingPages = [
   {
     path: "/pricing",
     label: "Pricing",
-    description: "See Pip weekly and monthly launch pricing.",
+    description: "See Pip weekly and monthly pricing.",
   },
   {
     path: "/security",
@@ -37,7 +37,7 @@ export const publicMarketingPages = [
   {
     path: "/support",
     label: "Support",
-    description: "Get support for connection, billing, launch status, and deletion questions.",
+    description: "Get support for connection, billing, account data, and deletion questions.",
   },
   {
     path: "/privacy",

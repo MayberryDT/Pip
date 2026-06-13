@@ -14,7 +14,7 @@ import {
 } from "@/lib/marketing/content";
 
 describe("marketing content loader", () => {
-  it("publishes the launch article batch and excludes drafts", () => {
+  it("publishes the product article batch and excludes drafts", () => {
     const articles = getPublishedArticles();
 
     expect(articles).toHaveLength(3);
@@ -74,7 +74,7 @@ Body`),
     }
   });
 
-  it("keeps paid-launch article topics in draft until they are ready", () => {
+  it("keeps paid product article topics in draft until they are ready", () => {
     const articles = getAllArticles();
     const draftSlugs = articles.filter((article) => article.status === "draft").map((article) => article.slug);
 
@@ -112,7 +112,7 @@ Pip: Shows the daily signal.
 :::
 
 :::cta
-Get launch access.
+Get Pip.
 :::
 
 :::quote

@@ -1,10 +1,20 @@
 import type { Metadata } from "next";
+import { ArrowRight } from "lucide-react";
 import { ArticleCard } from "@/components/marketing/ArticleComponents";
-import { LaunchAccessForm } from "@/components/marketing/LaunchAccessForm";
+import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
+import {
+  SwissFigure,
+  SwissKicker,
+  SwissRuleList,
+  SwissSection,
+  SwissText,
+  SwissTitle,
+} from "@/components/marketing/SwissGrid";
+import { marketingAssets } from "@/lib/marketing/assets";
 import { getFeaturedArticle, getPublishedArticles } from "@/lib/marketing/content";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
-import { pipLaunch } from "@/lib/marketing/pricing";
+import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Pip Blog",
@@ -23,48 +33,52 @@ export default function BlogIndexPage() {
   return (
     <MarketingLayout>
       <main>
-        <section className="px-4 py-16 sm:px-6">
-          <div className="mx-auto max-w-4xl">
-            <p className="text-sm font-bold uppercase tracking-normal text-moss">Pip blog</p>
-            <h1 className="font-display mt-4 text-5xl leading-[1] text-ink sm:text-6xl">
+        <SwissSection className="editorial-home-hero" folio="01 / Pip blog">
+          <div className="col-span-12 lg:col-span-7">
+            <SwissKicker>Pip blog</SwissKicker>
+            <SwissTitle className="mt-5" level={1} size="page">
               Tiny money habits, no homework.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/70">
+            </SwissTitle>
+          </div>
+          <div className="col-span-12 lg:col-span-4 lg:col-start-9">
+            <SwissText className="text-lg leading-8">
               Short, product-led reads about bank-balance guessing, cute money psychology, daily
               spending signals, and why one number can work better than a budget.
-            </p>
-            <div className="mt-7 flex flex-wrap gap-2" aria-label="Blog categories">
-              {categoryPills.map((category) => (
-                <span className="rounded-full border border-line bg-porcelain px-3 py-1 text-xs font-bold text-moss" key={category}>
-                  {category}
-                </span>
-              ))}
-            </div>
+            </SwissText>
           </div>
-        </section>
+          <div className="col-span-12 lg:col-span-8">
+            <SwissFigure asset={marketingAssets.articleCoverTemplate} priority variant="wide" />
+          </div>
+          <div className="col-span-12 lg:col-span-4">
+            <SwissRuleList items={categoryPills} />
+          </div>
+        </SwissSection>
 
-        <section className="bg-porcelain px-4 py-16 sm:px-6">
-          <div className="mx-auto max-w-6xl">
-            {featured ? <ArticleCard article={featured} featured /> : null}
-            <div className="mt-8 grid gap-5 md:grid-cols-2 lg:grid-cols-3">
-              {remaining.map((article) => (
-                <ArticleCard article={article} key={article.slug} />
-              ))}
-            </div>
+        <SwissSection folio="02 / Start here" tone="porcelain">
+          <div className="col-span-12">{featured ? <ArticleCard article={featured} featured /> : null}</div>
+          <div className="col-span-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+            {remaining.map((article) => (
+              <ArticleCard article={article} key={article.slug} />
+            ))}
           </div>
-        </section>
+        </SwissSection>
 
-        <section className="px-4 py-16 sm:px-6" id="launch-access">
-          <div className="mx-auto max-w-3xl">
-            <h2 className="font-display text-4xl leading-tight text-ink">Try the number behind the articles.</h2>
-            <p className="mt-4 text-base leading-7 text-ink/68">
-              {pipLaunch.trialLine} {pipLaunch.appStoreLine}
-            </p>
-            <div className="mt-7">
-              <LaunchAccessForm sourcePage="/blog" compact />
-            </div>
+        <SwissSection folio="03 / Product">
+          <div className="col-span-12 lg:col-span-7">
+            <SwissTitle size="section">Put the daily number behind the articles to work.</SwissTitle>
           </div>
-        </section>
+          <div className="col-span-12 lg:col-span-4 lg:col-start-9">
+            <MarketingCtaLink
+              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-ink px-6 text-sm font-bold text-porcelain transition hover:bg-moss"
+              eventLabel="blog_index_get_pip"
+              eventProperties={{ intent: "get_pip" }}
+              href={getProductAccessHref()}
+            >
+              {productAccess.primaryLabel}
+              <ArrowRight aria-hidden="true" size={17} />
+            </MarketingCtaLink>
+          </div>
+        </SwissSection>
       </main>
     </MarketingLayout>
   );

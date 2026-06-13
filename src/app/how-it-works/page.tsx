@@ -1,38 +1,44 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, CreditCard, Landmark, MessageCircle, PiggyBank } from "lucide-react";
-import { LaunchAccessForm } from "@/components/marketing/LaunchAccessForm";
+import { ArrowRight } from "lucide-react";
+import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
+import {
+  SwissFigure,
+  SwissKicker,
+  SwissNumber,
+  SwissRuleList,
+  SwissSection,
+  SwissText,
+  SwissTitle,
+} from "@/components/marketing/SwissGrid";
+import { marketingAssets } from "@/lib/marketing/assets";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
-import { pipLaunch, pipPricing } from "@/lib/marketing/pricing";
+import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "How Pip Works",
   description:
-    "Choose a plan, connect read-only account data, pick a savings cushion, and check one daily number before you spend.",
+    "Connect read-only account data, choose a savings cushion, check Spendable Cash Today, and ask Pip when you want the why.",
   path: "/how-it-works",
 });
 
 const steps = [
   {
-    icon: CreditCard,
-    title: "Choose a plan",
-    copy: `Start with weekly or monthly access when Pip launches. Plans start at ${pipPricing.weekly.displayPrice}.`,
-  },
-  {
-    icon: Landmark,
     title: "Connect accounts",
-    copy: "Pip reads balances and transactions from the accounts you connect. More complete spending data makes the daily number more useful.",
+    copy: "Pip reads balances and transactions through a read-only connection.",
   },
   {
-    icon: PiggyBank,
-    title: "Pick a cushion",
-    copy: "Choose the savings cushion Pip should protect before it shows what is usable today.",
+    title: "Choose your cushion",
+    copy: "Pick the savings cushion Pip should protect before showing today's room.",
   },
   {
-    icon: MessageCircle,
-    title: "Check one number",
-    copy: "Open Pip, see Spendable Cash Today, and ask for detail only when you want the why.",
+    title: "Check one daily number",
+    copy: "Open Pip and see Spendable Cash Today before the next purchase.",
+  },
+  {
+    title: "Ask when you want the why",
+    copy: "Ask Pip about changes, upcoming bills, missing accounts, or a purchase you are considering.",
   },
 ];
 
@@ -40,82 +46,76 @@ export default function HowItWorksPage() {
   return (
     <MarketingLayout>
       <main>
-        <section className="px-4 py-16 sm:px-6">
-          <div className="mx-auto max-w-4xl">
-            <p className="text-sm font-bold uppercase tracking-normal text-moss">How it works</p>
-            <h1 className="font-display mt-4 text-5xl leading-[1] text-ink sm:text-6xl">
+        <SwissSection className="editorial-home-hero" folio="01 / How Pip works">
+          <div className="col-span-12 lg:col-span-8">
+            <SwissKicker>How it works</SwissKicker>
+            <SwissTitle className="mt-5" level={1} size="page">
               Pip turns money noise into one daily number.
-            </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-ink/70">
+            </SwissTitle>
+          </div>
+          <div className="col-span-12 lg:col-span-3 lg:col-start-10">
+            <SwissNumber label="setup steps, then one daily habit">03</SwissNumber>
+          </div>
+          <div className="col-span-12 lg:col-span-4">
+            <SwissText className="text-lg leading-8">
               Your bank balance shows what exists. Pip holds back the money already spoken for and
               gives you Spendable Cash Today before the next purchase.
+            </SwissText>
+          </div>
+          <div className="col-span-12 lg:col-span-8">
+            <SwissFigure asset={marketingAssets.howPipWorksSteps} priority variant="wide" />
+          </div>
+        </SwissSection>
+
+        <SwissSection folio="02 / Setup sequence" tone="porcelain">
+          <div className="col-span-12 lg:col-span-3">
+            <SwissKicker>Setup</SwissKicker>
+            <SwissTitle className="mt-5" size="compact">
+              Four steps, one default behavior.
+            </SwissTitle>
+          </div>
+          <div className="col-span-12 lg:col-span-9">
+            <SwissRuleList className="md:grid-cols-2 lg:grid-cols-4" items={steps} />
+          </div>
+        </SwissSection>
+
+        <SwissSection folio="03 / Product boundary">
+          <div className="col-span-12 lg:col-span-5">
+            <SwissTitle size="section">The product is intentionally small.</SwissTitle>
+          </div>
+          <div className="col-span-12 lg:col-span-4 lg:col-start-7">
+            <SwissText>
+              Pip is not trying to make you manage a dashboard or spreadsheet. The default behavior
+              is one daily signal and a simple way to ask for context.
+            </SwissText>
+            <SwissText className="mt-5">
+              If you want to inspect balances or transactions, ask Pip. They are not the default
+              screen because the default screen should shape the next spending decision.
+            </SwissText>
+          </div>
+          <div className="col-span-12 border-t border-line pt-5 lg:col-span-2">
+            <p className="text-sm font-black uppercase leading-6 tracking-[0.08em] text-moss">
+              The number comes first. The why is there when you ask.
             </p>
           </div>
-        </section>
-
-        <section className="bg-porcelain px-4 py-16 sm:px-6">
-          <div className="mx-auto grid max-w-6xl gap-5 md:grid-cols-4">
-            {steps.map((step, index) => {
-              const Icon = step.icon;
-
-              return (
-                <article className="rounded-[0.5rem] border border-line bg-paper p-6" key={step.title}>
-                  <div className="flex items-center justify-between">
-                    <Icon aria-hidden="true" className="text-moss" size={28} />
-                    <span className="text-sm font-bold text-taupe">0{index + 1}</span>
-                  </div>
-                  <h2 className="mt-6 text-2xl font-bold leading-tight text-ink">{step.title}</h2>
-                  <p className="mt-4 text-sm leading-6 text-ink/66">{step.copy}</p>
-                </article>
-              );
-            })}
+          <div className="col-span-12 flex flex-wrap gap-3 lg:col-span-6 lg:col-start-7">
+            <MarketingCtaLink
+              className="focus-ring inline-flex min-h-11 items-center gap-2 bg-ink px-5 text-sm font-bold text-porcelain hover:bg-moss"
+              eventLabel="how_it_works_get_pip"
+              eventProperties={{ intent: "get_pip" }}
+              href={getProductAccessHref()}
+            >
+              {productAccess.primaryLabel}
+              <ArrowRight aria-hidden="true" size={16} />
+            </MarketingCtaLink>
+            <Link
+              className="focus-ring inline-flex min-h-11 items-center border border-line bg-porcelain px-5 text-sm font-bold text-ink hover:border-moss"
+              href="/pricing"
+            >
+              View pricing
+            </Link>
           </div>
-        </section>
-
-        <section className="px-4 py-16 sm:px-6">
-          <div className="mx-auto grid max-w-6xl gap-8 md:grid-cols-[0.8fr_1fr]">
-            <h2 className="font-display text-4xl leading-tight text-ink sm:text-5xl">
-              The product is intentionally small.
-            </h2>
-            <div className="space-y-5 text-base leading-8 text-ink/70">
-              <p>
-                Pip is not trying to make you manage a dashboard or spreadsheet. The default
-                behavior is one daily signal and a simple way to ask for context.
-              </p>
-              <p>
-                If you want to inspect balances or transactions, ask Pip. They are not the default
-                screen because the default screen should shape the next spending decision.
-              </p>
-              <div className="flex flex-wrap gap-3">
-                <Link
-                  className="focus-ring inline-flex min-h-11 items-center gap-2 rounded-full bg-ink px-5 text-sm font-bold text-porcelain hover:bg-moss"
-                  href="/pricing"
-                >
-                  See pricing
-                  <ArrowRight aria-hidden="true" size={16} />
-                </Link>
-                <Link
-                  className="focus-ring inline-flex min-h-11 items-center rounded-full border border-line bg-porcelain px-5 text-sm font-bold text-ink hover:border-moss"
-                  href="/security"
-                >
-                  See trust boundaries
-                </Link>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="bg-porcelain px-4 py-16 sm:px-6" id="launch-access">
-          <div className="mx-auto max-w-3xl">
-            <h2 className="font-display text-4xl leading-tight text-ink">Try the daily-number habit.</h2>
-            <p className="mt-4 text-base leading-7 text-ink/68">
-              {pipLaunch.trialLine} {pipLaunch.appStoreLine}
-            </p>
-            <div className="mt-7">
-              <LaunchAccessForm sourcePage="/how-it-works" compact />
-            </div>
-          </div>
-        </section>
+        </SwissSection>
       </main>
     </MarketingLayout>
   );

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
@@ -8,9 +9,16 @@ import BlogIndexPage from "@/app/blog/page";
 import ArticlePage from "@/app/blog/[slug]/page";
 import HowItWorksPage from "@/app/how-it-works/page";
 import PricingPage from "@/app/pricing/page";
+import PrivacyPage from "@/app/privacy/page";
 import SecurityPage from "@/app/security/page";
+import SupportPage from "@/app/support/page";
+import TermsPage from "@/app/terms/page";
+import { marketingAssets, requiredMarketingAssetRoles } from "@/lib/marketing/assets";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
+
+const stalePublicMarketingPattern =
+  /\b(?:waitlist|tester|testers|launch access|launch list|notify me|request access)\b|join the beta|join the list|#launch-access|when pip launches|when it launches|coming soon to (?:iphone|android|the app store|google play)/i;
 
 describe("marketing website pages", () => {
   it("renders the public root marketing homepage", () => {
@@ -18,12 +26,15 @@ describe("marketing website pages", () => {
 
     expect(html).toContain("Before you spend, check Pip.");
     expect(html).toContain("Spendable Cash Today");
-    expect(html).toContain("Get launch access");
+    expect(html).toContain("Get Pip");
     expect(html).toContain("$2.99/week");
     expect(html).toContain("$7.99/month");
     expect(html).toContain("Read-only account data. Pip cannot move your money.");
-    expect(html).toContain("Your bank app shows the pile. Pip shows the spending number.");
-    expect(html).not.toContain("Join beta");
+    expect(html).toContain("The balance is real. It is just not all open room.");
+    expect(html).toContain("Built for people who will never use a budget.");
+    expect(html).toContain(marketingAssets.homepageHeroProduct.src);
+    expect(html).not.toMatch(stalePublicMarketingPattern);
+    expect(html).not.toContain('type="email"');
   });
 
   it("keeps the product app available at /app", async () => {
@@ -42,6 +53,9 @@ describe("marketing website pages", () => {
     expect(renderToStaticMarkup(<HowItWorksPage />)).toContain("Pip turns money noise into one daily number");
     expect(renderToStaticMarkup(<PricingPage />)).toContain("Simple pricing for one daily number");
     expect(renderToStaticMarkup(<SecurityPage />)).toContain("No money movement");
+    expect(renderToStaticMarkup(<SupportPage />)).toContain("Account Connection Help");
+    expect(renderToStaticMarkup(<PrivacyPage />)).toContain("What Pip Stores");
+    expect(renderToStaticMarkup(<TermsPage />)).toContain("Product Boundary");
   });
 
   it("renders the blog index and a published article page", async () => {
@@ -63,7 +77,8 @@ describe("marketing website pages", () => {
     expect(html).toContain("FAQ");
     expect(html).toContain("application/ld+json");
     expect(html).toContain("BreadcrumbList");
-    expect(html).toContain("Get launch access and try Spendable Cash Today");
+    expect(html).toContain("Get Pip and try Spendable Cash Today");
+    expect(html).toContain(marketingAssets.articleCoverTemplate.src);
   });
 
   it("renders rich article blocks on published article pages", async () => {
@@ -110,9 +125,10 @@ describe("marketing website pages", () => {
     expect(llms).toContain("$2.99/week");
     expect(llms).toContain("https://spendwithpip.com/security");
     expect(llms).toContain("Pip does not move money");
+    expect(llms).not.toMatch(stalePublicMarketingPattern);
   });
 
-  it("keeps old product names and overbroad positioning out of public marketing pages", async () => {
+  it("keeps old product names, stale launch language, and forms out of public marketing pages", async () => {
     const article = await ArticlePage({
       params: Promise.resolve({
         slug: "meet-pip-cute-money-companion",
@@ -124,6 +140,9 @@ describe("marketing website pages", () => {
       renderToStaticMarkup(<HowItWorksPage />),
       renderToStaticMarkup(<PricingPage />),
       renderToStaticMarkup(<SecurityPage />),
+      renderToStaticMarkup(<SupportPage />),
+      renderToStaticMarkup(<PrivacyPage />),
+      renderToStaticMarkup(<TermsPage />),
       renderToStaticMarkup(article),
     ].join("\n");
 
@@ -132,6 +151,40 @@ describe("marketing website pages", () => {
     expect(publicHtml).not.toContain("My Margin");
     expect(publicHtml).not.toContain("finance command center");
     expect(publicHtml).not.toContain("AI finance coach");
-    expect(publicHtml).not.toMatch(/\b(?:beta|waitlist|tester|testers)\b|join-beta/i);
+    expect(publicHtml).not.toMatch(stalePublicMarketingPattern);
+    expect(publicHtml).not.toContain('type="email"');
+  });
+
+  it("maps and renders the required marketing image assets", async () => {
+    expect(requiredMarketingAssetRoles).toHaveLength(12);
+
+    for (const asset of Object.values(marketingAssets)) {
+      expect(asset.src).toMatch(/^\/marketing\//);
+      expect(asset.width).toBeGreaterThan(0);
+      expect(asset.height).toBeGreaterThan(0);
+      expect(existsSync(join(process.cwd(), "public", asset.src))).toBe(true);
+    }
+
+    const article = await ArticlePage({
+      params: Promise.resolve({
+        slug: "what-is-spendable-cash-today",
+      }),
+    });
+    const publicHtml = [
+      renderToStaticMarkup(<MarketingHomePage />),
+      renderToStaticMarkup(<BlogIndexPage />),
+      renderToStaticMarkup(<HowItWorksPage />),
+      renderToStaticMarkup(<PricingPage />),
+      renderToStaticMarkup(<SecurityPage />),
+      renderToStaticMarkup(article),
+    ].join("\n");
+
+    for (const asset of Object.values(marketingAssets)) {
+      if (asset.role === "ogImage") {
+        continue;
+      }
+
+      expect(publicHtml, asset.role).toContain(asset.src);
+    }
   });
 });

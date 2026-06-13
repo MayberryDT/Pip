@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { trackMarketingEvent } from "@/components/marketing/WaitlistForm";
+import { trackMarketingEvent } from "@/components/marketing/trackMarketingEvent";
 
 export function MarketingCtaLink({
   children,
