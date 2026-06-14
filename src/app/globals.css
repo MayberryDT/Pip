@@ -1282,17 +1282,16 @@ button {
   }
 
   .editorial-mobile-nav {
-    position: fixed;
-    right: 1rem;
-    bottom: max(1rem, env(safe-area-inset-bottom));
-    left: 1rem;
-    z-index: 40;
+    position: sticky;
+    top: 4.5rem;
+    z-index: 29;
     display: grid;
-    width: auto;
+    width: min(calc(100% - 2.5rem), 38rem);
     grid-auto-flow: column;
     grid-auto-columns: 1fr;
     gap: 0.25rem;
     overflow-x: auto;
+    margin: 0.75rem auto 0;
     border: 1px solid rgba(196, 200, 189, 0.72);
     border-radius: 9999px;
     background: rgba(252, 249, 248, 0.86);
@@ -1321,7 +1320,7 @@ button {
   }
 
   .editorial-footer {
-    padding-bottom: 7.5rem;
+    padding-bottom: 4.5rem;
   }
 
   .editorial-footer-brand,
@@ -1384,6 +1383,660 @@ button {
   .editorial-figure-poster,
   .editorial-figure-bleed {
     aspect-ratio: 16 / 10;
+  }
+}
+
+.pip-home {
+  background:
+    linear-gradient(180deg, rgba(252, 249, 248, 0.94), rgba(246, 243, 242, 0.82)),
+    #fcf9f8;
+  color: #1c1b1b;
+}
+
+.pip-home img {
+  max-width: 100%;
+}
+
+.pip-home-wrap {
+  width: min(calc(100% - 2.5rem), 75rem);
+  margin: 0 auto;
+}
+
+.pip-home-section {
+  padding: 7.5rem 0;
+}
+
+.pip-hero-section {
+  position: relative;
+  overflow: hidden;
+  padding-top: 4.5rem;
+  padding-bottom: 7.5rem;
+}
+
+.pip-hero-grid,
+.pip-two-column,
+.pip-pricing-security-grid,
+.pip-final-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4rem;
+  align-items: center;
+}
+
+.pip-copy-stack {
+  display: flex;
+  max-width: 35rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1.5rem;
+}
+
+.pip-pill-label,
+.pip-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  color: #4e6545;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.25rem;
+  text-transform: uppercase;
+}
+
+.pip-pill-label {
+  border-radius: 9999px;
+  background: #eae7e7;
+  padding: 0.35rem 0.75rem;
+  color: #434840;
+  text-transform: none;
+}
+
+.pip-home-title {
+  margin: 0;
+  color: #1c1b1b;
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.pip-home-title span,
+.pip-home-title em {
+  color: #4e6545;
+  font-style: italic;
+}
+
+.pip-home-title-hero {
+  max-width: 11ch;
+  font-size: 4.8rem;
+  line-height: 0.98;
+}
+
+.pip-home-title-section {
+  max-width: 15ch;
+  font-size: 3rem;
+  line-height: 1.08;
+}
+
+.pip-home-title-compact {
+  max-width: 16ch;
+  font-size: 2rem;
+  line-height: 1.14;
+}
+
+.pip-home-lede,
+.pip-home-text {
+  margin: 0;
+  color: rgba(67, 72, 64, 0.84);
+  font-size: 1.06rem;
+  font-weight: 400;
+  line-height: 1.75rem;
+}
+
+.pip-home-lede {
+  max-width: 35rem;
+  font-size: 1.125rem;
+  line-height: 1.8rem;
+}
+
+.pip-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.pip-button {
+  display: inline-flex;
+  min-height: 3rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  padding: 0.75rem 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2rem;
+  text-decoration: none;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.pip-button:hover {
+  transform: translateY(-1px);
+}
+
+.pip-button-primary {
+  border: 0;
+  border-bottom: 3px solid #374c2f;
+  background: #8da682;
+  color: #263b20;
+  box-shadow: 0 12px 26px rgba(78, 101, 69, 0.16);
+}
+
+.pip-button-primary:hover {
+  background: #9eb892;
+  color: #1c1b1b;
+}
+
+.pip-button-secondary {
+  border: 1px solid rgba(78, 101, 69, 0.22);
+  background: transparent;
+  color: #4e6545;
+}
+
+.pip-button-secondary:hover {
+  background: rgba(78, 101, 69, 0.06);
+  border-color: rgba(78, 101, 69, 0.34);
+}
+
+.pip-trust-line {
+  max-width: 34rem;
+  margin: 0;
+  color: rgba(67, 72, 64, 0.68);
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.55rem;
+}
+
+.pip-hero-media {
+  position: relative;
+  display: flex;
+  min-height: 32rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.pip-hero-glow {
+  position: absolute;
+  inset: 6% 0 0 8%;
+  border-radius: 36% 42% 40% 44%;
+  background: linear-gradient(135deg, rgba(208, 234, 194, 0.32), rgba(252, 249, 248, 0));
+  filter: blur(42px);
+}
+
+.pip-hero-media img {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 24px 44px rgba(28, 27, 27, 0.1));
+}
+
+.pip-section-paper {
+  border-top: 1px solid rgba(196, 200, 189, 0.2);
+  border-bottom: 1px solid rgba(196, 200, 189, 0.2);
+  background: #ffffff;
+}
+
+.pip-section-sage {
+  border-top-left-radius: 3rem;
+  border-top-right-radius: 3rem;
+  background:
+    linear-gradient(180deg, rgba(246, 243, 242, 0.96), rgba(240, 237, 237, 0.88)),
+    #f6f3f2;
+}
+
+.pip-centered-block {
+  display: flex;
+  max-width: 48rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  margin-right: auto;
+  margin-left: auto;
+  text-align: center;
+}
+
+.pip-centered-block .pip-home-title,
+.pip-centered-block .pip-home-text {
+  max-width: 100%;
+}
+
+.pip-framed-media {
+  overflow: hidden;
+  border: 1px solid rgba(196, 200, 189, 0.22);
+  border-radius: 1.5rem;
+  background: #ffffff;
+  box-shadow: 0 18px 48px rgba(28, 27, 27, 0.055);
+}
+
+.pip-framed-media img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.pip-framed-media-large {
+  max-width: 64rem;
+  margin: 3rem auto 0;
+  padding: 1.5rem;
+  border-radius: 2rem;
+  background: #fcf9f8;
+}
+
+.pip-founder-row {
+  margin-bottom: 9rem;
+}
+
+.pip-habit-card {
+  display: flex;
+  max-width: 48rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.5rem;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.pip-number-card {
+  display: inline-flex;
+  min-width: min(100%, 22rem);
+  flex-direction: column;
+  align-items: center;
+  border-radius: 2.5rem;
+  background: #f6f3f2;
+  padding: 3rem;
+  box-shadow: inset 0 4px 18px rgba(28, 27, 27, 0.035);
+}
+
+.pip-number-card span {
+  color: rgba(67, 72, 64, 0.82);
+  font-size: 0.96rem;
+  line-height: 1.5rem;
+}
+
+.pip-number-card strong {
+  color: #4e6545;
+  font-family: var(--font-display);
+  font-size: 5rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 0.95;
+}
+
+.pip-number-card div {
+  width: 8rem;
+  height: 0.45rem;
+  overflow: hidden;
+  border-radius: 9999px;
+  background: #e1dfdc;
+}
+
+.pip-number-card i {
+  display: block;
+  width: 70%;
+  height: 100%;
+  border-radius: inherit;
+  background: #4e6545;
+}
+
+.pip-meet-row {
+  margin-top: 8rem;
+}
+
+.pip-character-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1fr);
+  gap: 1rem;
+  align-items: end;
+}
+
+.pip-character-card {
+  overflow: hidden;
+  border-radius: 1.5rem;
+  background: rgba(255, 255, 255, 0.72);
+  padding: 1rem;
+  box-shadow: 0 14px 34px rgba(28, 27, 27, 0.04);
+}
+
+.pip-character-card img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+
+.pip-character-card-wide {
+  align-self: center;
+}
+
+.pip-step-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-top: 3rem;
+}
+
+.pip-soft-card {
+  border: 1px solid rgba(196, 200, 189, 0.24);
+  border-radius: 1.5rem;
+  background: #ffffff;
+  box-shadow: 0 8px 30px rgba(28, 27, 27, 0.04);
+}
+
+.pip-step-card {
+  display: flex;
+  min-height: 18rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.85rem;
+  padding: 2.5rem;
+}
+
+.pip-step-icon {
+  display: inline-flex;
+  width: 3rem;
+  height: 3rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 1rem;
+  background: #eae7e7;
+  color: #4e6545;
+}
+
+.pip-step-card p {
+  margin: 0;
+  color: #4e6545;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.2rem;
+}
+
+.pip-step-card h3,
+.pip-step-showcase h3 {
+  margin: 0;
+  color: #1c1b1b;
+  font-family: var(--font-display);
+  font-size: 1.55rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 2rem;
+}
+
+.pip-step-card span,
+.pip-step-showcase p {
+  margin: 0;
+  color: rgba(67, 72, 64, 0.8);
+  font-size: 1rem;
+  line-height: 1.65rem;
+}
+
+.pip-step-showcase {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1fr);
+  gap: 2rem;
+  align-items: center;
+  padding: 2rem;
+}
+
+.pip-step-showcase img {
+  width: 100%;
+  height: auto;
+  border-radius: 1rem;
+  object-fit: contain;
+}
+
+.pip-pricing-security-grid {
+  align-items: start;
+}
+
+.pip-pricing-media {
+  max-width: 25rem;
+}
+
+.pip-security-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  border-left: 1px solid rgba(196, 200, 189, 0.42);
+  padding-left: 4rem;
+}
+
+.pip-trust-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.pip-trust-grid span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.74);
+  padding: 0.65rem 0.85rem;
+  color: rgba(67, 72, 64, 0.84);
+  font-size: 0.84rem;
+  font-weight: 700;
+  line-height: 1.2rem;
+}
+
+.pip-trust-grid svg,
+.pip-inline-link svg {
+  color: #4e6545;
+  flex: 0 0 auto;
+}
+
+.pip-inline-link {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  color: #4e6545;
+  font-size: 0.9rem;
+  font-weight: 750;
+  text-decoration: none;
+}
+
+.pip-ask-row {
+  align-items: center;
+}
+
+.pip-chat-prompts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.pip-chat-prompts span {
+  border-radius: 9999px;
+  background: #f0eded;
+  padding: 0.7rem 0.9rem;
+  color: rgba(67, 72, 64, 0.88);
+  font-size: 0.9rem;
+  font-weight: 700;
+  line-height: 1.2rem;
+}
+
+.pip-article-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2.5rem;
+  margin-top: 3rem;
+}
+
+.pip-article-grid article {
+  overflow: hidden;
+  border: 1px solid rgba(196, 200, 189, 0.24);
+  border-radius: 1.5rem;
+  background: #fcf9f8;
+  padding: 1.35rem;
+  box-shadow: 0 8px 28px rgba(28, 27, 27, 0.035);
+}
+
+.pip-article-grid h2 {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.pip-final-cta {
+  position: relative;
+  overflow: hidden;
+  padding: 8rem 0;
+}
+
+.pip-final-grid {
+  gap: 3rem;
+}
+
+.pip-final-icon {
+  color: #4e6545;
+}
+
+@media (max-width: 980px) {
+  .pip-hero-grid,
+  .pip-two-column,
+  .pip-pricing-security-grid,
+  .pip-final-grid {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+
+  .pip-hero-media {
+    min-height: auto;
+  }
+
+  .pip-founder-row .pip-framed-media,
+  .pip-ask-row .pip-framed-media {
+    order: 2;
+  }
+
+  .pip-founder-row .pip-copy-stack,
+  .pip-ask-row .pip-copy-stack {
+    order: 1;
+  }
+
+  .pip-security-panel {
+    border-top: 1px solid rgba(196, 200, 189, 0.42);
+    border-left: 0;
+    padding-top: 3rem;
+    padding-left: 0;
+  }
+
+  .pip-article-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+@media (max-width: 767px) {
+  .pip-home-wrap {
+    width: min(calc(100% - 2.5rem), 75rem);
+  }
+
+  .pip-home-section,
+  .pip-hero-section {
+    padding: 4.5rem 0;
+  }
+
+  .pip-copy-stack,
+  .pip-centered-block,
+  .pip-habit-card {
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .pip-home-title-hero {
+    max-width: 10.5ch;
+    font-size: 3.15rem;
+    line-height: 1;
+  }
+
+  .pip-home-title-section {
+    max-width: 12ch;
+    font-size: 2.25rem;
+    line-height: 1.08;
+  }
+
+  .pip-home-title-compact {
+    font-size: 1.8rem;
+  }
+
+  .pip-home-lede,
+  .pip-home-text {
+    font-size: 1rem;
+    line-height: 1.65rem;
+  }
+
+  .pip-action-row,
+  .pip-button {
+    width: 100%;
+  }
+
+  .pip-hero-media {
+    margin: 0 -0.75rem;
+  }
+
+  .pip-framed-media-large {
+    margin-top: 2rem;
+    padding: 0.75rem;
+    border-radius: 1.5rem;
+  }
+
+  .pip-founder-row,
+  .pip-meet-row {
+    margin-bottom: 5rem;
+  }
+
+  .pip-meet-row {
+    margin-top: 5rem;
+  }
+
+  .pip-number-card {
+    width: 100%;
+    padding: 2rem;
+  }
+
+  .pip-number-card strong {
+    font-size: 4rem;
+  }
+
+  .pip-character-pair,
+  .pip-step-grid,
+  .pip-step-showcase,
+  .pip-trust-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pip-step-card,
+  .pip-step-showcase {
+    min-height: auto;
+    padding: 1.5rem;
+  }
+
+  .pip-section-sage {
+    border-top-left-radius: 2rem;
+    border-top-right-radius: 2rem;
   }
 }
 
