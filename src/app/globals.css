@@ -1068,6 +1068,192 @@ button {
   box-shadow: var(--pip-shadow-soft) !important;
 }
 
+/* Stitch refinement: soften the remaining spread-era layout. */
+.editorial-site .editorial-spread {
+  padding: clamp(3.5rem, 7vw, 5.25rem) 0;
+}
+
+.editorial-site .editorial-home-hero {
+  padding-top: clamp(4rem, 7vw, 5.5rem);
+}
+
+.editorial-site .editorial-spread-porcelain {
+  background:
+    radial-gradient(circle at 12% 15%, rgba(208, 234, 194, 0.22), transparent 20rem),
+    rgba(246, 243, 242, 0.58);
+}
+
+.editorial-site .editorial-folio {
+  display: none;
+}
+
+.editorial-site .editorial-grid {
+  row-gap: clamp(1.25rem, 3vw, 2rem);
+}
+
+.editorial-site .editorial-kicker {
+  color: #4e6545;
+  font-size: 0.78rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.editorial-site .editorial-title-hero {
+  max-width: 10.75ch;
+  font-size: clamp(3.5rem, 6.3vw, 5.4rem);
+  line-height: 1;
+}
+
+.editorial-site .editorial-title-page {
+  max-width: 12.5ch;
+  font-size: clamp(2.9rem, 5vw, 4.6rem);
+  line-height: 1;
+}
+
+.editorial-site .editorial-title-section {
+  max-width: 13.5ch;
+  font-size: clamp(2.2rem, 3.8vw, 3.7rem);
+  line-height: 1.04;
+}
+
+.editorial-site .editorial-title-compact {
+  max-width: 17ch;
+  font-size: clamp(1.55rem, 2.4vw, 2.25rem);
+}
+
+.editorial-site .editorial-text {
+  color: rgba(67, 72, 64, 0.84);
+  font-size: 1.05rem;
+  line-height: 1.7rem;
+}
+
+.editorial-site .editorial-home-hero .editorial-grid {
+  align-items: center;
+}
+
+.editorial-site .editorial-home-hero .editorial-figure-hero {
+  transform: translateY(0.75rem);
+}
+
+.editorial-site .editorial-figure {
+  border-radius: 1.65rem;
+  box-shadow:
+    0 22px 50px rgba(28, 27, 27, 0.055),
+    0 1px 0 rgba(255, 255, 255, 0.84) inset;
+}
+
+.editorial-site .editorial-figure-hero,
+.editorial-site .editorial-figure-wide,
+.editorial-site .editorial-figure-bleed {
+  aspect-ratio: 16 / 9.5;
+}
+
+.editorial-site .editorial-number {
+  border: 1px solid rgba(196, 200, 189, 0.36);
+  border-radius: 1.65rem;
+  background:
+    radial-gradient(circle at 85% 10%, rgba(208, 234, 194, 0.24), transparent 8rem),
+    #ffffff;
+}
+
+.editorial-site .editorial-number p {
+  font-size: clamp(3rem, 6vw, 5.2rem);
+}
+
+.editorial-site .editorial-rule-list {
+  gap: 0.8rem;
+}
+
+.editorial-site .editorial-rule-item {
+  border: 1px solid rgba(196, 200, 189, 0.26);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(246, 243, 242, 0.92));
+}
+
+.editorial-site .editorial-rule-index {
+  display: inline-flex;
+  width: 1.8rem;
+  height: 1.8rem;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: rgba(208, 234, 194, 0.66);
+  color: #263b20;
+  letter-spacing: 0;
+}
+
+.editorial-site .editorial-spread-ink {
+  background: transparent;
+}
+
+.editorial-site .editorial-spread-ink .editorial-wrap {
+  border-radius: 1.8rem;
+  background:
+    radial-gradient(circle at 88% 18%, rgba(180, 206, 168, 0.22), transparent 24rem),
+    #313030;
+  box-shadow: 0 24px 64px rgba(28, 27, 27, 0.16);
+}
+
+.editorial-site .editorial-spread-ink .editorial-title,
+.editorial-site .editorial-spread-ink .editorial-kicker {
+  color: #f3f0ef;
+}
+
+.editorial-site .editorial-spread-ink .editorial-text {
+  color: rgba(243, 240, 239, 0.78);
+}
+
+.editorial-site .editorial-spread-ink a.bg-porcelain {
+  background: #f3f0ef !important;
+  color: #1c1b1b !important;
+}
+
+.editorial-site .pricing-hero .editorial-grid {
+  align-items: start;
+}
+
+.editorial-site .pricing-plan-card {
+  overflow: hidden;
+  border: 1px solid rgba(196, 200, 189, 0.42);
+  border-radius: 1.65rem;
+  background:
+    radial-gradient(circle at 88% 12%, rgba(208, 234, 194, 0.24), transparent 8rem),
+    #ffffff;
+  box-shadow:
+    0 18px 42px rgba(28, 27, 27, 0.055),
+    0 1px 0 rgba(255, 255, 255, 0.88) inset;
+}
+
+.editorial-site .pricing-plan-card-recommended {
+  border-color: rgba(78, 101, 69, 0.5);
+  box-shadow:
+    0 20px 46px rgba(78, 101, 69, 0.11),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset;
+}
+
+.editorial-site .pricing-plan-badge {
+  border-radius: 9999px;
+  box-shadow: none;
+}
+
+.editorial-site .pricing-plan-card .swiss-price {
+  font-size: clamp(3rem, 5vw, 4.8rem);
+}
+
+.editorial-site .pricing-included-panel,
+.editorial-site .pricing-trust-panel {
+  border: 1px solid rgba(196, 200, 189, 0.34);
+  border-radius: 1.35rem;
+  background: rgba(255, 255, 255, 0.72) !important;
+}
+
+.editorial-site .editorial-spread-ink .pricing-plan-card,
+.editorial-site .editorial-spread-ink .pricing-included-panel,
+.editorial-site .editorial-spread-ink .pricing-trust-panel {
+  background: rgba(255, 255, 255, 0.92) !important;
+}
+
 @media (min-width: 768px) {
   .editorial-home-hero {
     min-height: auto;
@@ -1167,6 +1353,26 @@ button {
 
   .editorial-title-compact {
     font-size: clamp(1.8rem, 8vw, 2.6rem);
+  }
+
+  .editorial-site .editorial-title-hero,
+  .editorial-site .editorial-title-page,
+  .editorial-site .editorial-title-section {
+    max-width: 12ch;
+    font-size: clamp(2.5rem, 11vw, 3.8rem);
+    line-height: 1.02;
+  }
+
+  .editorial-site .editorial-home-hero {
+    padding-top: 3.25rem;
+  }
+
+  .editorial-site .editorial-home-hero .editorial-figure-hero {
+    transform: none;
+  }
+
+  .editorial-site .editorial-number p {
+    font-size: clamp(2.9rem, 13vw, 4.4rem);
   }
 
   .editorial-figure,

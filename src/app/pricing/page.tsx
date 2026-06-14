@@ -7,7 +7,6 @@ import { PricingCards } from "@/components/marketing/PricingCards";
 import {
   SwissFigure,
   SwissKicker,
-  SwissNumber,
   SwissRuleList,
   SwissSection,
   SwissText,
@@ -64,26 +63,18 @@ export default function PricingPage() {
   return (
     <MarketingLayout>
       <main>
-        <SwissSection className="editorial-home-hero" folio="01 / Pricing">
-          <div className="col-span-12 lg:col-span-6">
+        <SwissSection className="editorial-home-hero pricing-hero" folio="01 / Pricing">
+          <div className="col-span-12 lg:col-span-5 lg:row-start-1">
             <SwissKicker>Pricing</SwissKicker>
             <SwissTitle className="mt-5" level={1} size="page">
               Simple pricing for one daily number.
             </SwissTitle>
-          </div>
-          <div className="col-span-12 sm:col-span-6 lg:col-span-3 lg:col-start-7">
-            <SwissNumber className="pricing-number" label="weekly">{pipPricing.weekly.price}</SwissNumber>
-          </div>
-          <div className="col-span-12 sm:col-span-6 lg:col-span-3 lg:col-start-10">
-            <SwissNumber className="pricing-number" label="monthly">{pipPricing.monthly.price}</SwissNumber>
-          </div>
-          <div className="col-span-12 lg:col-span-4">
-            <SwissText className="text-lg leading-8">
+            <SwissText className="mt-6 text-lg leading-8">
               Pip helps you stop guessing from your bank balance before the next purchase. Plans
               start at {pipPricing.weekly.displayPrice}.
             </SwissText>
           </div>
-          <div className="col-span-12 lg:col-span-8">
+          <div className="col-span-12 lg:col-span-7 lg:col-start-6 lg:row-span-2 lg:row-start-1">
             <PricingCards eventSource="pricing_page" showIncluded />
           </div>
         </SwissSection>

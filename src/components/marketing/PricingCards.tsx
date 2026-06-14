@@ -23,13 +23,13 @@ export function PricingCards({
         {pipPricingPlans.map((plan) => (
           <article
             className={[
-              "relative flex min-h-[19rem] flex-col border-t-2 p-5",
-              plan.recommended ? "border-moss bg-porcelain text-ink" : "border-line bg-paper text-ink",
+              "pricing-plan-card relative flex min-h-[19rem] flex-col p-6 text-ink",
+              plan.recommended ? "pricing-plan-card-recommended" : "",
             ].join(" ")}
             key={plan.id}
           >
             {plan.recommended ? (
-              <span className="absolute right-0 top-0 bg-moss px-3 py-1 text-xs font-bold text-porcelain">
+              <span className="pricing-plan-badge absolute right-4 top-4 bg-moss px-3 py-1 text-xs font-bold text-porcelain">
                 Best value
               </span>
             ) : null}
@@ -65,7 +65,7 @@ export function PricingCards({
       </div>
 
       {showIncluded ? (
-        <div className="mt-8 border-t-2 border-line bg-porcelain p-5">
+        <div className="pricing-included-panel mt-5 bg-porcelain p-5">
           <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-moss">Included</p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {pipPricingIncludedFeatures.map((feature) => (
@@ -78,7 +78,7 @@ export function PricingCards({
         </div>
       ) : null}
 
-      <div className="mt-5 border-t border-line bg-porcelain p-4">
+      <div className="pricing-trust-panel mt-5 bg-porcelain p-4">
         <p className="text-sm font-semibold leading-6 text-ink/62">
           {pipPaidTrustLine} No ads. No selling your financial data. Read-only account connection.
         </p>

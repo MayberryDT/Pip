@@ -95,16 +95,16 @@ export default function MarketingHomePage() {
       <JsonLd data={buildWebSiteJsonLd()} />
       <main>
         <SwissSection className="editorial-home-hero" folio="01 / Spendable Cash Today">
-          <div className="col-span-12 lg:col-span-7">
+          <div className="col-span-12 lg:col-span-5">
             <SwissKicker>Spendable Cash Today</SwissKicker>
             <SwissTitle className="mt-5" level={1} size="hero">
               Before you spend, check Pip.
             </SwissTitle>
           </div>
-          <div className="col-span-12 lg:col-span-5 lg:col-start-8 lg:row-start-1">
+          <div className="col-span-12 lg:col-span-6 lg:col-start-7 lg:row-span-4 lg:row-start-1">
             <SwissFigure asset={marketingAssets.homepageHeroProduct} priority variant="hero" />
           </div>
-          <div className="col-span-12 border-t border-line pt-4 lg:col-span-3 lg:col-start-10">
+          <div className="col-span-12 lg:col-span-5">
             <SwissText>
               Pip gives you one calm daily number for what is actually okay to use today.
             </SwissText>
@@ -112,10 +112,7 @@ export default function MarketingHomePage() {
               Stop guessing from your bank balance without turning into a budget person.
             </SwissText>
           </div>
-          <div className="col-span-12 sm:col-span-4 lg:col-span-3">
-            <SwissNumber label="Example daily signal after bills and cushion">$84</SwissNumber>
-          </div>
-          <div className="col-span-12 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center lg:col-span-6 lg:col-start-5">
+          <div className="col-span-12 flex flex-col gap-3 sm:flex-row sm:items-center lg:col-span-5">
             <MarketingCtaLink
               className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-ink px-6 text-sm font-bold text-porcelain transition hover:bg-moss"
               eventLabel="home_hero_get_pip"
@@ -132,8 +129,8 @@ export default function MarketingHomePage() {
               See how it works
             </Link>
           </div>
-          <p className="col-span-12 border-t border-line pt-4 text-sm font-bold leading-6 text-ink/64 lg:col-span-3">
-            Read-only account data. Pip cannot move your money.
+          <p className="col-span-12 text-sm font-bold leading-6 text-ink/64 lg:col-span-5">
+            Read-only account data. Pip cannot move your money. No ads. No selling your financial data.
           </p>
         </SwissSection>
 
