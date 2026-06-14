@@ -1,0 +1,23 @@
+{
+  "version": "v001",
+  "source": "approved_generated_images_best_effort",
+  "requiredIdentityElements": [
+    "sage_pebble_body",
+    "dot_eyes",
+    "gentle_smile",
+    "tiny_arms",
+    "leafy_branch"
+  ],
+  "versionedPublicBasePath": "/brand/pip-character/v001",
+  "minimumRequiredForApp": {
+    "avatar": [
+      "normal",
+      "happy",
+      "thinking",
+      "concerned"
+    ],
+    "medium": [
+      "onboarding-wave"
+    ]
+  }
+}

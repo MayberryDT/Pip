@@ -1,12 +1,20 @@
 "use client";
 
-import type { PipMascotProps } from "@/components/brand/PipMascot";
+import { PipCharacter, type PipCharacterExpression } from "@/components/brand/PipCharacter";
 
 type PipAvatarSize = "xs" | "sm" | "md" | "lg";
+type PipAvatarExpression =
+  | PipCharacterExpression
+  | "neutral"
+  | "reassuring"
+  | "careful"
+  | "uncertain"
+  | "sleepy"
+  | "shortfall";
 
 export type PipAvatarProps = {
   size?: PipAvatarSize;
-  expression?: PipMascotProps["expression"];
+  expression?: PipAvatarExpression;
   withSprig?: boolean;
   ariaLabel?: string;
   className?: string;
@@ -19,11 +27,36 @@ const avatarClassBySize = {
   lg: "h-24 w-24",
 } satisfies Record<PipAvatarSize, string>;
 
+function mapAvatarExpression(expression: PipAvatarExpression | undefined): PipCharacterExpression {
+  switch (expression) {
+    case "happy":
+      return "happy";
+    case "thinking":
+      return "thinking";
+    case "concerned":
+      return "concerned";
+    case "normal":
+    case "onboarding-wave":
+    case "neutral":
+    case "reassuring":
+    case "careful":
+    case "uncertain":
+    case "sleepy":
+    case "shortfall":
+    case undefined:
+    default:
+      return "normal";
+  }
+}
+
 export function PipAvatar({
   size = "sm",
+  expression = "normal",
   ariaLabel = "Pip",
   className,
 }: PipAvatarProps) {
+  const pipExpression = mapAvatarExpression(expression);
+
   return (
     <span
       className={[
@@ -34,16 +67,11 @@ export function PipAvatar({
       role="img"
       aria-label={ariaLabel}
     >
-      <img
-        src="/brand/pip-profile-clean.png"
-        alt=""
-        aria-hidden="true"
-        width={160}
-        height={160}
-        className="h-full w-full scale-[1.12] rounded-full object-cover"
-        draggable={false}
-        loading="lazy"
-        decoding="async"
+      <PipCharacter
+        size="avatar"
+        expression={pipExpression}
+        ariaLabel=""
+        className="!h-full !w-full scale-[1.12] rounded-full object-cover"
       />
     </span>
   );

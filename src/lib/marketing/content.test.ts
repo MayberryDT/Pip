@@ -119,7 +119,7 @@ Get Pip.
 Overspending often starts with one misleading number.
 :::
 
-:::figure src="/brand/pip-waving.png" alt="Pip waving" width="416" height="484"
+:::figure src="/brand/pip-character/v001/medium/onboarding-wave.png" alt="Pip waving" width="416" height="484"
 Pip waving.
 :::`);
 

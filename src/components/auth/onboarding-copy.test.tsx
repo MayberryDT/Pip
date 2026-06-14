@@ -12,7 +12,8 @@ describe("onboarding copy", () => {
     expect(markup).toContain("without making balances the default number");
     expect(markup).toContain("Sign in with Google to set up Pip");
     expect(markup).toContain("Continue with Google");
-    expect(markup).toContain("pip-waving.png");
+    expect(markup).toContain("pip-character-medium");
+    expect(markup).toContain("/brand/pip-character/v001/medium/onboarding-wave.png");
   });
 
   it("explains consent, server-side provider tokens, no money movement, and protected savings", () => {
@@ -23,6 +24,7 @@ describe("onboarding copy", () => {
     expect(markup).toContain("Connecting checking accounts and cards makes Spendable Cash Today more accurate");
     expect(markup).toContain("Savings cushion");
     expect(markup).toContain("Use $200 cushion");
-    expect(markup).toContain("pip-waving.png");
+    expect(markup).toContain("pip-character-medium");
+    expect(markup).toContain("/brand/pip-character/v001/medium/onboarding-wave.png");
   });
 });

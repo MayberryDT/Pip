@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { AgentResponse } from "@/lib/agent/card-types";
-import { PipAvatar } from "@/components/brand/PipAvatar";
+import { PipCharacter } from "@/components/brand/PipCharacter";
 import { CardRenderer } from "@/components/cards/CardRenderer";
 
 export type AgentThreadItem = {
@@ -65,7 +65,7 @@ export function AgentThread({
           </div>
           {item.response ? (
             <div className="chat-message-in chat-message-in-delay flex items-start gap-3">
-              <PipAvatar size="sm" expression="happy" ariaLabel="Pip" />
+              <PipCharacter size="avatar" expression="happy" action="talking" />
               <div className="min-w-0 flex-1 space-y-3">
                 <p className="glass-panel px-4 py-3 text-sm font-medium leading-6 text-ink/[0.82]">
                   {item.response.message}
@@ -89,7 +89,7 @@ export function AgentThread({
             <ThinkingBubble />
           ) : (
             <div className="chat-message-in flex items-start gap-3">
-              <PipAvatar size="sm" expression="concerned" ariaLabel="Pip" />
+              <PipCharacter size="avatar" expression="concerned" action="settle" />
               <p className="glass-panel border-red-200/80 bg-red-50/[0.84] px-4 py-3 text-sm font-medium leading-6 text-red-800">
                 {item.errorText ?? defaultAgentErrorText}
               </p>
@@ -104,7 +104,7 @@ export function AgentThread({
 function ThinkingBubble() {
   return (
     <div className="chat-message-in chat-message-in-delay flex items-start gap-3">
-      <PipAvatar size="sm" expression="happy" ariaLabel="Pip" />
+      <PipCharacter size="avatar" expression="thinking" action="thinking" />
       <div
         className="glass-panel inline-flex items-center gap-3 px-5 py-4 text-sm font-semibold text-taupe"
         data-testid="agent-thinking"

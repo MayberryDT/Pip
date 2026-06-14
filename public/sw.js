@@ -1,4 +1,4 @@
-const STATIC_CACHE_NAME = "pip-static-v3";
+const STATIC_CACHE_NAME = "pip-static-v6";
 
 const APP_SHELL_ASSETS = [
   "/offline.html",
@@ -9,10 +9,14 @@ const APP_SHELL_ASSETS = [
   "/icon-maskable-192.png",
   "/icon-maskable-512.png",
   "/apple-touch-icon.png",
-  "/brand/pip-waving.png",
   "/brand/pip-wordmark.png",
   "/brand/pip-profile.png",
   "/brand/pip-profile-clean.png",
+  "/brand/pip-character/v001/avatar/normal.png",
+  "/brand/pip-character/v001/avatar/happy.png",
+  "/brand/pip-character/v001/avatar/thinking.png",
+  "/brand/pip-character/v001/avatar/concerned.png",
+  "/brand/pip-character/v001/medium/onboarding-wave.png",
 ];
 
 self.addEventListener("install", (event) => {

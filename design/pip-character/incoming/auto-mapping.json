@@ -1,0 +1,52 @@
+{
+  "version": "v001",
+  "status": "auto_selected_best_effort",
+  "notes": [
+    "Best-effort generated-image mapping created automatically.",
+    "All selected assets must keep Pip's leafy branch visible.",
+    "Refine this mapping later by editing the preferred candidates in scripts/pip-character/auto-select-pip-assets.mjs or replacing approved public assets."
+  ],
+  "assets": {
+    "avatar/normal": "pip-upload-005",
+    "avatar/happy": "pip-upload-014",
+    "avatar/thinking": "pip-upload-039",
+    "avatar/concerned": "pip-upload-025",
+    "medium/onboarding-wave": "pip-upload-030"
+  },
+  "unassigned": [
+    "pip-upload-001",
+    "pip-upload-002",
+    "pip-upload-003",
+    "pip-upload-004",
+    "pip-upload-006",
+    "pip-upload-007",
+    "pip-upload-008",
+    "pip-upload-009",
+    "pip-upload-010",
+    "pip-upload-011",
+    "pip-upload-012",
+    "pip-upload-013",
+    "pip-upload-015",
+    "pip-upload-016",
+    "pip-upload-017",
+    "pip-upload-018",
+    "pip-upload-019",
+    "pip-upload-020",
+    "pip-upload-021",
+    "pip-upload-022",
+    "pip-upload-023",
+    "pip-upload-024",
+    "pip-upload-026",
+    "pip-upload-027",
+    "pip-upload-028",
+    "pip-upload-029",
+    "pip-upload-031",
+    "pip-upload-032",
+    "pip-upload-033",
+    "pip-upload-034",
+    "pip-upload-035",
+    "pip-upload-036",
+    "pip-upload-037",
+    "pip-upload-038"
+  ]
+}

@@ -21,7 +21,16 @@
     "proof:in-app-browser": "node scripts/write-in-app-browser-proof.mjs",
     "deploy:netlify": "node scripts/safe-netlify-deploy.mjs",
     "eval:agent": "node scripts/eval-agent.mjs",
-    "analyze:agent-conversations": "node scripts/analyze-agent-conversations.mjs"
+    "analyze:agent-conversations": "node scripts/analyze-agent-conversations.mjs",
+    "pip:character:import": "node scripts/pip-character/import-local-pip-assets.mjs",
+    "pip:character:normalize": "node scripts/pip-character/normalize-pip-assets.mjs",
+    "pip:character:review": "node scripts/pip-character/generate-pip-review-page.mjs",
+    "pip:character:propose-mapping": "node scripts/pip-character/propose-pip-asset-mapping.mjs",
+    "pip:character:apply-mapping": "node scripts/pip-character/apply-pip-asset-mapping.mjs",
+    "pip:character:auto-select": "node scripts/pip-character/auto-select-pip-assets.mjs",
+    "pip:character:check": "node scripts/pip-character/check-pip-character-assets.mjs",
+    "pip:character:prepare": "npm run pip:character:import && npm run pip:character:normalize && npm run pip:character:review && npm run pip:character:propose-mapping",
+    "pip:character:quick-wire": "npm run pip:character:normalize && npm run pip:character:auto-select && npm run pip:character:check"
   },
   "dependencies": {
     "@openai/agents": "^0.11.6",
@@ -45,6 +54,7 @@
     "@types/react-dom": "^18.3.5",
     "autoprefixer": "^10.4.20",
     "postcss": "^8.5.10",
+    "sharp": "^0.34.5",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"

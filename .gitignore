@@ -11,3 +11,23 @@ tsconfig.tsbuildinfo
 
 # Local Netlify folder
 .netlify
+
+.tools/
+design/pip-character/generated/*
+!design/pip-character/generated/.gitkeep
+design/pip-character/blender/
+design/pip-character/tools/
+design/pip-character/exports/*
+!design/pip-character/exports/.gitkeep
+design/pip-character/incoming/raw/
+design/pip-character/incoming/normalized/
+design/pip-character/incoming/contact-sheets/
+design/pip-character/incoming/proposed-mapping.json
+design/pip-character/incoming/mapping.json
+design/pip-character/rejected/
+*.blend1
+*.blend2
+__pycache__/
+*.pyc
+/img_*.jpg
+public/brand/pip-character/v001/**/*.jpg

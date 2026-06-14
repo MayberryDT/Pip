@@ -18,6 +18,8 @@ describe("AgentThread", () => {
 
     expect(markup).toContain('data-testid="agent-thinking"');
     expect(markup).toContain('aria-label="Pip"');
+    expect(markup).toContain("/brand/pip-character/v001/avatar/thinking.png");
+    expect(markup).toContain('data-expression="thinking"');
     expect(markup).toContain("Thinking");
   });
 
@@ -35,6 +37,8 @@ describe("AgentThread", () => {
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
     expect(markup).toContain('aria-label="Pip"');
+    expect(markup).toContain("/brand/pip-character/v001/avatar/concerned.png");
+    expect(markup).toContain('data-expression="concerned"');
     expect(visibleText).toContain("I couldn’t answer that cleanly. Try again.");
     expect(visibleText).not.toContain("AI request failed");
   });
@@ -66,5 +70,7 @@ describe("AgentThread", () => {
 
     expect(visibleText).toContain("I’ll open Plaid now.");
     expect(visibleText).toContain("Plaid failed to load.");
+    expect(markup).toContain("/brand/pip-character/v001/avatar/happy.png");
+    expect(markup).toContain('data-expression="happy"');
   });
 });

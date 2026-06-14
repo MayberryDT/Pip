@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { PipCharacter } from "@/components/brand/PipCharacter";
 
 export function PipIntroScene({
   title,
@@ -31,18 +32,13 @@ export function PipIntroScene({
         {children ? <div className="mt-3 text-sm leading-6 text-ink/[0.66]">{children}</div> : null}
         {actions ? <div className="mt-5">{actions}</div> : null}
       </section>
-      <div className="assistant-intro-character" role="img" aria-label="Pip">
-        <img
-          src="/brand/pip-waving.png"
-          alt=""
-          aria-hidden="true"
-          width={416}
-          height={484}
+      <div className="assistant-intro-character">
+        <PipCharacter
+          size="medium"
+          expression="onboarding-wave"
+          action="wave"
+          priority={priority}
           className="assistant-intro-character-image"
-          draggable={false}
-          loading={priority ? "eager" : "lazy"}
-          fetchPriority={priority ? "high" : undefined}
-          decoding="async"
         />
       </div>
       {footer ? <div className="mt-2">{footer}</div> : null}
