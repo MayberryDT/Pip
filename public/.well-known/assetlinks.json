@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.spendwithpip.app",
+      "sha256_cert_fingerprints": [
+        "E3:22:BA:05:FC:34:50:CE:30:62:7F:50:12:D0:51:34:3E:5C:0B:FF:DF:70:2A:55:E5:D5:AD:4E:B5:DA:A2:F3"
+      ]
+    }
+  }
+]
