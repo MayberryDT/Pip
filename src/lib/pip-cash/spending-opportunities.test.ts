@@ -162,6 +162,39 @@ describe("buildSpendingOpportunities", () => {
     expect(opportunities).toEqual([]);
   });
 
+  it("excludes provider transfer categories even when the kind is purchase", () => {
+    const opportunities = buildSpendingOpportunities(
+      snapshot([
+        tx({
+          id: "provider-transfer-1",
+          date: "2026-06-04",
+          description: "External account move",
+          category: "transfer_out:transfer_out_account_transfer",
+          kind: "purchase",
+          amountCents: -9000,
+        }),
+        tx({
+          id: "provider-transfer-2",
+          date: "2026-06-08",
+          description: "External account move",
+          category: "transfer_out:transfer_out_account_transfer",
+          kind: "purchase",
+          amountCents: -8000,
+        }),
+        tx({
+          id: "provider-transfer-3",
+          date: "2026-06-14",
+          description: "External account move",
+          category: "transfer_out:transfer_out_account_transfer",
+          kind: "purchase",
+          amountCents: -7000,
+        }),
+      ]),
+    );
+
+    expect(opportunities).toEqual([]);
+  });
+
   it("returns no opportunities when current spending data is sparse", () => {
     const opportunities = buildSpendingOpportunities(
       snapshot([diningTx("single-dining", "2026-06-10", "Cafe Rojo", -3600)]),
@@ -182,6 +215,24 @@ describe("buildSpendingOpportunities", () => {
 
     expect(opportunity?.merchantExamples).toEqual(["Taqueria Sol", "Cafe Rojo"]);
     expect(opportunity?.reasonCodes).toContain("merchant_concentration");
+  });
+
+  it("normalizes provider category taxonomy before returning opportunities", () => {
+    const [opportunity] = buildSpendingOpportunities(
+      snapshot([
+        providerCategoryTx("service-1", "2026-06-04", "Repair Desk", -4500),
+        providerCategoryTx("service-2", "2026-06-08", "Laundry App", -2500),
+        providerCategoryTx("service-3", "2026-06-14", "Home Task Co", -2500),
+      ]),
+    );
+
+    expect(opportunity).toMatchObject({
+      id: "category:services",
+      category: "Services",
+      currentSpendCents: 9500,
+    });
+    expect(opportunity?.category).not.toMatch(/[:_]/);
+    expect(opportunity?.category).not.toMatch(/[a-z]+_[a-z]+/);
   });
 });
 
@@ -208,6 +259,22 @@ function diningTx(
     merchantName,
     description: merchantName,
     category: "dining",
+    amountCents,
+  });
+}
+
+function providerCategoryTx(
+  id: string,
+  date: string,
+  merchantName: string,
+  amountCents: number,
+): Transaction {
+  return tx({
+    id,
+    date,
+    merchantName,
+    description: merchantName,
+    category: "general_services:general_services_other_general_services",
     amountCents,
   });
 }

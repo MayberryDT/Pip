@@ -148,6 +148,29 @@ describe("agent tool runner", () => {
       amountCents: -1399,
     });
   });
+
+  it("keeps provider category taxonomy and reason codes out of cutback card copy", () => {
+    const response = runAgentTool("show_spending_opportunity", {}, providerCategorySnapshot);
+    const card = response.cards[0];
+
+    if (card?.type !== "insight_card") {
+      throw new Error("Expected cutback insight card.");
+    }
+
+    const visibleCopy = [
+      card.title,
+      card.summary,
+      ...card.rows.flatMap((row) => [row.label, row.detail ?? "", row.valueText ?? ""]),
+      card.footer ?? "",
+    ].join(" ");
+
+    expect(card.summary).toContain("Services is $95");
+    expect(card.footer).toBe("Based on recent repeat spending and merchant concentration.");
+    expect(visibleCopy).not.toMatch(/general_services|other_general_services/i);
+    expect(visibleCopy).not.toMatch(
+      /discretionary_category|recent_increase|frequent_transactions|material_spend|merchant_concentration/,
+    );
+  });
 });
 
 const cleanSnapshot: FinancialSnapshot = {
@@ -200,6 +223,54 @@ const recurringSnapshot: FinancialSnapshot = {
       merchantName: "Youtube Premium",
       amountCents: -1399,
       category: "subscriptions",
+      kind: "purchase",
+    },
+  ],
+};
+
+const providerCategorySnapshot: FinancialSnapshot = {
+  settings: {
+    asOfDate: "2026-06-16",
+    protectedSavingsMonthlyCents: 0,
+  },
+  accounts: [
+    {
+      id: "checking",
+      name: "Everyday Checking",
+      institutionName: "Plaid Bank",
+      kind: "checking",
+      balanceCents: 10000,
+    },
+  ],
+  transactions: [
+    {
+      id: "service-1",
+      accountId: "checking",
+      date: "2026-06-04",
+      description: "Repair Desk",
+      merchantName: "Repair Desk",
+      amountCents: -4500,
+      category: "general_services:general_services_other_general_services",
+      kind: "purchase",
+    },
+    {
+      id: "service-2",
+      accountId: "checking",
+      date: "2026-06-08",
+      description: "Laundry App",
+      merchantName: "Laundry App",
+      amountCents: -2500,
+      category: "general_services:general_services_other_general_services",
+      kind: "purchase",
+    },
+    {
+      id: "service-3",
+      accountId: "checking",
+      date: "2026-06-14",
+      description: "Home Task Co",
+      merchantName: "Home Task Co",
+      amountCents: -2500,
+      category: "general_services:general_services_other_general_services",
       kind: "purchase",
     },
   ],

@@ -17,6 +17,56 @@ const DEFAULT_WINDOW_DAYS = 14;
 const DEFAULT_MAX_OPPORTUNITIES = 3;
 const DEFAULT_MIN_CURRENT_SPEND_CENTS = 2500;
 const DEFAULT_MIN_ESTIMATED_SAVINGS_CENTS = 500;
+const WEAK_CATEGORY_SEGMENTS = new Set([
+  "general",
+  "misc",
+  "miscellaneous",
+  "other",
+  "uncategorized",
+]);
+const PROVIDER_CATEGORY_LABELS: Array<{
+  pattern: RegExp;
+  key: string;
+  label: string;
+  discretionary: boolean;
+}> = [
+  {
+    pattern: /^general services(?: |$)/,
+    key: "services",
+    label: "Services",
+    discretionary: false,
+  },
+  {
+    pattern: /^food and drink .*coffee/,
+    key: "coffee",
+    label: "Coffee",
+    discretionary: true,
+  },
+  {
+    pattern: /^food and drink .*restaurant/,
+    key: "dining",
+    label: "Dining",
+    discretionary: true,
+  },
+  {
+    pattern: /^general merchandise(?: |$)/,
+    key: "shopping",
+    label: "Shopping",
+    discretionary: true,
+  },
+  {
+    pattern: /^transportation(?: |$)/,
+    key: "transport",
+    label: "Transport",
+    discretionary: false,
+  },
+  {
+    pattern: /^travel(?: |$)/,
+    key: "travel",
+    label: "Travel",
+    discretionary: true,
+  },
+];
 
 export type SpendingOpportunityReasonCode =
   | "discretionary_category"
@@ -158,7 +208,7 @@ function isEligibleSpendTransaction(transaction: Transaction, account: Account |
     return false;
   }
 
-  return !isLoanLikeTransaction(transaction);
+  return !isProviderTransferCategory(transaction.category) && !isLoanLikeTransaction(transaction);
 }
 
 function isProtectedSavingsTransaction(
@@ -194,6 +244,17 @@ function isLoanLikeTransaction(transaction: Transaction): boolean {
     hasToken(haystack, "lender") ||
     hasToken(haystack, "lending") ||
     hasToken(haystack, "debt")
+  );
+}
+
+function isProviderTransferCategory(category: string | undefined): boolean {
+  const normalized = normalizeProviderCategory(category ?? "");
+
+  return (
+    normalized === "transfer" ||
+    normalized.startsWith("transfer ") ||
+    normalized.includes("bank transfer") ||
+    normalized.includes("account transfer")
   );
 }
 
@@ -444,7 +505,7 @@ function getOpportunityCategory(transaction: Transaction): {
   discretionary: boolean;
 } {
   const haystack = getTransactionHaystack(transaction);
-  const mapped = mapKnownCategory(haystack);
+  const mapped = mapKnownCategory(getTransactionMerchantHaystack(transaction));
 
   if (mapped) {
     return mapped;
@@ -453,13 +514,19 @@ function getOpportunityCategory(transaction: Transaction): {
   const rawCategory = transaction.category?.trim();
 
   if (rawCategory) {
-    const label = titleCase(
-      rawCategory
-        .split(/[>/]/)
-        .map((part) => part.trim())
-        .filter(Boolean)
-        .pop() ?? rawCategory,
-    );
+    const providerCategory = mapProviderCategory(rawCategory);
+
+    if (providerCategory) {
+      return providerCategory;
+    }
+
+    const rawCategoryMapping = mapKnownCategory(normalizeText(rawCategory));
+
+    if (rawCategoryMapping) {
+      return rawCategoryMapping;
+    }
+
+    const label = getReadableCategoryLabel(rawCategory);
 
     return {
       key: slugify(label),
@@ -476,6 +543,74 @@ function getOpportunityCategory(transaction: Transaction): {
     label,
     discretionary: isDiscretionaryHaystack(haystack),
   };
+}
+
+function mapProviderCategory(
+  rawCategory: string,
+): { key: string; label: string; discretionary: boolean } | null {
+  const normalized = normalizeProviderCategory(rawCategory);
+
+  for (const category of PROVIDER_CATEGORY_LABELS) {
+    if (category.pattern.test(normalized)) {
+      return {
+        key: category.key,
+        label: category.label,
+        discretionary: category.discretionary,
+      };
+    }
+  }
+
+  return null;
+}
+
+function getReadableCategoryLabel(rawCategory: string): string {
+  const normalizedSegments = rawCategory
+    .split(/[:>/]+/)
+    .map((part) => normalizeProviderCategory(part))
+    .filter(Boolean);
+  const dedupedSegments = normalizedSegments.filter(
+    (segment, index) => index === 0 || segment !== normalizedSegments[index - 1],
+  );
+  const parentSegment = dedupedSegments[0];
+  const bestSegment =
+    [...dedupedSegments]
+      .reverse()
+      .find((segment) => !isWeakCategorySegment(segment, parentSegment)) ??
+    dedupedSegments[0] ??
+    normalizeProviderCategory(rawCategory);
+
+  return titleCase(bestSegment || "spending");
+}
+
+function isWeakCategorySegment(segment: string, parentSegment: string | undefined): boolean {
+  const comparableSegment = stripRepeatedParentSegment(segment, parentSegment);
+  const tokens = comparableSegment.split(/\s+/).filter(Boolean);
+
+  return (
+    tokens.length === 0 ||
+    tokens.every((token) => WEAK_CATEGORY_SEGMENTS.has(token)) ||
+    (tokens.some((token) => WEAK_CATEGORY_SEGMENTS.has(token)) &&
+      tokens.length > 1 &&
+      tokens.filter((token) => !WEAK_CATEGORY_SEGMENTS.has(token)).length <= 1)
+  );
+}
+
+function stripRepeatedParentSegment(segment: string, parentSegment: string | undefined): string {
+  if (!parentSegment || segment === parentSegment) {
+    return segment;
+  }
+
+  let nextSegment = segment;
+
+  if (nextSegment.startsWith(`${parentSegment} `)) {
+    nextSegment = nextSegment.slice(parentSegment.length).trim();
+  }
+
+  if (nextSegment.endsWith(` ${parentSegment}`)) {
+    nextSegment = nextSegment.slice(0, -parentSegment.length).trim();
+  }
+
+  return nextSegment;
 }
 
 function mapKnownCategory(
@@ -629,8 +764,25 @@ function getTransactionHaystack(transaction: Transaction): string {
   );
 }
 
+function getTransactionMerchantHaystack(transaction: Transaction): string {
+  return normalizeText(
+    [transaction.description, transaction.merchantName, transaction.metadata?.issuerName]
+      .filter(Boolean)
+      .join(" "),
+  );
+}
+
 function normalizeText(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function normalizeProviderCategory(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[_:/>\s]+/g, " ")
+    .replace(/\b([a-z0-9]+(?: [a-z0-9]+)*) \1\b/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function hasAnyToken(haystack: string, tokens: string[]): boolean {

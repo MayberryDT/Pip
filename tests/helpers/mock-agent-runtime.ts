@@ -449,10 +449,29 @@ function isFinancialGuidancePrompt(normalized: string): boolean {
 }
 
 function isSpendingOpportunityPrompt(normalized: string): boolean {
+  if (isSavingsSetupOrSettingsPrompt(normalized)) {
+    return false;
+  }
+
+  const hasOpportunityTerm =
+    /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b/.test(normalized) ||
+    /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
+    /\bwhere can i save\b/.test(normalized);
+
+  if (!hasOpportunityTerm) {
+    return false;
+  }
+
   return (
-    /\b(what|where|which|find|show|spot|identify|help|how)\b.*\b(cut back|cutback|spend less|save money|overspending|over spending|waste|wasteful|stop buying|trim)\b/.test(normalized) ||
-    /\b(cut back|cutback|spend less|save money|overspending|over spending|waste|wasteful|stop buying|trim)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what)\b/.test(normalized)
+    /\b(what|where|which|find|show|spot|identify|help|how)\b/.test(normalized) ||
+    /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what|costs?|expenses?|cash)\b/.test(normalized) ||
+    /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized)
   );
+}
+
+function isSavingsSetupOrSettingsPrompt(normalized: string): boolean {
+  return /\b(protected savings|savings cushion)\b/.test(normalized) ||
+    /\bsave\b.{0,24}\b(account settings|settings|preferences)\b/.test(normalized);
 }
 
 function isJudgmentalPurchasePrompt(normalized: string): boolean {

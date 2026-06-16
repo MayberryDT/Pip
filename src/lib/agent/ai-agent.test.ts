@@ -3,11 +3,13 @@ import { agentFinalOutputSchema, agentMessageMaxChars, agentResponseSchema, card
 import {
   PIP_AI_MODEL,
   NETLIFY_AI_GATEWAY_MODEL,
+  AgentUnavailableError,
   getPipAiTransport,
   getPipAiModel,
   getOpenAIClientConfig,
   getOpenAIApiKeyForSdk,
   runAIAgent,
+  toAgentErrorPayload,
   __agentTestHooks,
 } from "@/lib/agent/ai-agent";
 import { createMockModelClient } from "../../../tests/helpers/mock-agent-runtime";
@@ -426,6 +428,24 @@ describe("runAIAgent", () => {
     expect(response.message).toContain("cutback opportunity");
   });
 
+  it("calls the spending opportunity tool for save-more prompts", async () => {
+    const response = await runAIAgent(
+      {
+        message: "What can I do to save more money?",
+        snapshot: getFakeSnapshot("cutback-dining"),
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_spending_opportunity"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "Cutback opportunity",
+    });
+    expect(response.message.toLowerCase()).toContain("cutback opportunity");
+  });
+
   it("uses an insight card for payday impact questions", async () => {
     const response = await runAIAgent(
       { message: "How does payday affect my money?" },
@@ -558,10 +578,14 @@ describe("runAIAgent", () => {
   it("routes cutback prompts through the real forced-tool classifier", () => {
     for (const message of [
       "What can I cut back on?",
+      "What can I do to save more money?",
       "Where am I overspending?",
+      "Where can I save this week?",
+      "How do I reduce expenses?",
       "How can I save money this week?",
       "Find waste in my spending",
       "What should I stop buying?",
+      "What costs should I cut?",
     ]) {
       expect(
         __agentTestHooks.getForcedAgentTool({
@@ -580,6 +604,18 @@ describe("runAIAgent", () => {
     ).toMatchObject({
       toolName: "get_financial_guidance_context",
     });
+
+    for (const message of [
+      "Set my savings cushion",
+      "Use $200 savings cushion",
+      "Save my account settings",
+    ]) {
+      expect(
+        __agentTestHooks.getForcedAgentTool({
+          message,
+        })?.toolName,
+      ).not.toBe("get_spending_opportunity");
+    }
   });
 
   it("routes currentness and update-status prompts to sync status", () => {
@@ -1116,6 +1152,55 @@ describe("runAIAgent", () => {
         },
       }),
     ).toThrow();
+  });
+
+  it("maps model output validation failures to a 502 agent-output error", () => {
+    const payload = toAgentErrorPayload(
+      new AgentUnavailableError({
+        code: "model-returned-invalid-final-output",
+        message: "AI returned an invalid final response.",
+        status: 502,
+        detail: "message: too_big, maximum 260 characters",
+      }),
+    );
+
+    expect(payload).toMatchObject({
+      code: "invalid-agent-output",
+      error: "AI returned an invalid response.",
+      status: 502,
+    });
+  });
+
+  it("does not label SDK model-output validation failures as service outages", () => {
+    const payload = toAgentErrorPayload(
+      new Error("Final output schema validation failed: message too_big, maximum 260 characters"),
+    );
+
+    expect(payload).toMatchObject({
+      code: "invalid-agent-output",
+      error: "AI returned an invalid response.",
+      status: 502,
+    });
+  });
+
+  it("has deterministic broad-chat fallbacks for service-failure recovery", () => {
+    expect(
+      __agentTestHooks.createBroadChatFallbackFinalOutput({
+        message: "How do I lower my spending without feeling miserable?",
+      }),
+    ).toMatchObject({
+      message: "Start with one small spending rule: choose one category, set a weekly cap, and keep one low-cost thing you still enjoy.",
+      responseMode: "chat_only",
+    });
+
+    expect(
+      __agentTestHooks.createBroadChatFallbackFinalOutput({
+        message: "Should I buy Bitcoin?",
+      }),
+    ).toMatchObject({
+      message: "I can’t pick crypto, but I can help test how a purchase amount would affect today.",
+      responseMode: "chat_only",
+    });
   });
 
   it("allows extra raw model prompt chips for deterministic replanning", () => {

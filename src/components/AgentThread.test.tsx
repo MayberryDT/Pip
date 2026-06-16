@@ -73,4 +73,37 @@ describe("AgentThread", () => {
     expect(markup).toContain("/brand/pip-character/v001/avatar/happy.png");
     expect(markup).toContain('data-expression="happy"');
   });
+
+  it("applies long-token wrapping to chat bubbles and assistant text", () => {
+    const longToken = "GENERAL_SERVICES_OTHER_GENERAL_SERVICES".repeat(4);
+    const markup = renderToStaticMarkup(
+      <AgentThread
+        thread={[
+          {
+            id: "long-token",
+            userText: longToken,
+            response: {
+              message: longToken,
+              cards: [],
+              promptChips: [],
+              usedTools: [],
+              responseMode: "answer",
+              audit: {
+                toolNames: [],
+                usedModel: false,
+              },
+            },
+            errorText: longToken,
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain(longToken);
+    expect(countOccurrences(markup, "pip-wrap-anywhere")).toBeGreaterThanOrEqual(3);
+  });
 });
+
+function countOccurrences(value: string, search: string): number {
+  return value.split(search).length - 1;
+}

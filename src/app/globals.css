@@ -2050,15 +2050,23 @@ button {
     linear-gradient(180deg, #fbf7ef 0%, #f8f3ea 100%);
 }
 
+.pip-wrap-anywhere {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .pip-chat-shell {
   position: fixed;
-  inset: 0;
-  height: 100dvh;
+  top: var(--pip-chat-shell-top, 0px);
+  right: 0;
+  left: 0;
+  height: var(--pip-chat-shell-height, 100dvh);
   max-height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
   padding-top: max(1.25rem, env(safe-area-inset-top));
-  padding-bottom: max(1.25rem, env(safe-area-inset-bottom));
+  padding-bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + var(--pip-keyboard-inset, 0px)));
 }
 
 .pip-metric-hero {

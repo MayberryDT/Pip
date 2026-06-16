@@ -52,6 +52,34 @@ describe("CardRenderer", () => {
     button?.props.onClick();
     expect(prompts).toEqual(["Add account"]);
   });
+
+  it("applies long-token wrapping to insight card text surfaces", () => {
+    const longToken = "GENERAL_SERVICES_OTHER_GENERAL_SERVICES".repeat(4);
+    const markup = renderToStaticMarkup(
+      <CardRenderer
+        card={{
+          type: "insight_card",
+          title: longToken,
+          summary: longToken,
+          rows: [
+            {
+              id: "pathological-token",
+              label: longToken,
+              detail: longToken,
+              valueText: longToken,
+              tone: "warning",
+            },
+          ],
+          footer: longToken,
+        }}
+      />,
+    );
+
+    expect(markup).toContain(longToken);
+    expect(markup).toMatch(/<section class="[^"]*pip-wrap-anywhere/);
+    expect(markup).toMatch(/<h3 class="[^"]*pip-wrap-anywhere/);
+    expect(countOccurrences(markup, "pip-wrap-anywhere")).toBeGreaterThanOrEqual(6);
+  });
 });
 
 function findElementByType(node: ReactNode, type: string): any {
@@ -75,6 +103,10 @@ function findElementByType(node: ReactNode, type: string): any {
   }
 
   return findElementByType(node.props.children, type);
+}
+
+function countOccurrences(value: string, search: string): number {
+  return value.split(search).length - 1;
 }
 
 function getRenderableCards(): Array<{

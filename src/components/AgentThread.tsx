@@ -60,14 +60,14 @@ export function AgentThread({
           className="space-y-4"
           ref={itemIndex === thread.length - 1 ? latestItemRef : null}
         >
-          <div className="chat-message-in ml-auto w-fit max-w-[86%] whitespace-pre-wrap break-words rounded-[1.25rem] border border-line bg-porcelain/60 px-4 py-3 text-sm font-medium text-ink/[0.82] shadow-[0_8px_18px_rgba(60,50,40,0.04)]">
+          <div className="pip-wrap-anywhere chat-message-in ml-auto w-fit max-w-[86%] whitespace-pre-wrap break-words rounded-[1.25rem] border border-line bg-porcelain/60 px-4 py-3 text-sm font-medium text-ink/[0.82] shadow-[0_8px_18px_rgba(60,50,40,0.04)]">
             {item.userText}
           </div>
           {item.response ? (
             <div className="chat-message-in chat-message-in-delay flex items-start gap-3">
               <PipCharacter size="avatar" expression="happy" action="talking" />
               <div className="min-w-0 flex-1 space-y-3">
-                <p className="glass-panel px-4 py-3 text-sm font-medium leading-6 text-ink/[0.82]">
+                <p className="pip-wrap-anywhere glass-panel px-4 py-3 text-sm font-medium leading-6 text-ink/[0.82]">
                   {item.response.message}
                 </p>
                 {item.response.cards.map((card, index) => (
@@ -79,7 +79,7 @@ export function AgentThread({
                   />
                 ))}
                 {item.errorText ? (
-                  <p className="glass-panel border-red-200/80 bg-red-50/[0.84] px-4 py-3 text-sm font-medium leading-6 text-red-800">
+                  <p className="pip-wrap-anywhere glass-panel border-red-200/80 bg-red-50/[0.84] px-4 py-3 text-sm font-medium leading-6 text-red-800">
                     {item.errorText}
                   </p>
                 ) : null}
@@ -90,7 +90,7 @@ export function AgentThread({
           ) : (
             <div className="chat-message-in flex items-start gap-3">
               <PipCharacter size="avatar" expression="concerned" action="settle" />
-              <p className="glass-panel border-red-200/80 bg-red-50/[0.84] px-4 py-3 text-sm font-medium leading-6 text-red-800">
+              <p className="pip-wrap-anywhere glass-panel border-red-200/80 bg-red-50/[0.84] px-4 py-3 text-sm font-medium leading-6 text-red-800">
                 {item.errorText ?? defaultAgentErrorText}
               </p>
             </div>

@@ -314,7 +314,10 @@ export async function runAIAgent(
       const agentError = toAgentUnavailableError(error);
       const fallbackFinalOutput = createFallbackFinalOutput(context);
 
-      if (fallbackFinalOutput && shouldRetryFinalOutput(agentError)) {
+      if (
+        fallbackFinalOutput &&
+        (shouldRetryFinalOutput(agentError) || shouldUseDeterministicFallbackAfterModelFailure(agentError, context))
+      ) {
         return buildAgentResponse(fallbackFinalOutput, context, input, {
           usedModel: true,
           model: getPipAiModel(),
@@ -2162,27 +2165,35 @@ function shouldRecoverBroadChatFinalOutput(
   error: AgentUnavailableError,
   context: PipAgentContext,
 ): boolean {
-  return shouldRetryFinalOutput(error) &&
-    context.usedTools.length === 0 &&
-    !context.forcedTool &&
-    context.availableCards.length === 0 &&
-    !context.guidanceContext;
+  if (
+    context.usedTools.length > 0 ||
+    context.forcedTool ||
+    context.availableCards.length > 0 ||
+    context.guidanceContext
+  ) {
+    return false;
+  }
+
+  return shouldRetryFinalOutput(error) || isNoToolChatOnlyPrompt(context.inputMessage);
 }
 
 function createBroadChatFallbackFinalOutput(input: RunAiAgentInput): AgentFinalOutput {
   const greeting = isSimpleGreetingPrompt(input.message);
   const generalSpendingAdvice = isGeneralSpendingAdvicePrompt(input.message);
   const creditCardDiscussion = isGeneralCreditCardDiscussionPrompt(input.message);
+  const blockedAdvice = getBlockedAdviceFallbackMessage(input.message);
 
   return {
     message: greeting
       ? "I can help with your Spendable Cash Today. Ask what changed or test a specific purchase amount."
       : generalSpendingAdvice
         ? "Start with one small spending rule: choose one category, set a weekly cap, and keep one low-cost thing you still enjoy."
+        : blockedAdvice
+          ? blockedAdvice
         : creditCardDiscussion
           ? "I can help with credit cards. We can talk through payoff timing, card use, or how a specific purchase would affect today."
           : "I’m not sure what you mean yet. Ask about today’s number or test a specific purchase amount.",
-    responseMode: greeting || generalSpendingAdvice || creditCardDiscussion ? "chat_only" : "clarify",
+    responseMode: greeting || generalSpendingAdvice || blockedAdvice || creditCardDiscussion ? "chat_only" : "clarify",
     promptChips: [],
   };
 }
@@ -2208,7 +2219,26 @@ function isGeneralCreditCardDiscussionPrompt(message: string): boolean {
 function isNoToolChatOnlyPrompt(message: string): boolean {
   return isSimpleGreetingPrompt(message) ||
     isGeneralSpendingAdvicePrompt(message) ||
+    Boolean(getBlockedAdviceFallbackMessage(message)) ||
     isGeneralCreditCardDiscussionPrompt(message);
+}
+
+function getBlockedAdviceFallbackMessage(message: string): string | null {
+  const normalized = normalizePrompt(message);
+
+  if (/\b(should i|do you think i should|would you)\b.*\b(invest|nvidia|stocks?|shares?|etf|fund|securities?)\b/.test(normalized)) {
+    return "I can’t pick investments, but I can help test how a purchase amount would affect today.";
+  }
+
+  if (/\b(should i|do you think i should|would you)\b.*\b(buy|sell|hold)\b.*\b(crypto|bitcoin|ethereum|token)\b/.test(normalized)) {
+    return "I can’t pick crypto, but I can help test how a purchase amount would affect today.";
+  }
+
+  if (/\b(should i|do you think i should|would you)\b.*\b(balance transfer|credit product|credit card|loan|lender|insurance)\b/.test(normalized)) {
+    return "I can’t pick a credit product, but I can help think through payoff pressure in plain terms.";
+  }
+
+  return null;
 }
 
 function hasDeterministicNoCardFallback(context: PipAgentContext): boolean {
@@ -3423,16 +3453,46 @@ function toAgentUnavailableError(error: unknown): AgentUnavailableError {
     return error;
   }
 
+  const detail = getErrorDetail(error);
+
+  if (isModelOutputValidationDetail(detail)) {
+    return new AgentUnavailableError({
+      code: "invalid-agent-output",
+      message: "AI returned an invalid response.",
+      status: 502,
+      detail,
+      cause: error,
+    });
+  }
+
   return new AgentUnavailableError({
     code: "openai-request-failed",
     message: "AI request failed.",
-    detail: getErrorDetail(error),
+    detail,
     cause: error,
   });
 }
 
+function shouldUseDeterministicFallbackAfterModelFailure(
+  error: AgentUnavailableError,
+  context: PipAgentContext,
+): boolean {
+  return isModelServiceFailure(error) && Boolean(createFallbackFinalOutput(context));
+}
+
+function isModelServiceFailure(error: AgentUnavailableError): boolean {
+  return (
+    error.code === "openai-request-failed" ||
+    error.code === "model-unavailable" ||
+    /rate limit|timeout|temporarily unavailable|fetch failed|connection/i.test(
+      `${error.message} ${error.detail ?? ""}`,
+    )
+  );
+}
+
 function shouldRetryFinalOutput(error: AgentUnavailableError): boolean {
   if (
+    error.code === "invalid-agent-output" ||
     error.code === "model-returned-invalid-final-output" ||
     error.code === "model-returned-invalid-guidance-card" ||
     error.code === "model-returned-disallowed-final-message" ||
@@ -3445,9 +3505,7 @@ function shouldRetryFinalOutput(error: AgentUnavailableError): boolean {
 
   const detail = `${error.message} ${error.detail ?? ""}`;
 
-  return /invalid output type|schema validation|expected schema|too (?:big|long)|invalid final response/i.test(
-    detail,
-  );
+  return isModelOutputValidationDetail(detail);
 }
 
 function suppressVisibleRepeatedTools(
@@ -3612,10 +3670,29 @@ function isRecentSpendingPressurePrompt(normalized: string): boolean {
 }
 
 function isSpendingOpportunityPrompt(normalized: string): boolean {
+  if (isSavingsSetupOrSettingsPrompt(normalized)) {
+    return false;
+  }
+
+  const hasOpportunityTerm =
+    /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b/.test(normalized) ||
+    /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
+    /\bwhere can i save\b/.test(normalized);
+
+  if (!hasOpportunityTerm) {
+    return false;
+  }
+
   return (
-    /\b(what|where|which|find|show|spot|identify|help|how)\b.*\b(cut back|cutback|spend less|save money|overspending|over spending|waste|wasteful|stop buying|trim)\b/.test(normalized) ||
-    /\b(cut back|cutback|spend less|save money|overspending|over spending|waste|wasteful|stop buying|trim)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what)\b/.test(normalized)
+    /\b(what|where|which|find|show|spot|identify|help|how)\b/.test(normalized) ||
+    /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what|costs?|expenses?|cash)\b/.test(normalized) ||
+    /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized)
   );
+}
+
+function isSavingsSetupOrSettingsPrompt(normalized: string): boolean {
+  return /\b(protected savings|savings cushion)\b/.test(normalized) ||
+    /\bsave\b.{0,24}\b(account settings|settings|preferences)\b/.test(normalized);
 }
 
 function isDataQualityPrompt(normalized: string): boolean {
@@ -4259,6 +4336,15 @@ function isRepairablePlaidErrorCode(errorCode: string | null | undefined): boole
 
 export function toAgentErrorPayload(error: unknown): AgentErrorPayload {
   if (error instanceof AgentUnavailableError) {
+    if (isAgentOutputError(error)) {
+      return {
+        code: "invalid-agent-output",
+        error: "AI returned an invalid response.",
+        detail: error.detail,
+        status: 502,
+      };
+    }
+
     return {
       code: error.code,
       error: error.message,
@@ -4267,10 +4353,21 @@ export function toAgentErrorPayload(error: unknown): AgentErrorPayload {
     };
   }
 
+  const detail = getErrorDetail(error);
+
+  if (isModelOutputValidationDetail(detail)) {
+    return {
+      code: "invalid-agent-output",
+      error: "AI returned an invalid response.",
+      detail,
+      status: 502,
+    };
+  }
+
   return {
     code: "agent-error",
     error: "Agent failed.",
-    detail: getErrorDetail(error),
+    detail,
     status: 500,
   };
 }
@@ -4283,11 +4380,33 @@ function getErrorDetail(error: unknown): string {
   return "Unknown AI error.";
 }
 
+function isAgentOutputError(error: AgentUnavailableError): boolean {
+  return error.status === 502 && (
+    [
+      "invalid-agent-output",
+      "model-returned-invalid-final-output",
+      "model-returned-invalid-guidance-card",
+      "model-returned-disallowed-final-message",
+      "model-promised-unsupported-card",
+      "model-returned-no-prompt-chips",
+      "model-returned-too-long-final-message",
+    ].includes(error.code) ||
+    isModelOutputValidationDetail(`${error.message} ${error.detail ?? ""}`)
+  );
+}
+
+function isModelOutputValidationDetail(detail: string): boolean {
+  return /invalid output type|schema validation|expected schema|too[_ -]?(?:big|long)|invalid final response|model[- ]output validation|final output schema|response validation|zoderror/i.test(
+    detail,
+  );
+}
+
 function sanitizeErrorDetail(detail: string): string {
   return detail.replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 180);
 }
 
 export const __agentTestHooks = {
+  createBroadChatFallbackFinalOutput,
   getForcedAgentTool,
   getUnsupportedCardPromise,
   guardVisibleFinalMessage,

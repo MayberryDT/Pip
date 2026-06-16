@@ -687,7 +687,7 @@ function buildCutbackOpportunityCard(
         id: "previous-window",
         label: `Prior ${opportunity.windowDays} days`,
         amountCents: -opportunity.previousSpendCents,
-        detail: `${opportunity.transactionCount} recent ${opportunity.category.toLowerCase()} items.`,
+        detail: getCutbackComparisonDetail(opportunity),
         tone: "neutral",
       },
       {
@@ -698,8 +698,28 @@ function buildCutbackOpportunityCard(
         tone: "positive",
       },
     ],
-    footer: `${opportunity.confidence} confidence from ${opportunity.reasonCodes.join(", ")}.`,
+    footer: getCutbackFooter(opportunity),
   };
+}
+
+function getCutbackComparisonDetail(opportunity: SpendingOpportunity): string {
+  if (opportunity.merchantExamples.length > 0) {
+    return `Recent examples: ${opportunity.merchantExamples.join(", ")}.`;
+  }
+
+  return `${opportunity.transactionCount} recent ${opportunity.category.toLowerCase()} items.`;
+}
+
+function getCutbackFooter(opportunity: SpendingOpportunity): string {
+  if (opportunity.reasonCodes.includes("merchant_concentration")) {
+    return "Based on recent repeat spending and merchant concentration.";
+  }
+
+  if (opportunity.reasonCodes.includes("recent_increase")) {
+    return "Based on a recent spending increase and repeat activity.";
+  }
+
+  return "Based on recent repeat spending.";
 }
 
 function toneForAmount(amountCents: number): "positive" | "negative" | "neutral" {

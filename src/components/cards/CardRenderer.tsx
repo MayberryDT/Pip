@@ -312,14 +312,14 @@ export function CardRenderer({
     case "insight_card":
       return (
         <CardShell icon={<Sparkles aria-hidden="true" size={18} />} title={card.title}>
-          <p className="text-sm leading-6 text-ink/[0.68]">{card.summary}</p>
+          <p className="pip-wrap-anywhere text-sm leading-6 text-ink/[0.68]">{card.summary}</p>
           <div className="mt-3 space-y-2">
             {card.rows.map((row) => (
               <InsightRow key={row.id} row={row} />
             ))}
           </div>
           {card.footer ? (
-            <p className="mt-3 text-xs font-semibold uppercase leading-5 tracking-normal text-taupe">
+            <p className="pip-wrap-anywhere mt-3 text-xs font-semibold uppercase leading-5 tracking-normal text-taupe">
               {card.footer}
             </p>
           ) : null}
@@ -330,7 +330,7 @@ export function CardRenderer({
       return (
         <CardShell icon={<Sparkles aria-hidden="true" size={18} />} title={card.title}>
           <div className="mb-3 flex items-start justify-between gap-3">
-            <p className="min-w-0 text-sm leading-6 text-ink/[0.72]">{card.summary}</p>
+            <p className="pip-wrap-anywhere min-w-0 text-sm leading-6 text-ink/[0.72]">{card.summary}</p>
             <span className={["shrink-0 rounded-full border px-2.5 py-1 text-[0.68rem] font-bold uppercase tracking-normal", stanceClass(card.stance)].join(" ")}>
               {stanceLabel(card.stance)}
             </span>
@@ -341,7 +341,7 @@ export function CardRenderer({
             ))}
           </div>
           {card.footer ? (
-            <p className="mt-3 text-xs font-semibold uppercase leading-5 tracking-normal text-taupe">
+            <p className="pip-wrap-anywhere mt-3 text-xs font-semibold uppercase leading-5 tracking-normal text-taupe">
               {card.footer}
             </p>
           ) : null}
@@ -367,12 +367,12 @@ function CardShell({
   children: React.ReactNode;
 }) {
   return (
-    <section className="glass-panel p-4">
+    <section className="pip-wrap-anywhere glass-panel p-4">
       <div className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 place-items-center rounded-full border border-moss/15 bg-moss/[0.08] text-moss">
+        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-moss/15 bg-moss/[0.08] text-moss">
           {icon}
         </span>
-        <h3 className="text-[0.72rem] font-bold uppercase leading-none tracking-normal text-taupe">{title}</h3>
+        <h3 className="pip-wrap-anywhere text-[0.72rem] font-bold uppercase leading-4 tracking-normal text-taupe">{title}</h3>
       </div>
       {children}
     </section>
@@ -389,14 +389,14 @@ function InsightRow({
     : row.valueText ?? "Included";
 
   return (
-    <div className="flex min-h-12 items-center justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
-      <div className="min-w-0">
-        <p className="text-sm font-semibold text-ink">{row.label}</p>
+    <div className="flex min-h-12 min-w-0 items-center justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
+      <div className="min-w-0 flex-1">
+        <p className="pip-wrap-anywhere text-sm font-semibold text-ink">{row.label}</p>
         {row.detail ? (
-          <p className="mt-0.5 text-xs leading-5 text-ink/[0.56]">{row.detail}</p>
+          <p className="pip-wrap-anywhere mt-0.5 text-xs leading-5 text-ink/[0.56]">{row.detail}</p>
         ) : null}
       </div>
-      <span className={["shrink-0 text-sm font-bold", toneClass(row.tone)].join(" ")}>
+      <span className={["pip-wrap-anywhere min-w-0 max-w-[45%] text-right text-sm font-bold", toneClass(row.tone)].join(" ")}>
         {value}
       </span>
     </div>
@@ -410,11 +410,11 @@ function GuidanceRow({
 }) {
   return (
     <div className="rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2.5">
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-semibold text-ink">{row.label}</p>
+      <div className="flex min-w-0 items-center justify-between gap-3">
+        <p className="pip-wrap-anywhere min-w-0 text-sm font-semibold text-ink">{row.label}</p>
         <span className={["h-2.5 w-2.5 shrink-0 rounded-full", dotToneClass(row.tone)].join(" ")} />
       </div>
-      <p className="mt-1 text-xs leading-5 text-ink/[0.58]">{row.detail}</p>
+      <p className="pip-wrap-anywhere mt-1 text-xs leading-5 text-ink/[0.58]">{row.detail}</p>
     </div>
   );
 }
@@ -530,7 +530,7 @@ function MoneyRow({
 
   return (
     <div className="flex min-h-10 items-center justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
-      <span className={strong ? "text-sm font-semibold text-ink" : "text-sm font-medium text-ink/[0.68]"}>
+      <span className={strong ? "pip-wrap-anywhere min-w-0 text-sm font-semibold text-ink" : "pip-wrap-anywhere min-w-0 text-sm font-medium text-ink/[0.68]"}>
         {label}
       </span>
       <span className={[strong ? "text-base font-bold" : "text-sm font-semibold", valueClass].join(" ")}>
@@ -559,7 +559,7 @@ function WarningBlock({
   return (
     <div className="mt-3 flex gap-3 rounded-[0.9rem] border border-gold/15 bg-gold/[0.08] px-3 py-2.5 text-sm leading-5 text-ink/[0.68]">
       <AlertTriangle aria-hidden="true" className="mt-1 shrink-0 text-gold" size={17} />
-      <div>
+      <div className="pip-wrap-anywhere min-w-0">
         {label ? (
           <p className="font-semibold text-ink">
             {label}
@@ -583,7 +583,7 @@ function FormulaRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-4 rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-2">
-      <span className={strong ? "font-semibold text-ink" : "text-ink/[0.66]"}>{label}</span>
+      <span className={strong ? "pip-wrap-anywhere min-w-0 font-semibold text-ink" : "pip-wrap-anywhere min-w-0 text-ink/[0.66]"}>{label}</span>
       <span className={strong ? "font-semibold text-ink" : value < 0 ? "font-semibold text-coral" : "font-semibold text-moss"}>
         {formatMoney(value)}
       </span>
