@@ -3,7 +3,7 @@
   "sourceType": "procedural_blender",
   "approvalStatus": "needs-human-review",
   "productionExportAllowed": false,
-  "activePlan": "design/pip-character/pip-v001-reference-match-optimized-execution-plan-v7.md",
+  "activePlan": "planning-docs/pip-character/pip-v001-reference-match-optimized-execution-plan-v7.md",
   "currentAcceptedRun": "material-lookdev-v1",
   "finalQaRuns": {
     "broad": "final-reference-match-v1",

@@ -16,8 +16,6 @@ tsconfig.tsbuildinfo
 planning-docs/
 design/pip-character/generated/*
 !design/pip-character/generated/.gitkeep
-design/pip-character/blender/
-design/pip-character/tools/
 design/pip-character/exports/*
 !design/pip-character/exports/.gitkeep
 design/pip-character/incoming/raw/
