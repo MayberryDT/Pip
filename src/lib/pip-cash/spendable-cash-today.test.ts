@@ -9,7 +9,11 @@ import {
   overspendingPipSnapshot,
   shortfallPipSnapshot,
 } from "@/lib/fake-data";
-import { classifySpendableTransaction, simulateSpendablePurchase } from "@/lib/pip-cash/spendable-cash-today";
+import {
+  classifySpendableTransaction,
+  getSpendableCashTodaySubtitle,
+  simulateSpendablePurchase,
+} from "@/lib/pip-cash/spendable-cash-today";
 import type { Account, Transaction } from "@/lib/types";
 
 describe("Spendable Cash Today V2", () => {
@@ -77,6 +81,45 @@ describe("Spendable Cash Today V2", () => {
       ]),
     );
     expect(result?.drivers.map((driver) => driver.id)).toContain("missing-data");
+  });
+
+  it("writes the top-number subtitle in Pip's voice", () => {
+    const baseResult = calculatePipCash(fakeSnapshot);
+    const baseMetric = baseResult.spendableCashToday;
+    const subtitleForState = (state: NonNullable<typeof baseMetric>["state"]) =>
+      getSpendableCashTodaySubtitle({
+        ...baseResult,
+        spendableCashToday: baseMetric
+          ? {
+              ...baseMetric,
+              state,
+              shortfallCents: state === "shortfall" ? 1200 : 0,
+              warnings: [],
+            }
+          : undefined,
+      });
+    const subtitles = [
+      getSpendableCashTodaySubtitle(null),
+      getSpendableCashTodaySubtitle({
+        ...baseResult,
+        pipCashTodayCents: -1200,
+        spendableCashToday: undefined,
+      }),
+      getSpendableCashTodaySubtitle(calculatePipCash(fakeSnapshot)),
+      getSpendableCashTodaySubtitle(calculatePipCash(healthyPipSnapshot)),
+      getSpendableCashTodaySubtitle(calculatePipCash(overspendingPipSnapshot)),
+      getSpendableCashTodaySubtitle(calculatePipCash(shortfallPipSnapshot)),
+      getSpendableCashTodaySubtitle(calculatePipCash(lowConfidencePipSnapshot)),
+      getSpendableCashTodaySubtitle(calculatePipCash(missingCardPipSnapshot)),
+      subtitleForState("tight"),
+      subtitleForState("missing_data"),
+    ];
+
+    expect(subtitles).toContain("I’m missing a card, so I may adjust this after you connect it.");
+    expect(subtitles).toContain("I’d keep today light.");
+    expect(subtitles).toContain("I need more connected data before I trust this read.");
+    expect(subtitles.every((subtitle) => /^I(?:\b|’|')/.test(subtitle))).toBe(true);
+    expect(subtitles.join(" ")).not.toMatch(/This may change|That’s your room|You spent|Recent spending lowered|No extra room/);
   });
 
   it("separates immediate purchase room from the recomputed V2 allowance", () => {

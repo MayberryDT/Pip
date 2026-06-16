@@ -76,8 +76,9 @@ describe("PWA manifest", () => {
 
     const source = readFileSync(serviceWorkerPath, "utf8");
 
-    expect(source).toContain('const STATIC_CACHE_NAME = "pip-static-v6"');
+    expect(source).toContain('const STATIC_CACHE_NAME = "pip-static-v7"');
     expect(source).toContain("/offline.html");
+    expect(source).toContain("/brand/pip-logo.png");
     expect(source).toContain("/brand/pip-character/v001/avatar/normal.png");
     expect(source).toContain("/brand/pip-character/v001/medium/onboarding-wave.png");
     expect(source).toContain("/_next/static/");

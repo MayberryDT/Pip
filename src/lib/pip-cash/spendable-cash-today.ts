@@ -313,38 +313,38 @@ export function getSpendableCashTodayState(result: PipCashResult): SpendableCash
 
 export function getSpendableCashTodaySubtitle(result: PipCashResult | null): string {
   if (!result) {
-    return "Connect data to see today’s number.";
+    return "I’ll show today’s number after you connect data.";
   }
 
   const metric = result.spendableCashToday;
 
   if (!metric) {
     return result.pipCashTodayCents < 0
-      ? `You’re ${formatPlainMoney(Math.abs(result.pipCashTodayCents))} over today.`
-      : "That’s your room for today after bills and savings.";
+      ? `I see you’re ${formatPlainMoney(Math.abs(result.pipCashTodayCents))} over today.`
+      : "I held back bills and savings before this number.";
   }
 
   if (metric.warnings.some((warning) => warning.id === "missing-card")) {
-    return "This may change if you connect the missing card.";
+    return "I’m missing a card, so I may adjust this after you connect it.";
   }
 
   switch (metric.state) {
     case "healthy":
-      return "You spent lightly lately, so today has more room.";
+      return "I see lighter spending lately, so I found more room today.";
     case "normal":
-      return "That’s your room for today after bills and savings.";
+      return "I held back bills and savings before this number.";
     case "tight":
-      return "Keep it light today.";
+      return "I’d keep today light.";
     case "overspending":
-      return "Recent spending lowered today’s room.";
+      return "I see recent spending pulling this down.";
     case "shortfall":
       return metric.shortfallCents > 0
-        ? `You’re ${formatPlainMoney(metric.shortfallCents)} over your pattern.`
-        : "No extra room today. Essentials only.";
+        ? `I see you’re ${formatPlainMoney(metric.shortfallCents)} over your pattern.`
+        : "I don’t see extra room today. Essentials only.";
     case "low_confidence":
-      return "This is an early estimate while I learn your pattern.";
+      return "I’m still learning your pattern, so treat this as an early read.";
     case "missing_data":
-      return "I need more data to make this reliable.";
+      return "I need more connected data before I trust this read.";
   }
 }
 

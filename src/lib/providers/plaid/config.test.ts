@@ -52,6 +52,28 @@ describe("Plaid config", () => {
     expect(config.redirectUri).toBe("https://spendwithpip.com/plaid/oauth");
   });
 
+  it("does not default production Plaid OAuth redirects to localhost in local development", () => {
+    const config = getPlaidConfig({
+      PLAID_CLIENT_ID: "client-id",
+      PLAID_SECRET: "secret",
+      PLAID_ENV: "production",
+      NODE_ENV: "development",
+    });
+
+    expect(config.redirectUri).toBe("https://spendwithpip.com/plaid/oauth");
+  });
+
+  it("uses localhost Plaid OAuth redirects for sandbox local development", () => {
+    const config = getPlaidConfig({
+      PLAID_CLIENT_ID: "client-id",
+      PLAID_SECRET: "secret",
+      PLAID_ENV: "sandbox",
+      NODE_ENV: "development",
+    });
+
+    expect(config.redirectUri).toBe("http://localhost:3000/plaid/oauth");
+  });
+
   it("derives the Plaid webhook URL from a public HTTPS site URL", () => {
     const config = getPlaidConfig({
       PLAID_CLIENT_ID: "client-id",

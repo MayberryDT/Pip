@@ -217,12 +217,14 @@ function getPlaidRedirectUri(env: Record<string, string | undefined>): string | 
     return explicitRedirectUri;
   }
 
-  const appOrigin = normalizeOrigin(
-    env.NEXT_PUBLIC_SITE_URL ||
-      env.URL ||
-      env.DEPLOY_PRIME_URL ||
-      (env.NODE_ENV === "development" ? "http://localhost:3000" : undefined),
+  const configuredOrigin = normalizeOrigin(
+    env.NEXT_PUBLIC_SITE_URL || env.URL || env.DEPLOY_PRIME_URL,
   );
+  const appOrigin =
+    configuredOrigin &&
+    !(parsePlaidEnvironment(env.PLAID_ENV) === "production" && isLocalhostOrigin(configuredOrigin))
+      ? configuredOrigin
+      : normalizeOrigin(getDefaultPlaidRedirectOrigin(env));
 
   if (!appOrigin) {
     return undefined;
@@ -324,6 +326,26 @@ function normalizePublicHttpsUrl(rawUrl: string | undefined): string | undefined
     return parsed.toString();
   } catch {
     return undefined;
+  }
+}
+
+function getDefaultPlaidRedirectOrigin(env: Record<string, string | undefined>): string | undefined {
+  if (parsePlaidEnvironment(env.PLAID_ENV) === "production") {
+    return "https://spendwithpip.com";
+  }
+
+  if (env.NODE_ENV === "development") {
+    return "http://localhost:3000";
+  }
+
+  return undefined;
+}
+
+function isLocalhostOrigin(origin: string): boolean {
+  try {
+    return isLocalhost(new URL(origin).hostname);
+  } catch {
+    return false;
   }
 }
 

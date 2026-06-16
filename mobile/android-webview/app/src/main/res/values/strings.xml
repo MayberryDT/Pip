@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Pip</string>
+    <string name="launch_url">https://spendwithpip.com/app</string>
+    <string name="allowed_host">spendwithpip.com</string>
+</resources>

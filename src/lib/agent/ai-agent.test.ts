@@ -1138,6 +1138,17 @@ describe("runAIAgent", () => {
     expect(__agentTestHooks.getUnsupportedCardPromise(repaired ?? "", [])).toBeNull();
     expect(repaired).not.toMatch(/\b(show|see|pull|view|here is|here are)\b/i);
     expect(__agentTestHooks.guardVisibleFinalMessage(message)).toBe(repaired);
+
+    const cashPictureMessage =
+      "I’d treat this as a question about your money today. I can’t give investment advice. Nvidia isn’t in my feed here. If you want, I can pull up today’s cash picture and show how a purchase would affect it.";
+    const repairedCashPicture = __agentTestHooks.repairUnsupportedCardPromises(cashPictureMessage, []);
+
+    expect(__agentTestHooks.getUnsupportedCardPromise(cashPictureMessage, [])).not.toBeNull();
+    expect(repairedCashPicture).toContain("I can’t give investment advice.");
+    expect(repairedCashPicture?.trim().split(/\s+/).length).toBeLessThanOrEqual(45);
+    expect(__agentTestHooks.getUnsupportedCardPromise(repairedCashPicture ?? "", [])).toBeNull();
+    expect(repairedCashPicture).not.toMatch(/\b(show|see|pull|view|here is|here are)\b/i);
+    expect(__agentTestHooks.guardVisibleFinalMessage(cashPictureMessage)).toBe(repairedCashPicture);
   });
 
   it("repairs generic no-card display offers", () => {

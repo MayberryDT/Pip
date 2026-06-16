@@ -37,6 +37,22 @@ describe("marketing website pages", () => {
     expect(html).not.toContain('type="email"');
   });
 
+  it("keeps mobile marketing chrome from stacking sticky bars", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const mobileChromeCss = css
+      .slice(css.lastIndexOf("@media (max-width: 900px)"))
+      .split("@media (max-width: 767px)")[0];
+
+    expect(mobileChromeCss).toContain(".editorial-header {\n    position: static;");
+    expect(mobileChromeCss).toContain(".editorial-mobile-nav {\n    position: static;");
+    expect(mobileChromeCss).toContain("display: flex;");
+    expect(mobileChromeCss).toContain("gap: 0.625rem;");
+    expect(mobileChromeCss).toContain("flex: 0 0 auto;");
+    expect(mobileChromeCss).toContain(".editorial-footer-grid {\n    row-gap: 1rem;");
+    expect(mobileChromeCss).not.toContain("position: sticky;");
+    expect(mobileChromeCss).not.toContain("top: 4.5rem;");
+  });
+
   it("keeps the product app available at /app", async () => {
     const page = await AppPage({
       searchParams: Promise.resolve({
@@ -46,7 +62,8 @@ describe("marketing website pages", () => {
     const html = renderToStaticMarkup(page);
 
     expect(html).toContain("Hi,");
-    expect(html).toContain("Spendable Cash Today");
+    expect(html).toContain("Continue with Google");
+    expect(html).not.toContain("Spendable Cash Today");
   });
 
   it("renders required public support pages", () => {

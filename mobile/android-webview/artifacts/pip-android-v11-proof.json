@@ -1,0 +1,61 @@
+{
+  "artifact": "mobile/android-webview/artifacts/pip-android-v11.apk",
+  "packageName": "com.spendwithpip.app",
+  "versionCode": 11,
+  "versionName": "0.1.0-native-shell.2",
+  "launchUrl": "https://spendwithpip.com/app",
+  "launchableActivity": "com.spendwithpip.app.MainActivity",
+  "sizeBytes": 229828,
+  "sha256": "0975827de18c62264f595d46b29e3c9f67677f8870eb6e7190bdf35d9be88990",
+  "permissions": [
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE"
+  ],
+  "signing": {
+    "verified": true,
+    "v1": false,
+    "v2": true,
+    "v3": false,
+    "v31": false,
+    "v4": false,
+    "certificateSha256": "e322ba05fc3450ce30627f5012d051343e5c0bffdf702a55e5d5ad4eb5daa2f3",
+    "certificateDn": "CN=Pip, OU=Mobile, O=Pip, L=Denver, ST=Colorado, C=US"
+  },
+  "iconPackaging": {
+    "usesAdaptiveIconResource": true,
+    "aaptApplicationIcon": "res/BW.xml",
+    "restoresExistingMaskableAssetsFromTwaWrapper": true,
+    "generatedNewIconArtwork": false
+  },
+  "nativeShellEvidence": {
+    "usesAndroidSystemWebView": true,
+    "dexIncludes": [
+      "PipAndroid/1",
+      "PipNativeShell",
+      "android/webkit/WebView"
+    ],
+    "dexDoesNotInclude": [
+      "androidbrowserhelper",
+      "trustedwebactivity",
+      "customtabs"
+    ],
+    "normalLauncherShouldForeground": "com.spendwithpip.app"
+  },
+  "deviceSmoke": {
+    "status": "not_run",
+    "reason": "No physical Android device was attached in this Codex session.",
+    "requiredPassCondition": "Launching package com.spendwithpip.app must foreground com.spendwithpip.app/MainActivity and the launcher should mask the adaptive icon."
+  },
+  "webDogfood": {
+    "unitTests": "613 passed, 1 skipped",
+    "productionBuild": "passed",
+    "netlifyBundleCheck": "passed",
+    "inAppBrowserSmoke": {
+      "url": "http://localhost:3000/app?onboarding=guest",
+      "viewport": "390x844",
+      "showsSpendableCashMetric": false,
+      "horizontalOverflow": false,
+      "inputVisible": true
+    }
+  }
+}

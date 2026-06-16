@@ -40,9 +40,9 @@ ship at the cost of blocking beta app access.
 The project is linked to `spendwithpip` on Netlify.
 
 - Site URL: https://spendwithpip.com/app
-- Latest verified production deploy: https://6a2ae4e6a29bc882e8359c2b--spendwithpip.netlify.app
+- Latest verified production deploy: https://6a30e72e299667efdc84efcf--spendwithpip.netlify.app
 - Latest verified draft deploy: https://6a2a780edf4805a6c39e47e5--spendwithpip.netlify.app
-- Netlify is configured for real beta mode with Supabase, Netlify AI Gateway/OpenAI, and Plaid sandbox env. Fake-data preview deploys remain available with `PIP_DEPLOY_MODE=fake npm run deploy:netlify`.
+- Netlify is configured for real beta mode with Supabase, Netlify AI Gateway/OpenAI, and Plaid production env. Fake-data preview deploys remain available with `PIP_DEPLOY_MODE=fake npm run deploy:netlify`.
 - `npm run deploy:netlify` hides local `.env*` files during the local Netlify build, deploys the verified generated Netlify artifacts, and checks generated function bundles for accidental env-file inclusion and required Next static assets.
 
 ## AI Agent
@@ -120,7 +120,7 @@ Plaid env:
 ```bash
 PLAID_CLIENT_ID=
 PLAID_SECRET=
-PLAID_ENV=sandbox
+PLAID_ENV=production
 PLAID_PRODUCTS=transactions
 PLAID_COUNTRY_CODES=US
 PLAID_CLIENT_NAME=Pip
@@ -184,7 +184,7 @@ PIP_LIVE_STORAGE_STATE=/tmp/pip-live-auth.json npm run test:e2e:live
 
 `npm run capture:live-auth` opens Playwright against production and saves to `/tmp/pip-live-auth.json` by default. Override the target or file path with `-- --base-url=https://... --storage-state=/tmp/other-state.json` when needed. To keep a reusable Chrome profile for repeated auth attempts, add `-- --user-data-dir=/tmp/pip-live-auth-profile` or set `PIP_LIVE_AUTH_USER_DATA_DIR`.
 
-That smoke expects the Google user to complete OAuth, consent, Plaid sandbox connection, manual sync, and return to the same Pip screen with a real Spendable Cash Today number. It fails if the saved session is still at the guest, consent, or connect-data stage. When Plaid automation is enabled, it also requires successful `/api/providers/plaid/exchange` and `/api/sync/manual` responses, then verifies `/api/sync/status` shows a connected Plaid institution, a succeeded Plaid sync run, and nonzero synced account and transaction counts before asking the AI why the number changed.
+That smoke expects the Google user to complete OAuth, consent, Plaid production connection, manual sync, and return to the same Pip screen with a real Spendable Cash Today number. It fails if the saved session is still at the guest, consent, or connect-data stage. When Plaid automation is enabled, it also requires successful `/api/providers/plaid/exchange` and `/api/sync/manual` responses, then verifies `/api/sync/status` shows a connected Plaid institution, a succeeded Plaid sync run, and nonzero synced account and transaction counts before asking the AI why the number changed.
 
 To let the smoke attempt the Plaid Sandbox Link step itself after Google OAuth, save storage state after signing in with a Google user and run:
 

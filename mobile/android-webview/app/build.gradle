@@ -1,0 +1,46 @@
+plugins {
+    id 'com.android.application'
+}
+
+def releaseKeystorePath = System.getenv("PIP_ANDROID_KEYSTORE")
+def releaseKeystorePassword = System.getenv("PIP_ANDROID_KEYSTORE_PASSWORD")
+def releaseKeyAlias = System.getenv("PIP_ANDROID_KEY_ALIAS")
+def releaseKeyPassword = System.getenv("PIP_ANDROID_KEY_PASSWORD")
+def hasReleaseSigning = releaseKeystorePath && releaseKeystorePassword && releaseKeyAlias && releaseKeyPassword
+
+android {
+    namespace "com.spendwithpip.app"
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.spendwithpip.app"
+        minSdk 24
+        targetSdk 35
+        versionCode 11
+        versionName "0.1.0-native-shell.2"
+    }
+
+    signingConfigs {
+        release {
+            if (hasReleaseSigning) {
+                storeFile file(releaseKeystorePath)
+                storePassword releaseKeystorePassword
+                keyAlias releaseKeyAlias
+                keyPassword releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (hasReleaseSigning) {
+                signingConfig signingConfigs.release
+            }
+        }
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+        }
+    }
+}

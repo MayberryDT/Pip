@@ -39,8 +39,8 @@ export function runDeploymentEnvCheck({
       warnings.push("PIP_SUPABASE_MODE=off disables real Supabase data.");
     }
 
-    if (effectiveEnv.PLAID_ENV === "sandbox") {
-      warnings.push("PLAID_ENV=sandbox uses Plaid sandbox data, not real bank data.");
+    if (hasValue(effectiveEnv.PLAID_ENV) && effectiveEnv.PLAID_ENV !== "production") {
+      addUnique(missing, "PLAID_ENV must be production for beta mode.");
     }
 
     const siteOrigin = normalizeOrigin(effectiveEnv.NEXT_PUBLIC_SITE_URL);

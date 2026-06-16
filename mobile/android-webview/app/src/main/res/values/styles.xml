@@ -1,0 +1,11 @@
+<resources>
+    <style name="PipTheme" parent="@android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/pip_background</item>
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">@color/pip_text</item>
+        <item name="android:navigationBarColor">@color/pip_background</item>
+        <item name="android:statusBarColor">@color/pip_background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

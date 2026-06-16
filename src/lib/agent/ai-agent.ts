@@ -3137,6 +3137,7 @@ function repairUnsupportedCardPromiseText(message: string, detail: string): stri
 
   if (detail === "transactions promised without transaction card") {
     const repaired = message
+      .replace(/\bshow how (?:a )?purchases? would affect it\b/gi, "talk through how spending would affect it")
       .replace(/\b(show|showing|shown|showed|see|list|listed|pull|pulled|view)( me)?\b.{0,28}\b(transactions?|charges?|purchases?|activity)\b/gi, "talk through recent activity")
       .replace(/\btransactions?\b/gi, "activity")
       .replace(/\bcharges?\b/gi, "activity")
@@ -3153,6 +3154,8 @@ function repairUnsupportedCardPromiseText(message: string, detail: string): stri
   }
 
   const repaired = message
+    .replace(/\bpull up (?:today(?:'|\u2019)s )?cash picture\b/gi, "talk through today's cash picture")
+    .replace(/\bshow how (?:a )?purchases? would affect it\b/gi, "talk through how spending would affect it")
     .replace(/\bfuller view\b/gi, "fuller picture")
     .replace(/\b(the )?view\b/gi, "$1picture")
     .replace(/\bmissing cards?\b/gi, "missing data source")
@@ -3183,6 +3186,14 @@ function repairUnsupportedCardPromiseText(message: string, detail: string): stri
 
 function getUnsupportedCardPromise(message: string, cards: AgentCard[]): string | null {
   const normalized = message.toLowerCase().replace(/[\u2018\u2019]/g, "'");
+
+  if (cards.length === 0 && /\bpull up (?:today(?:'|\u2019)s )?cash picture\b/.test(normalized)) {
+    return "card promised without card";
+  }
+
+  if (cards.length === 0 && /\bshow how (?:a )?purchases? would affect it\b/.test(normalized)) {
+    return "transactions promised without transaction card";
+  }
 
   if (!containsDisplayPromise(normalized)) {
     return null;

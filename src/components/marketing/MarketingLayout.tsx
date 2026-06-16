@@ -39,10 +39,10 @@ export function MarketingHeader() {
         <div className="editorial-header-grid">
           <Link className="focus-ring editorial-logo" href="/" aria-label="Pip home">
             <img
-              src="/brand/pip-wordmark.png"
+              src="/brand/pip-logo.png"
               alt="Pip"
-              width={212}
-              height={177}
+              width={757}
+              height={634}
               loading="eager"
               decoding="async"
               className="h-11 w-auto object-contain"
@@ -96,10 +96,10 @@ export function MarketingFooter() {
       <div className="editorial-footer-grid">
         <div className="editorial-footer-brand">
           <img
-            src="/brand/pip-wordmark.png"
+            src="/brand/pip-logo.png"
             alt="Pip"
-            width={212}
-            height={177}
+            width={757}
+            height={634}
             loading="lazy"
             decoding="async"
             className="h-11 w-auto object-contain"

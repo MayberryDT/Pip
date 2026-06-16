@@ -16,7 +16,9 @@ describe("PipHome", () => {
     expect(visibleText).toContain("Pip");
     expect(visibleText).toContain("Spendable Cash Today");
     expect(visibleText).toContain("$104");
-    expect(visibleText).toContain("Hi, I’m Pip. I’ll show what’s actually spendable today.");
+    expect(visibleText).toContain("I’m missing a card, so I may adjust this after you connect it.");
+    expect(markup).not.toContain("pip-metric-subtitle");
+    expect(markup).not.toContain("This may change if you connect the missing card.");
     expect(markup).toContain("Ask Pip anything...");
     expect(markup).toContain("What does my $104 mean?");
     expect(markup).toContain("Why is it $104 today?");
@@ -36,7 +38,8 @@ describe("PipHome", () => {
     const markup = renderToStaticMarkup(<PipHome enableAccountControls />);
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
-    expect(markup).toContain("$--");
+    expect(markup).not.toContain("$--");
+    expect(countOccurrences(markup, 'data-testid="pip-cash-number"')).toBe(0);
     expect(markup).not.toContain("$43");
     expect(markup).not.toContain("Can I spend $50?");
     expect(markup).toContain("What data do you use?");
@@ -74,7 +77,8 @@ describe("PipHome", () => {
 
     expect(visibleText).toContain("Plaid connected");
     expect(visibleText).toContain("Your account data connected successfully.");
-    expect(markup).toContain("$--");
+    expect(markup).not.toContain("$--");
+    expect(countOccurrences(markup, 'data-testid="pip-cash-number"')).toBe(0);
   });
 
   it("keeps guest onboarding inside the Pip screen without showing fake Spendable Cash", () => {
@@ -82,13 +86,13 @@ describe("PipHome", () => {
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
     expect(visibleText).toContain("Pip");
-    expect(visibleText).toContain("Spendable Cash Today");
-    expect(visibleText).toContain("$--");
-    expect(visibleText).toContain("Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today.");
+    expect(visibleText).not.toContain("Spendable Cash Today");
+    expect(visibleText).not.toContain("Connect data to see today’s number.");
+    expect(countOccurrences(markup, 'data-testid="pip-cash-number"')).toBe(0);
+    expect(visibleText).toContain("Hi, I’m Pip. I’ll help you find what’s okay to spend today.");
     expect(markup).toContain("Continue with Google");
-    expect(markup).toContain("How does Pip work?");
-    expect(markup).toContain("What will I connect?");
-    expect(markup).toContain("Ask Pip anything...");
+    expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
+    expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(0);
     expect(markup).toContain("pip-character-medium");
     expect(markup).not.toContain("$43");
   });
@@ -101,7 +105,8 @@ describe("PipHome", () => {
 
     expect(visibleText).toContain("Google sign-in could not finish.");
     expect(visibleText).toContain("Hi, I’m Pip.");
-    expect(markup).toContain("Ask Pip anything...");
+    expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
+    expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(0);
   });
 
   it("keeps consent onboarding inside the Pip screen", () => {
@@ -110,9 +115,7 @@ describe("PipHome", () => {
     );
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
-    expect(visibleText).toContain("Pip");
-    expect(visibleText).toContain("Let’s set aside a little cushion first.");
-    expect(visibleText).toContain("Savings cushion");
+    expect(visibleText).toContain("Set your savings cushion.");
     expect(visibleText).toContain("Use $200 cushion");
     expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
     expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(0);
@@ -120,6 +123,33 @@ describe("PipHome", () => {
     expect(visibleText).not.toContain("Step 2");
     expect(markup).not.toContain("Protected savings, e.g. 200...");
     expect(markup).not.toContain("$43");
+  });
+
+  it("keeps ready checking setup free of chat controls until data connection starts", () => {
+    const markup = renderToStaticMarkup(
+      <PipHome authState={{ status: "ready", email: "tester@example.com" }} enableAccountControls />,
+    );
+    const visibleText = markup.replace(/<[^>]*>/g, " ");
+
+    expect(visibleText).toContain("I’m checking your connected data.");
+    expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
+    expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(0);
+    expect(countOccurrences(markup, 'data-testid="pip-cash-number"')).toBe(0);
+  });
+
+  it("uses refresh copy when a ready user already has connected data but no current number", () => {
+    expect(__pipHomeTestHooks.getReadyDataAction(stalePlaidSyncStatus())).toMatchObject({
+      title: "Refresh your connected data.",
+      body: "I see an account connection already. I’ll refresh it before we reconnect anything.",
+      buttonLabel: "Refresh data",
+    });
+  });
+
+  it("uses repair copy when a ready user's Plaid connection needs repair", () => {
+    expect(__pipHomeTestHooks.getReadyDataAction(repairablePlaidSyncStatus())).toMatchObject({
+      title: "Repair your account connection.",
+      buttonLabel: "Repair connection",
+    });
   });
 
   it("keeps visible chips when a chat response has no usable prompt chips", () => {
@@ -234,6 +264,26 @@ function stalePlaidSyncStatus(): SyncStatusResponse {
         staleAfter: "2026-06-05T12:00:00.000Z",
         isStale: true,
         errorMessage: null,
+      },
+    ],
+    latestSyncRun: null,
+    hasStaleInstitution: true,
+  };
+}
+
+function repairablePlaidSyncStatus(): SyncStatusResponse {
+  return {
+    institutions: [
+      {
+        id: "institution-1",
+        institutionName: "Northstar Bank",
+        provider: "plaid",
+        status: "connected",
+        lastSuccessfulSyncAt: null,
+        staleAfter: null,
+        isStale: true,
+        errorCode: "item-login-required",
+        errorMessage: "Login required.",
       },
     ],
     latestSyncRun: null,

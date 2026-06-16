@@ -1264,7 +1264,7 @@ button {
 
 @media (max-width: 900px) {
   .editorial-header {
-    position: sticky;
+    position: static;
   }
 
   .editorial-header-grid {
@@ -1282,22 +1282,20 @@ button {
   }
 
   .editorial-mobile-nav {
-    position: sticky;
-    top: 4.5rem;
-    z-index: 29;
-    display: grid;
+    position: static;
+    top: auto;
+    z-index: auto;
+    display: flex;
     width: min(calc(100% - 2.5rem), 38rem);
-    grid-auto-flow: column;
-    grid-auto-columns: 1fr;
-    gap: 0.25rem;
+    gap: 0.625rem;
     overflow-x: auto;
-    margin: 0.75rem auto 0;
-    border: 1px solid rgba(196, 200, 189, 0.72);
-    border-radius: 9999px;
-    background: rgba(252, 249, 248, 0.86);
-    padding: 0.4rem;
-    box-shadow: 0 16px 40px rgba(28, 27, 27, 0.12);
-    backdrop-filter: blur(20px);
+    margin: 0 auto 1rem;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: 0.125rem 0 0.5rem;
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   .editorial-mobile-link {
@@ -1305,9 +1303,11 @@ button {
     min-height: 2.5rem;
     align-items: center;
     justify-content: center;
+    flex: 0 0 auto;
     border: 0;
     border-radius: 9999px;
-    padding: 0 0.65rem;
+    background: rgba(252, 249, 248, 0.86);
+    padding: 0 0.85rem;
     color: rgba(67, 72, 64, 0.82);
     font-size: 0.72rem;
     font-weight: 700;
@@ -1326,6 +1326,10 @@ button {
   .editorial-footer-brand,
   .editorial-footer-links {
     grid-column: 1 / -1;
+  }
+
+  .editorial-footer-grid {
+    row-gap: 1rem;
   }
 }
 
@@ -2087,6 +2091,21 @@ button {
   user-select: none;
 }
 
+.pip-onboarding-brand {
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+  padding-top: 0.1rem;
+}
+
+.pip-onboarding-brand .pip-brand-title {
+  max-height: 4.25rem;
+}
+
+.pip-onboarding-brand .pip-wordmark-image {
+  width: min(6.8rem, 35vw);
+}
+
 .pip-metric-label {
   margin: 0.9rem 0 0;
   color: #6f675f;
@@ -2296,8 +2315,42 @@ button {
   width: min(22.75rem, 92%);
 }
 
-.onboarding-setup-scene .assistant-intro-character {
-  margin-top: -3.75rem;
+.onboarding-stage {
+  padding-top: 0;
+}
+
+.onboarding-step-panel {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding-bottom: 0.25rem;
+}
+
+.onboarding-step-scene {
+  display: flex;
+  min-height: 100%;
+  flex: 1;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: clamp(0.9rem, 2dvh, 1.25rem);
+  padding-top: clamp(1.25rem, 5dvh, 3.25rem);
+}
+
+.onboarding-step-scene .assistant-intro-message {
+  width: min(22.75rem, 92%);
+}
+
+.onboarding-step-scene .assistant-intro-character {
+  width: min(15.5rem, 58vw);
+  align-self: center;
+  margin: 0 0 clamp(1.25rem, 4dvh, 2.5rem);
+}
+
+.assistant-ready-intro-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
 .chat-thread-in {
@@ -2473,6 +2526,14 @@ button {
     width: min(7.45rem, 42vw);
   }
 
+  .pip-onboarding-brand .pip-brand-title {
+    max-height: 3.65rem;
+  }
+
+  .pip-onboarding-brand .pip-wordmark-image {
+    width: min(6rem, 36vw);
+  }
+
   .pip-metric-number {
     font-size: 6.92rem;
   }
@@ -2500,5 +2561,17 @@ button {
 
   .onboarding-intro-message {
     width: min(20.5rem, 94%);
+  }
+
+  .onboarding-step-scene {
+    gap: 0.75rem;
+    padding-top: clamp(1rem, 4dvh, 2rem);
+  }
+
+  .onboarding-step-scene .assistant-intro-character {
+    width: min(13rem, 56vw);
+    margin-right: 0;
+    margin-left: 0;
+    margin-bottom: clamp(1.25rem, 4dvh, 2.25rem);
   }
 }

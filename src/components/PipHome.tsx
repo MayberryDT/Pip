@@ -13,6 +13,8 @@ import {
 } from "@/lib/agent/suggested-prompts";
 import {
   canRefreshData,
+  getConnectLabel,
+  getConnectionStatusMessage,
   getRefreshProvider,
   shouldRefreshConnectedDataForToday,
   type FinancialProvider,
@@ -30,7 +32,6 @@ import type { PipCashResult } from "@/lib/types";
 import { AgentInput } from "@/components/AgentInput";
 import { AgentThread } from "@/components/AgentThread";
 import { PipIntroScene } from "@/components/onboarding/PipIntroScene";
-import { ProtectedSavingsPicker } from "@/components/onboarding/ProtectedSavingsPicker";
 import { PromptChips } from "@/components/PromptChips";
 import { openPlaidLink } from "@/lib/providers/plaid/link-browser";
 import type { PlaidEventMetadata } from "@/lib/providers/plaid/link-browser";
@@ -153,8 +154,28 @@ export function PipHome({
     activeAuthState?.status === "ready" &&
     !hasLoadedServerState &&
     !result;
-  const showAgentInput = activeAuthState?.status !== "needs-consent" || thread.length > 0;
-  const showPromptChips = activeAuthState?.status !== "needs-consent" || thread.length > 0;
+  const isSetupStep =
+    (isOnboarding || isReadyWithoutData || isCheckingLiveData) && !hasConversation;
+  const showAgentInput =
+    !isSetupStep && (activeAuthState?.status !== "needs-consent" || thread.length > 0);
+  const showPromptChips =
+    !isSetupStep && (activeAuthState?.status !== "needs-consent" || thread.length > 0);
+  const showMetric = Boolean(result);
+  const showMetricHero = showMetric || hasConversation;
+  const showMetricNumber = showMetric || hasConversation;
+  const showSetupBrand = isSetupStep;
+  const readyDataAction = getReadyDataAction(syncStatus);
+  const metricHeroClassName = [
+    "pip-metric-hero",
+    hasConversation ? "is-chatting" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const assistantSectionClassName = hasConversation
+    ? "mt-3 flex min-h-0 flex-1 flex-col overflow-hidden"
+    : isSetupStep
+      ? "onboarding-stage flex min-h-0 flex-1 flex-col overflow-hidden"
+      : "mt-6 flex min-h-0 flex-1 flex-col overflow-hidden max-[380px]:mt-5";
 
   useEffect(() => {
     const urlScenario = new URLSearchParams(window.location.search).get("scenario");
@@ -568,30 +589,46 @@ export function PipHome({
   return (
     <main className="pip-app-shell pip-chat-shell px-5 py-5 text-ink sm:px-6">
       <div className="mx-auto flex h-full min-h-0 w-full max-w-[430px] flex-col">
-        <section className={hasConversation ? "pip-metric-hero is-chatting" : "pip-metric-hero"}>
-          <h1 className="pip-brand-title">
-            <span className="sr-only">Pip</span>
-            <img
-              className="pip-wordmark-image"
-              src="/brand/pip-wordmark.png"
-              alt=""
-              aria-hidden="true"
-              draggable={false}
-            />
-          </h1>
-          <p className="pip-metric-label">Spendable Cash Today</p>
-          <div
-            className="pip-metric-number"
-            data-testid="pip-cash-number"
-          >
-            {result ? formatMoney(getDisplayedSpendableCashTodayCents(result)) : "$--"}
-          </div>
-          <div className="pip-metric-subtitle-row">
-            <p className="pip-metric-subtitle">{getSpendableCashTodaySubtitle(result)}</p>
-          </div>
-        </section>
+        {showSetupBrand ? (
+          <section className="pip-onboarding-brand">
+            <h1 className="pip-brand-title">
+              <span className="sr-only">Pip</span>
+              <img
+                className="pip-wordmark-image"
+                src="/brand/pip-logo.png"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+              />
+            </h1>
+          </section>
+        ) : showMetricHero ? (
+          <section className={metricHeroClassName}>
+            <h1 className="pip-brand-title">
+              <span className="sr-only">Pip</span>
+              <img
+                className="pip-wordmark-image"
+                src="/brand/pip-logo.png"
+                alt=""
+                aria-hidden="true"
+                draggable={false}
+              />
+            </h1>
+            {showMetricNumber ? (
+              <>
+                <p className="pip-metric-label">Spendable Cash Today</p>
+                <div
+                  className="pip-metric-number"
+                  data-testid="pip-cash-number"
+                >
+                  {result ? formatMoney(getDisplayedSpendableCashTodayCents(result)) : "$--"}
+                </div>
+              </>
+            ) : null}
+          </section>
+        ) : null}
 
-        <section className={hasConversation ? "mt-3 flex min-h-0 flex-1 flex-col overflow-hidden" : "mt-6 flex min-h-0 flex-1 flex-col overflow-hidden max-[380px]:mt-5"}>
+        <section className={assistantSectionClassName}>
           {isOnboarding && thread.length === 0 ? (
             <OnboardingIntro
               authNotice={authNotice}
@@ -604,6 +641,7 @@ export function PipHome({
           ) : isReadyWithoutData && thread.length === 0 ? (
             <ReadyIntro
               connectionNotice={connectionNotice}
+              dataAction={readyDataAction}
               onConnectData={startConnectData}
               variant="needs-data"
             />
@@ -670,8 +708,8 @@ export function PipHome({
 
     selectPromptChip({
       id: "connect-data",
-      label: "Connect data",
-      prompt: "Connect my data",
+      label: readyDataAction.buttonLabel,
+      prompt: readyDataAction.prompt,
     });
   }
 
@@ -891,32 +929,63 @@ function OnboardingIntro({
   onStartDevSignIn?: () => void;
   onSaveProtectedSavings: (amountCents: number) => Promise<void>;
 }) {
+  const [isSavingCushion, setIsSavingCushion] = useState(false);
+  const [cushionError, setCushionError] = useState("");
+
+  async function saveDefaultCushion() {
+    if (isSavingCushion) {
+      return;
+    }
+
+    setIsSavingCushion(true);
+    setCushionError("");
+
+    try {
+      await onSaveProtectedSavings(20000);
+    } catch (error) {
+      setCushionError(getSaveCushionErrorText(error));
+    } finally {
+      setIsSavingCushion(false);
+    }
+  }
+
   if (authState.status === "needs-consent") {
     return (
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
+      <div className="onboarding-step-panel" data-testid="agent-thread">
         <PipIntroScene
           priority
-          title="Let’s set aside a little cushion first."
-          className="onboarding-setup-scene"
+          title="Set your savings cushion."
+          className="onboarding-step-scene"
+          actions={
+            <button
+              type="button"
+              className="focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)] transition disabled:bg-ink/30"
+              disabled={isSavingCushion}
+              onClick={saveDefaultCushion}
+            >
+              {isSavingCushion ? "Saving cushion..." : "Use $200 cushion"}
+            </button>
+          }
           messageClassName="onboarding-intro-message"
         >
-          <p>
-            This is money I’ll keep protected before I answer spending questions.
-          </p>
-          <div className="mt-5">
-            <ProtectedSavingsPicker onSave={onSaveProtectedSavings} />
-          </div>
+          <p>I’ll keep this protected before I answer spending questions.</p>
+          {cushionError ? (
+            <p className="mt-3 rounded-[10px] border border-red-200 bg-red-50/80 px-3 py-2 text-sm leading-6 text-red-800">
+              {cushionError}
+            </p>
+          ) : null}
         </PipIntroScene>
       </div>
     );
   }
 
   return (
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
+    <div className="onboarding-step-panel" data-testid="agent-thread">
       <PipIntroScene
         priority
         notice={authNotice ? <AuthNotice /> : null}
-        title="Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today."
+        title="Hi, I’m Pip. I’ll help you find what’s okay to spend today."
+        className="onboarding-step-scene"
         actions={
           onStartDevSignIn ? (
             <button
@@ -937,9 +1006,7 @@ function OnboardingIntro({
         }
         messageClassName="onboarding-intro-message"
       >
-        <p>
-          First we’ll sign in, choose a gentle savings cushion, then connect the account data Pip needs.
-        </p>
+        <p>First we’ll sign in. Then we’ll set your cushion and connect data.</p>
       </PipIntroScene>
     </div>
   );
@@ -955,48 +1022,50 @@ function AuthNotice() {
 
 function ReadyIntro({
   connectionNotice,
+  dataAction,
   onConnectData,
   variant,
 }: {
   connectionNotice?: "plaid-connected";
+  dataAction?: ReadyDataAction;
   onConnectData?: () => void;
   variant: "checking" | "needs-data";
 }) {
   if (variant === "checking") {
     return (
-      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
+      <div className="onboarding-step-panel" data-testid="agent-thread">
         {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
         <PipIntroScene
           priority
-          title="I’m checking for connected data."
+          title="I’m checking your connected data."
+          className="onboarding-step-scene"
           messageClassName="onboarding-intro-message"
         >
-          <p>If nothing is connected yet, I’ll start the next step here.</p>
+          <p>If I do not find data, connect data is next.</p>
         </PipIntroScene>
       </div>
     );
   }
 
   return (
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
+    <div className="onboarding-step-panel" data-testid="agent-thread">
       {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
       <PipIntroScene
         priority
-        title="Almost there. Connect your account data and I’ll start showing your spendable cash."
+        title={dataAction?.title ?? "Connect your account data."}
+        className="onboarding-step-scene"
         actions={
           <button
             type="button"
             className="focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
             onClick={onConnectData}
           >
-            Connect data
+            {dataAction?.buttonLabel ?? "Connect data"}
           </button>
         }
         messageClassName="onboarding-intro-message"
       >
-        <p>
-          I’ll open Plaid, then you can ask what changed or whether a purchase fits.
-        </p>
+        <p>{dataAction?.body ?? "I’ll open Plaid, then we’ll move into chat."}</p>
       </PipIntroScene>
     </div>
   );
@@ -1013,14 +1082,19 @@ function DefaultAssistantIntro({
   const overAmount = result ? formatMoney(Math.abs(Math.min(result.pipCashTodayCents, 0))) : "";
 
   return (
-    <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-3" data-testid="agent-thread">
+    <div
+      className="assistant-ready-intro-panel min-h-0 flex-1 space-y-4 overflow-y-auto pb-3"
+      data-testid="agent-thread"
+    >
       {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
       <PipIntroScene
         priority
         title={
-          isNegative
-            ? `You’re ${overAmount} over today. Ask why to see what caused it.`
-            : "Hi, I’m Pip. I’ll show what’s actually spendable today."
+          result
+            ? getSpendableCashTodaySubtitle(result)
+            : isNegative
+              ? `I see you’re ${overAmount} over today. Ask why to see what caused it.`
+              : "Hi, I’m Pip. I’ll show what’s actually spendable today."
         }
       />
     </div>
@@ -1076,6 +1150,45 @@ function getDefaultPromptChips(
   return result ? getSuggestedPrompts(result) : [];
 }
 
+type ReadyDataAction = {
+  title: string;
+  body: string;
+  buttonLabel: string;
+  prompt: string;
+};
+
+function getReadyDataAction(syncStatus: SyncStatusResponse | null): ReadyDataAction {
+  const connectLabel = getConnectLabel(syncStatus);
+  const connectionMessage = getConnectionStatusMessage(syncStatus);
+
+  if (connectLabel === "Repair connection") {
+    return {
+      title: "Repair your account connection.",
+      body:
+        connectionMessage ??
+        "I see a connected account that needs repair. I’ll open Plaid in repair mode.",
+      buttonLabel: "Repair connection",
+      prompt: "Repair my account connection",
+    };
+  }
+
+  if (canRefreshData(syncStatus)) {
+    return {
+      title: "Refresh your connected data.",
+      body: "I see an account connection already. I’ll refresh it before we reconnect anything.",
+      buttonLabel: "Refresh data",
+      prompt: "Refresh my data",
+    };
+  }
+
+  return {
+    title: "Connect your account data.",
+    body: "I’ll open Plaid, then we’ll move into chat.",
+    buttonLabel: "Connect data",
+    prompt: "Connect my data",
+  };
+}
+
 function withAccountManagementPromptChip(chips: PromptChip[]): PromptChip[] {
   return [
     accountManagementPromptChip,
@@ -1089,6 +1202,14 @@ function getErrorMessage(payload: unknown, fallback: string): string {
   }
 
   return fallback;
+}
+
+function getSaveCushionErrorText(error: unknown): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return "I couldn’t save that cushion yet. Please try again.";
 }
 
 class AgentRequestError extends Error {
@@ -1329,6 +1450,7 @@ export const __pipHomeTestHooks = {
   getAppOpenRefreshProvider,
   getClientActionErrorText,
   getNextVisiblePromptChips,
+  getReadyDataAction,
   getSafeAgentFailureMessage,
   withAccountManagementPromptChip,
 };

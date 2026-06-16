@@ -1,0 +1,58 @@
+{
+  "artifact": "mobile/android-webview/artifacts/pip-android-v10.apk",
+  "packageName": "com.spendwithpip.app",
+  "versionCode": 10,
+  "versionName": "0.1.0-native-shell.1",
+  "launchUrl": "https://spendwithpip.com/app",
+  "launchableActivity": "com.spendwithpip.app.MainActivity",
+  "sizeBytes": 88304,
+  "sha256": "8b1f488370a3551e395f11c55b7bc33ffdac3865325ae5dbcab2a7181043f337",
+  "permissions": [
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE"
+  ],
+  "signing": {
+    "verified": true,
+    "v1": false,
+    "v2": true,
+    "v3": false,
+    "v31": false,
+    "v4": false,
+    "certificateSha256": "e322ba05fc3450ce30627f5012d051343e5c0bffdf702a55e5d5ad4eb5daa2f3",
+    "certificateDn": "CN=Pip, OU=Mobile, O=Pip, L=Denver, ST=Colorado, C=US"
+  },
+  "nativeShellEvidence": {
+    "usesAndroidSystemWebView": true,
+    "archiveFileCount": 12,
+    "dexIncludes": [
+      "PipAndroid/1",
+      "PipNativeShell",
+      "Lcom/spendwithpip/app/MainActivity;",
+      "https://spendwithpip.com/app"
+    ],
+    "dexDoesNotInclude": [
+      "androidbrowserhelper",
+      "trustedwebactivity",
+      "customtabs"
+    ],
+    "normalLauncherShouldForeground": "com.spendwithpip.app"
+  },
+  "deviceSmoke": {
+    "status": "not_run",
+    "reason": "adb devices showed no attached Android device in this Codex session.",
+    "requiredPassCondition": "Launching package com.spendwithpip.app must foreground com.spendwithpip.app/MainActivity, not com.android.chrome."
+  },
+  "webDogfood": {
+    "unitTests": "613 passed, 1 skipped",
+    "agentEval": "27 passed",
+    "productionBuild": "passed",
+    "netlifyBundleCheck": "passed",
+    "inAppBrowserSmoke": {
+      "url": "http://localhost:3000/app?onboarding=ready",
+      "viewport": "390x844",
+      "loadedSpendableCashToday": true,
+      "askPipAnswered": true,
+      "horizontalOverflow": false
+    }
+  }
+}

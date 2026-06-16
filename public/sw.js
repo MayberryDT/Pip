@@ -1,4 +1,4 @@
-const STATIC_CACHE_NAME = "pip-static-v6";
+const STATIC_CACHE_NAME = "pip-static-v7";
 
 const APP_SHELL_ASSETS = [
   "/offline.html",
@@ -9,7 +9,7 @@ const APP_SHELL_ASSETS = [
   "/icon-maskable-192.png",
   "/icon-maskable-512.png",
   "/apple-touch-icon.png",
-  "/brand/pip-wordmark.png",
+  "/brand/pip-logo.png",
   "/brand/pip-profile.png",
   "/brand/pip-profile-clean.png",
   "/brand/pip-character/v001/avatar/normal.png",

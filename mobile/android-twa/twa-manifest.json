@@ -1,0 +1,55 @@
+{
+  "packageId": "com.spendwithpip.app",
+  "host": "spendwithpip.com",
+  "name": "Pip",
+  "launcherName": "Pip",
+  "display": "standalone",
+  "themeColor": "#F8F3EA",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#F8F3EA",
+  "enableNotifications": false,
+  "startUrl": "/app",
+  "iconUrl": "https://spendwithpip.com/icon-512.png",
+  "maskableIconUrl": "https://spendwithpip.com/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "/home/tyler/.secrets/pip-android/pip-release.keystore",
+    "alias": "pip-release"
+  },
+  "appVersionName": "4",
+  "appVersionCode": 4,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://spendwithpip.com/manifest.webmanifest",
+  "fallbackType": "webview",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://spendwithpip.com/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [
+    {
+      "name": "Pip release key",
+      "value": "E3:22:BA:05:FC:34:50:CE:30:62:7F:50:12:D0:51:34:3E:5C:0B:FF:DF:70:2A:55:E5:D5:AD:4E:B5:DA:A2:F3"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "appVersion": "4"
+}

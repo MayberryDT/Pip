@@ -39,7 +39,7 @@ PLAID_ENV=sandbox
     expect(output).toContain(
       "- OPENAI_API_KEY, OPENAI_BASE_URL, or NETLIFY_AI_GATEWAY_BASE_URL plus NETLIFY_AI_GATEWAY_KEY",
     );
-    expect(output).toContain("- PLAID_ENV=sandbox uses Plaid sandbox data, not real bank data.");
+    expect(output).toContain("- PLAID_ENV must be production for beta mode.");
     expect(output).not.toContain("operator-token");
     expect(output).not.toContain("plaid-secret");
   });
