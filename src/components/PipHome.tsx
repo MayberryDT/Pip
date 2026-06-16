@@ -74,6 +74,7 @@ const accountManagementPromptChip: PromptChip = {
   label: "Manage accounts",
   prompt: "Show connected accounts",
 };
+const APP_OPEN_REFRESH_CLIENT_COOLDOWN_MS = 60_000;
 
 export type PipAuthState =
   | {
@@ -116,7 +117,8 @@ export function PipHome({
   const [syncStatus, setSyncStatus] = useState<SyncStatusResponse | null>(null);
   const [hasLoadedServerState, setHasLoadedServerState] = useState(false);
   const [backendReloadKey, setBackendReloadKey] = useState(0);
-  const [hasAttemptedDailyRefresh, setHasAttemptedDailyRefresh] = useState(false);
+  const appOpenRefreshInFlightRef = useRef(false);
+  const lastAppOpenRefreshRequestAtRef = useRef(0);
   const isOnboarding =
     activeAuthState?.status === "guest" || activeAuthState?.status === "needs-consent";
   const result = isOnboarding
@@ -246,33 +248,36 @@ export function PipHome({
   }, [backendReloadKey, liveAccountControlsEnabled, scenario]);
 
   useEffect(() => {
-    const provider = getAppOpenRefreshProvider({
-      liveAccountControlsEnabled,
-      authStatus: activeAuthState?.status,
-      syncStatus,
-      hasAttemptedDailyRefresh,
-      hasPendingSyncJob: serverResult?.freshness?.hasPendingSyncJob,
-    });
-
-    if (!provider) {
+    if (
+      !liveAccountControlsEnabled ||
+      activeAuthState?.status !== "ready" ||
+      !hasLoadedServerState
+    ) {
       return;
     }
 
-    setHasAttemptedDailyRefresh(true);
-    void runRefreshFromChat(provider, "app_open")
-      .then(() => {
-        setBackendReloadKey((current) => current + 1);
-      })
-      .catch(() => {
-        setBackendReloadKey((current) => current + 1);
-      });
+    void requestAppOpenRefresh();
   }, [
     activeAuthState?.status,
-    hasAttemptedDailyRefresh,
+    hasLoadedServerState,
     liveAccountControlsEnabled,
-    serverResult?.freshness?.hasPendingSyncJob,
-    syncStatus,
   ]);
+
+  useEffect(() => {
+    if (!liveAccountControlsEnabled || activeAuthState?.status !== "ready") {
+      return;
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        void requestAppOpenRefresh();
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [activeAuthState?.status, liveAccountControlsEnabled]);
 
   useEffect(() => {
     const reaction = serverResult?.reaction;
@@ -699,11 +704,33 @@ export function PipHome({
     });
   }
 
-  function startConnectData() {
+  async function startConnectData() {
     if (devOnboardingFlow) {
       setThread([]);
       setDevHasConnectedData(true);
       return;
+    }
+
+    if (readyDataAction.kind === "refresh") {
+      const provider = getRefreshProvider(syncStatus);
+
+      if (provider) {
+        try {
+          await runRefreshFromChat(provider, "manual");
+          setBackendReloadKey((current) => current + 1);
+        } catch (error) {
+          const itemId = createThreadItemId();
+          setThread((current) => [
+            ...current,
+            {
+              id: itemId,
+              userText: readyDataAction.prompt,
+              errorText: getClientActionErrorText(error),
+            },
+          ]);
+        }
+        return;
+      }
     }
 
     selectPromptChip({
@@ -913,6 +940,41 @@ export function PipHome({
     if (!response.ok) {
       const retry = payload?.retryAfterSeconds ? ` Try again in ${payload.retryAfterSeconds}s.` : "";
       throw new Error(`${getErrorMessage(payload, "Refresh failed.")}${retry}`);
+    }
+  }
+
+  async function requestAppOpenRefresh() {
+    const now = Date.now();
+
+    if (
+      appOpenRefreshInFlightRef.current ||
+      now - lastAppOpenRefreshRequestAtRef.current < APP_OPEN_REFRESH_CLIENT_COOLDOWN_MS
+    ) {
+      return;
+    }
+
+    appOpenRefreshInFlightRef.current = true;
+    lastAppOpenRefreshRequestAtRef.current = now;
+
+    try {
+      const response = await fetch("/api/sync/app-open", {
+        method: "POST",
+      });
+      const payload = await response.json().catch(() => null);
+
+      if (
+        response.ok &&
+        payload &&
+        typeof payload === "object" &&
+        "status" in payload &&
+        (payload.status === "ran" ||
+          payload.status === "needs_repair" ||
+          payload.status === "failed")
+      ) {
+        setBackendReloadKey((current) => current + 1);
+      }
+    } finally {
+      appOpenRefreshInFlightRef.current = false;
     }
   }
 
@@ -1151,6 +1213,7 @@ function getDefaultPromptChips(
 }
 
 type ReadyDataAction = {
+  kind: "connect" | "refresh" | "repair";
   title: string;
   body: string;
   buttonLabel: string;
@@ -1163,6 +1226,7 @@ function getReadyDataAction(syncStatus: SyncStatusResponse | null): ReadyDataAct
 
   if (connectLabel === "Repair connection") {
     return {
+      kind: "repair",
       title: "Repair your account connection.",
       body:
         connectionMessage ??
@@ -1174,6 +1238,7 @@ function getReadyDataAction(syncStatus: SyncStatusResponse | null): ReadyDataAct
 
   if (canRefreshData(syncStatus)) {
     return {
+      kind: "refresh",
       title: "Refresh your connected data.",
       body: "I see an account connection already. I’ll refresh it before we reconnect anything.",
       buttonLabel: "Refresh data",
@@ -1182,6 +1247,7 @@ function getReadyDataAction(syncStatus: SyncStatusResponse | null): ReadyDataAct
   }
 
   return {
+    kind: "connect",
     title: "Connect your account data.",
     body: "I’ll open Plaid, then we’ll move into chat.",
     buttonLabel: "Connect data",

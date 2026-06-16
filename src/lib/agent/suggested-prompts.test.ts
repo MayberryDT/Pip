@@ -11,19 +11,19 @@ describe("prompt chips", () => {
   it("provides deterministic ready-state financial next steps", () => {
     expect(getSuggestedPrompts(calculatePipCash(fakeSnapshot))).toEqual([
       {
-        id: "ai-what-number-means",
-        label: "What does my $104 mean?",
-        prompt: "What does my Spendable Cash Today number mean?",
+        id: "ai-pattern-assumptions",
+        label: "What pattern are you using?",
+        prompt: "Show the pattern assumptions behind this number",
       },
       {
-        id: "ai-why-today",
-        label: "Why is it $104 today?",
+        id: "ai-data-quality",
+        label: "Check if the data looks right",
+        prompt: "Check data quality",
+      },
+      {
+        id: "ai-biggest-drivers",
+        label: "Show the biggest drivers",
         prompt: "Show the biggest drivers behind today's number",
-      },
-      {
-        id: "ai-teach-money-basic",
-        label: "Teach me a money basic",
-        prompt: "Teach me one useful money basic",
       },
     ]);
   });

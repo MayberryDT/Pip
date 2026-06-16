@@ -106,6 +106,10 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return guidanceResponse(input);
   }
 
+  if (isSpendingOpportunityPrompt(normalized)) {
+    return toolResponse(input, "show_spending_opportunity", {});
+  }
+
   if (isSpendingPrompt(normalized)) {
     if (amountCents === null) {
       if (/\b(any|money|at all|negative)\b/.test(normalized)) {
@@ -249,6 +253,7 @@ function toolResponse(
     define_spendable_cash: "get_spendable_cash_definition",
     show_pattern_assumptions: "get_pattern_assumptions",
     show_recent_spending_pressure: "get_recent_spending_pressure",
+    show_spending_opportunity: "get_spending_opportunity",
     get_financial_guidance_context: "get_financial_guidance_context",
     detect_missing_card: "get_data_quality",
     show_math: "get_pip_cash_math",
@@ -418,6 +423,10 @@ function createToolMessage(response: AgentResponse): string {
   }
 
   if (card?.type === "insight_card") {
+    if (/\b(cutback|cut back|spending opportunity)\b/i.test(`${card.title} ${card.summary}`)) {
+      return `I found a cutback opportunity: ${card.summary}`;
+    }
+
     return "I put the main pieces in a card.";
   }
 
@@ -436,6 +445,13 @@ function isFinancialGuidancePrompt(normalized: string): boolean {
   return (
     /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|is my spending bad|am i broke|why am i broke|i'?m broke|in trouble|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized) ||
     /\bwhy\b.{0,40}\b(can'?t|cannot|cant)\b.{0,40}\bspend\b/.test(normalized)
+  );
+}
+
+function isSpendingOpportunityPrompt(normalized: string): boolean {
+  return (
+    /\b(what|where|which|find|show|spot|identify|help|how)\b.*\b(cut back|cutback|spend less|save money|overspending|over spending|waste|wasteful|stop buying|trim)\b/.test(normalized) ||
+    /\b(cut back|cutback|spend less|save money|overspending|over spending|waste|wasteful|stop buying|trim)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what)\b/.test(normalized)
   );
 }
 

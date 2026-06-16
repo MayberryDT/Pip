@@ -74,6 +74,7 @@ const requestSchema = z.object({
       "low-confidence",
       "missing-card",
       "cash-guardrail",
+      "cutback-dining",
       "negative",
     ])
     .optional(),

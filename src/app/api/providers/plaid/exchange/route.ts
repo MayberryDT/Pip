@@ -113,6 +113,71 @@ async function upsertPlaidInstitution(
     itemId: string;
   },
 ) {
+  const existing = await findPlaidInstitutionForExchange(supabase, input);
+  const payload = {
+    institution_name: input.institutionName,
+    provider_institution_id: input.providerInstitutionId ?? existing?.provider_institution_id ?? null,
+    status: "connected" as const,
+    error_code: null,
+    error_message: null,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from("connected_institutions")
+      .update(payload)
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    await deleteSupersededPlaidInstitutions(supabase, {
+      userId: input.userId,
+      institutionId: data.id,
+      institutionName: data.institution_name,
+      providerInstitutionId: data.provider_institution_id ?? undefined,
+    });
+
+    return data;
+  }
+
+  const { data, error } = await supabase
+    .from("connected_institutions")
+    .insert({
+      user_id: input.userId,
+      provider: "plaid",
+      ...payload,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  await deleteSupersededPlaidInstitutions(supabase, {
+    userId: input.userId,
+    institutionId: data.id,
+    institutionName: data.institution_name,
+    providerInstitutionId: data.provider_institution_id ?? undefined,
+  });
+
+  return data;
+}
+
+async function findPlaidInstitutionForExchange(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  input: {
+    userId: string;
+    institutionName: string;
+    providerInstitutionId?: string;
+    itemId: string;
+  },
+) {
   const { data: existingCredential, error: credentialFindError } = await supabase
     .schema("private")
     .from("provider_credentials")
@@ -141,46 +206,91 @@ async function upsertPlaidInstitution(
     throw existingInstitutionResult.error;
   }
 
-  const existing = existingInstitutionResult?.data ?? null;
-  const payload = {
-    institution_name: input.institutionName,
-    provider_institution_id: input.providerInstitutionId ?? existing?.provider_institution_id ?? null,
-    status: "connected" as const,
-    error_code: null,
-    error_message: null,
-    updated_at: new Date().toISOString(),
-  };
-
-  if (existing) {
-    const { data, error } = await supabase
-      .from("connected_institutions")
-      .update(payload)
-      .eq("id", existing.id)
-      .select("*")
-      .single();
-
-    if (error) {
-      throw error;
-    }
-
-    return data;
+  if (existingInstitutionResult?.data) {
+    return existingInstitutionResult.data;
   }
 
+  if (input.providerInstitutionId) {
+    const { data: providerMatches, error: providerMatchError } = await supabase
+      .from("connected_institutions")
+      .select("*")
+      .eq("user_id", input.userId)
+      .eq("provider", "plaid")
+      .eq("provider_institution_id", input.providerInstitutionId)
+      .order("updated_at", { ascending: false })
+      .limit(1);
+
+    if (providerMatchError) {
+      throw providerMatchError;
+    }
+
+    if (providerMatches?.[0]) {
+      return providerMatches[0];
+    }
+  }
+
+  const { data: nameMatches, error: nameMatchError } = await supabase
+    .from("connected_institutions")
+    .select("*")
+    .eq("user_id", input.userId)
+    .eq("provider", "plaid")
+    .eq("institution_name", input.institutionName)
+    .order("updated_at", { ascending: false })
+    .limit(5);
+
+  if (nameMatchError) {
+    throw nameMatchError;
+  }
+
+  return (nameMatches ?? []).find((institution) =>
+    institution.status === "failed" || institution.status === "revoked",
+  ) ?? null;
+}
+
+async function deleteSupersededPlaidInstitutions(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  input: {
+    userId: string;
+    institutionId: string;
+    institutionName: string;
+    providerInstitutionId?: string;
+  },
+) {
   const { data, error } = await supabase
     .from("connected_institutions")
-    .insert({
-      user_id: input.userId,
-      provider: "plaid",
-      ...payload,
-    })
-    .select("*")
-    .single();
+    .select("id, status, provider_institution_id")
+    .eq("user_id", input.userId)
+    .eq("provider", "plaid")
+    .eq("institution_name", input.institutionName)
+    .neq("id", input.institutionId);
 
   if (error) {
     throw error;
   }
 
-  return data;
+  const supersededIds = (data ?? [])
+    .filter((institution) => {
+      if (input.providerInstitutionId && institution.provider_institution_id === input.providerInstitutionId) {
+        return true;
+      }
+
+      return institution.status === "failed" || institution.status === "revoked";
+    })
+    .map((institution) => institution.id);
+
+  if (supersededIds.length === 0) {
+    return;
+  }
+
+  const { error: deleteError } = await supabase
+    .from("connected_institutions")
+    .delete()
+    .eq("user_id", input.userId)
+    .in("id", supersededIds);
+
+  if (deleteError) {
+    throw deleteError;
+  }
 }
 
 function toErrorBody(error: unknown) {

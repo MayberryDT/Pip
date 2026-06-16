@@ -17,6 +17,7 @@ import type { PipCashResult } from "@/lib/types";
 export type PromptChipFamilyId =
   | "ai-what-number-means"
   | "ai-why-today"
+  | "ai-cutback-opportunity"
   | "ai-biggest-drivers"
   | "ai-recent-charges"
   | "ai-upcoming-bills"
@@ -89,9 +90,9 @@ type PromptChipRenderContext = {
 };
 
 const starterChipFamilyIds = [
-  "ai-what-number-means",
   "ai-why-today",
-  "ai-teach-money-basic",
+  "ai-cutback-opportunity",
+  "ai-next-few-days",
 ] as const satisfies readonly PromptChipFamilyId[];
 
 const readyChipCatalog: Record<PromptChipFamilyId, ChipDefinition> = {
@@ -110,6 +111,12 @@ const readyChipCatalog: Record<PromptChipFamilyId, ChipDefinition> = {
       : "Why is it this amount today?",
     prompt: "Show the biggest drivers behind today's number",
     mode: "starter",
+  },
+  "ai-cutback-opportunity": {
+    id: "ai-cutback-opportunity",
+    label: "What can I cut back on?",
+    prompt: "What can I cut back on from my recent spending?",
+    mode: "context",
   },
   "ai-biggest-drivers": {
     id: "ai-biggest-drivers",
@@ -376,20 +383,21 @@ function prioritizeChipFamilies(
     return [...starterChipFamilyIds];
   }
 
-  const useNegativeHomeDefaults = Boolean(
-    summary.isNegativeSpendableCash &&
-      (job === "home" || job === "broad_chat"),
-  );
-  const jobIds = useNegativeHomeDefaults ? [] : getJobChipFamilyIds(job);
   const state = input.result ? getSpendableCashTodayState(input.result) : "normal";
+  const useStateDefaultsOnly = Boolean(
+    (job === "home" || job === "broad_chat") &&
+      state !== "normal" &&
+      state !== "healthy",
+  );
+  const jobIds = useStateDefaultsOnly ? [] : getJobChipFamilyIds(job);
   const defaultIds =
-    state === "shortfall"
-      ? (["ai-biggest-drivers", "ai-spending-pressure", "ai-upcoming-bills", "ai-cash-flow-basic"] as const)
+    state === "shortfall" || state === "tight"
+      ? (["ai-cutback-opportunity", "ai-spending-pressure", "ai-upcoming-bills", "ai-biggest-drivers"] as const)
       : state === "overspending"
-        ? (["ai-spending-pressure", "ai-test-purchase", "ai-biggest-drivers", "ai-next-few-days"] as const)
+        ? (["ai-cutback-opportunity", "ai-spending-pressure", "ai-upcoming-bills", "ai-next-few-days"] as const)
         : state === "low_confidence" || state === "missing_data"
           ? (["ai-pattern-assumptions", "ai-data-quality", "ai-biggest-drivers", "ai-how-it-works"] as const)
-          : (["ai-why-today", "ai-test-purchase", "ai-next-few-days", "ai-cash-flow-basic"] as const);
+          : (["ai-why-today", "ai-cutback-opportunity", "ai-next-few-days", "ai-cash-flow-basic"] as const);
   return uniqueFamilyIds([...stateIds, ...jobIds, ...defaultIds, "ai-true-balances", "ai-how-it-works"]);
 }
 
@@ -416,6 +424,10 @@ function getQuestionChipFamilyIds(message: string | undefined): PromptChipFamily
 
   if (/\b(upcoming bills?|bills? coming up|recurring|subscriptions?|repeat items?)\b/.test(normalized)) {
     ids.push("ai-upcoming-bills");
+  }
+
+  if (/\b(cut back|cutback|overspending|spending too much|spend less|save money|waste)\b/.test(normalized)) {
+    ids.push("ai-cutback-opportunity");
   }
 
   if (/\b(math|formula|calculation)\b/.test(normalized)) {
@@ -461,6 +473,16 @@ function shouldUseStarterChips(
     return false;
   }
 
+  if (shouldIncludeDiagnosticChip(summary)) {
+    return false;
+  }
+
+  const state = input.result ? getSpendableCashTodayState(input.result) : "normal";
+
+  if (state !== "normal" && state !== "healthy") {
+    return false;
+  }
+
   const hasResponseSurface = Boolean(input.responseCards?.length || input.responseToolNames?.length);
 
   return summary.currentJob === "home" || (summary.currentJob === "broad_chat" && !hasResponseSurface);
@@ -495,7 +517,7 @@ function getJobChipFamilyIds(job: ConversationJob): PromptChipFamilyId[] {
     case "data_quality":
       return ["ai-why-today", "ai-recent-charges", "ai-refresh-data"];
     case "financial_guidance":
-      return ["ai-spending-pressure", "ai-test-purchase", "ai-upcoming-bills", "ai-next-few-days"];
+      return ["ai-cutback-opportunity", "ai-spending-pressure", "ai-upcoming-bills", "ai-next-few-days"];
     case "definition":
       return ["ai-biggest-drivers", "ai-test-purchase", "ai-next-few-days"];
     case "duplicate_follow_up":
@@ -503,7 +525,7 @@ function getJobChipFamilyIds(job: ConversationJob): PromptChipFamilyId[] {
     case "setup":
     case "home":
     case "broad_chat":
-      return ["ai-why-today", "ai-test-purchase", "ai-upcoming-bills", "ai-next-few-days"];
+      return ["ai-why-today", "ai-cutback-opportunity", "ai-next-few-days", "ai-upcoming-bills"];
   }
 }
 

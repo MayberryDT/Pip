@@ -13,6 +13,7 @@ export type PlaidEnvironment = "sandbox" | "production";
 export type PlaidConfig = {
   clientId?: string;
   secret?: string;
+  secretSource?: "PLAID_SECRET" | "PLAID_SANDBOX_SECRET";
   environment: PlaidEnvironment;
   products: Products[];
   countryCodes: CountryCode[];
@@ -20,6 +21,7 @@ export type PlaidConfig = {
   daysRequested: number;
   redirectUri?: string;
   webhookUrl?: string;
+  productionRuntime?: boolean;
 };
 
 export type PlaidReadiness = {
@@ -49,16 +51,27 @@ const plaidCountryCodeMap: Record<string, CountryCode> = {
 };
 
 export function getPlaidConfig(env: Record<string, string | undefined> = process.env): PlaidConfig {
+  const secret = (env.PLAID_SECRET ?? env.PLAID_SANDBOX_SECRET)?.trim() || undefined;
+  const redirectUri = getPlaidRedirectUri(env);
+  const webhookUrl = getPlaidWebhookUrl(env);
+
   return {
     clientId: env.PLAID_CLIENT_ID?.trim() || undefined,
-    secret: (env.PLAID_SECRET ?? env.PLAID_SANDBOX_SECRET)?.trim() || undefined,
+    secret,
+    ...(secret
+      ? { secretSource: env.PLAID_SECRET?.trim() ? "PLAID_SECRET" : "PLAID_SANDBOX_SECRET" }
+      : {}),
     environment: parsePlaidEnvironment(env.PLAID_ENV),
     products: parsePlaidProducts(env.PLAID_PRODUCTS),
     countryCodes: parseCountryCodes(env.PLAID_COUNTRY_CODES),
     clientName: env.PLAID_CLIENT_NAME?.trim() || "Pip",
     daysRequested: parseDaysRequested(env.PLAID_DAYS_REQUESTED),
-    redirectUri: getPlaidRedirectUri(env),
-    webhookUrl: getPlaidWebhookUrl(env),
+    redirectUri,
+    webhookUrl,
+    productionRuntime: isProductionPlaidRuntime(env, {
+      redirectUri,
+      webhookUrl,
+    }),
   };
 }
 
@@ -80,6 +93,12 @@ export function createPlaidClient(config: PlaidConfig = getPlaidConfig()): Plaid
       "plaid",
       "Set PLAID_CLIENT_ID and PLAID_SECRET before connecting Plaid accounts.",
     );
+  }
+
+  const productionIssue = getProductionPlaidConfigIssue(config);
+
+  if (productionIssue) {
+    throw new ProviderUnavailableError("plaid", productionIssue);
   }
 
   return new PlaidApi(
@@ -114,12 +133,21 @@ export async function createPlaidConnectSession(input: {
 }> {
   const config = input.config ?? getPlaidConfig();
   const readiness = getPlaidReadiness(config);
+  const productionIssue = getProductionPlaidConfigIssue(config);
 
   if (!readiness.canCreateLinkToken) {
     return {
       provider: "plaid",
       status: "unavailable",
       message: "Set PLAID_CLIENT_ID and PLAID_SECRET before connecting Plaid accounts.",
+    };
+  }
+
+  if (productionIssue) {
+    return {
+      provider: "plaid",
+      status: "unavailable",
+      message: productionIssue,
     };
   }
 
@@ -175,6 +203,22 @@ export async function createPlaidConnectSession(input: {
 
 function parsePlaidEnvironment(value: string | undefined): PlaidEnvironment {
   return value === "production" ? "production" : "sandbox";
+}
+
+function getProductionPlaidConfigIssue(config: PlaidConfig): string | null {
+  if (!config.productionRuntime) {
+    return null;
+  }
+
+  if (config.environment !== "production") {
+    return "PLAID_ENV must be production for production Plaid connections.";
+  }
+
+  if (config.secretSource === "PLAID_SANDBOX_SECRET") {
+    return "PLAID_SECRET must be configured with the production Plaid secret.";
+  }
+
+  return null;
 }
 
 function parsePlaidProducts(value: string | undefined): Products[] {
@@ -339,6 +383,48 @@ function getDefaultPlaidRedirectOrigin(env: Record<string, string | undefined>):
   }
 
   return undefined;
+}
+
+function isProductionPlaidRuntime(
+  env: Record<string, string | undefined>,
+  urls: {
+    redirectUri?: string;
+    webhookUrl?: string;
+  },
+): boolean {
+  if (env.CONTEXT === "production") {
+    return true;
+  }
+
+  if (env.NODE_ENV !== "production") {
+    return false;
+  }
+
+  return [
+    env.NEXT_PUBLIC_SITE_URL,
+    env.URL,
+    env.DEPLOY_PRIME_URL,
+    urls.redirectUri,
+    urls.webhookUrl,
+  ]
+    .map(normalizeOrigin)
+    .filter((origin): origin is string => Boolean(origin))
+    .some(isKnownProductionPlaidOrigin);
+}
+
+function isKnownProductionPlaidOrigin(origin: string): boolean {
+  try {
+    const hostname = new URL(origin).hostname.toLowerCase();
+
+    return (
+      hostname === "spendwithpip.com" ||
+      hostname === "www.spendwithpip.com" ||
+      hostname === "spendwithpip.netlify.app" ||
+      hostname.endsWith("--spendwithpip.netlify.app")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function isLocalhostOrigin(origin: string): boolean {

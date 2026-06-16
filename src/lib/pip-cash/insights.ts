@@ -1,6 +1,7 @@
 import { classifyTransaction } from "@/lib/pip-cash/classify";
 import {
   addDays,
+  dateToUtc,
   daysInMonth,
   formatDateParts,
   isWithinInclusiveWindow,
@@ -21,8 +22,11 @@ import type {
 
 const DEFAULT_FORECAST_HORIZON_DAYS = 14;
 const MAX_FORECAST_HORIZON_DAYS = 14;
-const RECURRING_LOOKBACK_DAYS = 90;
+const RECURRING_LOOKBACK_DAYS = 180;
 const RECURRING_CARD_HORIZON_DAYS = 45;
+const ACTIVE_MONTHLY_LOOKBACK_DAYS = 45;
+const MONTHLY_INTERVAL_MIN_DAYS = 24;
+const MONTHLY_INTERVAL_MAX_DAYS = 38;
 
 export type SpendingBreakdownGroup = {
   id: string;
@@ -126,7 +130,7 @@ export function buildRecurringActivity(
       transaction.date <= asOfDate &&
       transaction.date >= addDays(asOfDate, -RECURRING_LOOKBACK_DAYS),
     )
-    .filter((transaction) => isRecurringEligibleKind(classifyTransaction(transaction)));
+    .filter((transaction) => isDefaultRecurringActivityCandidate(transaction));
   const grouped = groupBy(transactions, (transaction) => recurringGroupKey(transaction));
   const items: RecurringActivityItem[] = [];
 
@@ -146,7 +150,11 @@ export function buildRecurringActivity(
     asOfDate,
     horizonDays,
     items: items
-      .sort((left, right) => left.expectedDate.localeCompare(right.expectedDate) || Math.abs(right.amountCents) - Math.abs(left.amountCents))
+      .sort((left, right) =>
+        left.expectedDate.localeCompare(right.expectedDate) ||
+        Math.abs(right.amountCents) - Math.abs(left.amountCents) ||
+        left.label.localeCompare(right.label)
+      )
       .slice(0, 8),
   };
 }
@@ -407,9 +415,14 @@ function buildRecurringCandidate(
   asOfDate: string,
 ): RecurringActivityItem | null {
   const sorted = [...transactions].sort((left, right) => left.date.localeCompare(right.date));
-  const latest = sorted.at(-1);
+  const monthlyOccurrences = getMonthlyRecurringOccurrences(sorted);
+  const latest = monthlyOccurrences.at(-1);
 
   if (!latest) {
+    return null;
+  }
+
+  if (latest.date < addDays(asOfDate, -ACTIVE_MONTHLY_LOOKBACK_DAYS)) {
     return null;
   }
 
@@ -417,40 +430,46 @@ function buildRecurringCandidate(
   const kind = classifyTransaction(latest);
   const expectedDate = nextMonthlyDateAfter(latest.date, asOfDate);
   const amountCents = Math.round(
-    sorted.reduce((total, transaction) => total + transaction.amountCents, 0) / sorted.length,
+    monthlyOccurrences.reduce((total, transaction) => total + transaction.amountCents, 0) /
+      monthlyOccurrences.length,
   );
-
-  if (sorted.length >= 2) {
-    return {
-      id: `recurring-${normalizeText(label)}`,
-      label,
-      merchantName: latest.merchantName,
-      expectedDate,
-      amountCents,
-      kind,
-      cadence: "monthly",
-      confidence: getRecurringConfidence(sorted),
-      sourceTransactionCount: sorted.length,
-      lastSeenDate: latest.date,
-    };
-  }
-
-  if (!isLikelySingleTransactionRecurring(latest)) {
-    return null;
-  }
 
   return {
     id: `recurring-${normalizeText(label)}`,
     label,
     merchantName: latest.merchantName,
     expectedDate,
-    amountCents: latest.amountCents,
+    amountCents,
     kind,
     cadence: "monthly",
-    confidence: "low",
-    sourceTransactionCount: 1,
+    confidence: getRecurringConfidence(monthlyOccurrences),
+    sourceTransactionCount: monthlyOccurrences.length,
     lastSeenDate: latest.date,
   };
+}
+
+function getMonthlyRecurringOccurrences(transactions: Transaction[]): Transaction[] {
+  const monthlyGroups = groupBy(transactions, (transaction) => transaction.date.slice(0, 7));
+  const occurrences = [...monthlyGroups.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, monthTransactions]) =>
+      [...monthTransactions].sort((left, right) => left.date.localeCompare(right.date))[0],
+    )
+    .filter((transaction): transaction is Transaction => Boolean(transaction));
+
+  if (occurrences.length < 2) {
+    return [];
+  }
+
+  const intervals = occurrences.slice(1).map((transaction, index) =>
+    daysBetweenDates(occurrences[index].date, transaction.date),
+  );
+
+  if (!intervals.every(isMonthlyInterval)) {
+    return [];
+  }
+
+  return occurrences;
 }
 
 function getRecurringConfidence(transactions: Transaction[]): RecurringActivityItem["confidence"] {
@@ -498,7 +517,25 @@ function addOneCalendarMonth(date: string): string {
   });
 }
 
-function isLikelySingleTransactionRecurring(transaction: Transaction): boolean {
+function isDefaultRecurringActivityCandidate(transaction: Transaction): boolean {
+  const kind = classifyTransaction(transaction);
+
+  if (transaction.amountCents >= 0) {
+    return false;
+  }
+
+  if (kind === "rent" || kind === "fee") {
+    return true;
+  }
+
+  if (kind !== "purchase") {
+    return false;
+  }
+
+  return isLikelyBillOrSubscription(transaction);
+}
+
+function isLikelyBillOrSubscription(transaction: Transaction): boolean {
   const haystack = [
     transaction.description,
     transaction.merchantName,
@@ -506,20 +543,19 @@ function isLikelySingleTransactionRecurring(transaction: Transaction): boolean {
   ].filter(Boolean).join(" ").toLowerCase();
 
   return (
-    classifyTransaction(transaction) === "rent" ||
-    classifyTransaction(transaction) === "income" ||
-    /\b(subscription|premium|membership|rent|payroll|salary|utility|utilities|mobile|phone|insurance|gym)\b/.test(haystack)
+    /\b(subscription|subscriptions|premium|membership|streaming|utility|utilities|electric|electricity|power|water|sewer|internet|broadband|mobile|phone|cellular|wireless|insurance|gym|rent|mortgage)\b/.test(haystack) ||
+    /\b(natural gas|gas bill)\b/.test(haystack)
   );
 }
 
-function isRecurringEligibleKind(kind: TransactionKind): boolean {
-  return (
-    kind === "income" ||
-    kind === "purchase" ||
-    kind === "rent" ||
-    kind === "fee" ||
-    kind === "credit_card_payment"
-  );
+function isMonthlyInterval(dayCount: number): boolean {
+  return dayCount >= MONTHLY_INTERVAL_MIN_DAYS && dayCount <= MONTHLY_INTERVAL_MAX_DAYS;
+}
+
+function daysBetweenDates(startDate: string, endDate: string): number {
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+
+  return Math.round((dateToUtc(endDate) - dateToUtc(startDate)) / millisecondsPerDay);
 }
 
 function recurringGroupKey(transaction: Transaction): string {

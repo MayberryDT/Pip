@@ -190,6 +190,7 @@ type DeterministicAgentToolName =
   | "get_spendable_cash_definition"
   | "get_pattern_assumptions"
   | "get_recent_spending_pressure"
+  | "get_spending_opportunity"
   | "get_spending_breakdown"
   | "get_recurring_activity"
   | "forecast_spendable_cash"
@@ -363,6 +364,14 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     return undefined;
   }
 
+  if (isSpendingOpportunityPrompt(normalized)) {
+    return {
+      toolName: "get_spending_opportunity",
+      args: {},
+      requireCard: true,
+    };
+  }
+
   if (amountCents === null && isFinancialGuidancePrompt(normalized)) {
     return {
       toolName: "get_financial_guidance_context",
@@ -474,6 +483,14 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
       toolName: "get_pip_cash_drivers",
       args: {},
       requireCard: true,
+    };
+  }
+
+  if (isSyncStatusPrompt(normalized)) {
+    return {
+      toolName: "get_sync_status",
+      args: {},
+      requireCard: false,
     };
   }
 
@@ -1305,6 +1322,39 @@ function createPipTools() {
       },
     }),
     tool<typeof emptyToolParameters, PipAgentContext>({
+      name: "get_spending_opportunity",
+      description:
+        "Find the strongest grounded cutback opportunity from recent transaction patterns and make a cutback insight card available.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_spending_opportunity");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const response = runAgentTool("show_spending_opportunity", {}, snapshot);
+        const card = response.cards[0];
+        addAvailableCards(context, response.cards);
+
+        return {
+          availableCards: response.cards,
+          suggestedPrompts: response.promptChips,
+          opportunity:
+            card?.type === "insight_card"
+              ? {
+                  title: card.title,
+                  summary: card.summary,
+                  rowCount: card.rows.length,
+                }
+              : null,
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, PipAgentContext>({
       name: "get_spending_breakdown",
       description:
         "Get grouped rolling-window income, spending, refunds, rent, card payments, top categories, and top merchants, and make the breakdown card available.",
@@ -1665,6 +1715,7 @@ function createPipInstructions(runContext: {
     "If the user asks what Spendable Cash Today means, how Pip works, or what makes the number rise or fall, call get_spendable_cash_definition.",
     "If the user asks what pattern, assumptions, confidence, or baseline I am using, call get_pattern_assumptions.",
     "If the user asks how recent spending affects today's number, pace, over/under pattern, or spending pressure, call get_recent_spending_pressure.",
+    "If the user asks what to cut back on, where they are overspending, what spending looks wasteful, or how to save money from recent spending, call get_spending_opportunity.",
     "If the user asks how they are doing, what you think, what they should do, whether spending is too high, whether to lower the cushion, whether they are broke, or asks for your read, call get_financial_guidance_context.",
     "If the user asks for a trend, forecast, projection, or next-days view, call forecast_spendable_cash.",
     "If the user asks about recurring bills, subscriptions, monthly charges, or likely upcoming repeats, call get_recurring_activity.",
@@ -3560,9 +3611,35 @@ function isRecentSpendingPressurePrompt(normalized: string): boolean {
   );
 }
 
+function isSpendingOpportunityPrompt(normalized: string): boolean {
+  return (
+    /\b(what|where|which|find|show|spot|identify|help|how)\b.*\b(cut back|cutback|spend less|save money|overspending|over spending|waste|wasteful|stop buying|trim)\b/.test(normalized) ||
+    /\b(cut back|cutback|spend less|save money|overspending|over spending|waste|wasteful|stop buying|trim)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what)\b/.test(normalized)
+  );
+}
+
 function isDataQualityPrompt(normalized: string): boolean {
   return /\b(missing card|card missing|missing data|data missing|connect(ed)? data|repair data|stale data|data quality|pending transactions?|pending items?)\b/.test(
     normalized,
+  );
+}
+
+function isSyncStatusPrompt(normalized: string): boolean {
+  if (/^(refresh|sync|update|reload)\b/.test(normalized)) {
+    return false;
+  }
+
+  if (/^(did|does|do|when|why|is|are|was|were)\b.*\b(refresh|sync|update|updated|updating)\??$/.test(normalized)) {
+    return true;
+  }
+
+  return (
+    /\b(current|up to date|updated|fresh|stale|last refresh|last refreshed|last sync|last synced|not updating|sync status|refresh status)\b/.test(normalized) &&
+    /\b(number|spendable cash|spendable cash today|data|accounts?|bank|connection|refresh|sync|updated|current)\b/.test(normalized)
+  ) || (
+    /\b(did|does|do|when|why|is|are|was|were)\b/.test(normalized) &&
+    /\b(refresh|sync|update|updated|updating|current|fresh|stale)\b/.test(normalized) &&
+    /\b(number|spendable cash|data|accounts?|bank|connection|it|this)\b/.test(normalized)
   );
 }
 

@@ -7,21 +7,22 @@ import type { SyncStatus } from "@/lib/data/sync-status";
 describe("prompt chip planner", () => {
   it("returns contextual ready-state chips instead of an empty financial set", () => {
     const plan = planPromptChips({
-      result: calculatePipCash(fakeSnapshot),
+      result: resultWithSpendableState("normal"),
       message: "",
     });
 
     expect(plan.chips).toHaveLength(3);
     expect(plan.chips.map((chip) => chip.id)).toEqual([
-      "ai-what-number-means",
       "ai-why-today",
-      "ai-teach-money-basic",
+      "ai-cutback-opportunity",
+      "ai-next-few-days",
     ]);
     expect(plan.chips.map((chip) => chip.label)).toEqual([
-      "What does my $104 mean?",
       "Why is it $104 today?",
-      "Teach me a money basic",
+      "What can I cut back on?",
+      "What happens in the next few days?",
     ]);
+    expect(plan.chips[1].prompt).toBe("What can I cut back on from my recent spending?");
     expect(plan.chips.map((chip) => chip.label)).not.toContain("Missing card");
     expect(plan.chips.map((chip) => chip.label)).not.toContain("Test purchase");
   });
@@ -79,17 +80,74 @@ describe("prompt chip planner", () => {
     ]);
   });
 
-  it("uses starter chips even when the home number is negative", () => {
+  it("uses tight-state chips when the home number is negative", () => {
     const plan = planPromptChips({
       result: calculatePipCash(getFakeSnapshot("negative")),
       message: "",
     });
 
     expect(plan.chips.map((chip) => chip.id)).toEqual([
-      "ai-what-number-means",
-      "ai-why-today",
-      "ai-teach-money-basic",
+      "ai-cutback-opportunity",
+      "ai-spending-pressure",
+      "ai-upcoming-bills",
     ]);
+  });
+
+  it("prioritizes cutback opportunities for overspending states", () => {
+    const plan = planPromptChips({
+      result: resultWithSpendableState("overspending"),
+      message: "",
+    });
+
+    expect(plan.chips.map((chip) => chip.id)).toEqual([
+      "ai-cutback-opportunity",
+      "ai-spending-pressure",
+      "ai-upcoming-bills",
+    ]);
+  });
+
+  it("prioritizes cutback opportunities after a financial guidance read", () => {
+    const plan = planPromptChips({
+      result: calculatePipCash(fakeSnapshot),
+      message: "Am I spending too much?",
+      responseToolNames: ["get_financial_guidance_context"],
+      responseCards: [
+        {
+          type: "guidance_card",
+          title: "Pip read",
+          stance: "watch",
+          summary: "Recent spending is worth watching.",
+          rows: [],
+        },
+      ],
+    });
+
+    expect(plan.conversationJob).toBe("financial_guidance");
+    expect(plan.chips.map((chip) => chip.id)).toEqual([
+      "ai-cutback-opportunity",
+      "ai-spending-pressure",
+      "ai-upcoming-bills",
+    ]);
+  });
+
+  it("keeps stale sync diagnostics ahead of cutback opportunities", () => {
+    const syncStatus: SyncStatus = {
+      institutions: [],
+      hasStaleInstitution: true,
+      latestSyncRun: null,
+    };
+    const plan = planPromptChips({
+      result: calculatePipCash(fakeSnapshot),
+      message: "",
+      syncStatus,
+    });
+
+    expect(plan.chips.map((chip) => chip.id)).toEqual([
+      "ai-refresh-data",
+      "ai-pattern-assumptions",
+      "ai-data-quality",
+    ]);
+    expect(plan.chips.map((chip) => chip.id)).not.toContain("ai-cutback-opportunity");
   });
 
   it("surfaces one diagnostic chip when the user asks about data quality", () => {
@@ -211,3 +269,24 @@ describe("prompt chip planner", () => {
     ]);
   });
 });
+
+function resultWithSpendableState(state: "normal" | "overspending") {
+  const result = calculatePipCash(fakeSnapshot);
+
+  if (!result.spendableCashToday) {
+    throw new Error("Expected Spendable Cash Today result for test fixture.");
+  }
+
+  return {
+    ...result,
+    warnings: [],
+    dataStates: [],
+    spendableCashToday: {
+      ...result.spendableCashToday,
+      state,
+      confidence: "high" as const,
+      warnings: [],
+      dataStates: [],
+    },
+  };
+}

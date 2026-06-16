@@ -20,9 +20,9 @@ describe("PipHome", () => {
     expect(markup).not.toContain("pip-metric-subtitle");
     expect(markup).not.toContain("This may change if you connect the missing card.");
     expect(markup).toContain("Ask Pip anything...");
-    expect(markup).toContain("What does my $104 mean?");
-    expect(markup).toContain("Why is it $104 today?");
-    expect(markup).toContain("Teach me a money basic");
+    expect(markup).toContain("What pattern are you using?");
+    expect(markup).toContain("Check if the data looks right");
+    expect(markup).toContain("Show the biggest drivers");
     expect(markup).not.toContain("Missing card");
     expect(markup).not.toContain("Why today?");
     expect(markup).not.toContain("Test purchase");
@@ -56,8 +56,8 @@ describe("PipHome", () => {
 
     expect(chips.slice(0, 3).map((chip) => chip.id)).toEqual([
       "manage-accounts",
-      "ai-what-number-means",
-      "ai-why-today",
+      "ai-pattern-assumptions",
+      "ai-data-quality",
     ]);
     expect(chips[0]).toMatchObject({
       label: "Manage accounts",

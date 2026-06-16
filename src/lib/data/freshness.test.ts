@@ -2,7 +2,42 @@ import { describe, expect, it } from "vitest";
 import { getDataFreshnessState } from "@/lib/data/freshness";
 import type { SyncStatus } from "@/lib/data/sync-status";
 
+const repairablePlaidErrorCodes = [
+  "item-login-required",
+  "invalid-credentials",
+  "invalid-mfa",
+  "item-locked",
+  "mfa-not-supported",
+  "user-setup-required",
+  "invalid-access-token",
+  "item-not-found",
+  "user-permission-revoked",
+  "user-account-revoked",
+  "access-not-granted",
+  "no-accounts",
+];
+
 describe("getDataFreshnessState", () => {
+  it("reports fresh when sync status is clean", () => {
+    expect(getDataFreshnessState({ syncStatus: status() })).toBe("fresh");
+  });
+
+  it("reports stale when sync status is missing", () => {
+    expect(getDataFreshnessState({ syncStatus: null })).toBe("stale");
+  });
+
+  it("reports stale when an institution is stale", () => {
+    expect(
+      getDataFreshnessState({
+        syncStatus: status({
+          institution: {
+            isStale: true,
+          },
+        }),
+      }),
+    ).toBe("stale");
+  });
+
   it("prioritizes repair-required institutions", () => {
     expect(
       getDataFreshnessState({
@@ -18,6 +53,50 @@ describe("getDataFreshnessState", () => {
     ).toBe("needs_repair");
   });
 
+  it.each(repairablePlaidErrorCodes)(
+    "maps repairable Plaid code %s to needs_repair",
+    (errorCode) => {
+      expect(
+        getDataFreshnessState({
+          syncStatus: status({
+            institution: {
+              provider: "plaid",
+              status: "failed",
+              errorCode,
+            },
+          }),
+        }),
+      ).toBe("needs_repair");
+    },
+  );
+
+  it("normalizes uppercase underscore Plaid error codes before repair checks", () => {
+    expect(
+      getDataFreshnessState({
+        syncStatus: status({
+          institution: {
+            provider: "plaid",
+            status: "failed",
+            errorCode: "ITEM_LOGIN_REQUIRED",
+          },
+        }),
+      }),
+    ).toBe("needs_repair");
+  });
+
+  it("maps reconnect-required provider failures to needs_repair", () => {
+    expect(
+      getDataFreshnessState({
+        syncStatus: status({
+          institution: {
+            status: "failed",
+            errorCode: "provider-token-decrypt-failed",
+          },
+        }),
+      }),
+    ).toBe("needs_repair");
+  });
+
   it("reports syncing when a pending or running job exists", () => {
     expect(
       getDataFreshnessState({
@@ -27,7 +106,7 @@ describe("getDataFreshnessState", () => {
     ).toBe("syncing");
   });
 
-  it("maps latest failed, partial, stale, and clean states", () => {
+  it("reports failed when the latest sync failed", () => {
     expect(
       getDataFreshnessState({
         syncStatus: status({
@@ -35,6 +114,9 @@ describe("getDataFreshnessState", () => {
         }),
       }),
     ).toBe("failed");
+  });
+
+  it("reports partial when the latest sync partially completed", () => {
     expect(
       getDataFreshnessState({
         syncStatus: status({
@@ -42,16 +124,6 @@ describe("getDataFreshnessState", () => {
         }),
       }),
     ).toBe("partial");
-    expect(
-      getDataFreshnessState({
-        syncStatus: status({
-          institution: {
-            isStale: true,
-          },
-        }),
-      }),
-    ).toBe("stale");
-    expect(getDataFreshnessState({ syncStatus: status() })).toBe("fresh");
   });
 });
 

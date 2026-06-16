@@ -13,6 +13,8 @@ import {
   buildSpendingBreakdown,
 } from "@/lib/pip-cash/insights";
 import { buildFinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
+import { buildFinancialRead } from "@/lib/pip-cash/financial-read";
+import type { SpendingOpportunity } from "@/lib/pip-cash/spending-opportunities";
 import { fakeSnapshot } from "@/lib/fake-data";
 import { formatMoney } from "@/lib/money";
 import type { FinancialSnapshot } from "@/lib/types";
@@ -29,6 +31,7 @@ export const agentToolNames = [
   "define_spendable_cash",
   "show_pattern_assumptions",
   "show_recent_spending_pressure",
+  "show_spending_opportunity",
   "detect_missing_card",
   "show_math",
   "compose_insight_card",
@@ -104,6 +107,9 @@ export function runAgentTool(
     case "show_recent_spending_pressure":
       emptyArgsSchema.parse(rawArgs ?? {});
       return showRecentSpendingPressure(snapshot);
+    case "show_spending_opportunity":
+      emptyArgsSchema.parse(rawArgs ?? {});
+      return showSpendingOpportunity(snapshot);
     case "detect_missing_card":
       emptyArgsSchema.parse(rawArgs ?? {});
       return detectMissingCard(snapshot);
@@ -625,6 +631,74 @@ function showRecentSpendingPressure(snapshot: FinancialSnapshot): AgentResponse 
     cards,
     promptChips: getSuggestedPrompts(result),
     ...baseResponse("show_recent_spending_pressure", cards),
+  };
+}
+
+function showSpendingOpportunity(snapshot: FinancialSnapshot): AgentResponse {
+  const read = buildFinancialRead({
+    snapshot,
+  });
+  const opportunity = read.spendingOpportunities[0];
+
+  if (!opportunity) {
+    return {
+      message: "I need more recent spending history before I can name a useful cutback.",
+      cards: [],
+      promptChips: getSuggestedPrompts(read.result),
+      ...baseResponse("show_spending_opportunity", []),
+    };
+  }
+
+  const card = buildCutbackOpportunityCard(opportunity);
+  const cards: AgentResponse["cards"] = [card];
+
+  return {
+    message: "",
+    cards,
+    promptChips: getSuggestedPrompts(read.result),
+    ...baseResponse("show_spending_opportunity", cards),
+  };
+}
+
+function buildCutbackOpportunityCard(
+  opportunity: SpendingOpportunity,
+): Extract<AgentResponse["cards"][number], { type: "insight_card" }> {
+  const changeText = opportunity.deltaCents > 0
+    ? `up ${formatMoney(opportunity.deltaCents)} from the prior ${opportunity.windowDays}`
+    : `steady versus the prior ${opportunity.windowDays}`;
+  const merchantDetail = opportunity.merchantExamples.length > 0
+    ? opportunity.merchantExamples.join(", ")
+    : `${opportunity.transactionCount} transactions`;
+
+  return {
+    type: "insight_card",
+    title: "Cutback opportunity",
+    summary:
+      `${opportunity.category} is ${formatMoney(opportunity.currentSpendCents)} in the last ${opportunity.windowDays} days, ${changeText} days.`,
+    rows: [
+      {
+        id: "current-window",
+        label: `Last ${opportunity.windowDays} days`,
+        amountCents: -opportunity.currentSpendCents,
+        detail: merchantDetail,
+        tone: "warning",
+      },
+      {
+        id: "previous-window",
+        label: `Prior ${opportunity.windowDays} days`,
+        amountCents: -opportunity.previousSpendCents,
+        detail: `${opportunity.transactionCount} recent ${opportunity.category.toLowerCase()} items.`,
+        tone: "neutral",
+      },
+      {
+        id: "estimated-trim",
+        label: "Possible trim",
+        amountCents: opportunity.estimatedSavingsCents,
+        detail: opportunity.suggestedAction,
+        tone: "positive",
+      },
+    ],
+    footer: `${opportunity.confidence} confidence from ${opportunity.reasonCodes.join(", ")}.`,
   };
 }
 

@@ -15,7 +15,11 @@ const ALL_CARD_TYPES = [
   "spending_breakdown",
   "recurring_activity",
   "spendable_cash_forecast",
+  "missing_card_nudge",
+  "insight_card",
   "guidance_card",
+  "connect_account",
+  "account_connections",
 ];
 
 export const agentEvalCases = [
@@ -90,6 +94,30 @@ export const agentEvalCases = [
     expectedTools: ["get_financial_guidance_context"],
     expectedCards: ["guidance_card"],
     expectedResponseMode: "guidance",
+  },
+  {
+    id: "cutback-opportunity",
+    description: "Cutback prompt should use the deterministic spending opportunity route and a supported insight card.",
+    message: "What can I cut back on?",
+    scenario: "cutback-dining",
+    expectedTools: ["get_spending_opportunity"],
+    expectedCards: ["insight_card"],
+    expectedCardTitlePatterns: ["\\b(cutback|spending opportunity)\\b"],
+    expectedTextPatterns: ["\\$\\d+", "\\b(?:last|past|prior|previous)\\s+(?:14|30)\\s+days?\\b|\\b(?:14|30)-day\\b"],
+    forbiddenCards: ["guidance_card", "spending_breakdown", "recurring_activity", "purchase_simulation"],
+    forbidGenericCutbackAdvice: true,
+  },
+  {
+    id: "overspending-category",
+    description: "Overspending prompt should name a grounded category or merchant instead of generic spending advice.",
+    message: "Where am I overspending?",
+    scenario: "cutback-dining",
+    expectedTools: ["get_spending_opportunity"],
+    expectedCards: ["insight_card"],
+    expectedCardTitlePatterns: ["\\b(cutback|spending opportunity)\\b"],
+    expectedTextPatterns: ["\\$\\d+", "\\b(?:category|merchant|dining|coffee|grocer|restaurant|takeout)\\b"],
+    forbiddenCards: ["guidance_card", "spending_breakdown", "recurring_activity", "purchase_simulation"],
+    forbidGenericCutbackAdvice: true,
   },
   {
     id: "checking-balance-assumption",
@@ -251,6 +279,15 @@ const disallowedTextChecks = [
   { label: "money shorthand", pattern: /-?\$\d+(?:\.\d+)?k\b/i },
 ];
 
+const genericCutbackAdviceChecks = [
+  { label: "tracking spending", pattern: /\bstart by tracking your spending\b/i },
+  { label: "track every purchase", pattern: /\btrack every (?:purchase|expense|transaction)\b/i },
+  { label: "generic budget", pattern: /\b(?:make|create|set up) a budget\b/i },
+  { label: "generic non-essential cutback", pattern: /\bcut back on (?:non[-\s]?essential|unnecessary) (?:spending|expenses|purchases)\b/i },
+  { label: "generic subscription review", pattern: /\breview your (?:subscriptions|spending|expenses)\b/i },
+  { label: "generic savings search", pattern: /\blook for (?:areas|places|ways) (?:where )?you can save\b/i },
+];
+
 const showPromisePattern =
   /\b(?:show|showing|shown|list|listing|pull|view|card|cards|trend view|here is|here are|here's)\b/i;
 const cardWordExclusionPattern = /\b(?:credit cards?|debit cards?)\b/i;
@@ -310,6 +347,24 @@ function getUsedTools(response) {
 
 function getPromptChips(response) {
   return asArray(response?.promptChips);
+}
+
+function getResponseSearchText(response, message) {
+  const cardText = asArray(response?.cards).flatMap((card) => [
+    card?.title,
+    card?.summary,
+    card?.detail,
+    card?.footer,
+    ...asArray(card?.rows).flatMap((row) => [
+      row?.label,
+      row?.valueText,
+      row?.detail,
+    ]),
+  ]);
+
+  return [message, ...cardText]
+    .filter((value) => typeof value === "string")
+    .join(" ");
 }
 
 function wordCount(text) {
@@ -400,6 +455,7 @@ function isSupportedDisplayChip(text) {
     /\b(?:forecast|trend|tomorrow|next day|daily amounts|daily view|7 day|14 day|next 14 days?|upcoming bills?)\b/i.test(text) ||
     /\b(?:recurring|subscriptions?|bills?|coming up)\b/i.test(text) ||
     /\b(?:balances?)\b/i.test(text) ||
+    /\b(?:pattern assumptions?|assumptions behind this number)\b/i.test(text) ||
     /\b(?:connect data|get signed up|google|protected savings|delete data|refresh)\b/i.test(text)
   );
 }
@@ -451,6 +507,37 @@ function validateConversationProgression({ caseDef, message, usedTools, promptCh
   }
 }
 
+function validateExpectedResponseText({ caseDef, response, message, failures }) {
+  const responseText = getResponseSearchText(response, message);
+  const cardTitles = asArray(response?.cards)
+    .map((card) => (typeof card?.title === "string" ? card.title : ""))
+    .filter(Boolean);
+
+  for (const patternSource of asArray(caseDef.expectedTextPatterns)) {
+    const pattern = new RegExp(String(patternSource), "i");
+
+    if (!pattern.test(responseText)) {
+      failures.push(`expected response text pattern not found: ${patternSource}`);
+    }
+  }
+
+  for (const patternSource of asArray(caseDef.expectedCardTitlePatterns)) {
+    const pattern = new RegExp(String(patternSource), "i");
+
+    if (!cardTitles.some((title) => pattern.test(title))) {
+      failures.push(`expected card title pattern not found: ${patternSource}`);
+    }
+  }
+
+  if (caseDef.forbidGenericCutbackAdvice) {
+    for (const check of genericCutbackAdviceChecks) {
+      if (check.pattern.test(responseText)) {
+        failures.push(`cutback answer uses generic advice: ${check.label}`);
+      }
+    }
+  }
+}
+
 export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, httpOk = true, error = null }) {
   const failures = [];
   const message = getResponseMessage(response);
@@ -482,6 +569,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
   }
   validatePromptChips({ promptChips, failures });
   validateConversationProgression({ caseDef, message, usedTools, promptChips, failures });
+  validateExpectedResponseText({ caseDef, response, message, failures });
 
   for (const toolName of asArray(caseDef.expectedTools)) {
     if (!usedTools.includes(toolName)) {

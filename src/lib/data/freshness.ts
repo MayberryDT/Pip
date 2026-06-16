@@ -26,6 +26,7 @@ const repairablePlaidErrorCodes = new Set([
   "access-not-granted",
   "no-accounts",
 ]);
+const reconnectRequiredErrorCodes = new Set(["provider-token-decrypt-failed"]);
 
 export function getDataFreshnessState(input: {
   syncStatus: SyncStatus | null;
@@ -65,5 +66,15 @@ function isRepairableInstitution(institution: SyncStatus["institutions"][number]
     return true;
   }
 
-  return repairablePlaidErrorCodes.has((institution.errorCode ?? "").toLowerCase());
+  const errorCode = normalizeProviderErrorCode(institution.errorCode);
+
+  if (reconnectRequiredErrorCodes.has(errorCode)) {
+    return true;
+  }
+
+  return institution.provider === "plaid" && repairablePlaidErrorCodes.has(errorCode);
+}
+
+function normalizeProviderErrorCode(errorCode: string | null | undefined): string {
+  return (errorCode ?? "").trim().toLowerCase().replace(/_/g, "-");
 }

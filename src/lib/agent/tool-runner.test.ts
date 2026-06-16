@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { runAgentTool } from "@/lib/agent/tool-runner";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
-import { fakeSnapshot } from "@/lib/fake-data";
+import { fakeSnapshot, getFakeSnapshot } from "@/lib/fake-data";
 import type { FinancialSnapshot } from "@/lib/types";
 
 describe("agent tool runner", () => {
@@ -68,6 +68,10 @@ describe("agent tool runner", () => {
     expect(runAgentTool("show_recent_spending_pressure", {}, fakeSnapshot).cards[0]).toMatchObject({
       type: "insight_card",
       title: "Recent spending pressure",
+    });
+    expect(runAgentTool("show_spending_opportunity", {}, getFakeSnapshot("cutback-dining")).cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "Cutback opportunity",
     });
     expect(runAgentTool("detect_missing_card", {}, fakeSnapshot).cards[0]).toMatchObject({
       type: "missing_card_nudge",

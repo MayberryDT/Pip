@@ -26,12 +26,15 @@ describe("institution stale-state detection", () => {
     ).toBe(false);
   });
 
-  it("treats failed provider status as stale even without a timestamp", () => {
-    expect(
-      isInstitutionStale({
-        status: "failed",
-        stale_after: null,
-      }),
-    ).toBe(true);
-  });
+  it.each(["failed", "stale", "revoked"] as const)(
+    "treats %s provider status as stale even without a timestamp",
+    (status) => {
+      expect(
+        isInstitutionStale({
+          status,
+          stale_after: null,
+        }),
+      ).toBe(true);
+    },
+  );
 });

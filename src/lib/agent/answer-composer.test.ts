@@ -126,6 +126,41 @@ describe("answer composer", () => {
     expect(answer.answerPatternId).toBe("forecast");
   });
 
+  it("uses cutback insight card facts instead of a generic insight bridge", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "Generic spending advice.",
+      },
+      userMessage: "What can I cut back on?",
+      cards: [
+        {
+          type: "insight_card",
+          title: "Cutback opportunity",
+          summary: "Dining is up $72 over the last 14 days.",
+          rows: [
+            {
+              id: "current-window",
+              label: "Last 14 days",
+              amountCents: -18600,
+              detail: "Dining and takeout",
+              tone: "warning",
+            },
+          ],
+        },
+      ],
+      usedTools: ["get_spending_opportunity"],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "I found a cutback opportunity: Dining is up $72 over the last 14 days.",
+      answerPatternId: "cutback-opportunity",
+      repetitionAdjusted: false,
+    });
+    expect(answer.message).not.toContain("short summary");
+  });
+
   it("uses model support for non-card answers when it fits", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {

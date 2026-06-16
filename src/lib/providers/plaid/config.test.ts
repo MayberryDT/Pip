@@ -154,6 +154,135 @@ describe("Plaid config", () => {
     expect(JSON.stringify(session)).not.toContain("secret");
   });
 
+  it("blocks production Plaid Link sessions from silently using sandbox env", async () => {
+    const linkTokenCreate = vi.fn().mockResolvedValue({
+      data: {
+        link_token: "link-sandbox-123",
+      },
+    });
+    const client = {
+      linkTokenCreate,
+    } as unknown as PlaidClient;
+
+    const session = await createPlaidConnectSession({
+      userId: "user-1",
+      client,
+      config: getPlaidConfig({
+        CONTEXT: "production",
+        PLAID_CLIENT_ID: "client-id",
+        PLAID_SECRET: "secret",
+        PLAID_ENV: "sandbox",
+        NEXT_PUBLIC_SITE_URL: "https://spendwithpip.com",
+      }),
+    });
+
+    expect(session).toMatchObject({
+      provider: "plaid",
+      status: "unavailable",
+      message: "PLAID_ENV must be production for production Plaid connections.",
+    });
+    expect(linkTokenCreate).not.toHaveBeenCalled();
+  });
+
+  it("requires the production Plaid secret in production runtime", async () => {
+    const linkTokenCreate = vi.fn().mockResolvedValue({
+      data: {
+        link_token: "link-production-123",
+      },
+    });
+    const client = {
+      linkTokenCreate,
+    } as unknown as PlaidClient;
+
+    const session = await createPlaidConnectSession({
+      userId: "user-1",
+      client,
+      config: getPlaidConfig({
+        CONTEXT: "production",
+        PLAID_CLIENT_ID: "client-id",
+        PLAID_SANDBOX_SECRET: "sandbox-secret",
+        PLAID_ENV: "production",
+        NEXT_PUBLIC_SITE_URL: "https://spendwithpip.com",
+      }),
+    });
+
+    expect(session).toMatchObject({
+      provider: "plaid",
+      status: "unavailable",
+      message: "PLAID_SECRET must be configured with the production Plaid secret.",
+    });
+    expect(linkTokenCreate).not.toHaveBeenCalled();
+  });
+
+  it("creates production Plaid Link sessions when production env is explicit", async () => {
+    const linkTokenCreate = vi.fn().mockResolvedValue({
+      data: {
+        link_token: "link-production-123",
+      },
+    });
+    const client = {
+      linkTokenCreate,
+    } as unknown as PlaidClient;
+
+    const session = await createPlaidConnectSession({
+      userId: "user-1",
+      client,
+      config: getPlaidConfig({
+        CONTEXT: "production",
+        PLAID_CLIENT_ID: "client-id",
+        PLAID_SECRET: "production-secret",
+        PLAID_ENV: "production",
+        NEXT_PUBLIC_SITE_URL: "https://spendwithpip.com",
+      }),
+    });
+
+    expect(session).toMatchObject({
+      provider: "plaid",
+      status: "ready",
+      connect: {
+        kind: "plaid",
+        linkToken: "link-production-123",
+        environment: "production",
+        mode: "connect",
+      },
+    });
+    expect(linkTokenCreate).toHaveBeenCalledOnce();
+  });
+
+  it("keeps local sandbox Plaid Link sessions available", async () => {
+    const linkTokenCreate = vi.fn().mockResolvedValue({
+      data: {
+        link_token: "link-sandbox-123",
+      },
+    });
+    const client = {
+      linkTokenCreate,
+    } as unknown as PlaidClient;
+
+    const session = await createPlaidConnectSession({
+      userId: "user-1",
+      client,
+      config: getPlaidConfig({
+        NODE_ENV: "development",
+        PLAID_CLIENT_ID: "client-id",
+        PLAID_SECRET: "sandbox-secret",
+        PLAID_ENV: "sandbox",
+      }),
+    });
+
+    expect(session).toMatchObject({
+      provider: "plaid",
+      status: "ready",
+      connect: {
+        kind: "plaid",
+        linkToken: "link-sandbox-123",
+        environment: "sandbox",
+        mode: "connect",
+      },
+    });
+    expect(linkTokenCreate).toHaveBeenCalledOnce();
+  });
+
   it("creates Plaid update-mode Link sessions without product requests", async () => {
     const linkTokenCreate = vi.fn().mockResolvedValue({
       data: {

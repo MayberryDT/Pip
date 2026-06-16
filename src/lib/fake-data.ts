@@ -8,6 +8,7 @@ export type FakeDataScenario =
   | "low-confidence"
   | "missing-card"
   | "cash-guardrail"
+  | "cutback-dining"
   | "negative";
 
 export const fakeSnapshot: FinancialSnapshot = {
@@ -452,6 +453,125 @@ export const cashGuardrailPipSnapshot = buildPipScenario({
   currentEverydaySpendCents: 65000,
 });
 
+export const cutbackDiningPipSnapshot: FinancialSnapshot = {
+  settings: {
+    asOfDate: "2026-06-20",
+    protectedSavingsMonthlyCents: 20000,
+  },
+  accounts: [
+    {
+      id: "cutback_checking",
+      name: "Everyday Checking",
+      institutionName: "Northstar Bank",
+      kind: "checking",
+      balanceCents: 260000,
+      availableBalanceCents: 258000,
+      lastFour: "1042",
+    },
+    {
+      id: "cutback_visa",
+      name: "Everyday Visa",
+      institutionName: "Northstar Bank",
+      kind: "credit_card",
+      balanceCents: -42000,
+      availableBalanceCents: 300000,
+      lastFour: "8821",
+    },
+  ],
+  transactions: [
+    {
+      id: "cutback_paycheck",
+      accountId: "cutback_checking",
+      date: "2026-06-07",
+      description: "Payroll deposit",
+      merchantName: "Acme Studio",
+      amountCents: 260000,
+      category: "payroll",
+      kind: "income",
+    },
+    {
+      id: "cutback_rent",
+      accountId: "cutback_checking",
+      date: "2026-06-01",
+      description: "June rent",
+      merchantName: "Trailhead Apartments",
+      amountCents: -145000,
+      category: "rent",
+      kind: "rent",
+    },
+    {
+      id: "cutback_dining_1",
+      accountId: "cutback_visa",
+      date: "2026-06-08",
+      description: "Dinner",
+      merchantName: "Mesa Room",
+      amountCents: -7200,
+      category: "dining",
+      kind: "purchase",
+    },
+    {
+      id: "cutback_dining_2",
+      accountId: "cutback_checking",
+      date: "2026-06-11",
+      description: "Takeout",
+      merchantName: "DoorDash",
+      amountCents: -5400,
+      category: "dining",
+      kind: "purchase",
+    },
+    {
+      id: "cutback_dining_3",
+      accountId: "cutback_visa",
+      date: "2026-06-15",
+      description: "Lunch",
+      merchantName: "Cafe Rojo",
+      amountCents: -3200,
+      category: "dining",
+      kind: "purchase",
+    },
+    {
+      id: "cutback_dining_4",
+      accountId: "cutback_visa",
+      date: "2026-06-19",
+      description: "Dinner",
+      merchantName: "Mesa Room",
+      amountCents: -4200,
+      category: "dining",
+      kind: "purchase",
+    },
+    {
+      id: "cutback_prev_dining_1",
+      accountId: "cutback_visa",
+      date: "2026-05-27",
+      description: "Lunch",
+      merchantName: "Cafe Rojo",
+      amountCents: -3100,
+      category: "dining",
+      kind: "purchase",
+    },
+    {
+      id: "cutback_prev_dining_2",
+      accountId: "cutback_checking",
+      date: "2026-06-02",
+      description: "Dinner",
+      merchantName: "Mesa Room",
+      amountCents: -3700,
+      category: "dining",
+      kind: "purchase",
+    },
+    {
+      id: "cutback_transfer",
+      accountId: "cutback_checking",
+      date: "2026-06-13",
+      description: "Transfer to savings",
+      merchantName: "Northstar Bank",
+      amountCents: -50000,
+      category: "transfer",
+      kind: "transfer",
+    },
+  ],
+};
+
 export function getFakeSnapshot(scenario: string | null | undefined): FinancialSnapshot {
   switch (scenario) {
     case "healthy":
@@ -466,6 +586,8 @@ export function getFakeSnapshot(scenario: string | null | undefined): FinancialS
       return missingCardPipSnapshot;
     case "cash-guardrail":
       return cashGuardrailPipSnapshot;
+    case "cutback-dining":
+      return cutbackDiningPipSnapshot;
     case "negative":
       return negativePipCashSnapshot;
     case "default":
@@ -483,6 +605,7 @@ export function isFakeDataScenario(value: string | null | undefined): value is F
     value === "low-confidence" ||
     value === "missing-card" ||
     value === "cash-guardrail" ||
+    value === "cutback-dining" ||
     value === "negative"
   );
 }

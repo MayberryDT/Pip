@@ -13,7 +13,7 @@ import {
 import { createMockModelClient } from "../../../tests/helpers/mock-agent-runtime";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { buildFinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
-import { fakeSnapshot } from "@/lib/fake-data";
+import { fakeSnapshot, getFakeSnapshot } from "@/lib/fake-data";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -408,6 +408,24 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("calls the spending opportunity tool for cutback prompts", async () => {
+    const response = await runAIAgent(
+      {
+        message: "What can I cut back on?",
+        snapshot: getFakeSnapshot("cutback-dining"),
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_spending_opportunity"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "Cutback opportunity",
+    });
+    expect(response.message).toContain("cutback opportunity");
+  });
+
   it("uses an insight card for payday impact questions", async () => {
     const response = await runAIAgent(
       { message: "How does payday affect my money?" },
@@ -534,6 +552,61 @@ describe("runAIAgent", () => {
       }),
     ).toMatchObject({
       toolName: "get_pip_cash_math",
+    });
+  });
+
+  it("routes cutback prompts through the real forced-tool classifier", () => {
+    for (const message of [
+      "What can I cut back on?",
+      "Where am I overspending?",
+      "How can I save money this week?",
+      "Find waste in my spending",
+      "What should I stop buying?",
+    ]) {
+      expect(
+        __agentTestHooks.getForcedAgentTool({
+          message,
+        }),
+      ).toMatchObject({
+        toolName: "get_spending_opportunity",
+        requireCard: true,
+      });
+    }
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Am I spending too much?",
+      }),
+    ).toMatchObject({
+      toolName: "get_financial_guidance_context",
+    });
+  });
+
+  it("routes currentness and update-status prompts to sync status", () => {
+    for (const message of [
+      "Is this number current?",
+      "Is my Spendable Cash Today up to date?",
+      "Did you refresh?",
+      "Did you refresh my data?",
+      "Why is this not updating?",
+      "When did this last sync?",
+    ]) {
+      expect(
+        __agentTestHooks.getForcedAgentTool({
+          message,
+        }),
+      ).toMatchObject({
+        toolName: "get_sync_status",
+        requireCard: false,
+      });
+    }
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Refresh my connected data",
+      }),
+    ).not.toMatchObject({
+      toolName: "get_sync_status",
     });
   });
 
@@ -834,7 +907,7 @@ describe("runAIAgent", () => {
         },
         snapshot: fakeSnapshot,
       } as never,
-      calculatePipCash(fakeSnapshot),
+      createNormalReadyResult(),
       {
         input: {
           message: "I can help.",
@@ -845,9 +918,9 @@ describe("runAIAgent", () => {
     );
 
     expect(plan.chips.map((chip) => chip.id)).toEqual([
-      "ai-what-number-means",
       "ai-why-today",
-      "ai-teach-money-basic",
+      "ai-cutback-opportunity",
+      "ai-next-few-days",
     ]);
   });
 
@@ -886,7 +959,7 @@ describe("runAIAgent", () => {
         },
         snapshot: fakeSnapshot,
       } as never,
-      calculatePipCash(fakeSnapshot),
+      createNormalReadyResult(),
       {
         input: {
           message: "I can help.",
@@ -897,11 +970,12 @@ describe("runAIAgent", () => {
     );
 
     expect(plan.chips.map((chip) => chip.label)).toEqual([
-      "What does my $104 mean?",
       "Why is it $104 today?",
-      "Teach me a money basic",
+      "What can I cut back on?",
+      "What happens in the next few days?",
     ]);
-    expect(plan.chips[1]?.prompt).toBe("Show the biggest drivers behind today's number");
+    expect(plan.chips[0]?.prompt).toBe("Show the biggest drivers behind today's number");
+    expect(plan.chips[1]?.prompt).toBe("What can I cut back on from my recent spending?");
   });
 
   it("keeps prompt-chip refreshes populated when every generated chip repeats recent history", () => {
@@ -941,7 +1015,7 @@ describe("runAIAgent", () => {
         },
         snapshot: fakeSnapshot,
       } as never,
-      calculatePipCash(fakeSnapshot),
+      createNormalReadyResult(),
       {
         input: {
           message: "Create prompt chips for the current Pip screen.",
@@ -954,9 +1028,9 @@ describe("runAIAgent", () => {
 
     expect(plan.chips).toHaveLength(3);
     expect(plan.chips.map((chip) => chip.label)).toEqual([
-      "What does my $104 mean?",
       "Why is it $104 today?",
-      "Teach me a money basic",
+      "What can I cut back on?",
+      "What happens in the next few days?",
     ]);
   });
 
@@ -1302,4 +1376,25 @@ function createGuidanceSelectorContext(
     guidanceContext: buildFinancialGuidanceContext(calculatePipCash(fakeSnapshot)),
     fallbackFinalOutput: options.fallbackFinalOutput,
   } as Parameters<typeof __agentTestHooks.selectGuidanceCard>[1];
+}
+
+function createNormalReadyResult() {
+  const result = calculatePipCash(fakeSnapshot);
+
+  if (!result.spendableCashToday) {
+    return result;
+  }
+
+  return {
+    ...result,
+    warnings: [],
+    dataStates: [],
+    spendableCashToday: {
+      ...result.spendableCashToday,
+      state: "normal" as const,
+      confidence: "high" as const,
+      warnings: [],
+      dataStates: [],
+    },
+  };
 }

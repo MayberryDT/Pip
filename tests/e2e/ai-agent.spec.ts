@@ -337,6 +337,16 @@ test("connect data does not leave the chat stuck while Plaid is loading", async 
       }),
     });
   });
+  await page.route("**/api/sync/app-open", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "no_provider",
+        message: "No connected financial provider can refresh yet.",
+      }),
+    });
+  });
   await page.route("**/api/events", async (route) => {
     await route.fulfill({
       status: 200,
@@ -419,6 +429,16 @@ test("connect data completes Plaid exchange and syncs back to the same Pip scree
         institutions: [],
         latestSyncRun: null,
         hasStaleInstitution: false,
+      }),
+    });
+  });
+  await page.route("**/api/sync/app-open", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "no_provider",
+        message: "No connected financial provider can refresh yet.",
       }),
     });
   });
@@ -564,6 +584,16 @@ test("live data loading does not wipe same-screen onboarding chat cards", async 
         institutions: [],
         latestSyncRun: null,
         hasStaleInstitution: false,
+      }),
+    });
+  });
+  await page.route("**/api/sync/app-open", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        status: "no_provider",
+        message: "No connected financial provider can refresh yet.",
       }),
     });
   });

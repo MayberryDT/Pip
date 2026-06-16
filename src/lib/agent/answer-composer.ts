@@ -252,6 +252,13 @@ function composeCardBackedAnswer(
         answerPatternId: "math-breakdown",
       };
     case "insight_card":
+      if (isCutbackInsightCard(card)) {
+        return {
+          message: composeCutbackInsightBridge(card),
+          answerPatternId: "cutback-opportunity",
+        };
+      }
+
       return {
         message: `I built a short summary for ${card.title.toLowerCase()}.`,
         answerPatternId: "insight-card",
@@ -376,6 +383,22 @@ function composeDeterministicNoCardAnswer(
 
 function getSpendableCents(result: PipCashResult): number {
   return result.spendableCashToday?.spendableCashTodayCents ?? Math.max(0, result.pipCashTodayCents);
+}
+
+function isCutbackInsightCard(card: Extract<AgentCard, { type: "insight_card" }>): boolean {
+  return /\b(cutback|cut back|spending opportunity)\b/i.test(`${card.title} ${card.summary}`);
+}
+
+function composeCutbackInsightBridge(card: Extract<AgentCard, { type: "insight_card" }>): string {
+  const summary = card.summary.replace(/\s+/g, " ").trim();
+  const message = summary
+    ? `I found a cutback opportunity: ${summary}`
+    : "I found a cutback opportunity in your recent spending.";
+
+  return fitVisibleMessage(message, {
+    maxChars: 260,
+    maxWords: 45,
+  });
 }
 
 function isCreditCardDiscussion(message: string): boolean {
