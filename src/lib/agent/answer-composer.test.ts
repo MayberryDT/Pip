@@ -199,6 +199,42 @@ describe("answer composer", () => {
     });
   });
 
+  it("keeps general spending advice conversational and card-free", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "I can show a spending breakdown.",
+      },
+      userMessage: "How do I lower my spending without feeling miserable?",
+      cards: [],
+      usedTools: [],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "Start with one small spending rule: choose one category, set a weekly cap, and keep one low-cost thing you still enjoy.",
+      answerPatternId: "spending-advice",
+    });
+  });
+
+  it("replaces unsupported no-card view references on broad prompts", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "I found it is $104 today. A missing card warning could tweak things.",
+      },
+      userMessage: "purple banana waterfall",
+      cards: [],
+      usedTools: [],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "I’m not sure what you mean yet. Ask about today’s number or test a specific purchase amount.",
+      answerPatternId: "clarify",
+    });
+  });
+
   it("fits long model drafts to the visible response limits", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
@@ -254,6 +290,43 @@ describe("answer composer", () => {
       message: "That same answer still applies. I can take it from another angle.",
       answerPatternId: "duplicate-follow-up",
       repeatedMessage: true,
+      repetitionAdjusted: true,
+    });
+  });
+
+  it("does not let duplicate no-card follow-ups describe a hidden card", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "I found the main drivers behind today's number.",
+      },
+      userMessage: "why?",
+      history: [
+        {
+          role: "user",
+          content: "Why this number?",
+        },
+        {
+          role: "assistant",
+          content: "I found the main drivers behind today's number.",
+        },
+      ],
+      conversationState: {
+        shownCards: [
+          {
+            type: "pip_cash_explanation",
+          },
+        ],
+        lastToolNames: ["get_pip_cash_drivers"],
+      },
+      cards: [],
+      usedTools: [],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "That same answer still applies. I can take it from another angle.",
+      answerPatternId: "duplicate-follow-up",
       repetitionAdjusted: true,
     });
   });

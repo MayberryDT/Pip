@@ -37,12 +37,17 @@ export type ConnectedInstitution = {
 
 export type FinancialProviderName = ConnectSession["provider"];
 
+export type ProviderSyncOptions = {
+  institutionId?: string;
+};
+
 export type ProviderInstitutionSyncSuccess = {
   type: "success";
   connection: ConnectedInstitution;
   accounts: Account[];
   transactions: Transaction[];
   balances: AccountBalanceSummary[];
+  removedTransactionProviderIds?: string[];
   commit?: () => Promise<void>;
 };
 
@@ -69,5 +74,8 @@ export interface FinancialDataProvider {
   syncAccounts(userId: string): Promise<Account[]>;
   syncTransactions(userId: string): Promise<Transaction[]>;
   syncBalances(userId: string): Promise<AccountBalanceSummary[]>;
-  syncConnectedInstitutions?(userId: string): Promise<ProviderInstitutionSyncResult[]>;
+  syncConnectedInstitutions?(
+    userId: string,
+    options?: ProviderSyncOptions,
+  ): Promise<ProviderInstitutionSyncResult[]>;
 }

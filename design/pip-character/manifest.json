@@ -1,0 +1,57 @@
+{
+  "modelVersion": "v001",
+  "sourceType": "procedural_blender",
+  "approvalStatus": "needs-human-review",
+  "productionExportAllowed": false,
+  "activePlan": "design/pip-character/pip-v001-reference-match-optimized-execution-plan-v7.md",
+  "currentAcceptedRun": "material-lookdev-v1",
+  "finalQaRuns": {
+    "broad": "final-reference-match-v1",
+    "bodyOnly": "final-body-only-qa-v1",
+    "contactAudit": "final-contact-audit-v1"
+  },
+  "canonicalReference": "design/pip-character/references/pip-reference-sheet-v001.png",
+  "sourceBlend": "design/pip-character/generated/pip_v001_reference_matched.blend",
+  "generator": "design/pip-character/blender/create_pip_v001_reference_matched.py",
+  "finalReviewArtifacts": {
+    "humanReviewPacket": "design/pip-character/generated/qa/final_human_review_packet_v1.md",
+    "completionAudit": "design/pip-character/generated/qa/final_completion_audit_v1.md",
+    "finalDossier": "design/pip-character/generated/qa/final_reference_match_v1.md",
+    "artifactCurrencyAudit": "design/pip-character/generated/qa/final_artifact_currency_audit_v1.md",
+    "broadQaSheet": "design/pip-character/generated/previews/pip_reference_matched_qa_sheet.png",
+    "bodyTechnicalQaSheet": "design/pip-character/generated/previews/pip_reference_matched_technical_qa_sheet.png",
+    "contactAuditSheet": "design/pip-character/generated/previews/pip_reference_matched_contact_audit_sheet.png",
+    "finalTechnicalQaSheet": "design/pip-character/generated/previews/pip_reference_matched_final_technical_qa_sheet.png",
+    "contactAuditManifest": "design/pip-character/generated/qa/contact_audit/final_contact_audit_v1.json"
+  },
+  "requiredIdentityElements": [
+    "sage_pebble_body",
+    "dot_eyes",
+    "gentle_smile",
+    "tiny_arms",
+    "leafy_branch"
+  ],
+  "characterStates": [
+    "normal",
+    "happy",
+    "thinking",
+    "careful",
+    "concerned",
+    "uncertain",
+    "shortfall",
+    "wave"
+  ],
+  "sizes": [
+    "tiny",
+    "small",
+    "medium",
+    "hero"
+  ],
+  "views": [
+    "front",
+    "three_quarter",
+    "side",
+    "back",
+    "hero"
+  ]
+}

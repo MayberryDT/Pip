@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  loadPlaidCredentialByItemId,
   loadPlaidCredentialsForUser,
   storePlaidCredential,
   storePlaidTransactionCursor,
@@ -120,6 +121,44 @@ describe("Plaid credential store", () => {
     ]);
     expect(JSON.stringify(credentials)).not.toContain("access-token-secret");
   });
+
+  it("loads Plaid credentials by item ID for webhook routing", async () => {
+    const key = Buffer.alloc(32, 8).toString("base64");
+    vi.stubEnv("PIP_PROVIDER_TOKEN_KEY_BASE64", key);
+    const credential = await loadPlaidCredentialByItemId(
+      "item-1",
+      createPrivateCredentialReadClient([
+        {
+          institution_id: "institution-1",
+          user_id: "user-1",
+          provider: "plaid",
+          teller_enrollment_id: null,
+          plaid_item_id: "item-1",
+          access_token_ciphertext: encryptProviderToken("access-token-secret", key),
+          refresh_token_ciphertext: null,
+          certificate_ref: null,
+          metadata: {
+            institutionName: "Northstar Bank",
+            environment: "sandbox",
+            providerInstitutionId: "ins_123",
+          },
+          created_at: "2026-06-05T00:00:00.000Z",
+          updated_at: "2026-06-05T00:00:00.000Z",
+        },
+      ]),
+    );
+
+    expect(credential).toEqual(
+      expect.objectContaining({
+        institutionId: "institution-1",
+        userId: "user-1",
+        itemId: "item-1",
+        accessToken: "access-token-secret",
+        institutionName: "Northstar Bank",
+        providerInstitutionId: "ins_123",
+      }),
+    );
+  });
 });
 
 function createPrivateCredentialClient(
@@ -204,6 +243,12 @@ function createPrivateCredentialReadClient(
     order() {
       return Promise.resolve({
         data: rows,
+        error: null,
+      });
+    },
+    maybeSingle() {
+      return Promise.resolve({
+        data: rows[0] ?? null,
         error: null,
       });
     },

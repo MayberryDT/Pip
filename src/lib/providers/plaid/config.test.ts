@@ -52,6 +52,38 @@ describe("Plaid config", () => {
     expect(config.redirectUri).toBe("https://spendwithpip.com/plaid/oauth");
   });
 
+  it("derives the Plaid webhook URL from a public HTTPS site URL", () => {
+    const config = getPlaidConfig({
+      PLAID_CLIENT_ID: "client-id",
+      PLAID_SECRET: "secret",
+      NEXT_PUBLIC_SITE_URL: "https://spendwithpip.com/some/path",
+    });
+
+    expect(config.webhookUrl).toBe("https://spendwithpip.com/api/webhooks/plaid");
+  });
+
+  it("prefers an explicit public Plaid webhook URL", () => {
+    const config = getPlaidConfig({
+      PLAID_CLIENT_ID: "client-id",
+      PLAID_SECRET: "secret",
+      NEXT_PUBLIC_SITE_URL: "https://spendwithpip.com",
+      PLAID_WEBHOOK_URL: "https://hooks.spendwithpip.com/plaid?ignored=true",
+    });
+
+    expect(config.webhookUrl).toBe("https://hooks.spendwithpip.com/plaid");
+  });
+
+  it("does not configure Plaid webhooks for localhost URLs", () => {
+    const config = getPlaidConfig({
+      PLAID_CLIENT_ID: "client-id",
+      PLAID_SECRET: "secret",
+      NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
+      PLAID_WEBHOOK_URL: "http://localhost:3000/api/webhooks/plaid",
+    });
+
+    expect(config.webhookUrl).toBeUndefined();
+  });
+
   it("creates a client-safe Link session without exposing credentials", async () => {
     const linkTokenCreate = vi.fn().mockResolvedValue({
       data: {
@@ -70,6 +102,7 @@ describe("Plaid config", () => {
         PLAID_SECRET: "secret",
         PLAID_CLIENT_NAME: "Spendable",
         PLAID_REDIRECT_URI: "https://spendwithpip.com/plaid/oauth",
+        NEXT_PUBLIC_SITE_URL: "https://spendwithpip.com",
       }),
     });
 
@@ -90,6 +123,7 @@ describe("Plaid config", () => {
         products: [Products.Transactions],
         country_codes: [CountryCode.Us],
         redirect_uri: "https://spendwithpip.com/plaid/oauth",
+        webhook: "https://spendwithpip.com/api/webhooks/plaid",
         user: {
           client_user_id: "user-1",
         },
@@ -116,6 +150,7 @@ describe("Plaid config", () => {
         PLAID_CLIENT_ID: "client-id",
         PLAID_SECRET: "secret",
         PLAID_PRODUCTS: "transactions",
+        NEXT_PUBLIC_SITE_URL: "https://spendwithpip.com",
       }),
     });
 
@@ -143,6 +178,7 @@ describe("Plaid config", () => {
       expect.not.objectContaining({
         products: expect.anything(),
         transactions: expect.anything(),
+        webhook: expect.anything(),
       }),
     );
     expect(JSON.stringify(session)).not.toContain("access-token");

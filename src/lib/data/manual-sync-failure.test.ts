@@ -6,6 +6,7 @@ import type { Database } from "@/lib/supabase/database.types";
 
 const mocks = vi.hoisted(() => ({
   getFinancialDataProvider: vi.fn(),
+  loadCachedPipCashResultForUser: vi.fn(),
   loadFinancialSnapshotForUser: vi.fn(),
   recordProductEvent: vi.fn(),
 }));
@@ -26,11 +27,13 @@ vi.mock("@/lib/data/product-events", () => ({
 }));
 
 vi.mock("@/lib/data/financial-repository", () => ({
+  loadCachedPipCashResultForUser: mocks.loadCachedPipCashResultForUser,
   loadFinancialSnapshotForUser: mocks.loadFinancialSnapshotForUser,
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mocks.loadCachedPipCashResultForUser.mockResolvedValue(null);
   mocks.loadFinancialSnapshotForUser.mockResolvedValue(null);
   mocks.recordProductEvent.mockResolvedValue(undefined);
 });
@@ -616,6 +619,7 @@ function createCaptures() {
     syncRunUpdates: [] as Capture[],
     institutionUpdates: [] as Capture[],
     pipCashSnapshotInserts: [] as Record<string, unknown>[],
+    reactionEventInserts: [] as Record<string, unknown>[],
     upserts: [] as Array<{
       tableName: string;
       rows: Record<string, unknown>[];
@@ -648,6 +652,10 @@ function createQuery(tableName: string, captures: ReturnType<typeof createCaptur
       conditions.push([column, value]);
       return query;
     },
+    gte(column: string, value: unknown) {
+      conditions.push([column, value]);
+      return query;
+    },
     order() {
       return query;
     },
@@ -660,6 +668,10 @@ function createQuery(tableName: string, captures: ReturnType<typeof createCaptur
 
       if (tableName === "pip_cash_snapshots") {
         captures.pipCashSnapshotInserts.push(row);
+      }
+
+      if (tableName === "pip_reaction_events") {
+        captures.reactionEventInserts.push(row);
       }
 
       return query;
@@ -720,6 +732,32 @@ function createQuery(tableName: string, captures: ReturnType<typeof createCaptur
         });
       }
 
+      if (tableName === "pip_reaction_events" && operation === "insert") {
+        return Promise.resolve({
+          data: {
+            id: "reaction-1",
+            user_id: "user-1",
+            previous_snapshot_id: null,
+            current_snapshot_id: null,
+            previous_state: null,
+            current_state: "shortfall",
+            spendable_delta_cents: 0,
+            behavior_adjustment_delta_cents: 0,
+            shortfall_delta_cents: 0,
+            cash_reality_adjustment_delta_cents: 0,
+            confidence_change: null,
+            trigger: "manual_refresh",
+            reaction_type: "shortfall",
+            intensity: 2,
+            summary: "No extra room today. Essentials first.",
+            seen_at: null,
+            created_at: "2026-06-05T12:00:00.000Z",
+            ...(Array.isArray(payload) ? {} : payload),
+          },
+          error: null,
+        });
+      }
+
       return Promise.resolve({
         data: null,
         error: null,
@@ -749,6 +787,13 @@ function resolveQuery(tableName: string, operation: string | null, selectedColum
           provider_account_id: "provider-account-1",
         },
       ],
+      error: null,
+    };
+  }
+
+  if (tableName === "pip_reaction_events" && operation === "select") {
+    return {
+      data: [],
       error: null,
     };
   }

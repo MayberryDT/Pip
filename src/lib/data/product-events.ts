@@ -48,6 +48,15 @@ export const productEventNames = [
   "institution_removal_requested",
   "institution_removed",
   "institution_removal_failed",
+  "pip_sync_job_created",
+  "pip_sync_job_completed",
+  "pip_sync_job_failed",
+  "pip_reaction_created",
+  "pip_reaction_seen",
+  "pip_freshness_viewed",
+  "plaid_webhook_received",
+  "plaid_webhook_ignored",
+  "plaid_webhook_failed",
 ] as const;
 
 export type ProductEventName = (typeof productEventNames)[number];

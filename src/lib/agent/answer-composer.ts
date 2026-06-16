@@ -72,6 +72,15 @@ export function composeAgentVisibleAnswer(
     onboardingState: input.conversationState?.onboardingState,
   });
 
+  if (conversationSummary.duplicateFollowUp && input.cards.length === 0) {
+    return {
+      message: "That same answer still applies. I can take it from another angle.",
+      answerPatternId: "duplicate-follow-up",
+      repeatedMessage: modelRepeated,
+      repetitionAdjusted: true,
+    };
+  }
+
   if (isGreetingPrompt(input.userMessage) && input.cards.length === 0 && input.usedTools.length === 0) {
     return {
       message: "I can help with your Spendable Cash Today. Ask what changed or whether a specific purchase fits.",
@@ -341,10 +350,24 @@ function composeDeterministicNoCardAnswer(
     };
   }
 
+  if (input.usedTools.length === 0 && isGeneralSpendingAdvicePrompt(input.userMessage)) {
+    return {
+      message: "Start with one small spending rule: choose one category, set a weekly cap, and keep one low-cost thing you still enjoy.",
+      answerPatternId: "spending-advice",
+    };
+  }
+
   if (isCreditCardDiscussion(input.userMessage) && input.usedTools.length === 0) {
     return {
       message: "I can help with credit cards. We can talk through payoff timing, card use, or how a specific purchase would affect today.",
       answerPatternId: "credit-card-chat",
+    };
+  }
+
+  if (input.usedTools.length === 0 && hasUnsupportedNoCardReference(input.modelOutput)) {
+    return {
+      message: "I’m not sure what you mean yet. Ask about today’s number or test a specific purchase amount.",
+      answerPatternId: "clarify",
     };
   }
 
@@ -360,6 +383,16 @@ function isCreditCardDiscussion(message: string): boolean {
     !/\b(show|list|pull|view|transactions?|charges?|payments?|breakdown)\b/.test(message.toLowerCase());
 }
 
+function hasUnsupportedNoCardReference(output: AgentAnswerModelOutput): boolean {
+  const normalized = `${output.message} ${output.support ?? ""}`.toLowerCase();
+
+  if (/\b(?:credit|debit) cards?\b/.test(normalized)) {
+    return false;
+  }
+
+  return /\b(cards?|view|trend view|this card|the card|the view|missing card)\b/.test(normalized);
+}
+
 function isMoneyBasicPrompt(message: string): boolean {
   const normalized = message.toLowerCase();
 
@@ -368,6 +401,13 @@ function isMoneyBasicPrompt(message: string): boolean {
       /\b(money|spend|spending|cash|budget|finance|financial|basic|something)\b/.test(normalized) ||
       normalized.trim() === "teach me something"
     );
+}
+
+function isGeneralSpendingAdvicePrompt(message: string): boolean {
+  const normalized = message.toLowerCase();
+
+  return /\b(lower|reduce|cut|spend less|control|slow down|curb)\b/.test(normalized) &&
+    /\b(spending|spend|expenses?|budget|money)\b/.test(normalized);
 }
 
 function getRepetitionAdjustedMessage(

@@ -247,7 +247,9 @@ describe("PlaidProvider contract", () => {
             accounts,
             added: request.access_token === "access-token-good" ? transactions : [],
             modified: [],
-            removed: [],
+            removed: request.access_token === "access-token-good"
+              ? [{ transaction_id: "removed-tx-1" }]
+              : [],
             next_cursor: "cursor-next",
             has_more: false,
             request_id: "request-1",
@@ -301,6 +303,7 @@ describe("PlaidProvider contract", () => {
           id: "tx_1",
         }),
       ],
+      removedTransactionProviderIds: ["removed-tx-1"],
     });
     await expect(success?.type === "success" ? success.commit?.() : undefined).resolves.toBeUndefined();
     expect(transactionCursorStore).toHaveBeenCalledWith({
@@ -318,6 +321,67 @@ describe("PlaidProvider contract", () => {
         repairRequired: true,
       },
     });
+  });
+
+  it("can sync a targeted Plaid institution", async () => {
+    const institutionCredentialLoader = vi.fn().mockResolvedValue({
+      institutionId: "institution-target",
+      userId: "user_1",
+      itemId: "item-target",
+      accessToken: "access-token-target",
+      institutionName: "Target Bank",
+      environment: "sandbox",
+      transactionCursor: "cursor-target",
+    });
+    const credentialsLoader = vi.fn();
+    const targetedProvider = new PlaidProvider({
+      client: {
+        linkTokenCreate: vi.fn(),
+        itemPublicTokenExchange: vi.fn(),
+        accountsGet: vi.fn().mockResolvedValue({
+          data: {
+            accounts,
+          },
+        }),
+        transactionsSync: vi.fn().mockResolvedValue({
+          data: {
+            accounts,
+            added: transactions,
+            modified: [],
+            removed: [],
+            next_cursor: "cursor-next-target",
+            has_more: false,
+            request_id: "request-1",
+          },
+        }),
+      } as unknown as PlaidClient,
+      config: getPlaidConfig({
+        PLAID_CLIENT_ID: "client-id",
+        PLAID_SECRET: "secret",
+      }),
+      credentialsLoader,
+      institutionCredentialLoader,
+      transactionCursorStore: vi.fn(),
+    });
+
+    const results = await targetedProvider.syncConnectedInstitutions("user_1", {
+      institutionId: "institution-target",
+    });
+
+    expect(credentialsLoader).not.toHaveBeenCalled();
+    expect(institutionCredentialLoader).toHaveBeenCalledWith({
+      userId: "user_1",
+      institutionId: "institution-target",
+    });
+    expect(results).toEqual([
+      expect.objectContaining({
+        type: "success",
+        connection: expect.objectContaining({
+          institutionId: "institution-target",
+          institutionName: "Target Bank",
+        }),
+      }),
+    ]);
   });
 
   it("returns token decrypt failures as institution-tied repair failures", async () => {

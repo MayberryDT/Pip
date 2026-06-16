@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { PipHome, __pipHomeTestHooks } from "@/components/PipHome";
+import type { SyncStatusResponse } from "@/components/data-controls-helpers";
 import type { PromptChip } from "@/lib/agent/card-types";
 
 describe("PipHome", () => {
@@ -88,7 +89,7 @@ describe("PipHome", () => {
     expect(markup).toContain("How does Pip work?");
     expect(markup).toContain("What will I connect?");
     expect(markup).toContain("Ask Pip anything...");
-    expect(markup).toContain("pip-waving.png");
+    expect(markup).toContain("pip-character-medium");
     expect(markup).not.toContain("$43");
   });
 
@@ -115,7 +116,7 @@ describe("PipHome", () => {
     expect(visibleText).toContain("Use $200 cushion");
     expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
     expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(0);
-    expect(markup).toContain("pip-waving.png");
+    expect(markup).toContain("pip-character-medium");
     expect(visibleText).not.toContain("Step 2");
     expect(markup).not.toContain("Protected savings, e.g. 200...");
     expect(markup).not.toContain("$43");
@@ -143,6 +144,29 @@ describe("PipHome", () => {
     expect(
       __pipHomeTestHooks.getNextVisiblePromptChips([], [], lastNonEmptyChips),
     ).toEqual(lastNonEmptyChips);
+  });
+
+  it("selects an app-open refresh provider for stale connected data", () => {
+    expect(
+      __pipHomeTestHooks.getAppOpenRefreshProvider({
+        liveAccountControlsEnabled: true,
+        authStatus: "ready",
+        syncStatus: stalePlaidSyncStatus(),
+        hasAttemptedDailyRefresh: false,
+      }),
+    ).toBe("plaid");
+  });
+
+  it("skips app-open refresh while a sync job is already pending", () => {
+    expect(
+      __pipHomeTestHooks.getAppOpenRefreshProvider({
+        liveAccountControlsEnabled: true,
+        authStatus: "ready",
+        syncStatus: stalePlaidSyncStatus(),
+        hasAttemptedDailyRefresh: false,
+        hasPendingSyncJob: true,
+      }),
+    ).toBeNull();
   });
 
   it("maps agent failures to short PIP-safe visible messages", () => {
@@ -196,4 +220,23 @@ describe("PipHome", () => {
 
 function countOccurrences(source: string, pattern: string): number {
   return source.split(pattern).length - 1;
+}
+
+function stalePlaidSyncStatus(): SyncStatusResponse {
+  return {
+    institutions: [
+      {
+        id: "institution-1",
+        institutionName: "Northstar Bank",
+        provider: "plaid",
+        status: "connected",
+        lastSuccessfulSyncAt: "2026-06-04T12:00:00.000Z",
+        staleAfter: "2026-06-05T12:00:00.000Z",
+        isStale: true,
+        errorMessage: null,
+      },
+    ],
+    latestSyncRun: null,
+    hasStaleInstitution: true,
+  };
 }

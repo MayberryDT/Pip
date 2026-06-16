@@ -23,7 +23,7 @@ export function PipMascot({
   size = "md",
   variant = "avatar",
   expression = "happy",
-  withSprig = true,
+  withSprig = false,
   ariaLabel,
   className,
 }: PipMascotProps) {
@@ -31,12 +31,12 @@ export function PipMascot({
   const bodyGlowId = `${id}-pip-body-glow`;
   const shadowId = `${id}-pip-shadow`;
   const isExpressive = variant === "expressive" || variant === "hero";
-  const showArms = size === "md" || size === "lg" || size === "hero" || variant === "appIcon";
+  const showArms = true;
   const smilePath = expression === "concerned"
-    ? "M92 110 Q108 102 124 110"
+    ? "M92 88 Q108 82 124 88"
     : expression === "reassuring"
-      ? "M91 104 Q108 118 125 104"
-      : "M93 101 Q108 113 123 101";
+      ? "M91 84 Q108 98 125 84"
+      : "M93 82 Q108 94 123 82";
 
   return (
     <svg
@@ -64,35 +64,40 @@ export function PipMascot({
       {variant === "appIcon" ? (
         <rect x="16" y="16" width="184" height="184" rx="42" fill="#FBF7EF" />
       ) : null}
-      <ellipse cx="108" cy="184" rx="60" ry="11" fill={`url(#${shadowId})`} />
-      <path
-        d="M50 131C50 82 73 38 111 38C148 38 169 84 166 132C164 168 142 185 108 185C75 185 50 167 50 131Z"
-        fill={`url(#${bodyGlowId})`}
-      />
-      <path
-        d="M56 131C56 87 76 47 110 47C144 47 162 90 159 132C157 162 139 177 108 177C79 177 56 161 56 131Z"
-        fill="#D7DDCD"
-        opacity="0.18"
-      />
+      <ellipse cx="108" cy="188" rx="58" ry="10" fill={`url(#${shadowId})`} />
       {showArms ? (
         <>
           <path
-            d="M56 126C43 128 39 139 43 149C47 160 58 156 62 146"
+            d={isExpressive ? "M65 124C48 124 38 136 40 151C42 164 57 166 66 153" : "M65 127C51 128 42 139 44 151C46 164 59 165 68 153"}
             stroke="#9DAA8F"
-            strokeWidth="10"
+            strokeWidth="9.4"
             strokeLinecap="round"
           />
           <path
-            d={isExpressive ? "M158 126C174 119 180 126 177 139C174 151 163 151 158 140" : "M158 127C169 124 175 130 173 140C171 150 162 150 158 140"}
+            d={isExpressive ? "M151 123C168 112 181 117 183 132C185 147 170 154 153 144" : "M151 127C166 127 175 137 172 150C169 163 156 163 149 151"}
             stroke="#9DAA8F"
-            strokeWidth="10"
+            strokeWidth="9.4"
             strokeLinecap="round"
           />
+          <circle cx={isExpressive ? "40" : "45"} cy="151" r="6.6" fill="#B9C4AB" />
+          <circle cx={isExpressive ? "183" : "172"} cy={isExpressive ? "132" : "150"} r="6.6" fill="#B9C4AB" />
         </>
       ) : null}
-      <circle cx="88" cy="88" r="5.6" fill="#252622" />
-      <circle cx="127" cy="88" r="5.6" fill="#252622" />
+      <path
+        d="M60 135C60 109 79 91 108 91C137 91 156 109 156 135V154C156 174 138 186 108 186C78 186 60 174 60 154V135Z"
+        fill={`url(#${bodyGlowId})`}
+      />
+      <circle cx="108" cy="69" r="39" fill={`url(#${bodyGlowId})`} />
+      <path
+        d="M70 137C70 116 84 103 108 103C132 103 146 116 146 137V152C146 166 132 174 108 174C84 174 70 166 70 152V137Z"
+        fill="#E3E8DA"
+        opacity="0.18"
+      />
+      <circle cx="88" cy="72" r="5.6" fill="#252622" />
+      <circle cx="127" cy="72" r="5.6" fill="#252622" />
       <path d={smilePath} stroke="#252622" strokeWidth="4.4" strokeLinecap="round" />
+      <ellipse cx="83" cy="187" rx="16" ry="6.2" fill="#9EA98F" opacity="0.28" />
+      <ellipse cx="133" cy="187" rx="16" ry="6.2" fill="#9EA98F" opacity="0.28" />
 
       {withSprig ? (
         <g stroke="#708165" strokeLinecap="round" strokeLinejoin="round">

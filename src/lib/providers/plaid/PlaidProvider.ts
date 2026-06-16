@@ -5,6 +5,7 @@ import type {
   FinancialDataProvider,
   ProviderInstitutionSyncResult,
   ProviderInstitutionSyncSuccess,
+  ProviderSyncOptions,
 } from "@/lib/providers/FinancialDataProvider";
 import type { Account, AccountBalanceSummary, Transaction } from "@/lib/types";
 import { ProviderSyncError, ProviderUnavailableError } from "@/lib/providers/provider-errors";
@@ -135,8 +136,11 @@ export class PlaidProvider implements FinancialDataProvider {
     };
   }
 
-  async syncConnectedInstitutions(userId: string): Promise<ProviderInstitutionSyncResult[]> {
-    const credentials = await this.credentialsLoader(userId);
+  async syncConnectedInstitutions(
+    userId: string,
+    options: ProviderSyncOptions = {},
+  ): Promise<ProviderInstitutionSyncResult[]> {
+    const credentials = await this.loadSyncCredentials(userId, options);
 
     if (credentials.length === 0) {
       throw new ProviderUnavailableError(
@@ -239,6 +243,7 @@ export class PlaidProvider implements FinancialDataProvider {
       accounts,
       transactions: transactionSync.transactions,
       balances,
+      removedTransactionProviderIds: transactionSync.removedTransactionProviderIds,
       ...(nextCursor
         ? {
             commit: () =>
@@ -254,9 +259,14 @@ export class PlaidProvider implements FinancialDataProvider {
 
   private async syncTransactionsForCredential(
     credential: PlaidStoredCredential,
-  ): Promise<{ transactions: Transaction[]; nextCursor?: string }> {
+  ): Promise<{
+    transactions: Transaction[];
+    removedTransactionProviderIds: string[];
+    nextCursor?: string;
+  }> {
     const client = this.getClient();
     const transactions = [];
+    const removedTransactionProviderIds = [];
     let cursor = credential.transactionCursor;
     let nextCursor = credential.transactionCursor;
     let hasMore = true;
@@ -275,6 +285,9 @@ export class PlaidProvider implements FinancialDataProvider {
       );
 
       transactions.push(...response.data.added, ...response.data.modified);
+      removedTransactionProviderIds.push(
+        ...response.data.removed.map((transaction) => transaction.transaction_id),
+      );
       nextCursor = response.data.next_cursor || nextCursor;
       cursor = nextCursor;
       hasMore = response.data.has_more;
@@ -283,8 +296,25 @@ export class PlaidProvider implements FinancialDataProvider {
 
     return {
       transactions: transactions.map(normalizePlaidTransaction),
+      removedTransactionProviderIds,
       nextCursor,
     };
+  }
+
+  private async loadSyncCredentials(
+    userId: string,
+    options: ProviderSyncOptions,
+  ): Promise<PlaidStoredCredential[]> {
+    if (!options.institutionId) {
+      return this.credentialsLoader(userId);
+    }
+
+    const credential = await this.institutionCredentialLoader({
+      userId,
+      institutionId: options.institutionId,
+    });
+
+    return credential ? [credential] : [];
   }
 
   private async loadAccounts(userId: string) {

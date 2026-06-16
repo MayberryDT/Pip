@@ -1,0 +1,88 @@
+{
+  "source": "design/pip-character/references/pip-reference-sheet-v001.png",
+  "sourceWidth": 1448,
+  "sourceHeight": 1086,
+  "crops": {
+    "front": {
+      "file": "design/pip-character/references/crops/v001/front.png",
+      "box": {
+        "left": 80,
+        "top": 160,
+        "width": 310,
+        "height": 390
+      }
+    },
+    "three_quarter": {
+      "file": "design/pip-character/references/crops/v001/three_quarter.png",
+      "box": {
+        "left": 410,
+        "top": 165,
+        "width": 330,
+        "height": 390
+      }
+    },
+    "side": {
+      "file": "design/pip-character/references/crops/v001/side.png",
+      "box": {
+        "left": 760,
+        "top": 165,
+        "width": 280,
+        "height": 390
+      }
+    },
+    "back": {
+      "file": "design/pip-character/references/crops/v001/back.png",
+      "box": {
+        "left": 1080,
+        "top": 165,
+        "width": 300,
+        "height": 390
+      }
+    },
+    "expression_normal": {
+      "file": "design/pip-character/references/crops/v001/expression_normal.png",
+      "box": {
+        "left": 75,
+        "top": 635,
+        "width": 245,
+        "height": 290
+      }
+    },
+    "expression_happy": {
+      "file": "design/pip-character/references/crops/v001/expression_happy.png",
+      "box": {
+        "left": 325,
+        "top": 635,
+        "width": 245,
+        "height": 290
+      }
+    },
+    "expression_careful": {
+      "file": "design/pip-character/references/crops/v001/expression_careful.png",
+      "box": {
+        "left": 575,
+        "top": 635,
+        "width": 245,
+        "height": 290
+      }
+    },
+    "expression_concerned": {
+      "file": "design/pip-character/references/crops/v001/expression_concerned.png",
+      "box": {
+        "left": 825,
+        "top": 635,
+        "width": 245,
+        "height": 290
+      }
+    },
+    "expression_shortfall": {
+      "file": "design/pip-character/references/crops/v001/expression_shortfall.png",
+      "box": {
+        "left": 1075,
+        "top": 635,
+        "width": 260,
+        "height": 290
+      }
+    }
+  }
+}

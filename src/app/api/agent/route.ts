@@ -905,6 +905,12 @@ async function getPlaidConnectRequest(
     return resolved;
   }
 
+  if (requiresFreshPlaidConnection(input.syncStatus, resolved.institutionId)) {
+    return {
+      mode: "connect",
+    };
+  }
+
   return {
     mode: input.mode,
     institutionId: resolved.institutionId,
@@ -1289,6 +1295,10 @@ function getRepairablePlaidInstitutions(syncStatus: SyncStatus | null) {
       return false;
     }
 
+    if (isFreshPlaidConnectionRequiredErrorCode(institution.errorCode)) {
+      return false;
+    }
+
     return (
       institution.isStale ||
       institution.status === "failed" ||
@@ -1297,6 +1307,19 @@ function getRepairablePlaidInstitutions(syncStatus: SyncStatus | null) {
       isRepairablePlaidErrorCode(institution.errorCode)
     );
   });
+}
+
+function requiresFreshPlaidConnection(
+  syncStatus: SyncStatus | null,
+  institutionId: string,
+): boolean {
+  const institution = syncStatus?.institutions.find((item) => item.id === institutionId);
+
+  return isFreshPlaidConnectionRequiredErrorCode(institution?.errorCode);
+}
+
+function isFreshPlaidConnectionRequiredErrorCode(errorCode: string | null | undefined): boolean {
+  return ["provider-token-decrypt-failed"].includes((errorCode ?? "").toLowerCase());
 }
 
 function isRepairablePlaidErrorCode(errorCode: string | null | undefined): boolean {

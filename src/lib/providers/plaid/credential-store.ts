@@ -123,6 +123,25 @@ export async function loadPlaidCredentialForInstitution(
   return mapPlaidCredentialRow(data);
 }
 
+export async function loadPlaidCredentialByItemId(
+  itemId: string,
+  supabase: SupabaseClient<Database> = createSupabaseAdminClient(),
+): Promise<PlaidStoredCredential | null> {
+  const { data, error } = await supabase
+    .schema("private")
+    .from("provider_credentials")
+    .select("*")
+    .eq("provider", "plaid")
+    .eq("plaid_item_id", itemId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return mapPlaidCredentialRow(data);
+}
+
 export async function storePlaidTransactionCursor(
   input: {
     userId: string;

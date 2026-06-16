@@ -14,10 +14,16 @@ describe("MVP scope boundary", () => {
     expect(appRouteDirs.filter((dir) => dashboardRoutePattern.test(dir))).toEqual([]);
   });
 
-  it("keeps provider sync manual-only in the MVP", () => {
+  it("keeps background sync isolated to the feature-flagged Pip worker", () => {
     const routeDirs = findDirectories(join(process.cwd(), "src/app/api"))
       .map((dir) => relative(join(process.cwd(), "src/app/api"), dir));
     const netlifyToml = readFileSync(join(process.cwd(), "netlify.toml"), "utf8");
+    const netlifyFunctions = findSourceFiles(join(process.cwd(), "netlify/functions"))
+      .map((file) => relative(process.cwd(), file));
+    const scheduledFunction = readFileSync(
+      join(process.cwd(), "netlify/functions/pip-scheduled-sync.ts"),
+      "utf8",
+    );
     const source = findSourceFiles(join(process.cwd(), "src"))
       .filter((file) => !file.endsWith(".test.ts") && !file.endsWith(".test.tsx"))
       .map((file) => readFileSync(file, "utf8"))
@@ -25,7 +31,10 @@ describe("MVP scope boundary", () => {
 
     expect(routeDirs.filter((dir) => /(^|\/)sync\/(background|scheduled|cron|job)(\/|$)/i.test(dir))).toEqual([]);
     expect(netlifyToml).not.toMatch(/schedule\s*=|\[\s*functions\."[^"]*"\s*\].*schedule/si);
-    expect(source).not.toMatch(/\bsetInterval\s*\(|\bcron\s*\(|\bscheduledSync\b|\bbackgroundSync\b/);
+    expect(netlifyFunctions).toEqual(["netlify/functions/pip-scheduled-sync.ts"]);
+    expect(scheduledFunction).toContain('schedule: "@hourly"');
+    expect(scheduledFunction).toContain("PIP_SCHEDULED_SYNC_ENABLED");
+    expect(source).not.toMatch(/\bsetInterval\s*\(|\bcron\s*\(|\bbackgroundSync\b/);
   });
 
   it("does not render permanent finance-dashboard UI primitives in components", () => {

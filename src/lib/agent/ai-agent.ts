@@ -363,12 +363,6 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     return undefined;
   }
 
-  const accountManagementTool = getAccountManagementForcedTool(message, normalized);
-
-  if (accountManagementTool) {
-    return accountManagementTool;
-  }
-
   if (amountCents === null && isFinancialGuidancePrompt(normalized)) {
     return {
       toolName: "get_financial_guidance_context",
@@ -447,6 +441,12 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
       args: {},
       requireCard: true,
     };
+  }
+
+  const accountManagementTool = getAccountManagementForcedTool(message, normalized);
+
+  if (accountManagementTool) {
+    return accountManagementTool;
   }
 
   if (isPaydayImpactPrompt(normalized)) {
@@ -1978,11 +1978,17 @@ function buildAgentResponse(
     parsed.responseMode === "guidance" ||
     cards.some((card) => card.type === "guidance_card") ||
     usedTools.includes("get_financial_guidance_context");
+  const hasNoToolChatOnlyPrompt =
+    cards.length === 0 &&
+    usedTools.length === 0 &&
+    isNoToolChatOnlyPrompt(input.message);
   const responseMode =
     input.requestKind === "prompt_chips"
       ? "chat_only"
       : hasGuidanceResponse
         ? "guidance"
+        : hasNoToolChatOnlyPrompt
+          ? "chat_only"
         : cards.length === 0 && parsed.responseMode === "show_card"
           ? usedTools.length > 0
             ? "update_context"
@@ -2114,18 +2120,44 @@ function shouldRecoverBroadChatFinalOutput(
 
 function createBroadChatFallbackFinalOutput(input: RunAiAgentInput): AgentFinalOutput {
   const greeting = isSimpleGreetingPrompt(input.message);
+  const generalSpendingAdvice = isGeneralSpendingAdvicePrompt(input.message);
+  const creditCardDiscussion = isGeneralCreditCardDiscussionPrompt(input.message);
 
   return {
     message: greeting
       ? "I can help with your Spendable Cash Today. Ask what changed or test a specific purchase amount."
-      : "I’m not sure what you mean yet. Ask about today’s number or test a specific purchase amount.",
-    responseMode: greeting ? "chat_only" : "clarify",
+      : generalSpendingAdvice
+        ? "Start with one small spending rule: choose one category, set a weekly cap, and keep one low-cost thing you still enjoy."
+        : creditCardDiscussion
+          ? "I can help with credit cards. We can talk through payoff timing, card use, or how a specific purchase would affect today."
+          : "I’m not sure what you mean yet. Ask about today’s number or test a specific purchase amount.",
+    responseMode: greeting || generalSpendingAdvice || creditCardDiscussion ? "chat_only" : "clarify",
     promptChips: [],
   };
 }
 
 function isSimpleGreetingPrompt(message: string): boolean {
   return /^(hi|hello|hey|yo|sup|good morning|good afternoon|good evening)$/i.test(message.trim());
+}
+
+function isGeneralSpendingAdvicePrompt(message: string): boolean {
+  const normalized = normalizePrompt(message);
+
+  return /\b(lower|reduce|cut|spend less|control|slow down|curb)\b/.test(normalized) &&
+    /\b(spending|spend|expenses?|budget|money)\b/.test(normalized);
+}
+
+function isGeneralCreditCardDiscussionPrompt(message: string): boolean {
+  const normalized = normalizePrompt(message);
+
+  return /\bcredit cards?\b|\bcards?\b/.test(normalized) &&
+    !/\b(show|list|pull|view|transactions?|charges?|payments?|breakdown)\b/.test(normalized);
+}
+
+function isNoToolChatOnlyPrompt(message: string): boolean {
+  return isSimpleGreetingPrompt(message) ||
+    isGeneralSpendingAdvicePrompt(message) ||
+    isGeneralCreditCardDiscussionPrompt(message);
 }
 
 function hasDeterministicNoCardFallback(context: PipAgentContext): boolean {
@@ -2214,11 +2246,7 @@ function selectGuidanceCard(
   context: PipAgentContext,
 ): GuidanceCardSelection {
   if (!parsed.guidanceCardDraft) {
-    if (
-      context.fallbackFinalOutput &&
-      shouldReturnGuidanceCard(context) &&
-      context.guidanceContext
-    ) {
+    if (shouldReturnGuidanceCard(context) && context.guidanceContext) {
       return {
         card: createDeterministicGuidanceCard(context.guidanceContext),
         rejectionReason: null,
@@ -4175,6 +4203,7 @@ export const __agentTestHooks = {
   getForcedAgentTool,
   getUnsupportedCardPromise,
   guardVisibleFinalMessage,
+  isNoToolChatOnlyPrompt,
   normalizeAgentFinalOutput,
   repairUnsupportedCardPromises,
   selectGuidanceCard,

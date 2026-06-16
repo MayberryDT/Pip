@@ -4,6 +4,7 @@ import type {
   FinancialDataProvider,
   ProviderInstitutionSyncResult,
   ProviderInstitutionSyncSuccess,
+  ProviderSyncOptions,
 } from "@/lib/providers/FinancialDataProvider";
 import type { Account, AccountBalanceSummary, Transaction } from "@/lib/types";
 import { ProviderUnavailableError } from "@/lib/providers/provider-errors";
@@ -91,7 +92,10 @@ export class TellerProvider implements FinancialDataProvider {
     });
   }
 
-  async syncConnectedInstitutions(userId: string): Promise<ProviderInstitutionSyncResult[]> {
+  async syncConnectedInstitutions(
+    userId: string,
+    _options: ProviderSyncOptions = {},
+  ): Promise<ProviderInstitutionSyncResult[]> {
     const credential = await this.loadCredential(userId);
 
     try {

@@ -13,6 +13,7 @@ tsconfig.tsbuildinfo
 .netlify
 
 .tools/
+planning-docs/
 design/pip-character/generated/*
 !design/pip-character/generated/.gitkeep
 design/pip-character/blender/
@@ -31,3 +32,17 @@ __pycache__/
 *.pyc
 /img_*.jpg
 public/brand/pip-character/v001/**/*.jpg
+
+# Android / TWA local build outputs and signing material
+*.keystore
+*.jks
+*.p12
+*.pem
+mobile/android-twa/.gradle/
+mobile/android-twa/**/build/
+mobile/android-twa/local.properties
+mobile/android-twa/**/keystore.properties
+mobile/android-twa/**/signing.env
+mobile/android-twa/**/*.apk
+mobile/android-twa/**/*.aab
+mobile/android-twa/**/*.idsig

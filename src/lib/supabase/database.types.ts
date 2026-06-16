@@ -63,6 +63,38 @@ export type Database = {
       financial_provider: "mock" | "teller" | "plaid";
       connection_status: "connected" | "mocked" | "stale" | "failed" | "revoked";
       sync_status: "started" | "succeeded" | "failed" | "partial";
+      plaid_webhook_verification_status: "verified" | "bypassed_dev" | "failed";
+      plaid_webhook_processing_status: "received" | "ignored" | "enqueued" | "failed";
+      pip_sync_job_reason:
+        | "plaid_webhook"
+        | "scheduled"
+        | "app_open"
+        | "manual"
+        | "repair"
+        | "account_selection"
+        | "settings_change"
+        | "account_change";
+      pip_sync_job_status: "pending" | "running" | "succeeded" | "failed" | "skipped";
+      pip_reaction_trigger:
+        | "plaid_webhook"
+        | "scheduled_sync"
+        | "app_open_refresh"
+        | "manual_refresh"
+        | "account_change"
+        | "settings_change"
+        | "repair"
+        | "account_selection";
+      pip_reaction_type:
+        | "small_lift"
+        | "big_lift"
+        | "small_drop"
+        | "big_drop"
+        | "shortfall"
+        | "recovered"
+        | "data_issue"
+        | "connection_repaired"
+        | "cash_tight"
+        | "low_confidence";
     };
     Tables: {
       user_settings: {
@@ -323,6 +355,164 @@ export type Database = {
           balance_count?: number;
           error_code?: string | null;
           error_message?: string | null;
+        };
+        Relationships: [];
+      };
+      plaid_webhook_events: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          item_id: string | null;
+          webhook_type: string;
+          webhook_code: string;
+          environment: string | null;
+          payload: Json;
+          body_sha256: string | null;
+          verification_status: Database["public"]["Enums"]["plaid_webhook_verification_status"];
+          processing_status: Database["public"]["Enums"]["plaid_webhook_processing_status"];
+          source_sync_job_id: string | null;
+          received_at: string;
+          processed_at: string | null;
+          error_message: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          item_id?: string | null;
+          webhook_type: string;
+          webhook_code: string;
+          environment?: string | null;
+          payload: Json;
+          body_sha256?: string | null;
+          verification_status?: Database["public"]["Enums"]["plaid_webhook_verification_status"];
+          processing_status?: Database["public"]["Enums"]["plaid_webhook_processing_status"];
+          source_sync_job_id?: string | null;
+          received_at?: string;
+          processed_at?: string | null;
+          error_message?: string | null;
+        };
+        Update: {
+          user_id?: string | null;
+          item_id?: string | null;
+          webhook_type?: string;
+          webhook_code?: string;
+          environment?: string | null;
+          payload?: Json;
+          body_sha256?: string | null;
+          verification_status?: Database["public"]["Enums"]["plaid_webhook_verification_status"];
+          processing_status?: Database["public"]["Enums"]["plaid_webhook_processing_status"];
+          source_sync_job_id?: string | null;
+          processed_at?: string | null;
+          error_message?: string | null;
+        };
+        Relationships: [];
+      };
+      pip_sync_jobs: {
+        Row: {
+          id: string;
+          user_id: string;
+          provider: Database["public"]["Enums"]["financial_provider"];
+          institution_id: string | null;
+          reason: Database["public"]["Enums"]["pip_sync_job_reason"];
+          status: Database["public"]["Enums"]["pip_sync_job_status"];
+          source_webhook_event_id: string | null;
+          attempts: number;
+          max_attempts: number;
+          priority: number;
+          dedupe_key: string | null;
+          available_at: string;
+          started_at: string | null;
+          completed_at: string | null;
+          account_count: number;
+          transaction_count: number;
+          balance_count: number;
+          created_reaction_type: Database["public"]["Enums"]["pip_reaction_type"] | null;
+          last_error: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          provider: Database["public"]["Enums"]["financial_provider"];
+          institution_id?: string | null;
+          reason: Database["public"]["Enums"]["pip_sync_job_reason"];
+          status?: Database["public"]["Enums"]["pip_sync_job_status"];
+          source_webhook_event_id?: string | null;
+          attempts?: number;
+          max_attempts?: number;
+          priority?: number;
+          dedupe_key?: string | null;
+          available_at?: string;
+          started_at?: string | null;
+          completed_at?: string | null;
+          account_count?: number;
+          transaction_count?: number;
+          balance_count?: number;
+          created_reaction_type?: Database["public"]["Enums"]["pip_reaction_type"] | null;
+          last_error?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: Database["public"]["Enums"]["pip_sync_job_status"];
+          attempts?: number;
+          max_attempts?: number;
+          priority?: number;
+          dedupe_key?: string | null;
+          available_at?: string;
+          started_at?: string | null;
+          completed_at?: string | null;
+          account_count?: number;
+          transaction_count?: number;
+          balance_count?: number;
+          created_reaction_type?: Database["public"]["Enums"]["pip_reaction_type"] | null;
+          last_error?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      pip_reaction_events: {
+        Row: {
+          id: string;
+          user_id: string;
+          previous_snapshot_id: string | null;
+          current_snapshot_id: string | null;
+          previous_state: string | null;
+          current_state: string;
+          spendable_delta_cents: number;
+          behavior_adjustment_delta_cents: number;
+          shortfall_delta_cents: number;
+          cash_reality_adjustment_delta_cents: number;
+          confidence_change: string | null;
+          trigger: Database["public"]["Enums"]["pip_reaction_trigger"];
+          reaction_type: Database["public"]["Enums"]["pip_reaction_type"];
+          intensity: number;
+          summary: string | null;
+          seen_at: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          previous_snapshot_id?: string | null;
+          current_snapshot_id?: string | null;
+          previous_state?: string | null;
+          current_state: string;
+          spendable_delta_cents?: number;
+          behavior_adjustment_delta_cents?: number;
+          shortfall_delta_cents?: number;
+          cash_reality_adjustment_delta_cents?: number;
+          confidence_change?: string | null;
+          trigger: Database["public"]["Enums"]["pip_reaction_trigger"];
+          reaction_type: Database["public"]["Enums"]["pip_reaction_type"];
+          intensity: number;
+          summary?: string | null;
+          seen_at?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          seen_at?: string | null;
         };
         Relationships: [];
       };

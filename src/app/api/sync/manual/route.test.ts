@@ -17,7 +17,9 @@ const routeMocks = vi.hoisted(() => {
   return {
     createSupabaseServerClient: vi.fn(),
     loadSyncStatusForUser: vi.fn(),
+    assertManualSyncAllowed: vi.fn(),
     runManualSync: vi.fn(),
+    runProviderSync: vi.fn(),
     ManualSyncRateLimitError: MockManualSyncRateLimitError,
   };
 });
@@ -27,7 +29,9 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 vi.mock("@/lib/data/manual-sync", () => ({
+  assertManualSyncAllowed: routeMocks.assertManualSyncAllowed,
   runManualSync: routeMocks.runManualSync,
+  runProviderSync: routeMocks.runProviderSync,
   ManualSyncRateLimitError: routeMocks.ManualSyncRateLimitError,
 }));
 
@@ -148,7 +152,7 @@ describe("POST /api/sync/manual", () => {
       latestSyncRun: null,
       hasStaleInstitution: true,
     });
-    routeMocks.runManualSync.mockResolvedValue({
+    routeMocks.runProviderSync.mockResolvedValue({
       syncRunId: "sync-1",
       provider: "plaid",
       institutionId: "institution-1",
@@ -165,10 +169,12 @@ describe("POST /api/sync/manual", () => {
 
     expect(response.status).toBe(200);
     expect(routeMocks.loadSyncStatusForUser).toHaveBeenCalledWith(supabase, "user-1");
-    expect(routeMocks.runManualSync).toHaveBeenCalledWith(supabase, {
+    expect(routeMocks.assertManualSyncAllowed).not.toHaveBeenCalled();
+    expect(routeMocks.runManualSync).not.toHaveBeenCalled();
+    expect(routeMocks.runProviderSync).toHaveBeenCalledWith(supabase, {
       userId: "user-1",
       provider: "plaid",
-      bypassRateLimit: true,
+      reason: "repair",
     });
   });
 
@@ -188,7 +194,7 @@ describe("POST /api/sync/manual", () => {
       latestSyncRun: null,
       hasStaleInstitution: false,
     });
-    routeMocks.runManualSync.mockResolvedValue({
+    routeMocks.runProviderSync.mockResolvedValue({
       syncRunId: "sync-1",
       provider: "plaid",
       institutionId: "institution-1",
@@ -204,9 +210,49 @@ describe("POST /api/sync/manual", () => {
     }));
 
     expect(response.status).toBe(200);
-    expect(routeMocks.runManualSync).toHaveBeenCalledWith(supabase, {
+    expect(routeMocks.assertManualSyncAllowed).toHaveBeenCalledWith(supabase, {
       userId: "user-1",
       provider: "plaid",
+      now: expect.any(Date),
+    });
+    expect(routeMocks.runProviderSync).toHaveBeenCalledWith(supabase, {
+      userId: "user-1",
+      provider: "plaid",
+      reason: "repair",
+    });
+    expect(routeMocks.runManualSync).not.toHaveBeenCalled();
+  });
+
+  it("runs app-open refreshes through the shared sync core with an app_open reason", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.runProviderSync.mockResolvedValue({
+      syncRunId: "sync-1",
+      provider: "plaid",
+      institutionId: "institution-1",
+      accountCount: 3,
+      transactionCount: 22,
+      balanceCount: 3,
+      pipCashTodayCents: 4300,
+    });
+
+    const response = await POST(jsonRequest({
+      provider: "plaid",
+      reason: "app_open",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.loadSyncStatusForUser).not.toHaveBeenCalled();
+    expect(routeMocks.assertManualSyncAllowed).toHaveBeenCalledWith(supabase, {
+      userId: "user-1",
+      provider: "plaid",
+      now: expect.any(Date),
+    });
+    expect(routeMocks.runProviderSync).toHaveBeenCalledWith(supabase, {
+      userId: "user-1",
+      provider: "plaid",
+      reason: "app_open",
     });
   });
 

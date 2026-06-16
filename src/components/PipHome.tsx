@@ -43,6 +43,31 @@ type ThreadItem = {
   isPending?: boolean;
 };
 
+type PipHomeServerResult = PipCashResult & {
+  freshness?: {
+    state: "fresh" | "stale" | "syncing" | "failed" | "needs_repair" | "partial";
+    lastSuccessfulSyncAt?: string;
+    latestSyncRunStatus?: string;
+    hasPendingSyncJob?: boolean;
+    hasStaleInstitution?: boolean;
+  };
+  reaction?: {
+    id: string;
+    reactionType:
+      | "small_lift"
+      | "big_lift"
+      | "small_drop"
+      | "big_drop"
+      | "shortfall"
+      | "recovered"
+      | "data_issue"
+      | "connection_repaired"
+      | "cash_tight"
+      | "low_confidence";
+    intensity: 1 | 2 | 3;
+  };
+};
+
 const accountManagementPromptChip: PromptChip = {
   id: "manage-accounts",
   label: "Manage accounts",
@@ -85,7 +110,7 @@ export function PipHome({
   const activeAuthState = devOnboardingFlow ? devAuthState : authState;
   const liveAccountControlsEnabled = !devOnboardingFlow && enableAccountControls;
   const onboardingPromptControlsEnabled = liveAccountControlsEnabled || devOnboardingFlow;
-  const [serverResult, setServerResult] = useState<PipCashResult | null>(null);
+  const [serverResult, setServerResult] = useState<PipHomeServerResult | null>(null);
   const [serverErrorText, setServerErrorText] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatusResponse | null>(null);
   const [hasLoadedServerState, setHasLoadedServerState] = useState(false);
@@ -116,6 +141,7 @@ export function PipHome({
   const [promptChipRefreshSequence, setPromptChipRefreshSequence] = useState(0);
   const [isSending, setIsSending] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const seenReactionIdsRef = useRef<Set<string>>(new Set());
   const hasConversation = thread.length > 0;
   const isReadyWithoutData =
     devOnboardingFlow && activeAuthState?.status === "ready"
@@ -171,7 +197,7 @@ export function PipHome({
         return;
       }
 
-      const payload = (await response.json()) as PipCashResult;
+      const payload = (await response.json()) as PipHomeServerResult;
 
       if (!ignore) {
         setServerResult(payload);
@@ -199,31 +225,65 @@ export function PipHome({
   }, [backendReloadKey, liveAccountControlsEnabled, scenario]);
 
   useEffect(() => {
-    if (
-      !liveAccountControlsEnabled ||
-      activeAuthState?.status !== "ready" ||
-      !syncStatus ||
-      hasAttemptedDailyRefresh ||
-      !shouldRefreshConnectedDataForToday(syncStatus)
-    ) {
-      return;
-    }
+    const provider = getAppOpenRefreshProvider({
+      liveAccountControlsEnabled,
+      authStatus: activeAuthState?.status,
+      syncStatus,
+      hasAttemptedDailyRefresh,
+      hasPendingSyncJob: serverResult?.freshness?.hasPendingSyncJob,
+    });
 
-    const provider = getRefreshProvider(syncStatus);
-
-    if (!provider || !canRefreshData(syncStatus)) {
+    if (!provider) {
       return;
     }
 
     setHasAttemptedDailyRefresh(true);
-    void runRefreshFromChat(provider, "manual")
+    void runRefreshFromChat(provider, "app_open")
       .then(() => {
         setBackendReloadKey((current) => current + 1);
       })
       .catch(() => {
         setBackendReloadKey((current) => current + 1);
       });
-  }, [activeAuthState?.status, hasAttemptedDailyRefresh, liveAccountControlsEnabled, syncStatus]);
+  }, [
+    activeAuthState?.status,
+    hasAttemptedDailyRefresh,
+    liveAccountControlsEnabled,
+    serverResult?.freshness?.hasPendingSyncJob,
+    syncStatus,
+  ]);
+
+  useEffect(() => {
+    const reaction = serverResult?.reaction;
+
+    if (!liveAccountControlsEnabled || !reaction || seenReactionIdsRef.current.has(reaction.id)) {
+      return;
+    }
+
+    seenReactionIdsRef.current.add(reaction.id);
+    const timeoutId = window.setTimeout(() => {
+      void fetch("/api/pip/reactions/seen", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          reactionId: reaction.id,
+        }),
+      }).finally(() => {
+        setServerResult((current) =>
+          current?.reaction?.id === reaction.id
+            ? {
+                ...current,
+                reaction: undefined,
+              }
+            : current,
+        );
+      });
+    }, 1400);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [liveAccountControlsEnabled, serverResult?.reaction]);
 
   useEffect(() => {
     if (hasConversation) {
@@ -526,7 +586,9 @@ export function PipHome({
           >
             {result ? formatMoney(getDisplayedSpendableCashTodayCents(result)) : "$--"}
           </div>
-          <p className="pip-metric-subtitle">{getSpendableCashTodaySubtitle(result)}</p>
+          <div className="pip-metric-subtitle-row">
+            <p className="pip-metric-subtitle">{getSpendableCashTodaySubtitle(result)}</p>
+          </div>
         </section>
 
         <section className={hasConversation ? "mt-3 flex min-h-0 flex-1 flex-col overflow-hidden" : "mt-6 flex min-h-0 flex-1 flex-col overflow-hidden max-[380px]:mt-5"}>
@@ -796,7 +858,7 @@ export function PipHome({
 
   async function runRefreshFromChat(
     provider: FinancialProvider,
-    reason: "manual" | "repair" | "account_selection" = "manual",
+    reason: "manual" | "repair" | "account_selection" | "app_open" = "manual",
   ) {
     const response = await fetch("/api/sync/manual", {
       method: "POST",
@@ -1170,6 +1232,33 @@ function getNextVisiblePromptChips(
   return lastNonEmptyChips;
 }
 
+function getAppOpenRefreshProvider(input: {
+  liveAccountControlsEnabled: boolean;
+  authStatus?: PipAuthState["status"];
+  syncStatus: SyncStatusResponse | null;
+  hasAttemptedDailyRefresh: boolean;
+  hasPendingSyncJob?: boolean;
+}): FinancialProvider | null {
+  if (
+    !input.liveAccountControlsEnabled ||
+    input.authStatus !== "ready" ||
+    !input.syncStatus ||
+    input.hasAttemptedDailyRefresh ||
+    input.hasPendingSyncJob ||
+    !shouldRefreshConnectedDataForToday(input.syncStatus)
+  ) {
+    return null;
+  }
+
+  const provider = getRefreshProvider(input.syncStatus);
+
+  if (!provider || !canRefreshData(input.syncStatus)) {
+    return null;
+  }
+
+  return provider;
+}
+
 function getAgentErrorText(error: unknown): string {
   if (error instanceof AgentRequestError) {
     return error.message;
@@ -1237,6 +1326,7 @@ export const __pipHomeTestHooks = {
   getDefaultPromptChips,
   getDemoPipCashResult: () => calculatePipCash(getFakeSnapshot("default")),
   getAgentErrorText,
+  getAppOpenRefreshProvider,
   getClientActionErrorText,
   getNextVisiblePromptChips,
   getSafeAgentFailureMessage,

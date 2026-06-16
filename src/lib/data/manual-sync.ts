@@ -2,8 +2,21 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getCurrentAppDate } from "@/lib/date/app-date";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { getDisplayedSpendableCashTodayCents } from "@/lib/pip-cash/spendable-cash-today";
-import { loadFinancialSnapshotForUser } from "@/lib/data/financial-repository";
+import {
+  loadCachedPipCashResultForUser,
+  loadFinancialSnapshotForUser,
+} from "@/lib/data/financial-repository";
+import {
+  createPipReactionEventForUser,
+  loadRecentPipReactionEventsForUser,
+} from "@/lib/data/pip-reactions";
 import { recordProductEvent } from "@/lib/data/product-events";
+import {
+  choosePipReaction,
+  comparePipCashResults,
+  type PipReactionType,
+  type PipReactionTrigger,
+} from "@/lib/pip/reactions";
 import type {
   FinancialDataProvider,
   FinancialProviderName,
@@ -14,7 +27,7 @@ import type {
 import { ProviderSyncError, type ProviderConnectionStatus } from "@/lib/providers/provider-errors";
 import { getFinancialDataProvider, ProviderUnavailableError } from "@/lib/providers/provider-registry";
 import { sanitizeSensitiveText } from "@/lib/security/error-messages";
-import type { Account, FinancialSnapshot, Transaction } from "@/lib/types";
+import type { Account, FinancialSnapshot, PipCashResult, Transaction } from "@/lib/types";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 export const MANUAL_SYNC_RATE_LIMIT_MS = 60_000;
@@ -32,7 +45,20 @@ export type ManualSyncResult = {
   pipCashTodayCents: number;
   failedInstitutionCount: number;
   failures: ManualSyncFailure[];
+  createdReactionType?: PipReactionType;
 };
+
+export type PipSyncReason =
+  | "manual"
+  | "repair"
+  | "account_selection"
+  | "app_open"
+  | "plaid_webhook"
+  | "scheduled"
+  | "settings_change"
+  | "account_change";
+
+export type ProviderSyncResult = ManualSyncResult;
 
 export type ManualSyncFailure = {
   code: string;
@@ -72,15 +98,37 @@ export async function runManualSync(
     });
   }
 
+  return runProviderSync(supabase, {
+    userId: input.userId,
+    provider: input.provider,
+    reason: "manual",
+    now,
+  });
+}
+
+export async function runProviderSync(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    provider: FinancialProviderName;
+    reason: PipSyncReason;
+    institutionId?: string;
+    now?: Date;
+  },
+): Promise<ProviderSyncResult> {
+  const now = input.now ?? new Date();
   const provider = getFinancialDataProvider(input.provider);
   const syncRun = await createSyncRun(supabase, {
     userId: input.userId,
     provider: input.provider,
+    institutionId: input.institutionId,
   });
   const startedAt = now.getTime();
 
   try {
-    const syncResults = await syncProviderConnections(provider, input.userId);
+    const syncResults = await syncProviderConnections(provider, input.userId, {
+      institutionId: input.institutionId,
+    });
     const successes = syncResults.filter(isSyncSuccess);
     const failures = syncResults.filter((result) => result.type === "failure");
 
@@ -119,6 +167,10 @@ export async function runManualSync(
         transactions: success.transactions,
         accountIdByProviderId,
       });
+      await deleteRemovedProviderTransactions(supabase, {
+        userId: input.userId,
+        providerTransactionIds: success.removedTransactionProviderIds ?? [],
+      });
       await success.commit?.();
 
       institutionIds.push(institution.id);
@@ -128,6 +180,11 @@ export async function runManualSync(
     }
 
     const storedSnapshot = await loadFinancialSnapshotForUser(supabase, input.userId);
+    const previousPipCashResult = await loadCachedPipCashResultForUser(
+      supabase,
+      input.userId,
+      getCurrentAppDate(now),
+    );
     const snapshot: FinancialSnapshot = storedSnapshot ?? {
       accounts: successes.flatMap((success) => success.accounts),
       transactions: successes.flatMap((success) => success.transactions),
@@ -141,6 +198,7 @@ export async function runManualSync(
         recordProviderFailure(supabase, {
           userId: input.userId,
           provider: input.provider,
+          reason: input.reason,
           now,
           error: failure.error,
           institutionId: failure.institutionId,
@@ -155,9 +213,16 @@ export async function runManualSync(
       syncRunId: syncRun.id,
       result,
     });
+    const createdReaction = await maybeCreateSyncReaction(supabase, {
+      userId: input.userId,
+      reason: input.reason,
+      previousResult: previousPipCashResult,
+      currentResult: result,
+      now,
+    });
     await finishSyncRun(supabase, {
       syncRunId: syncRun.id,
-      institutionId: institutionIds[0],
+      institutionId: input.institutionId ?? institutionIds[0],
       status,
       startedAt,
       now,
@@ -173,7 +238,11 @@ export async function runManualSync(
           }
         : {}),
     });
-    await recordProductEvent(supabase, input.userId, status === "partial" ? "manual_sync_partial" : "manual_sync_succeeded", {
+    await recordSyncCompletionEvent(supabase, {
+      userId: input.userId,
+      reason: input.reason,
+      status,
+      createdReactionType: createdReaction?.reactionType,
       provider: input.provider,
       accountCount,
       transactionCount,
@@ -202,6 +271,7 @@ export async function runManualSync(
       pipCashTodayCents: spendableCashTodayCents,
       failedInstitutionCount: syncFailures.length,
       failures: syncFailures.map(toManualSyncFailure),
+      ...(createdReaction?.reactionType ? { createdReactionType: createdReaction.reactionType } : {}),
     };
   } catch (error) {
     const failure = getProviderFailure(input.provider, error);
@@ -223,7 +293,9 @@ export async function runManualSync(
       now,
       failure,
     });
-    await recordProductEvent(supabase, input.userId, "manual_sync_failed", {
+    await recordSyncFailureEvent(supabase, {
+      userId: input.userId,
+      reason: input.reason,
       provider: failure.provider,
       error: failure.message,
       errorCode: failure.code,
@@ -239,8 +311,17 @@ export async function runManualSync(
 async function syncProviderConnections(
   provider: FinancialDataProvider,
   userId: string,
+  options: {
+    institutionId?: string;
+  } = {},
 ): Promise<ProviderInstitutionSyncResult[]> {
   if (provider.syncConnectedInstitutions) {
+    if (options.institutionId) {
+      return provider.syncConnectedInstitutions(userId, {
+        institutionId: options.institutionId,
+      });
+    }
+
     return provider.syncConnectedInstitutions(userId);
   }
 
@@ -266,6 +347,71 @@ function isSyncSuccess(
   result: ProviderInstitutionSyncResult,
 ): result is ProviderInstitutionSyncSuccess {
   return result.type === "success";
+}
+
+async function maybeCreateSyncReaction(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    reason: PipSyncReason;
+    previousResult: PipCashResult | null;
+    currentResult: PipCashResult;
+    now: Date;
+  },
+) {
+  const comparison = comparePipCashResults(input.previousResult, input.currentResult);
+  const trigger = toPipReactionTrigger(input.reason);
+  const preliminaryDecision = choosePipReaction({
+    comparison,
+    trigger,
+    recentEvents: [],
+    now: input.now,
+  });
+
+  if (!preliminaryDecision) {
+    return null;
+  }
+
+  const recentEvents = await loadRecentPipReactionEventsForUser(supabase, {
+    userId: input.userId,
+    now: input.now,
+  });
+  const decision = choosePipReaction({
+    comparison,
+    trigger,
+    recentEvents,
+    now: input.now,
+  });
+
+  if (!decision) {
+    return null;
+  }
+
+  return createPipReactionEventForUser(supabase, {
+    userId: input.userId,
+    decision,
+  });
+}
+
+function toPipReactionTrigger(reason: PipSyncReason): PipReactionTrigger {
+  switch (reason) {
+    case "plaid_webhook":
+      return "plaid_webhook";
+    case "scheduled":
+      return "scheduled_sync";
+    case "app_open":
+      return "app_open_refresh";
+    case "repair":
+      return "repair";
+    case "account_selection":
+      return "account_selection";
+    case "settings_change":
+      return "settings_change";
+    case "account_change":
+      return "account_change";
+    case "manual":
+      return "manual_refresh";
+  }
 }
 
 export async function assertManualSyncAllowed(
@@ -310,6 +456,7 @@ async function createSyncRun(
   input: {
     userId: string;
     provider: FinancialProviderName;
+    institutionId?: string;
   },
 ) {
   const { data, error } = await supabase
@@ -317,6 +464,7 @@ async function createSyncRun(
     .insert({
       user_id: input.userId,
       provider: input.provider,
+      institution_id: input.institutionId ?? null,
       status: "started",
     })
     .select("*")
@@ -549,6 +697,30 @@ async function upsertTransactions(
   }
 }
 
+async function deleteRemovedProviderTransactions(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    providerTransactionIds: string[];
+  },
+) {
+  const providerTransactionIds = Array.from(new Set(input.providerTransactionIds));
+
+  if (providerTransactionIds.length === 0) {
+    return;
+  }
+
+  const { error } = await supabase
+    .from("transactions")
+    .delete()
+    .eq("user_id", input.userId)
+    .in("provider_transaction_id", providerTransactionIds);
+
+  if (error) {
+    throw error;
+  }
+}
+
 async function upsertDefaultSettings(
   supabase: SupabaseClient<Database>,
   userId: string,
@@ -659,6 +831,7 @@ async function recordProviderFailure(
   input: {
     userId: string;
     provider: FinancialProviderName;
+    reason: PipSyncReason;
     now: Date;
     error: unknown;
     institutionId?: string;
@@ -680,7 +853,9 @@ async function recordProviderFailure(
     now: input.now,
     failure,
   });
-  await recordProductEvent(supabase, input.userId, "manual_sync_failed", {
+  await recordSyncFailureEvent(supabase, {
+    userId: input.userId,
+    reason: input.reason,
     provider: failure.provider,
     error: failure.message,
     errorCode: failure.code,
@@ -690,6 +865,97 @@ async function recordProviderFailure(
   });
 
   return failure;
+}
+
+async function recordSyncCompletionEvent(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    reason: PipSyncReason;
+    status: "succeeded" | "partial";
+    provider: FinancialProviderName;
+    accountCount: number;
+    transactionCount: number;
+    failedInstitutionCount: number;
+    createdReactionType?: string;
+    pipCashTodayCents: number;
+    metricVersion: string;
+    spendableCashTodayCents: number;
+    baselineDailyAllowanceCents?: number;
+    behaviorAdjustmentCents?: number;
+    cashRealityAdjustmentCents?: number;
+    state?: string;
+    confidence?: string;
+    shortfallCents?: number;
+    currentMonthVarianceCents?: number;
+  },
+) {
+  const commonProperties = {
+    provider: input.provider,
+    accountCount: input.accountCount,
+    transactionCount: input.transactionCount,
+    failedInstitutionCount: input.failedInstitutionCount,
+    createdReactionType: input.createdReactionType,
+    pipCashTodayCents: input.pipCashTodayCents,
+    metricVersion: input.metricVersion,
+    spendableCashTodayCents: input.spendableCashTodayCents,
+    baselineDailyAllowanceCents: input.baselineDailyAllowanceCents,
+    behaviorAdjustmentCents: input.behaviorAdjustmentCents,
+    cashRealityAdjustmentCents: input.cashRealityAdjustmentCents,
+    state: input.state,
+    confidence: input.confidence,
+    shortfallCents: input.shortfallCents,
+    currentMonthVarianceCents: input.currentMonthVarianceCents,
+  } satisfies Json;
+
+  if (input.reason === "manual") {
+    await recordProductEvent(
+      supabase,
+      input.userId,
+      input.status === "partial" ? "manual_sync_partial" : "manual_sync_succeeded",
+      commonProperties,
+    );
+    return;
+  }
+
+  await recordProductEvent(supabase, input.userId, "pip_sync_job_completed", {
+    ...commonProperties,
+    reason: input.reason,
+    status: input.status,
+  });
+}
+
+async function recordSyncFailureEvent(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    reason: PipSyncReason;
+    provider: FinancialProviderName;
+    error: string;
+    errorCode: string;
+    repairRequired: boolean;
+    institutionId?: string;
+    institutionName?: string;
+  },
+) {
+  const commonProperties = {
+    provider: input.provider,
+    error: input.error,
+    errorCode: input.errorCode,
+    repairRequired: input.repairRequired,
+    institutionId: input.institutionId,
+    institutionName: input.institutionName,
+  } satisfies Json;
+
+  if (input.reason === "manual") {
+    await recordProductEvent(supabase, input.userId, "manual_sync_failed", commonProperties);
+    return;
+  }
+
+  await recordProductEvent(supabase, input.userId, "pip_sync_job_failed", {
+    ...commonProperties,
+    reason: input.reason,
+  });
 }
 
 function toManualSyncFailure(failure: ProviderFailure): ManualSyncFailure {

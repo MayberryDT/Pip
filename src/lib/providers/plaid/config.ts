@@ -19,6 +19,7 @@ export type PlaidConfig = {
   clientName: string;
   daysRequested: number;
   redirectUri?: string;
+  webhookUrl?: string;
 };
 
 export type PlaidReadiness = {
@@ -30,7 +31,11 @@ export type PlaidReadiness = {
 
 export type PlaidClient = Pick<
   PlaidApi,
-  "accountsGet" | "itemPublicTokenExchange" | "linkTokenCreate" | "transactionsSync"
+  | "accountsGet"
+  | "itemPublicTokenExchange"
+  | "linkTokenCreate"
+  | "transactionsSync"
+  | "webhookVerificationKeyGet"
 >;
 
 const plaidProductMap: Record<string, Products> = {
@@ -53,6 +58,7 @@ export function getPlaidConfig(env: Record<string, string | undefined> = process
     clientName: env.PLAID_CLIENT_NAME?.trim() || "Pip",
     daysRequested: parseDaysRequested(env.PLAID_DAYS_REQUESTED),
     redirectUri: getPlaidRedirectUri(env),
+    webhookUrl: getPlaidWebhookUrl(env),
   };
 }
 
@@ -124,6 +130,7 @@ export async function createPlaidConnectSession(input: {
     language: "en",
     country_codes: config.countryCodes,
     ...(config.redirectUri ? { redirect_uri: config.redirectUri } : {}),
+    ...(!input.accessToken && config.webhookUrl ? { webhook: config.webhookUrl } : {}),
     user: {
       client_user_id: input.userId,
     },
@@ -224,6 +231,24 @@ function getPlaidRedirectUri(env: Record<string, string | undefined>): string | 
   return `${appOrigin}/plaid/oauth`;
 }
 
+function getPlaidWebhookUrl(env: Record<string, string | undefined>): string | undefined {
+  const explicitWebhookUrl = normalizePublicHttpsUrl(env.PLAID_WEBHOOK_URL);
+
+  if (explicitWebhookUrl) {
+    return explicitWebhookUrl;
+  }
+
+  const appOrigin = normalizePublicHttpsOrigin(
+    env.NEXT_PUBLIC_SITE_URL || env.URL || env.DEPLOY_PRIME_URL,
+  );
+
+  if (!appOrigin) {
+    return undefined;
+  }
+
+  return `${appOrigin}/api/webhooks/plaid`;
+}
+
 function normalizeOrigin(rawUrl: string | undefined): string | null {
   if (!rawUrl?.trim()) {
     return null;
@@ -260,4 +285,48 @@ function normalizeAbsoluteUrl(rawUrl: string | undefined): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function normalizePublicHttpsOrigin(rawUrl: string | undefined): string | undefined {
+  const origin = normalizeOrigin(rawUrl);
+
+  if (!origin) {
+    return undefined;
+  }
+
+  try {
+    const url = new URL(origin);
+
+    if (url.protocol !== "https:" || isLocalhost(url.hostname)) {
+      return undefined;
+    }
+
+    return url.origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function normalizePublicHttpsUrl(rawUrl: string | undefined): string | undefined {
+  const url = normalizeAbsoluteUrl(rawUrl);
+
+  if (!url) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(url);
+
+    if (parsed.protocol !== "https:" || isLocalhost(parsed.hostname)) {
+      return undefined;
+    }
+
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function isLocalhost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
 }

@@ -613,6 +613,84 @@ describe("POST /api/agent", () => {
     );
   });
 
+  it("uses a fresh Plaid connect session when the only stale institution has an undecryptable token", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient(
+      { id: "user-1" },
+      {
+        privacy_consent_at: "2026-06-07T00:00:00.000Z",
+      },
+      {
+        connectedInstitutions: [
+          {
+            id: "inst-1",
+            user_id: "user-1",
+            provider: "plaid",
+            institution_name: "Wise (US)",
+            status: "failed",
+            last_successful_sync_at: "2026-06-08T00:00:00.000Z",
+            stale_after: "2026-06-09T00:00:00.000Z",
+            error_code: "provider-token-decrypt-failed",
+            error_message: "This Plaid connection needs to be reconnected before Pip can refresh it.",
+            updated_at: "2026-06-14T23:46:00.000Z",
+          },
+        ],
+      },
+    );
+    const createConnectSession = vi.fn().mockResolvedValue({
+      provider: "plaid",
+      status: "ready",
+      message: "Plaid Link is ready.",
+      connect: {
+        kind: "plaid",
+        linkToken: "link-token-fresh",
+        environment: "production",
+        products: ["transactions"],
+        mode: "connect",
+      },
+    });
+    routeMocks.getFinancialDataProvider.mockReturnValue({
+      createConnectSession,
+    });
+    routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockImplementation(async (input) => {
+      const result = await input.actions?.startPlaidLink?.();
+
+      return createAgentResponse({
+        message: result?.message,
+        usedTools: ["start_plaid_link"],
+        responseMode: "update_context",
+        clientAction: result?.clientAction,
+      });
+    });
+
+    const response = await POST(jsonRequest({ message: "Connect data" }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      clientAction: {
+        type: "open_plaid",
+        plaid: {
+          linkToken: "link-token-fresh",
+          mode: "connect",
+        },
+      },
+      usedTools: ["start_plaid_link"],
+    });
+    expect(createConnectSession).toHaveBeenCalledWith("user-1", {
+      mode: "connect",
+    });
+    expect(createConnectSession).not.toHaveBeenCalledWith(
+      "user-1",
+      expect.objectContaining({
+        mode: "repair",
+      }),
+    );
+  });
+
   it("passes authenticated no-data state into the agent without answering from fake rows", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockRejectedValue(new NoFinancialDataError());
@@ -711,6 +789,10 @@ function createSupabaseClient(
   settings: Record<string, unknown> | null = {
     privacy_consent_at: "2026-06-07T00:00:00.000Z",
   },
+  options: {
+    connectedInstitutions?: Array<Record<string, unknown>>;
+    syncRuns?: Array<Record<string, unknown>>;
+  } = {},
 ) {
   return {
     auth: {
@@ -722,21 +804,48 @@ function createSupabaseClient(
       }),
     },
     from: vi.fn((tableName: string) => {
-      if (tableName !== "user_settings") {
-        throw new Error(`Unexpected table ${tableName}`);
+      if (tableName === "user_settings") {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: settings,
+            error: null,
+          }),
+          upsert: vi.fn().mockResolvedValue({
+            error: null,
+          }),
+        };
       }
 
-      return {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        maybeSingle: vi.fn().mockResolvedValue({
-          data: settings,
-          error: null,
-        }),
-        upsert: vi.fn().mockResolvedValue({
-          error: null,
-        }),
-      };
+      if (tableName === "connected_institutions") {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: options.connectedInstitutions?.[0] ?? null,
+            error: null,
+          }),
+          order: vi.fn().mockResolvedValue({
+            data: options.connectedInstitutions ?? [],
+            error: null,
+          }),
+        };
+      }
+
+      if (tableName === "sync_runs") {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockResolvedValue({
+            data: options.syncRuns ?? [],
+            error: null,
+          }),
+        };
+      }
+
+      throw new Error(`Unexpected table ${tableName}`);
     }),
   };
 }

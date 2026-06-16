@@ -35,6 +35,11 @@ describe("runAIAgent", () => {
     expect(response.message.toLowerCase()).not.toContain("dashboard");
   });
 
+  it("treats simple greetings as no-tool chat-only prompts", () => {
+    expect(__agentTestHooks.isNoToolChatOnlyPrompt("hi")).toBe(true);
+  });
+
+
   it("shows the Spendable Cash explanation card the first time the user asks why", async () => {
     const response = await runAIAgent(
       { message: "Why this number?" },
@@ -128,7 +133,7 @@ describe("runAIAgent", () => {
     });
   });
 
-  it("allows model-authored guidance text without forcing a deterministic card", () => {
+  it("returns a deterministic guidance card when the model omits a guidance card draft", () => {
     const selection = __agentTestHooks.selectGuidanceCard(
       {
         message: "My read: you look steady with the main holds already counted.",
@@ -138,14 +143,15 @@ describe("runAIAgent", () => {
       createGuidanceSelectorContext(),
     );
 
-    expect(selection).toEqual({
-      card: null,
-      rejectionReason: null,
-      guidanceSource: "none",
+    expect(selection.card).toMatchObject({
+      type: "guidance_card",
+      title: "My read",
     });
+    expect(selection.rejectionReason).toBeNull();
+    expect(selection.guidanceSource).toBe("deterministic_fallback");
   });
 
-  it("uses deterministic guidance cards only for fallback final output", () => {
+  it("uses deterministic guidance cards for fallback final output", () => {
     const selection = __agentTestHooks.selectGuidanceCard(
       {
         message: "My read: I used the reliable fallback read.",
@@ -513,6 +519,14 @@ describe("runAIAgent", () => {
       }),
     ).toMatchObject({
       toolName: "get_recent_transactions",
+    });
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Show card payments in the last window",
+      }),
+    ).toMatchObject({
+      toolName: "get_spending_breakdown",
+      requireCard: true,
     });
     expect(
       __agentTestHooks.getForcedAgentTool({

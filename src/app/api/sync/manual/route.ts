@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { runManualSync, ManualSyncRateLimitError } from "@/lib/data/manual-sync";
+import {
+  assertManualSyncAllowed,
+  runManualSync,
+  runProviderSync,
+  ManualSyncRateLimitError,
+} from "@/lib/data/manual-sync";
 import { loadSyncStatusForUser } from "@/lib/data/sync-status";
 import type { FinancialProviderName } from "@/lib/providers/FinancialDataProvider";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
@@ -10,7 +15,7 @@ import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
   provider: z.enum(["mock", "teller", "plaid"]),
-  reason: z.enum(["manual", "repair", "account_selection"]).default("manual"),
+  reason: z.enum(["manual", "repair", "account_selection", "app_open"]).default("manual"),
 });
 
 export async function POST(request: Request) {
@@ -42,11 +47,19 @@ export async function POST(request: Request) {
       provider,
       reason: parsed.data.reason,
     });
-    const result = await runManualSync(supabase, {
-      userId: user.id,
-      provider,
-      ...(bypassRateLimit ? { bypassRateLimit: true } : {}),
-    });
+    const result =
+      parsed.data.reason === "manual"
+        ? await runManualSync(supabase, {
+            userId: user.id,
+            provider,
+            ...(bypassRateLimit ? { bypassRateLimit: true } : {}),
+          })
+        : await runNonManualSync(supabase, {
+            userId: user.id,
+            provider,
+            reason: parsed.data.reason,
+            bypassRateLimit,
+          });
 
     return NextResponse.json(result);
   } catch (error) {
@@ -87,7 +100,7 @@ async function shouldBypassRateLimitForRepair(
   input: {
     userId: string;
     provider: FinancialProviderName;
-    reason: "manual" | "repair" | "account_selection";
+    reason: "manual" | "repair" | "account_selection" | "app_open";
   },
 ): Promise<boolean> {
   if (input.reason !== "repair" && input.reason !== "account_selection") {
@@ -102,6 +115,30 @@ async function shouldBypassRateLimitForRepair(
     }
 
     return institution.isStale || ["failed", "stale", "revoked"].includes(institution.status);
+  });
+}
+
+async function runNonManualSync(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  input: {
+    userId: string;
+    provider: FinancialProviderName;
+    reason: "repair" | "account_selection" | "app_open";
+    bypassRateLimit: boolean;
+  },
+) {
+  if (!input.bypassRateLimit) {
+    await assertManualSyncAllowed(supabase, {
+      userId: input.userId,
+      provider: input.provider,
+      now: new Date(),
+    });
+  }
+
+  return runProviderSync(supabase, {
+    userId: input.userId,
+    provider: input.provider,
+    reason: input.reason,
   });
 }
 
