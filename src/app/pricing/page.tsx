@@ -75,7 +75,7 @@ export default function PricingPage() {
             </SwissText>
           </div>
           <div className="col-span-12 lg:col-span-7 lg:col-start-6 lg:row-span-2 lg:row-start-1">
-            <PricingCards eventSource="pricing_page" showIncluded />
+            <PricingCards eventSource="pricing_page" />
           </div>
         </SwissSection>
 

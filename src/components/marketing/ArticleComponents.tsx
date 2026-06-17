@@ -7,98 +7,190 @@ import type { Article, ArticleBodyBlock } from "@/lib/marketing/content";
 import { parseArticleBody } from "@/lib/marketing/content";
 import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
 
+const homeArticleAssets = {
+  "meet-pip-cute-money-companion": marketingAssets.blogMeetPipCard,
+  "why-your-bank-balance-is-misleading": marketingAssets.blogBankBalanceCard,
+  "what-is-spendable-cash-today": marketingAssets.blogSpendableCashCard,
+} as const;
+
+function getHomeArticleAsset(article: Article) {
+  return homeArticleAssets[article.slug as keyof typeof homeArticleAssets] ?? marketingAssets.articleCoverTemplate;
+}
+
 export function ArticleCard({
   article,
   featured = false,
+  variant,
 }: {
   article: Article;
   featured?: boolean;
+  variant?: "default" | "featured" | "homeFeatured" | "homeCompact";
 }) {
-  if (featured) {
+  const resolvedVariant = variant ?? (featured ? "featured" : "default");
+
+  if (resolvedVariant === "homeFeatured") {
+    const asset = getHomeArticleAsset(article);
+
     return (
-      <article className="grid gap-6 border-y border-line py-8 md:grid-cols-[minmax(0,1fr)_18rem]">
-        <div>
-          <div className="flex flex-wrap items-start gap-4">
-            <span className="border-t border-gold pt-2 text-xs font-extrabold uppercase tracking-[0.08em] text-ink">
+      <article className="pip-blog-card pip-blog-card-feature">
+        <Link className="focus-ring pip-blog-card-media" href={`/blog/${article.slug}`}>
+          <img
+            src={asset.src}
+            alt={asset.alt}
+            width={asset.width}
+            height={asset.height}
+            loading="lazy"
+            decoding="async"
+          />
+        </Link>
+        <div className="pip-blog-card-body">
+          <span className="pip-blog-card-label">Featured read</span>
+          <h3>
+            <Link className="focus-ring rounded hover:text-moss" href={`/blog/${article.slug}`}>
+              {article.title}
+            </Link>
+          </h3>
+          <p>{article.description}</p>
+          <div className="pip-blog-card-meta">
+            <span>{formatDate(article.publishedAt)}</span>
+            <span>
+              <Clock3 aria-hidden="true" size={14} />
+              {article.readingTimeMinutes} min
+            </span>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  if (resolvedVariant === "homeCompact") {
+    const asset = getHomeArticleAsset(article);
+
+    return (
+      <article className="pip-blog-card pip-blog-card-compact">
+        <Link className="focus-ring pip-blog-card-media" href={`/blog/${article.slug}`}>
+          <img
+            src={asset.src}
+            alt={asset.alt}
+            width={asset.width}
+            height={asset.height}
+            loading="lazy"
+            decoding="async"
+          />
+        </Link>
+        <div className="pip-blog-card-body">
+          <div className="pip-blog-card-tags">
+            {article.tags.slice(0, 2).map((tag) => (
+              <span key={tag}>{tag}</span>
+            ))}
+          </div>
+          <h3>
+            <Link className="focus-ring rounded hover:text-moss" href={`/blog/${article.slug}`}>
+              {article.title}
+            </Link>
+          </h3>
+          <p>{article.description}</p>
+          <div className="pip-blog-card-meta">
+            <span>{formatDate(article.publishedAt)}</span>
+            <span>
+              <Clock3 aria-hidden="true" size={14} />
+              {article.readingTimeMinutes} min
+            </span>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  if (resolvedVariant === "featured") {
+    const asset = getHomeArticleAsset(article);
+
+    return (
+      <article className="pip-blog-card pip-blog-card-feature pip-blog-card-index-feature">
+        <Link className="focus-ring pip-blog-card-media" href={`/blog/${article.slug}`}>
+          <img
+            src={asset.src}
+            alt={asset.alt}
+            width={asset.width}
+            height={asset.height}
+            loading="lazy"
+            decoding="async"
+          />
+        </Link>
+        <div className="pip-blog-card-body">
+          <div className="pip-blog-card-tags">
+            <span>
               Start here
             </span>
             {article.tags.slice(0, 3).map((tag) => (
-              <span
-                className="border-t border-line pt-2 text-xs font-bold text-moss"
-                key={tag}
-              >
+              <span key={tag}>
                 {tag}
               </span>
             ))}
           </div>
-          <h2 className="swiss-type mt-5 max-w-3xl text-4xl font-extrabold leading-[1.05] text-ink sm:text-5xl">
+          <h2>
             <Link className="focus-ring rounded hover:text-moss" href={`/blog/${article.slug}`}>
               {article.title}
             </Link>
           </h2>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-ink/66">{article.description}</p>
-          <div className="mt-5 flex flex-wrap items-center gap-4 text-xs font-bold uppercase tracking-normal text-taupe">
+          <p>{article.description}</p>
+          <div className="pip-blog-card-meta">
             <span>{formatDate(article.publishedAt)}</span>
-            <span className="inline-flex items-center gap-1">
+            <span>
               <Clock3 aria-hidden="true" size={14} />
               {article.readingTimeMinutes} min
             </span>
           </div>
           <Link
-            className="focus-ring mt-6 inline-flex min-h-11 items-center justify-center gap-2 bg-ink px-5 text-sm font-bold text-porcelain transition hover:bg-moss"
+            className="focus-ring pip-blog-read-link"
             href={`/blog/${article.slug}`}
           >
             Start reading
             <ArrowRight aria-hidden="true" size={16} />
           </Link>
         </div>
-        <img
-          src={marketingAssets.articleCoverTemplate.src}
-          alt=""
-          aria-hidden="true"
-          width={marketingAssets.articleCoverTemplate.width}
-          height={marketingAssets.articleCoverTemplate.height}
-          loading="lazy"
-          decoding="async"
-          className="hidden h-full w-full self-stretch border border-line bg-porcelain object-contain md:block"
-        />
       </article>
     );
   }
 
+  const asset = getHomeArticleAsset(article);
+
   return (
-    <article
-      className="border-t border-line pt-5"
-    >
-      <div className="flex flex-wrap gap-3">
-        {article.tags.slice(0, 3).map((tag) => (
-          <span
-            className="border-t border-line pt-2 text-xs font-bold text-moss"
-            key={tag}
-          >
-            {tag}
-          </span>
-        ))}
-      </div>
-      <h2
-        className="swiss-type mt-4 text-2xl font-extrabold leading-[1.05] text-ink"
-      >
-        <Link className="focus-ring rounded hover:text-moss" href={`/blog/${article.slug}`}>
-          {article.title}
-        </Link>
-      </h2>
-      <p className="mt-3 text-sm leading-6 text-ink/66">{article.description}</p>
-      <div className="mt-5 flex flex-wrap items-center gap-4 text-xs font-bold uppercase tracking-normal text-taupe">
-        <span>{formatDate(article.publishedAt)}</span>
-        <span className="inline-flex items-center gap-1">
-          <Clock3 aria-hidden="true" size={14} />
-          {article.readingTimeMinutes} min
-        </span>
-      </div>
-      <Link className="focus-ring mt-5 inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink" href={`/blog/${article.slug}`}>
-        Read article
-        <ArrowRight aria-hidden="true" size={16} />
+    <article className="pip-blog-card pip-blog-card-default">
+      <Link className="focus-ring pip-blog-card-media" href={`/blog/${article.slug}`}>
+        <img
+          src={asset.src}
+          alt={asset.alt}
+          width={asset.width}
+          height={asset.height}
+          loading="lazy"
+          decoding="async"
+        />
       </Link>
+      <div className="pip-blog-card-body">
+        <div className="pip-blog-card-tags">
+          {article.tags.slice(0, 3).map((tag) => (
+            <span key={tag}>{tag}</span>
+          ))}
+        </div>
+        <h2>
+          <Link className="focus-ring rounded hover:text-moss" href={`/blog/${article.slug}`}>
+            {article.title}
+          </Link>
+        </h2>
+        <p>{article.description}</p>
+        <div className="pip-blog-card-meta">
+          <span>{formatDate(article.publishedAt)}</span>
+          <span>
+            <Clock3 aria-hidden="true" size={14} />
+            {article.readingTimeMinutes} min
+          </span>
+        </div>
+        <Link className="focus-ring pip-blog-read-link" href={`/blog/${article.slug}`}>
+          Read article
+          <ArrowRight aria-hidden="true" size={16} />
+        </Link>
+      </div>
     </article>
   );
 }
@@ -222,7 +314,7 @@ function renderBlock(block: ArticleBodyBlock) {
 
 function ArticleCallout({ body, title }: { body: string; title?: string }) {
   return (
-    <aside className="max-w-2xl border-l-4 border-moss bg-porcelain p-5">
+    <aside className="max-w-2xl rounded-3xl border border-moss/20 bg-moss/10 p-6 shadow-[0_18px_44px_rgba(28,27,27,0.045)]">
       {title ? <p className="text-sm font-bold uppercase tracking-normal text-moss">{title}</p> : null}
       <p className={["text-base leading-7 text-ink/74", title ? "mt-2" : ""].join(" ")}>{renderInlineText(body)}</p>
     </aside>
@@ -237,7 +329,7 @@ function MoneyExampleBlock({
   title?: string;
 }) {
   return (
-    <aside className="max-w-2xl border-t border-line bg-paper p-5">
+    <aside className="max-w-2xl rounded-3xl border border-line bg-paper p-6 shadow-[0_18px_44px_rgba(28,27,27,0.045)]">
       <p className="text-sm font-bold uppercase tracking-normal text-moss">{title ?? "Money example"}</p>
       <dl className="mt-4 divide-y divide-line font-mono text-sm">
         {rows.map((row) => (
@@ -259,11 +351,11 @@ function ComparisonBlock({
   title?: string;
 }) {
   return (
-    <aside className="max-w-3xl border-t border-line bg-porcelain p-5">
+    <aside className="max-w-3xl rounded-3xl border border-line bg-porcelain p-6 shadow-[0_18px_44px_rgba(28,27,27,0.045)]">
       {title ? <p className="text-sm font-bold uppercase tracking-normal text-moss">{title}</p> : null}
       <div className={["grid gap-4 md:grid-cols-2", title ? "mt-4" : ""].join(" ")}>
         {items.map((item) => (
-          <div className="border-t border-line bg-paper pt-4" key={item.label}>
+          <div className="rounded-2xl bg-paper p-4" key={item.label}>
             <p className="text-sm font-bold text-ink">{item.label}</p>
             <p className="mt-2 text-sm leading-6 text-ink/66">{renderInlineText(item.value)}</p>
           </div>
@@ -283,7 +375,7 @@ function InlineCtaCard({
   label?: string;
 }) {
   return (
-    <aside className="max-w-2xl border-y border-moss/30 bg-moss/10 p-5">
+    <aside className="max-w-2xl rounded-3xl border border-moss/20 bg-moss/10 p-6 shadow-[0_18px_44px_rgba(28,27,27,0.045)]">
       <p className="text-base font-bold leading-7 text-ink">{renderInlineText(body)}</p>
       <MarketingCtaLink
         className="focus-ring mt-4 inline-flex min-h-11 items-center justify-center gap-2 bg-moss px-5 text-sm font-bold text-porcelain transition hover:bg-ink"
@@ -321,17 +413,17 @@ function ArticleFigure({
   width?: number;
 }) {
   return (
-    <figure className="max-w-2xl">
+    <figure className="max-w-2xl overflow-hidden rounded-3xl border border-line bg-porcelain shadow-[0_18px_44px_rgba(28,27,27,0.045)]">
       <img
         alt={alt}
-        className="w-full border border-line bg-porcelain object-contain"
+        className="aspect-[16/9] w-full object-cover"
         decoding="async"
         height={height}
         loading="lazy"
         src={src}
         width={width}
       />
-      {caption ? <figcaption className="mt-3 text-sm leading-6 text-ink/58">{renderInlineText(caption)}</figcaption> : null}
+      {caption ? <figcaption className="p-4 text-sm leading-6 text-ink/58">{renderInlineText(caption)}</figcaption> : null}
     </figure>
   );
 }

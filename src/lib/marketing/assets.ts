@@ -10,7 +10,16 @@ export type MarketingAssetRole =
   | "ogImage"
   | "articleCoverTemplate"
   | "appStoreProductShowcase"
-  | "budgetAppComparison";
+  | "budgetAppComparison"
+  | "homepageBalanceRoom"
+  | "homepageHabitShift"
+  | "homepageAntiBudget"
+  | "homepageHowItWorks"
+  | "homepageAskPip"
+  | "homepageFinalCta"
+  | "blogMeetPipCard"
+  | "blogBankBalanceCard"
+  | "blogSpendableCashCard";
 
 export type MarketingAsset = {
   role: MarketingAssetRole;
@@ -26,13 +35,13 @@ export type MarketingAsset = {
 export const marketingAssets = {
   homepageHeroProduct: {
     role: "homepageHeroProduct",
-    src: "/marketing/home/homepage-hero-product.png",
-    width: 1672,
-    height: 941,
-    alt: "Pip app screen showing Spendable Cash Today beside the Pip character.",
+    src: "/marketing/home/homepage-hero-transparent.png",
+    width: 951,
+    height: 1095,
+    alt: "Pip standing in front of a phone showing Spendable Cash Today.",
     decorative: false,
     priority: true,
-    placement: "Homepage hero product visual.",
+    placement: "Homepage hero generated transparent product image.",
   },
   bankBalanceComparison: {
     role: "bankBalanceComparison",
@@ -143,6 +152,96 @@ export const marketingAssets = {
     decorative: false,
     priority: false,
     placement: "Not-another-budget-app comparison section.",
+  },
+  homepageBalanceRoom: {
+    role: "homepageBalanceRoom",
+    src: "/marketing/home/balance-room-generated.png",
+    width: 1672,
+    height: 941,
+    alt: "A bank balance, upcoming commitments, and Pip's Spendable Cash Today number in one calm flow.",
+    decorative: false,
+    priority: false,
+    placement: "Homepage balance-room section generated scene.",
+  },
+  homepageHabitShift: {
+    role: "homepageHabitShift",
+    src: "/marketing/plan/03-habit-shift.png",
+    width: 1651,
+    height: 953,
+    alt: "A hand checking a bank balance habit beside a hand checking Pip's daily number.",
+    decorative: false,
+    priority: false,
+    placement: "Homepage habit-shift section generated scene.",
+  },
+  homepageAntiBudget: {
+    role: "homepageAntiBudget",
+    src: "/marketing/home/anti-budget-poster-v2.png",
+    width: 1672,
+    height: 941,
+    alt: "Pip in a calm product scene beside softened budgeting clutter.",
+    decorative: false,
+    priority: false,
+    placement: "Homepage not-another-budget-app section generated scene.",
+  },
+  homepageHowItWorks: {
+    role: "homepageHowItWorks",
+    src: "/marketing/plan/05-how-it-works.png",
+    width: 1748,
+    height: 900,
+    alt: "Four calm steps leading to Pip's Spendable Cash Today screen.",
+    decorative: false,
+    priority: false,
+    placement: "Homepage how-it-works section generated scene.",
+  },
+  homepageAskPip: {
+    role: "homepageAskPip",
+    src: "/marketing/home/ask-pip-proof-v2.png",
+    width: 1672,
+    height: 941,
+    alt: "A phone and Pip in a calm Ask Pip conversation scene.",
+    decorative: false,
+    priority: false,
+    placement: "Homepage Ask Pip section generated scene.",
+  },
+  homepageFinalCta: {
+    role: "homepageFinalCta",
+    src: "/marketing/home/final-cta-poster-v2.png",
+    width: 1672,
+    height: 941,
+    alt: "Pip and a phone on a warm product stage with space for a call to action.",
+    decorative: false,
+    priority: false,
+    placement: "Homepage final call-to-action generated scene.",
+  },
+  blogMeetPipCard: {
+    role: "blogMeetPipCard",
+    src: "/marketing/blog/cards/meet-pip-cute-money-companion.png",
+    width: 1586,
+    height: 992,
+    alt: "Pip beside a phone showing the Spendable Cash Today number.",
+    decorative: false,
+    priority: false,
+    placement: "Homepage blog card for the Meet Pip article.",
+  },
+  blogBankBalanceCard: {
+    role: "blogBankBalanceCard",
+    src: "/marketing/blog/cards/why-your-bank-balance-is-misleading.png",
+    width: 1586,
+    height: 992,
+    alt: "A bank balance screen beside layered commitments and Pip.",
+    decorative: false,
+    priority: false,
+    placement: "Homepage blog card for the misleading bank balance article.",
+  },
+  blogSpendableCashCard: {
+    role: "blogSpendableCashCard",
+    src: "/marketing/blog/cards/what-is-spendable-cash-today.png",
+    width: 1586,
+    height: 992,
+    alt: "A Pip phone screen showing the daily Spendable Cash Today number.",
+    decorative: false,
+    priority: false,
+    placement: "Homepage blog card for the Spendable Cash Today article.",
   },
 } satisfies Record<MarketingAssetRole, MarketingAsset>;
 

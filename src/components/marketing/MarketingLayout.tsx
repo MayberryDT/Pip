@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Menu } from "lucide-react";
 import { marketingSite } from "@/lib/marketing/site";
 import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { MarketingPageView } from "@/components/marketing/MarketingPageView";
@@ -67,25 +67,30 @@ export function MarketingHeader() {
             {productAccess.primaryLabel}
             <ArrowRight aria-hidden="true" size={16} strokeWidth={2.4} />
           </MarketingCtaLink>
+          <details className="editorial-mobile-menu">
+            <summary className="focus-ring editorial-mobile-menu-trigger" aria-label="Open navigation">
+              <Menu aria-hidden="true" size={19} strokeWidth={2.3} />
+            </summary>
+            <nav className="editorial-mobile-menu-panel" aria-label="Mobile primary">
+              {navLinks.map((link) => (
+                <Link
+                  className="focus-ring editorial-mobile-link"
+                  href={link.href}
+                  key={link.href}
+                >
+                  {link.label}
+                </Link>
+              ))}
+              <Link
+                className="focus-ring editorial-mobile-link"
+                href={marketingSite.appPath}
+              >
+                App
+              </Link>
+            </nav>
+          </details>
         </div>
       </header>
-      <nav className="editorial-mobile-nav" aria-label="Mobile primary">
-        {navLinks.map((link) => (
-          <Link
-            className="focus-ring editorial-mobile-link"
-            href={link.href}
-            key={link.href}
-          >
-            {link.label}
-          </Link>
-        ))}
-        <Link
-          className="focus-ring editorial-mobile-link"
-          href={marketingSite.appPath}
-        >
-          App
-        </Link>
-      </nav>
     </>
   );
 }

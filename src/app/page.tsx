@@ -3,11 +3,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   Bell,
-  Landmark,
   Leaf,
-  MessageCircle,
-  PiggyBank,
-  SearchCheck,
   ShieldCheck,
 } from "lucide-react";
 import { ArticleCard, JsonLd } from "@/components/marketing/ArticleComponents";
@@ -38,31 +34,54 @@ const steps = [
   {
     title: "Connect securely",
     copy: "Link read-only accounts so Pip can understand the money coming in and going out.",
-    Icon: Landmark,
   },
   {
     title: "Protect the cushion",
     copy: "Pick the amount you want held outside everyday spending decisions.",
-    Icon: PiggyBank,
   },
   {
     title: "Check Pip first",
     copy: "Open one number before the next purchase instead of guessing from your bank balance.",
-    Icon: SearchCheck,
   },
   {
     title: "Ask for the why",
     copy: "When the number changes, Pip can explain what moved it without turning the app into a dashboard.",
-    Icon: MessageCircle,
   },
 ];
 
-const trustFacts = [
-  "Read-only account data",
-  "Pip cannot move money",
-  "No ads",
-  "No selling your financial data",
+const identityProofs = ["Read-only data", "Cushion protected", "One daily number"];
+
+const trustProofs = [
+  "Read-only data in",
+  "Pip calculates",
+  "Cannot move money",
+  "No ads or data selling",
 ];
+
+const askPipPrompts = ["Can I spend $50?", "Why did today change?", "What's coming up?"];
+
+const askPipConversation = [
+  {
+    speaker: "You",
+    body: "Can I spend $50?",
+    tone: "user",
+  },
+  {
+    speaker: "Pip",
+    body: "Yes. You still have $84 for today.",
+    tone: "pip",
+  },
+  {
+    speaker: "You",
+    body: "Why did today change?",
+    tone: "user",
+  },
+  {
+    speaker: "Pip",
+    body: "Your phone bill posted this morning.",
+    tone: "pip",
+  },
+] as const;
 
 export default function MarketingHomePage() {
   const articles = getPublishedArticles();
@@ -75,15 +94,19 @@ export default function MarketingHomePage() {
       <JsonLd data={buildOrganizationJsonLd()} />
       <JsonLd data={buildWebSiteJsonLd()} />
       <main className="pip-home">
-        <section className="pip-home-section pip-hero-section">
+        <section className="pip-home-section pip-hero-section" data-section="hero">
           <div className="pip-home-wrap pip-hero-grid">
             <div className="pip-copy-stack">
               <p className="pip-pill-label">
                 <Bell aria-hidden="true" size={16} />
                 Introducing a calmer way to spend
               </p>
-              <h1 className="pip-home-title pip-home-title-hero" aria-label="Before you spend, check Pip.">
-                Before you spend, <span>check Pip.</span>
+              <h1
+                className="pip-home-title pip-home-title-hero pip-home-title-lockup"
+                aria-label="Before you spend, check Pip."
+              >
+                <span className="pip-title-line">Before you spend,</span>
+                <span className="pip-title-line pip-title-line-accent">check Pip.</span>
               </h1>
               <p className="pip-home-lede">
                 Pip gives you Spendable Cash Today: one calm number before the next purchase,
@@ -103,15 +126,13 @@ export default function MarketingHomePage() {
                   See how it works
                 </Link>
               </div>
-              <p className="pip-trust-line">
-                Read-only account data. Pip cannot move your money. No ads. No selling your
-                financial data.
-              </p>
             </div>
-            <div className="pip-hero-media">
-              <div className="pip-hero-glow" aria-hidden="true" />
+            <div className="pip-hero-stage" aria-label="Pip app product scene">
+              <div className="pip-stage-glow" aria-hidden="true" />
+              <div className="pip-stage-sun" aria-hidden="true" />
               <img
                 alt={marketingAssets.homepageHeroProduct.alt}
+                className="pip-stage-subject"
                 decoding="async"
                 fetchPriority="high"
                 height={marketingAssets.homepageHeroProduct.height}
@@ -119,48 +140,42 @@ export default function MarketingHomePage() {
                 src={marketingAssets.homepageHeroProduct.src}
                 width={marketingAssets.homepageHeroProduct.width}
               />
+              <div className="pip-stage-ground" aria-hidden="true" />
             </div>
           </div>
         </section>
 
-        <section className="pip-home-section pip-section-paper">
-          <div className="pip-home-wrap pip-centered-block">
-            <h2 className="pip-home-title pip-home-title-section">
-              The balance is real. It is just not all open room.
-            </h2>
-            <p className="pip-home-text">
-              Your bank app shows what exists. Pip subtracts what already has a job and gives you
-              the number to check before the next purchase.
-            </p>
-            <div className="pip-framed-media pip-framed-media-large">
+        <section className="pip-home-section pip-section-paper" data-section="balance">
+          <div className="pip-home-wrap pip-balance-layout pip-balance-layout-reversed">
+            <div className="pip-copy-stack pip-balance-copy">
+              <p className="pip-kicker">Balance room</p>
+              <h2 className="pip-home-title pip-home-title-section">
+                Your balance is not all open room.
+              </h2>
+              <p className="pip-home-text">
+                Your bank app shows what exists. Pip subtracts what already has a job and gives you
+                the number to check before the next purchase.
+              </p>
+            </div>
+            <figure className="pip-generated-figure pip-balance-figure">
               <img
-                alt={marketingAssets.bankBalanceComparison.alt}
+                alt={marketingAssets.homepageBalanceRoom.alt}
                 decoding="async"
-                height={marketingAssets.bankBalanceComparison.height}
+                height={marketingAssets.homepageBalanceRoom.height}
                 loading="lazy"
-                src={marketingAssets.bankBalanceComparison.src}
-                width={marketingAssets.bankBalanceComparison.width}
+                src={marketingAssets.homepageBalanceRoom.src}
+                width={marketingAssets.homepageBalanceRoom.width}
               />
-            </div>
+            </figure>
           </div>
         </section>
 
-        <section className="pip-home-section">
-          <div className="pip-home-wrap">
-            <div className="pip-two-column pip-founder-row">
-              <div className="pip-framed-media">
-                <img
-                  alt={marketingAssets.founderInsight.alt}
-                  decoding="async"
-                  height={marketingAssets.founderInsight.height}
-                  loading="lazy"
-                  src={marketingAssets.founderInsight.src}
-                  width={marketingAssets.founderInsight.width}
-                />
-              </div>
-              <div className="pip-copy-stack">
+        <section className="pip-home-section" data-section="habit">
+          <div className="pip-home-wrap pip-habit-layout">
+              <div className="pip-copy-stack pip-habit-copy">
+                <p className="pip-kicker">The habit</p>
                 <h2 className="pip-home-title pip-home-title-compact">
-                  Built for people who will never use a budget.
+                  Same check. Better number.
                 </h2>
                 <p className="pip-home-text">
                   Most people already have a money habit: open the bank app, look at the balance,
@@ -171,232 +186,209 @@ export default function MarketingHomePage() {
                   No category lecture. No spreadsheet upkeep. Just a single daily signal that makes
                   the next decision easier.
                 </p>
-              </div>
-            </div>
-            <div className="pip-habit-card">
-              <p className="pip-kicker">The habit</p>
-              <h2 className="pip-home-title pip-home-title-section">
-                One number for the moment right before you spend.
-              </h2>
-              <div className="pip-number-card" aria-label="Example Spendable Cash Today amount">
-                <span>Spendable Cash Today</span>
-                <strong>$84</strong>
-                <div aria-hidden="true">
-                  <i />
+                <div className="pip-habit-chips" aria-label="Habit shift">
+                  <span>Same habit</span>
+                  <span>Better number</span>
                 </div>
               </div>
-            </div>
+              <figure className="pip-generated-figure pip-habit-figure">
+                <img
+                  alt={marketingAssets.homepageHabitShift.alt}
+                  decoding="async"
+                  height={marketingAssets.homepageHabitShift.height}
+                  loading="lazy"
+                  src={marketingAssets.homepageHabitShift.src}
+                  width={marketingAssets.homepageHabitShift.width}
+                />
+              </figure>
           </div>
         </section>
 
-        <section className="pip-home-section pip-section-sage">
-          <div className="pip-home-wrap">
-            <div className="pip-centered-block">
-              <h2 className="pip-home-title pip-home-title-section">
-                Pip is <em>not</em> another budget app.
-              </h2>
-              <p className="pip-home-text">
-                Say goodbye to spreadsheets, category guilt, and complex charts. Clarity should
-                feel calming, not like homework.
-              </p>
-            </div>
-            <div className="pip-framed-media pip-framed-media-large">
+        <section className="pip-home-section pip-section-sage" data-section="anti-budget">
+          <div className="pip-home-wrap pip-identity-chapter">
+            <figure className="pip-story-poster pip-story-poster-anti">
               <img
-                alt={marketingAssets.budgetAppComparison.alt}
+                alt={marketingAssets.homepageAntiBudget.alt}
                 decoding="async"
-                height={marketingAssets.budgetAppComparison.height}
+                height={marketingAssets.homepageAntiBudget.height}
                 loading="lazy"
-                src={marketingAssets.budgetAppComparison.src}
-                width={marketingAssets.budgetAppComparison.width}
+                src={marketingAssets.homepageAntiBudget.src}
+                width={marketingAssets.homepageAntiBudget.width}
               />
-            </div>
-            <div className="pip-two-column pip-meet-row">
-              <div className="pip-copy-stack">
-                <p className="pip-kicker">Meet Pip</p>
+              <figcaption className="pip-story-overlay pip-story-overlay-center">
+                <p className="pip-kicker">Not another budget app</p>
                 <h2 className="pip-home-title pip-home-title-section">
-                  Cute on purpose. Serious where it counts.
+                  Pip is <em>not</em> another budget app.
                 </h2>
                 <p className="pip-home-text">
-                  Money is stressful. Pip is softer because the daily check needs to be repeatable,
-                  but Spendable Cash Today still comes from real account data.
+                  Say goodbye to spreadsheets, category guilt, and complex charts. Clarity should
+                  feel calming, not like homework.
                 </p>
-              </div>
-              <div className="pip-character-pair">
-                <div className="pip-character-card">
-                  <img
-                    alt={marketingAssets.cuteSeriousCharacter.alt}
-                    decoding="async"
-                    height={marketingAssets.cuteSeriousCharacter.height}
-                    loading="lazy"
-                    src={marketingAssets.cuteSeriousCharacter.src}
-                    width={marketingAssets.cuteSeriousCharacter.width}
-                  />
+                <div className="pip-proof-rail" aria-label="Pip proof points">
+                  {identityProofs.map((proof) => (
+                    <span className="pip-proof-pill" key={proof}>
+                      <ShieldCheck aria-hidden="true" size={17} />
+                      {proof}
+                    </span>
+                  ))}
                 </div>
-                <div className="pip-character-card pip-character-card-wide">
-                  <img
-                    alt={marketingAssets.pipEmotionalStates.alt}
-                    decoding="async"
-                    height={marketingAssets.pipEmotionalStates.height}
-                    loading="lazy"
-                    src={marketingAssets.pipEmotionalStates.src}
-                    width={marketingAssets.pipEmotionalStates.width}
-                  />
-                </div>
-              </div>
-            </div>
+              </figcaption>
+            </figure>
           </div>
         </section>
 
-        <section className="pip-home-section" id="how-it-works">
+        <section className="pip-home-section" data-section="how-it-works" id="how-it-works">
           <div className="pip-home-wrap">
             <div className="pip-centered-block">
               <p className="pip-kicker">How it works</p>
               <h2 className="pip-home-title pip-home-title-section">
-                Four calm steps to Spendable Cash Today.
+                Four calm steps to one daily number.
               </h2>
             </div>
-            <div className="pip-step-grid">
-              {steps.map(({ Icon, copy, title }, index) => (
-                <article className="pip-soft-card pip-step-card" key={title}>
-                  <span className="pip-step-icon">
-                    <Icon aria-hidden="true" size={26} strokeWidth={1.8} />
-                  </span>
+            <figure className="pip-generated-figure pip-wide-figure">
+              <img
+                alt={marketingAssets.homepageHowItWorks.alt}
+                decoding="async"
+                height={marketingAssets.homepageHowItWorks.height}
+                loading="lazy"
+                src={marketingAssets.homepageHowItWorks.src}
+                width={marketingAssets.homepageHowItWorks.width}
+              />
+            </figure>
+            <div className="pip-step-rule-list" aria-label="Four steps to Spendable Cash Today">
+              {steps.map(({ copy, title }, index) => (
+                <article className="pip-step-rule" key={title}>
                   <p>{String(index + 1).padStart(2, "0")}</p>
                   <h3>{title}</h3>
                   <span>{copy}</span>
                 </article>
               ))}
-              <article className="pip-soft-card pip-step-showcase">
-                <div>
-                  <h3>Connect accounts. Choose a cushion. Check one daily number.</h3>
-                  <p>The number comes first. The why is there when you ask.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="pip-home-section pip-section-paper" data-section="pricing-trust" id="pricing">
+          <div className="pip-home-wrap">
+            <div className="pip-conversion-panel">
+              <div className="pip-copy-stack pip-conversion-copy">
+                <p className="pip-kicker">Pricing</p>
+                <h2 className="pip-home-title pip-home-title-compact">
+                  Simple pricing for one daily number.
+                </h2>
+                <p className="pip-home-text">
+                  {pipPaidTrustLine} No ads. No selling your financial data.
+                </p>
+                <PricingCards eventSource="home_pricing" />
+              </div>
+              <div className="pip-trust-proof" id="security">
+                <p className="pip-kicker">Trust</p>
+                <h2 className="pip-home-title pip-home-title-compact">
+                  Cute does not mean careless.
+                </h2>
+                <p className="pip-home-text">
+                  Read-only connections feed the daily signal. Pip calculates the number, keeps the
+                  paid relationship direct, and never turns your data into ads.
+                </p>
+                <div className="pip-trust-proof-flow" aria-label="How Pip handles account signals">
+                  {trustProofs.map((proof, index) => (
+                    <div className="pip-trust-proof-node" key={proof}>
+                      <span>{String(index + 1).padStart(2, "0")}</span>
+                      <strong>{proof}</strong>
+                    </div>
+                  ))}
                 </div>
-                <img
-                  alt={marketingAssets.howPipWorksSteps.alt}
-                  decoding="async"
-                  height={marketingAssets.howPipWorksSteps.height}
-                  loading="lazy"
-                  src={marketingAssets.howPipWorksSteps.src}
-                  width={marketingAssets.howPipWorksSteps.width}
-                />
-              </article>
+                <Link className="pip-inline-link focus-ring" href="/security">
+                  Read security details
+                  <ArrowRight aria-hidden="true" size={16} />
+                </Link>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="pip-home-section pip-section-paper" id="pricing">
-          <div className="pip-home-wrap pip-pricing-security-grid">
-            <div className="pip-copy-stack">
-              <p className="pip-kicker">Pricing</p>
-              <h2 className="pip-home-title pip-home-title-compact">
-                Simple pricing for one daily number.
-              </h2>
-              <p className="pip-home-text">
-                {pipPaidTrustLine} No ads. No selling your financial data.
-              </p>
-              <PricingCards eventSource="home_pricing" />
-              <div className="pip-framed-media pip-pricing-media">
-                <img
-                  alt={marketingAssets.pricingIllustration.alt}
-                  decoding="async"
-                  height={marketingAssets.pricingIllustration.height}
-                  loading="lazy"
-                  src={marketingAssets.pricingIllustration.src}
-                  width={marketingAssets.pricingIllustration.width}
-                />
-              </div>
-            </div>
-            <div className="pip-security-panel" id="security">
-              <p className="pip-kicker">Trust</p>
-              <h2 className="pip-home-title pip-home-title-compact">
-                Cute does not mean careless.
-              </h2>
-              <p className="pip-home-text">
-                Pip uses read-only account data. It cannot move your money. The paid model keeps
-                the relationship direct.
-              </p>
-              <div className="pip-framed-media">
-                <img
-                  alt={marketingAssets.securityTrustIllustration.alt}
-                  decoding="async"
-                  height={marketingAssets.securityTrustIllustration.height}
-                  loading="lazy"
-                  src={marketingAssets.securityTrustIllustration.src}
-                  width={marketingAssets.securityTrustIllustration.width}
-                />
-              </div>
-              <div className="pip-trust-grid">
-                {trustFacts.map((fact) => (
-                  <span key={fact}>
-                    <ShieldCheck aria-hidden="true" size={17} />
-                    {fact}
-                  </span>
-                ))}
-              </div>
-              <Link className="pip-inline-link focus-ring" href="/security">
-                Read security details
-                <ArrowRight aria-hidden="true" size={16} />
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        <section className="pip-home-section">
-          <div className="pip-home-wrap pip-two-column pip-ask-row">
-            <div className="pip-framed-media">
-              <img
-                alt={marketingAssets.articleCoverTemplate.alt}
-                decoding="async"
-                height={marketingAssets.articleCoverTemplate.height}
-                loading="lazy"
-                src={marketingAssets.articleCoverTemplate.src}
-                width={marketingAssets.articleCoverTemplate.width}
-              />
-            </div>
-            <div className="pip-copy-stack">
+        <section className="pip-home-section" data-section="ask-pip" id="ask-pip">
+          <div className="pip-home-wrap pip-ask-layout">
+            <div className="pip-copy-stack pip-ask-copy">
               <p className="pip-kicker">Ask Pip</p>
               <h2 className="pip-home-title pip-home-title-section">
-                Have a conversation with your money.
+                Ask Pip about your money.
               </h2>
               <p className="pip-home-text">
                 Sometimes you need more than a number. Ask Pip natural questions and get calm,
                 context-aware answers without digging through transaction histories.
               </p>
               <div className="pip-chat-prompts" aria-label="Example questions">
-                <span>Can I spend $50?</span>
-                <span>Why did today change?</span>
-                <span>What's coming up?</span>
+                {askPipPrompts.map((prompt) => (
+                  <span key={prompt}>{prompt}</span>
+                ))}
+              </div>
+            </div>
+            <figure className="pip-generated-figure pip-ask-proof">
+              <img
+                alt={marketingAssets.homepageAskPip.alt}
+                decoding="async"
+                height={marketingAssets.homepageAskPip.height}
+                loading="lazy"
+                src={marketingAssets.homepageAskPip.src}
+                width={marketingAssets.homepageAskPip.width}
+              />
+              <div className="pip-ask-thread" aria-label="Example Ask Pip conversation">
+                {askPipConversation.map((message) => (
+                  <p className={`pip-ask-bubble pip-ask-bubble-${message.tone}`} key={`${message.speaker}-${message.body}`}>
+                    <span>{message.speaker}</span>
+                    {message.body}
+                  </p>
+                ))}
+              </div>
+            </figure>
+          </div>
+        </section>
+
+        <section className="pip-home-section pip-section-paper pip-blog-section" data-section="blog" id="blog">
+          <div className="pip-home-wrap">
+            <div className="pip-blog-editorial-head pip-centered-block">
+                <p className="pip-kicker">Pip blog</p>
+                <h2 className="pip-home-title pip-home-title-section">
+                  Tiny money habits, no homework.
+                </h2>
+                <p className="pip-home-text">
+                  Product-led reads about bank-balance guessing, daily spending signals, cute
+                  finance design, and why one number can work better than a budget.
+                </p>
+                <Link className="pip-inline-link focus-ring" href="/blog">
+                  Read the blog
+                  <ArrowRight aria-hidden="true" size={16} />
+                </Link>
+            </div>
+            <div className="pip-blog-editorial-grid">
+              {featuredArticles[0] ? (
+                <ArticleCard article={featuredArticles[0]} variant="homeFeatured" />
+              ) : null}
+              <div className="pip-blog-supporting">
+                {featuredArticles.slice(1).map((article) => (
+                  <ArticleCard article={article} key={article.slug} variant="homeCompact" />
+                ))}
               </div>
             </div>
           </div>
         </section>
 
-        <section className="pip-home-section pip-section-paper" id="blog">
+        <section className="pip-home-section pip-final-cta" data-section="final-cta" id="get-pip">
           <div className="pip-home-wrap">
-            <div className="pip-centered-block">
-              <p className="pip-kicker">Pip blog</p>
-              <h2 className="pip-home-title pip-home-title-section">
-                Tiny money habits, no homework.
-              </h2>
-              <p className="pip-home-text">
-                Product-led reads about bank-balance guessing, daily spending signals, cute finance
-                design, and why one number can work better than a budget.
-              </p>
-            </div>
-            <div className="pip-article-grid">
-              {featuredArticles.map((article) => (
-                <ArticleCard article={article} key={article.slug} />
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="pip-home-section pip-final-cta" id="get-pip">
-          <div className="pip-home-wrap pip-final-grid">
-            <div className="pip-copy-stack">
+            <figure className="pip-story-poster pip-story-poster-final">
+              <img
+                alt={marketingAssets.homepageFinalCta.alt}
+                decoding="async"
+                height={marketingAssets.homepageFinalCta.height}
+                loading="lazy"
+                src={marketingAssets.homepageFinalCta.src}
+                width={marketingAssets.homepageFinalCta.width}
+              />
+              <figcaption className="pip-story-overlay pip-story-overlay-left pip-final-overlay">
               <Leaf aria-hidden="true" className="pip-final-icon" size={46} strokeWidth={1.5} />
               <h2 className="pip-home-title pip-home-title-hero">
-                Your bank balance is not permission to spend.
+                <span className="pip-title-line">Check Pip </span>
+                <span className="pip-title-line">before you spend.</span>
               </h2>
               <p className="pip-home-lede">
                 Pip gives you one calm number before the next purchase. Plans start at{" "}
@@ -416,17 +408,9 @@ export default function MarketingHomePage() {
                   View pricing
                 </Link>
               </div>
-            </div>
-            <div className="pip-framed-media">
-              <img
-                alt={marketingAssets.appStoreProductShowcase.alt}
-                decoding="async"
-                height={marketingAssets.appStoreProductShowcase.height}
-                loading="lazy"
-                src={marketingAssets.appStoreProductShowcase.src}
-                width={marketingAssets.appStoreProductShowcase.width}
-              />
-            </div>
+              <p className="pip-final-proof">Plans start at {pipPricing.weekly.displayPrice}.</p>
+              </figcaption>
+            </figure>
           </div>
         </section>
       </main>

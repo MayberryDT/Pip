@@ -20,19 +20,70 @@ import sitemap from "@/app/sitemap";
 const stalePublicMarketingPattern =
   /\b(?:waitlist|tester|testers|launch access|launch list|notify me|request access)\b|join the beta|join the list|#launch-access|when pip launches|when it launches|coming soon to (?:iphone|android|the app store|google play)/i;
 
+const homepageSectionHooks = [
+  "hero",
+  "balance",
+  "habit",
+  "anti-budget",
+  "how-it-works",
+  "pricing-trust",
+  "ask-pip",
+  "blog",
+  "final-cta",
+];
+
+const renderedMarketingAssetRoles = [
+  "homepageHeroProduct",
+  "homepageBalanceRoom",
+  "homepageHabitShift",
+  "homepageAntiBudget",
+  "homepageHowItWorks",
+  "homepageAskPip",
+  "homepageFinalCta",
+  "blogMeetPipCard",
+  "blogBankBalanceCard",
+  "blogSpendableCashCard",
+  "pricingIllustration",
+  "securityTrustIllustration",
+  "howPipWorksSteps",
+  "articleCoverTemplate",
+] as const;
+
 describe("marketing website pages", () => {
   it("renders the public root marketing homepage", () => {
     const html = renderToStaticMarkup(<MarketingHomePage />);
 
+    for (const section of homepageSectionHooks) {
+      expect(html).toContain(`data-section="${section}"`);
+    }
+
     expect(html).toContain("Before you spend, check Pip.");
     expect(html).toContain("Spendable Cash Today");
+    expect(html).toContain("pip-home-title-lockup");
+    expect(html).toContain('class="pip-title-line"');
+    expect(html).toContain('class="pip-title-line pip-title-line-accent"');
     expect(html).toContain("Get Pip");
     expect(html).toContain("$2.99/week");
     expect(html).toContain("$7.99/month");
-    expect(html).toContain("Read-only account data. Pip cannot move your money.");
-    expect(html).toContain("The balance is real. It is just not all open room.");
-    expect(html).toContain("Built for people who will never use a budget.");
+    expect(html).not.toContain("Read-only account data. Pip cannot move your money.");
+    expect(html).not.toContain("Read-only account data");
+    expect(html).not.toContain("Pip cannot move money");
+    expect(html).toContain("Your balance is not all open room.");
+    expect(html).toContain("Same check. Better number.");
+    expect(html).toContain("Same habit");
+    expect(html).toContain("Better number");
+    expect(html).toContain("Read-only data");
+    expect(html).toContain("Cushion protected");
+    expect(html).toContain("One daily number");
+    expect(html).toContain("Read the blog");
+    expect(html).toContain("Featured read");
+    expect(html).toContain("pip-generated-figure");
     expect(html).toContain(marketingAssets.homepageHeroProduct.src);
+    expect(html).toContain(marketingAssets.homepageBalanceRoom.src);
+    expect(html).toContain(marketingAssets.homepageAskPip.src);
+    expect(html).toContain(marketingAssets.blogMeetPipCard.src);
+    expect(html).toContain("editorial-mobile-menu");
+    expect(html).not.toContain("editorial-mobile-nav");
     expect(html).not.toMatch(stalePublicMarketingPattern);
     expect(html).not.toContain('type="email"');
   });
@@ -43,14 +94,65 @@ describe("marketing website pages", () => {
       .slice(css.lastIndexOf("@media (max-width: 900px)"))
       .split("@media (max-width: 767px)")[0];
 
-    expect(mobileChromeCss).toContain(".editorial-header {\n    position: static;");
-    expect(mobileChromeCss).toContain(".editorial-mobile-nav {\n    position: static;");
-    expect(mobileChromeCss).toContain("display: flex;");
-    expect(mobileChromeCss).toContain("gap: 0.625rem;");
-    expect(mobileChromeCss).toContain("flex: 0 0 auto;");
+    expect(mobileChromeCss).toContain(".editorial-header {\n    position: relative;");
+    expect(mobileChromeCss).toContain("z-index: 60;");
+    expect(mobileChromeCss).toContain("grid-template-columns: 1fr auto auto;");
+    expect(mobileChromeCss).toContain(".editorial-mobile-menu {\n    position: relative;");
+    expect(mobileChromeCss).toContain("display: block;");
+    expect(mobileChromeCss).toContain(".editorial-mobile-menu-panel {");
+    expect(mobileChromeCss).toContain("position: absolute;");
     expect(mobileChromeCss).toContain(".editorial-footer-grid {\n    row-gap: 1rem;");
+    expect(mobileChromeCss).not.toContain(".editorial-mobile-nav {\n    position: static;");
     expect(mobileChromeCss).not.toContain("position: sticky;");
     expect(mobileChromeCss).not.toContain("top: 4.5rem;");
+  });
+
+  it("keeps the hero product asset transparent", () => {
+    const heroAsset = readFileSync(
+      join(process.cwd(), "public", marketingAssets.homepageHeroProduct.src.replace(/^\//, "")),
+    );
+
+    expect(heroAsset[25]).toBe(6);
+  });
+
+  it("keeps the mobile hero subject from being clipped", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const mobileHeroCss = css.slice(css.lastIndexOf("@media (max-width: 767px)"));
+
+    expect(css).toContain(".pip-title-line {\n  display: block;\n  white-space: nowrap;");
+    expect(css).toContain(".pip-home-title .pip-title-line-accent,");
+    expect(css).toContain(".pip-home-title-lockup {\n  max-width: none;");
+    expect(mobileHeroCss).toContain(".pip-home-title-lockup {\n    max-width: none;");
+    expect(mobileHeroCss).toContain(".pip-hero-stage {\n    min-height: min(31.5rem, 124vw);");
+    expect(mobileHeroCss).toContain("margin: 1.25rem -1.25rem -0.5rem;");
+    expect(mobileHeroCss).toContain("overflow: visible;");
+    expect(mobileHeroCss).toContain(".pip-home .pip-stage-subject {");
+    expect(mobileHeroCss).toContain("top: 0;");
+    expect(mobileHeroCss).toContain("bottom: auto;");
+    expect(mobileHeroCss).toContain("max-width: 100%;");
+  });
+
+  it("keeps redesigned homepage sections scoped and responsive", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const tabletCss = css
+      .slice(css.lastIndexOf("@media (max-width: 980px)"))
+      .split("@media (max-width: 900px)")[0];
+    const mobileCss = css.slice(css.lastIndexOf("@media (max-width: 767px)"));
+
+    expect(css).toContain(".pip-balance-layout,");
+    expect(css).toContain(".pip-generated-figure {");
+    expect(css).toContain(".pip-habit-layout,");
+    expect(css).toContain(".pip-identity-summary,");
+    expect(css).toContain(".pip-step-rule-list {");
+    expect(css).toContain(".pip-blog-editorial-grid {");
+    expect(css).toContain(".pip-final-figure {");
+    expect(tabletCss).toContain(".pip-balance-layout,");
+    expect(tabletCss).toContain(".pip-habit-layout,");
+    expect(tabletCss).toContain(".pip-ask-layout {");
+    expect(tabletCss).toContain("grid-template-columns: 1fr;");
+    expect(mobileCss).toContain(".pip-generated-figure,");
+    expect(mobileCss).toContain(".pip-chat-prompts span {");
+    expect(mobileCss).toContain("min-height: 2.75rem;");
   });
 
   it("keeps the product app available at /app", async () => {
@@ -173,7 +275,7 @@ describe("marketing website pages", () => {
   });
 
   it("maps and renders the required marketing image assets", async () => {
-    expect(requiredMarketingAssetRoles).toHaveLength(12);
+    expect(requiredMarketingAssetRoles).toHaveLength(21);
 
     for (const asset of Object.values(marketingAssets)) {
       expect(asset.src).toMatch(/^\/marketing\//);
@@ -196,10 +298,8 @@ describe("marketing website pages", () => {
       renderToStaticMarkup(article),
     ].join("\n");
 
-    for (const asset of Object.values(marketingAssets)) {
-      if (asset.role === "ogImage") {
-        continue;
-      }
+    for (const role of renderedMarketingAssetRoles) {
+      const asset = marketingAssets[role];
 
       expect(publicHtml, asset.role).toContain(asset.src);
     }
