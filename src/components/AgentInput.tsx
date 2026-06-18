@@ -71,7 +71,7 @@ export function AgentInput({
   return (
     <form
       ref={formRef}
-      className="relative mt-auto shrink-0 pt-4"
+      className="pip-composer-dock relative mt-auto shrink-0 pt-4"
       data-testid="agent-input"
       onSubmit={handleSubmit}
       aria-busy={busy}
@@ -79,7 +79,7 @@ export function AgentInput({
       <textarea
         ref={inputRef}
         rows={1}
-        className="focus-ring max-h-56 min-h-[3.55rem] w-full resize-none overflow-y-hidden rounded-[1.35rem] border border-line bg-porcelain/[0.34] px-5 py-4 pr-16 text-base font-medium leading-6 text-ink shadow-[0_14px_36px_rgba(60,50,40,0.04)] placeholder:text-taupe/[0.84] max-[380px]:min-h-[3.35rem] max-[380px]:text-[0.96rem]"
+        className="focus-ring pip-composer-input max-h-56 min-h-[3.55rem] w-full resize-none overflow-y-hidden rounded-[1.35rem] border border-line bg-porcelain/[0.34] px-5 py-4 pr-16 text-base font-medium leading-6 text-ink shadow-[0_14px_36px_rgba(60,50,40,0.04)] placeholder:text-taupe/[0.84] max-[380px]:min-h-[3.35rem] max-[380px]:text-[0.96rem]"
         value={message}
         onChange={(event) => setMessage(event.target.value)}
         onFocus={() => scheduleComposerIntoView(formRef.current)}
@@ -90,7 +90,7 @@ export function AgentInput({
       />
       <button
         type="submit"
-        className="focus-ring absolute bottom-2 right-2 grid h-11 w-11 place-items-center rounded-full bg-ink text-paper shadow-[0_12px_28px_rgba(43,42,39,0.16)] transition hover:bg-ink/[0.82] disabled:pointer-events-none disabled:opacity-0 max-[380px]:h-10 max-[380px]:w-10"
+        className="focus-ring pip-composer-submit absolute bottom-2 right-2 grid h-11 w-11 place-items-center rounded-full bg-ink text-paper shadow-[0_12px_28px_rgba(43,42,39,0.16)] transition hover:bg-ink/[0.82] disabled:pointer-events-none disabled:opacity-0 max-[380px]:h-10 max-[380px]:w-10"
         disabled={disabled || busy || !message.trim()}
         aria-label="Send"
         title="Send"

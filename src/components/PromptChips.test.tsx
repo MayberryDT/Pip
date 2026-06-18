@@ -9,20 +9,31 @@ describe("PromptChips", () => {
       <PromptChips chips={overflowingPromptChips} onSelect={() => undefined} />,
     );
 
-    expect(markup.match(/<button/g)).toHaveLength(5);
+    expect(markup.match(/<button/g)).toHaveLength(3);
     expect(markup).toContain("Upcoming bills");
     expect(markup).toContain("How should I think about spending?");
     expect(markup).toContain("What would a $25 purchase do?");
-    expect(markup).toContain("Show recent transactions");
-    expect(markup).toContain("Show the math");
-    expect(markup).toContain("flex-nowrap");
-    expect(markup).toContain("overflow-x-auto");
-    expect(markup).toContain("scrollbar-none");
-    expect(markup).toContain("justify-center");
+    expect(markup).not.toContain("Show recent transactions");
+    expect(markup).not.toContain("Show the math");
+    expect(markup).toContain("pip-prompt-grid");
+    expect(markup).toContain("grid-cols-2");
     expect(markup).toContain("min-w-full");
-    expect(markup).toContain("w-max");
-    expect(markup).toContain("whitespace-nowrap");
+    expect(markup).toContain("min-w-0");
+    expect(markup).not.toContain("overflow-x-auto");
+    expect(markup).not.toContain("whitespace-nowrap");
     expect(markup).not.toContain("role=&quot;menu&quot;");
+  });
+
+  it("can render compact active-chat chips without horizontal clipping", () => {
+    const markup = renderToStaticMarkup(
+      <PromptChips compact chips={overflowingPromptChips} onSelect={() => undefined} />,
+    );
+
+    expect(markup.match(/<button/g)).toHaveLength(3);
+    expect(markup).toContain("is-compact");
+    expect(markup).not.toContain("overflow-x-auto");
+    expect(markup).not.toContain("whitespace-nowrap");
+    expect(markup).toContain("What would a $25 purchase do?");
   });
 });
 

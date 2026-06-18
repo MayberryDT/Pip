@@ -402,12 +402,12 @@ function CardShell({
   children: React.ReactNode;
 }) {
   return (
-    <section className="pip-wrap-anywhere glass-panel p-4">
-      <div className="mb-3 flex items-center gap-2">
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-moss/15 bg-moss/[0.08] text-moss">
+    <section className="pip-wrap-anywhere pip-card-shell glass-panel p-4">
+      <div className="pip-card-header mb-3 flex items-center gap-2">
+        <span className="pip-card-icon grid h-7 w-7 shrink-0 place-items-center rounded-full border border-moss/15 bg-moss/[0.08] text-moss">
           {icon}
         </span>
-        <h3 className="pip-wrap-anywhere text-[0.72rem] font-bold uppercase leading-4 tracking-normal text-taupe">{title}</h3>
+        <h3 className="pip-wrap-anywhere pip-card-title text-[0.72rem] font-bold uppercase leading-4 tracking-normal text-taupe">{title}</h3>
       </div>
       {children}
     </section>
@@ -424,7 +424,7 @@ function InsightRow({
     : row.valueText ?? "Included";
 
   return (
-    <div className="flex min-h-12 min-w-0 items-center justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
+    <div className="pip-card-row flex min-h-12 min-w-0 items-center justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
       <div className="min-w-0 flex-1">
         <p className="pip-wrap-anywhere text-sm font-semibold text-ink">{row.label}</p>
         {row.detail ? (
@@ -444,7 +444,7 @@ function GuidanceRow({
   row: Extract<AgentCard, { type: "guidance_card" }>["rows"][number];
 }) {
   return (
-    <div className="rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2.5">
+    <div className="pip-card-row rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2.5">
       <div className="flex min-w-0 items-center justify-between gap-3">
         <p className="pip-wrap-anywhere min-w-0 text-sm font-semibold text-ink">{row.label}</p>
         <span className={["h-2.5 w-2.5 shrink-0 rounded-full", dotToneClass(row.tone)].join(" ")} />
@@ -623,7 +623,7 @@ function MoneyRow({
   const valueClass = toneClass(tone);
 
   return (
-    <div className="flex min-h-10 items-center justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
+    <div className="pip-card-row flex min-h-10 items-center justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
       <span className={strong ? "pip-wrap-anywhere min-w-0 text-sm font-semibold text-ink" : "pip-wrap-anywhere min-w-0 text-sm font-medium text-ink/[0.68]"}>
         {label}
       </span>
@@ -651,7 +651,7 @@ function WarningBlock({
   label?: string;
 }) {
   return (
-    <div className="mt-3 flex gap-3 rounded-[0.9rem] border border-gold/15 bg-gold/[0.08] px-3 py-2.5 text-sm leading-5 text-ink/[0.68]">
+    <div className="pip-card-warning mt-3 flex gap-3 rounded-[0.9rem] border border-gold/15 bg-gold/[0.08] px-3 py-2.5 text-sm leading-5 text-ink/[0.68]">
       <AlertTriangle aria-hidden="true" className="mt-1 shrink-0 text-gold" size={17} />
       <div className="pip-wrap-anywhere min-w-0">
         {label ? (
@@ -676,7 +676,7 @@ function FormulaRow({
   strong?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-2">
+    <div className="pip-card-row flex items-center justify-between gap-4 rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-2">
       <span className={strong ? "pip-wrap-anywhere min-w-0 font-semibold text-ink" : "pip-wrap-anywhere min-w-0 text-ink/[0.66]"}>{label}</span>
       <span className={strong ? "font-semibold text-ink" : value < 0 ? "font-semibold text-coral" : "font-semibold text-moss"}>
         {formatMoney(value)}
@@ -706,7 +706,7 @@ function GroupedMoneyList({
       <p className="mb-2 text-xs font-bold uppercase tracking-normal text-taupe">{title}</p>
       <div className="space-y-2">
         {groups.map((group) => (
-          <div key={group.id} className="flex items-center justify-between gap-3 rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-2">
+          <div key={group.id} className="pip-card-row flex items-center justify-between gap-3 rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-2">
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-ink">{group.label}</p>
               <p className="text-xs text-ink/[0.52]">

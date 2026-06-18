@@ -3514,9 +3514,54 @@ button {
 }
 
 .pip-app-shell {
+  position: relative;
+  isolation: isolate;
+  --pip-app-paper: #fbf5ec;
+  --pip-app-paper-warm: #f5eadc;
+  --pip-app-porcelain: #fffaf2;
+  --pip-app-ink: #1c1b1b;
+  --pip-app-sage: #53684a;
+  --pip-app-sage-deep: #314a2f;
+  --pip-app-moss-wash: rgba(193, 212, 174, 0.18);
+  --pip-app-honey-wash: rgba(201, 166, 109, 0.18);
+  --pip-app-muted: rgba(73, 68, 58, 0.72);
+  --pip-app-rule: rgba(190, 171, 142, 0.38);
+  --pip-app-rule-strong: rgba(121, 102, 70, 0.18);
+  --pip-app-paper-shadow: rgba(84, 62, 35, 0.1);
   background:
-    radial-gradient(circle at 50% 2%, rgba(255, 253, 248, 0.96), rgba(255, 253, 248, 0.62) 34%, rgba(248, 243, 234, 0.2) 70%),
-    linear-gradient(180deg, #fbf7ef 0%, #f8f3ea 100%);
+    radial-gradient(circle at 52% 10%, rgba(255, 250, 242, 0.96), transparent 21rem),
+    linear-gradient(145deg, #fffaf2 0%, #f7efe3 54%, #fbf5ec 100%),
+    #fbf5ec;
+}
+
+.pip-app-shell::before,
+.pip-app-shell::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+}
+
+.pip-app-shell::before {
+  background-image:
+    linear-gradient(rgba(121, 102, 70, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(121, 102, 70, 0.014) 1px, transparent 1px);
+  background-size: 36px 36px;
+  opacity: 0.72;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.3), transparent 66%);
+}
+
+.pip-app-shell::after {
+  background:
+    radial-gradient(circle at 14% 84%, var(--pip-app-honey-wash), transparent 17rem),
+    radial-gradient(circle at 88% 24%, var(--pip-app-moss-wash), transparent 18rem),
+    linear-gradient(180deg, rgba(255, 250, 242, 0.58) 0%, transparent 36%, rgba(199, 178, 144, 0.08) 100%);
+}
+
+.pip-app-shell > * {
+  position: relative;
+  z-index: 1;
 }
 
 .pip-wrap-anywhere {
@@ -3534,25 +3579,39 @@ button {
   max-height: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
-  padding-top: max(1.25rem, env(safe-area-inset-top));
-  padding-bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + var(--pip-keyboard-inset, 0px)));
+  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-bottom: max(1rem, calc(env(safe-area-inset-bottom) + var(--pip-keyboard-inset, 0px)));
 }
 
 .pip-metric-hero {
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-shrink: 0;
   flex-direction: column;
   align-items: center;
-  padding-top: 0.55rem;
+  width: 100%;
+  padding-top: 0.05rem;
+  padding-bottom: 0.72rem;
   transition:
     padding 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
     opacity 320ms ease;
 }
 
+.pip-metric-hero::after {
+  position: absolute;
+  right: 18%;
+  bottom: 0.08rem;
+  left: 18%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(121, 102, 70, 0.2), transparent);
+  content: "";
+}
+
 .pip-brand-title {
   display: flex;
   justify-content: center;
-  max-height: 5.25rem;
+  max-height: 3.85rem;
   margin: 0;
   overflow: visible;
   transition:
@@ -3563,7 +3622,7 @@ button {
 
 .pip-wordmark-image {
   display: block;
-  width: min(7.85rem, 39vw);
+  width: min(5.85rem, 31vw);
   height: auto;
   user-select: none;
 }
@@ -3584,11 +3643,11 @@ button {
 }
 
 .pip-metric-label {
-  margin: 0.9rem 0 0;
-  color: #6f675f;
-  font-family: var(--font-display);
-  font-size: 1rem;
-  font-weight: 600;
+  margin: 0.45rem 0 0;
+  color: var(--pip-app-sage);
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 850;
   letter-spacing: 0;
   line-height: 1;
   text-shadow: 0 1px 0 rgba(255, 253, 248, 0.72);
@@ -3600,13 +3659,17 @@ button {
 }
 
 .pip-metric-number {
-  margin: 1.05rem 0 0;
-  color: #2e2d2a;
+  margin: 0.48rem 0 0;
+  color: var(--pip-app-ink);
   font-family: var(--font-display);
-  font-size: 7.72rem;
+  font-size: 6.48rem;
   font-weight: 400;
   letter-spacing: 0;
-  line-height: 0.78;
+  line-height: 0.82;
+  font-variant-numeric: tabular-nums;
+  text-shadow:
+    0 1px 0 rgba(255, 253, 248, 0.9),
+    0 18px 40px rgba(28, 27, 27, 0.08);
   transition:
     margin 420ms cubic-bezier(0.2, 0.8, 0.2, 1),
     opacity 320ms ease,
@@ -3629,7 +3692,7 @@ button {
 .pip-metric-subtitle {
   min-width: 0;
   margin: 0;
-  color: rgba(46, 45, 42, 0.62);
+  color: var(--pip-app-muted);
   font-size: 0.95rem;
   font-weight: 650;
   line-height: 1.35;
@@ -3696,6 +3759,14 @@ button {
 
 .pip-metric-hero.is-chatting {
   padding-top: 0;
+  padding-bottom: 0.08rem;
+}
+
+.pip-metric-hero.is-chatting::after {
+  right: 32%;
+  bottom: 0;
+  left: 32%;
+  opacity: 0.58;
 }
 
 .pip-metric-hero.is-chatting .pip-brand-title {
@@ -3707,14 +3778,15 @@ button {
 
 .pip-metric-hero.is-chatting .pip-metric-label {
   margin-top: 0;
-  color: #81766d;
+  color: var(--pip-app-sage);
+  font-size: 0.7rem;
   opacity: 0.72;
   transform: translateY(-0.04rem);
 }
 
 .pip-metric-hero.is-chatting .pip-metric-number {
-  margin-top: 0.14rem;
-  font-size: 2.62rem;
+  margin-top: 0.03rem;
+  font-size: 2.28rem;
   opacity: 0.82;
   transform: translateY(-0.04rem);
 }
@@ -3724,13 +3796,16 @@ button {
 }
 
 .glass-panel {
-  border: 1px solid rgba(232, 221, 209, 0.84);
-  border-radius: 1.45rem;
-  background: rgba(255, 253, 248, 0.64);
+  border: 1px solid var(--pip-app-rule);
+  border-radius: 1.25rem;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(255, 247, 236, 0.82)),
+    rgba(255, 250, 242, 0.82);
   box-shadow:
-    0 18px 44px rgba(60, 50, 40, 0.07),
-    inset 0 1px 0 rgba(255, 255, 255, 0.74);
-  backdrop-filter: blur(14px);
+    0 18px 42px var(--pip-app-paper-shadow),
+    0 1px 0 rgba(255, 255, 255, 0.72) inset,
+    0 -1px 0 rgba(151, 122, 82, 0.045) inset;
+  backdrop-filter: blur(10px);
 }
 
 .assistant-intro-card {
@@ -3756,7 +3831,7 @@ button {
   align-self: flex-start;
   margin-top: 0.15rem;
   margin-left: clamp(0.7rem, 5vw, 1.45rem);
-  filter: drop-shadow(0 16px 24px rgba(60, 50, 40, 0.1));
+  filter: drop-shadow(0 18px 28px rgba(28, 27, 27, 0.1));
 }
 
 .assistant-intro-character-image {
@@ -3780,9 +3855,9 @@ button {
   left: 2.5rem;
   width: 1.35rem;
   height: 1.35rem;
-  border-right: 1px solid rgba(232, 221, 209, 0.84);
-  border-bottom: 1px solid rgba(232, 221, 209, 0.84);
-  background: rgba(255, 253, 248, 0.64);
+  border-right: 1px solid var(--pip-app-rule);
+  border-bottom: 1px solid var(--pip-app-rule);
+  background: rgba(255, 249, 240, 0.92);
   content: "";
   transform: rotate(45deg);
   backdrop-filter: blur(14px);
@@ -3829,11 +3904,235 @@ button {
 .assistant-ready-intro-panel {
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: center;
+  padding-bottom: clamp(0.2rem, 1dvh, 0.45rem);
+}
+
+.assistant-ready-intro-panel .assistant-intro-stack {
+  align-items: center;
+  padding-top: 0;
+}
+
+.assistant-ready-intro-panel .assistant-intro-message {
+  width: min(18.85rem, 88%);
+  align-self: center;
+  border-color: rgba(121, 102, 70, 0.14);
+  border-radius: 1.22rem;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(255, 247, 236, 0.86)),
+    rgba(255, 250, 242, 0.86);
+  box-shadow:
+    0 16px 38px rgba(84, 62, 35, 0.09),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -1px 0 rgba(151, 122, 82, 0.045);
+}
+
+.assistant-ready-intro-panel .assistant-intro-message::after {
+  left: 2.7rem;
+}
+
+.assistant-ready-intro-panel .assistant-intro-character {
+  width: min(11.6rem, 46vw);
+  align-self: center;
+  margin: 0.45rem auto 0;
 }
 
 .chat-thread-in {
+  padding-bottom: 0.55rem;
+  scrollbar-gutter: stable;
   animation: chat-thread-in 180ms ease-out both;
+}
+
+.pip-user-bubble {
+  border-color: rgba(121, 102, 70, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 249, 240, 0.96), rgba(247, 238, 224, 0.78)),
+    rgba(248, 240, 229, 0.78);
+  box-shadow:
+    0 12px 26px rgba(84, 62, 35, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.pip-assistant-row {
+  align-items: flex-start;
+}
+
+.pip-assistant-bubble,
+.pip-error-bubble {
+  border-radius: 1.15rem;
+}
+
+.pip-assistant-bubble {
+  border-color: rgba(121, 102, 70, 0.13);
+  color: rgba(37, 34, 29, 0.84);
+  box-shadow:
+    0 16px 36px rgba(84, 62, 35, 0.085),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.pip-card-shell {
+  border-color: rgba(121, 102, 70, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(255, 248, 239, 0.9)),
+    rgba(255, 250, 242, 0.9);
+  box-shadow:
+    0 18px 40px rgba(84, 62, 35, 0.1),
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 -1px 0 rgba(151, 122, 82, 0.05) inset;
+}
+
+.pip-card-header {
+  padding-bottom: 0.12rem;
+}
+
+.pip-card-icon {
+  border-color: rgba(83, 104, 74, 0.18);
+  background:
+    linear-gradient(180deg, rgba(239, 246, 228, 0.72), rgba(225, 237, 210, 0.42));
+  color: var(--pip-app-sage);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 5px 12px rgba(83, 104, 74, 0.08);
+}
+
+.pip-card-title {
+  color: rgba(99, 86, 65, 0.68);
+}
+
+.pip-card-row {
+  border-color: rgba(190, 171, 142, 0.34);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 0.88), rgba(255, 249, 240, 0.7)),
+    rgba(255, 250, 242, 0.74);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.72),
+    0 4px 12px rgba(84, 62, 35, 0.035);
+}
+
+.pip-card-warning {
+  border-color: rgba(180, 151, 105, 0.2);
+  background:
+    linear-gradient(180deg, rgba(255, 247, 232, 0.88), rgba(248, 235, 208, 0.58));
+}
+
+.pip-thinking-bubble {
+  border-radius: 999px;
+}
+
+.pip-prompt-tray {
+  padding-top: 0.05rem;
+}
+
+.pip-prompt-grid {
+  max-width: 100%;
+}
+
+.pip-prompt-tray.is-compact {
+  padding-top: 0.1rem;
+}
+
+.pip-prompt-tray.is-compact .pip-prompt-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  width: 100%;
+  min-width: 100%;
+  gap: 0.35rem;
+}
+
+.pip-prompt-chip {
+  min-width: 0;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 0.9rem;
+  border-color: rgba(121, 102, 70, 0.14);
+  background:
+    linear-gradient(180deg, rgba(255, 251, 245, 0.96), rgba(252, 243, 230, 0.78)),
+    rgba(255, 250, 242, 0.82);
+  color: rgba(28, 27, 27, 0.86);
+  font-weight: 650;
+  box-shadow:
+    0 6px 16px rgba(84, 62, 35, 0.052),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  white-space: normal;
+}
+
+.pip-prompt-tray.is-compact .pip-prompt-chip {
+  width: 100%;
+  min-height: 2rem;
+  overflow: visible;
+  padding: 0.38rem 0.35rem;
+  font-size: 0.64rem;
+  line-height: 0.78rem;
+  white-space: normal;
+}
+
+.pip-prompt-chip:nth-child(3):last-child {
+  grid-column: 1 / -1;
+  justify-self: center;
+  width: min(100%, 14rem);
+}
+
+.pip-prompt-tray.is-compact .pip-prompt-chip:nth-child(3):last-child {
+  grid-column: auto;
+  justify-self: auto;
+  width: 100%;
+}
+
+.pip-prompt-chip:hover {
+  border-color: rgba(83, 104, 74, 0.28);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 1), rgba(251, 240, 224, 0.92));
+  color: var(--pip-app-sage-deep);
+}
+
+.pip-composer-dock {
+  padding-top: 0.48rem;
+}
+
+.pip-composer-dock::before {
+  position: absolute;
+  top: 0.05rem;
+  right: 0.85rem;
+  left: 0.85rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(121, 102, 70, 0.18), transparent);
+  content: "";
+}
+
+.pip-composer-input {
+  min-height: 3.08rem;
+  border-radius: 1.18rem;
+  border-color: rgba(121, 102, 70, 0.16);
+  padding: 0.72rem 3.1rem 0.72rem 1rem;
+  background:
+    linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(255, 248, 239, 0.88)),
+    rgba(255, 250, 242, 0.84);
+  font-size: 0.95rem;
+  line-height: 1.35rem;
+  box-shadow:
+    0 12px 28px rgba(84, 62, 35, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(151, 122, 82, 0.04);
+}
+
+.pip-composer-input:focus {
+  border-color: rgba(83, 104, 74, 0.34);
+  background:
+    linear-gradient(180deg, rgba(255, 253, 248, 1), rgba(255, 249, 240, 0.92));
+}
+
+.pip-composer-submit {
+  right: 0.38rem;
+  bottom: 0.38rem;
+  width: 2.35rem;
+  height: 2.35rem;
+  background: var(--pip-app-sage-deep);
+  box-shadow:
+    0 13px 26px rgba(49, 70, 44, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+}
+
+.pip-composer-submit:hover {
+  background: var(--pip-app-sage);
 }
 
 .chat-message-in {
@@ -3994,15 +4293,16 @@ button {
 
 @media (max-width: 380px) {
   .pip-metric-hero {
-    padding-top: 0.65rem;
+    padding-top: 0.1rem;
+    padding-bottom: 0.62rem;
   }
 
   .pip-brand-title {
-    max-height: 4.15rem;
+    max-height: 3.35rem;
   }
 
   .pip-wordmark-image {
-    width: min(7.45rem, 42vw);
+    width: min(5.25rem, 32vw);
   }
 
   .pip-onboarding-brand .pip-brand-title {
@@ -4014,11 +4314,11 @@ button {
   }
 
   .pip-metric-number {
-    font-size: 6.92rem;
+    font-size: 5.45rem;
   }
 
   .pip-metric-hero.is-chatting .pip-metric-number {
-    font-size: 2.42rem;
+    font-size: 2.08rem;
   }
 
   .assistant-intro-stack {
@@ -4026,8 +4326,25 @@ button {
   }
 
   .assistant-intro-character {
-    width: min(11.25rem, 48vw);
+    width: min(11.25rem, 49vw);
     margin-left: 0.8rem;
+  }
+
+  .assistant-ready-intro-panel .assistant-intro-character {
+    width: min(9.9rem, 46vw);
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .pip-composer-input {
+    min-height: 2.95rem;
+  }
+
+  .pip-prompt-tray.is-compact .pip-prompt-chip {
+    padding-right: 0.25rem;
+    padding-left: 0.25rem;
+    font-size: 0.6rem;
+    line-height: 0.74rem;
   }
 
   .assistant-intro-message {

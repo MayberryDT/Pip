@@ -2,26 +2,39 @@ import type { PromptChip } from "@/lib/agent/card-types";
 
 export function PromptChips({
   chips,
+  compact = false,
   onSelect,
 }: {
   chips: PromptChip[];
+  compact?: boolean;
   onSelect: (chip: PromptChip) => void;
 }) {
   if (chips.length === 0) {
     return null;
   }
+  const trayClassName = [
+    "pip-prompt-tray -mx-5 shrink-0 px-5 pb-0.5",
+    compact ? "is-compact" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const chipClassName = [
+    "focus-ring pip-prompt-chip min-h-[1.85rem] min-w-0 rounded-full border border-line bg-porcelain/50 px-2.5 py-1 text-[0.7rem] font-medium leading-[0.9rem] text-ink/90 shadow-[0_8px_22px_rgba(60,50,40,0.04)] transition hover:-translate-y-0.5 hover:bg-porcelain max-[380px]:text-[0.68rem] max-[380px]:leading-[0.84rem]",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div
-      className="scrollbar-none -mx-5 shrink-0 overflow-x-auto overflow-y-visible px-5 pb-1"
+      className={trayClassName}
       data-testid="prompt-chips"
     >
-      <div className="flex w-max min-w-full flex-nowrap justify-center gap-2">
-        {chips.map((chip) => (
+      <div className="pip-prompt-grid grid min-w-full grid-cols-2 gap-1.5">
+        {chips.slice(0, 3).map((chip) => (
           <button
             key={chip.id}
             type="button"
-            className="focus-ring h-10 min-w-max shrink-0 whitespace-nowrap rounded-full border border-line bg-porcelain/50 px-4 text-[0.82rem] font-medium leading-none text-ink/90 shadow-[0_8px_22px_rgba(60,50,40,0.04)] transition hover:-translate-y-0.5 hover:bg-porcelain max-[380px]:text-xs"
+            className={chipClassName}
             onClick={() => onSelect(chip)}
           >
             {chip.label}

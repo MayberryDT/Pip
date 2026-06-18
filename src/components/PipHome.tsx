@@ -204,10 +204,10 @@ export function PipHome({
     .filter(Boolean)
     .join(" ");
   const assistantSectionClassName = hasConversation
-    ? "mt-3 flex min-h-0 flex-1 flex-col overflow-hidden"
+    ? "mt-1 flex min-h-0 flex-1 flex-col overflow-hidden"
     : isSetupStep
       ? "onboarding-stage flex min-h-0 flex-1 flex-col overflow-hidden"
-      : "mt-6 flex min-h-0 flex-1 flex-col overflow-hidden max-[380px]:mt-5";
+      : "mt-4 flex min-h-0 flex-1 flex-col overflow-hidden max-[380px]:mt-4";
 
   useEffect(() => {
     const urlScenario = new URLSearchParams(window.location.search).get("scenario");
@@ -949,7 +949,7 @@ export function PipHome({
               onReportResponse={canUseInAppAccountActions ? reportAssistantResponse : undefined}
             />
           )}
-          {showPromptChips ? <PromptChips chips={chips} onSelect={selectPromptChip} /> : null}
+          {showPromptChips ? <PromptChips chips={chips} compact={hasConversation} onSelect={selectPromptChip} /> : null}
           {showAgentInput ? (
             <AgentInput
               busy={isSending}
