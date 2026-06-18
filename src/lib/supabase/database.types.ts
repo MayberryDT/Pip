@@ -722,6 +722,84 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      ai_response_reports: {
+        Row: {
+          id: string;
+          user_id: string;
+          conversation_id: string;
+          message_id: string;
+          reason:
+            | "inaccurate_financial_explanation"
+            | "unsafe_or_offensive"
+            | "privacy_concern"
+            | "confusing_or_misleading"
+            | "other";
+          details: string | null;
+          response_excerpt: string | null;
+          platform: string;
+          app_version: string | null;
+          user_agent: string | null;
+          status: "new" | "reviewed" | "dismissed" | "actioned";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          conversation_id: string;
+          message_id: string;
+          reason:
+            | "inaccurate_financial_explanation"
+            | "unsafe_or_offensive"
+            | "privacy_concern"
+            | "confusing_or_misleading"
+            | "other";
+          details?: string | null;
+          response_excerpt?: string | null;
+          platform?: string;
+          app_version?: string | null;
+          user_agent?: string | null;
+          status?: "new" | "reviewed" | "dismissed" | "actioned";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: "new" | "reviewed" | "dismissed" | "actioned";
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      tester_feedback: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          email: string | null;
+          message: string;
+          platform: string;
+          app_version: string | null;
+          user_agent: string | null;
+          status: "new" | "reviewed" | "dismissed" | "actioned";
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          email?: string | null;
+          message: string;
+          platform?: string;
+          app_version?: string | null;
+          user_agent?: string | null;
+          status?: "new" | "reviewed" | "dismissed" | "actioned";
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: "new" | "reviewed" | "dismissed" | "actioned";
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {

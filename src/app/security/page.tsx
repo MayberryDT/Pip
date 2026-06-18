@@ -43,7 +43,7 @@ const securityFacts = [
   },
   {
     title: "Deletion path",
-    copy: "You can ask Pip to delete stored financial data from the app when you want it cleared.",
+    copy: "You can delete your account from in-app Settings or use the public deletion page if you cannot access the app.",
   },
 ];
 
@@ -54,7 +54,7 @@ const paidTrustNotes = [
   },
   {
     title: "Stored product data",
-    copy: "Pip stores normalized financial data, account metadata, sync logs, user settings, AI chat context needed for product behavior, and product events needed to operate the app.",
+    copy: "Pip stores normalized financial data, account metadata, sync logs, user settings, AI chat context, AI response reports, tester feedback, and product events needed to operate the app.",
   },
   {
     title: "Provider boundary",
@@ -68,7 +68,7 @@ const paidTrustNotes = [
 
 export default function SecurityPage() {
   return (
-    <MarketingLayout>
+    <MarketingLayout showPricingLinks={false}>
       <main>
         <SwissSection className="editorial-home-hero" folio="01 / Security">
           <div className="col-span-12 lg:col-span-7">

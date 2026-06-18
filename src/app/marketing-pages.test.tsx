@@ -8,17 +8,19 @@ import AppPage from "@/app/app/page";
 import BlogIndexPage from "@/app/blog/page";
 import ArticlePage from "@/app/blog/[slug]/page";
 import HowItWorksPage from "@/app/how-it-works/page";
-import PricingPage from "@/app/pricing/page";
+import { PricingPageContent } from "@/components/marketing/PricingPageContent";
 import PrivacyPage from "@/app/privacy/page";
 import SecurityPage from "@/app/security/page";
 import SupportPage from "@/app/support/page";
 import TermsPage from "@/app/terms/page";
+import AndroidAccessPage from "@/app/android-access/page";
+import DeleteAccountPage from "@/app/delete-account/page";
 import { marketingAssets, requiredMarketingAssetRoles } from "@/lib/marketing/assets";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 
 const stalePublicMarketingPattern =
-  /\b(?:waitlist|tester|testers|launch access|launch list|notify me|request access)\b|join the beta|join the list|#launch-access|when pip launches|when it launches|coming soon to (?:iphone|android|the app store|google play)/i;
+  /\b(?:waitlist|launch access|launch list|notify me|request access)\b|join the beta|join the list|#launch-access|when pip launches|when it launches|coming soon to (?:iphone|android|the app store|google play)/i;
 
 const homepageSectionHooks = [
   "hero",
@@ -170,11 +172,13 @@ describe("marketing website pages", () => {
 
   it("renders required public support pages", () => {
     expect(renderToStaticMarkup(<HowItWorksPage />)).toContain("Pip turns money noise into one daily number");
-    expect(renderToStaticMarkup(<PricingPage />)).toContain("Simple pricing for one daily number");
+    expect(renderToStaticMarkup(<PricingPageContent />)).toContain("Simple pricing for one daily number");
     expect(renderToStaticMarkup(<SecurityPage />)).toContain("No money movement");
     expect(renderToStaticMarkup(<SupportPage />)).toContain("Account Connection Help");
     expect(renderToStaticMarkup(<PrivacyPage />)).toContain("What Pip Stores");
     expect(renderToStaticMarkup(<TermsPage />)).toContain("Product Boundary");
+    expect(renderToStaticMarkup(<DeleteAccountPage />)).toContain("Delete your Pip account");
+    expect(renderToStaticMarkup(<AndroidAccessPage />)).toContain("Your access is active");
   });
 
   it("renders the blog index and a published article page", async () => {
@@ -220,6 +224,7 @@ describe("marketing website pages", () => {
 
     expect(urls).toContain("https://spendwithpip.com/");
     expect(urls).toContain("https://spendwithpip.com/pricing");
+    expect(urls).toContain("https://spendwithpip.com/delete-account");
     expect(urls).toContain("https://spendwithpip.com/blog/what-is-spendable-cash-today");
     expect(urls).not.toContain("https://spendwithpip.com/app");
     expect(urls).not.toContain("https://spendwithpip.com/blog/daily-spending-allowance-vs-budget");
@@ -257,11 +262,12 @@ describe("marketing website pages", () => {
       renderToStaticMarkup(<MarketingHomePage />),
       renderToStaticMarkup(<BlogIndexPage />),
       renderToStaticMarkup(<HowItWorksPage />),
-      renderToStaticMarkup(<PricingPage />),
+      renderToStaticMarkup(<PricingPageContent />),
       renderToStaticMarkup(<SecurityPage />),
       renderToStaticMarkup(<SupportPage />),
       renderToStaticMarkup(<PrivacyPage />),
       renderToStaticMarkup(<TermsPage />),
+      renderToStaticMarkup(<DeleteAccountPage />),
       renderToStaticMarkup(article),
     ].join("\n");
 
@@ -293,7 +299,7 @@ describe("marketing website pages", () => {
       renderToStaticMarkup(<MarketingHomePage />),
       renderToStaticMarkup(<BlogIndexPage />),
       renderToStaticMarkup(<HowItWorksPage />),
-      renderToStaticMarkup(<PricingPage />),
+      renderToStaticMarkup(<PricingPageContent />),
       renderToStaticMarkup(<SecurityPage />),
       renderToStaticMarkup(article),
     ].join("\n");

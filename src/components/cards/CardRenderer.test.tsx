@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { isValidElement, type ReactNode } from "react";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import type { AgentCard } from "@/lib/agent/card-types";
 import { CardRenderer } from "@/components/cards/CardRenderer";
@@ -53,6 +53,18 @@ describe("CardRenderer", () => {
     expect(prompts).toEqual(["Add account"]);
   });
 
+  it("submits settings card action prompts through chat", () => {
+    const prompts: string[] = [];
+    const element = CardRenderer({
+      card: settingsPanelCard(),
+      onSubmitPrompt: (prompt) => prompts.push(prompt),
+    });
+    const button = findElementByType(element, "button");
+
+    button?.props.onClick();
+    expect(prompts).toEqual(["Show support"]);
+  });
+
   it("applies long-token wrapping to insight card text surfaces", () => {
     const longToken = "GENERAL_SERVICES_OTHER_GENERAL_SERVICES".repeat(4);
     const markup = renderToStaticMarkup(
@@ -100,6 +112,16 @@ function findElementByType(node: ReactNode, type: string): any {
 
   if (node.type === type) {
     return node;
+  }
+
+  if (
+    typeof node.type === "function" &&
+    !(node.type.prototype && "render" in node.type.prototype)
+  ) {
+    const element = node as ReactElement;
+    const Component = node.type as (props: any) => ReactNode;
+
+    return findElementByType(Component(element.props), type);
   }
 
   return findElementByType(node.props.children, type);
@@ -456,7 +478,88 @@ function getRenderableCards(): Array<{
         "Needs repair",
       ],
     },
+    {
+      name: "settings_panel",
+      card: settingsPanelCard(),
+      expectedText: [
+        "Settings",
+        "Account",
+        "tester@example.com",
+        "Connected data loaded",
+        "Support",
+        "Privacy and terms",
+      ],
+    },
+    {
+      name: "settings_detail",
+      card: {
+        type: "settings_detail",
+        title: "Terms",
+        summary: "Pip is a spending signal and assistant.",
+        rows: [
+          {
+            label: "Accuracy",
+            detail: "Pending or missing data can change Spendable Cash Today.",
+          },
+        ],
+        actions: [
+          {
+            id: "settings-overview",
+            label: "Settings",
+            prompt: "Settings",
+            style: "secondary",
+          },
+        ],
+      },
+      expectedText: [
+        "Terms",
+        "Pip is a spending signal and assistant.",
+        "Accuracy",
+        "Pending or missing data can change Spendable Cash Today.",
+      ],
+    },
   ];
+}
+
+function settingsPanelCard(): AgentCard {
+  return {
+    type: "settings_panel",
+    title: "Settings",
+    accountRows: [
+      {
+        label: "Account",
+        value: "tester@example.com",
+      },
+      {
+        label: "Data",
+        value: "Connected data loaded",
+      },
+    ],
+    sections: [
+      {
+        title: "Support",
+        body: "Get help, report answer quality, or send tester feedback from this chat.",
+      },
+      {
+        title: "Privacy and terms",
+        body: "Read the short in-app version here without leaving Pip.",
+      },
+    ],
+    actions: [
+      {
+        id: "settings-support",
+        label: "Support",
+        prompt: "Show support",
+        style: "secondary",
+      },
+      {
+        id: "settings-delete-account",
+        label: "Delete account",
+        prompt: "Delete my account",
+        style: "danger",
+      },
+    ],
+  };
 }
 
 function accountConnectionsCard(): AgentCard {

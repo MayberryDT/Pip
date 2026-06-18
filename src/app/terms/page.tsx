@@ -25,6 +25,7 @@ export default function TermsPage() {
         <p className="mt-3">
           Pip is not financial, tax, investment, credit, or legal advice. You are responsible for
           your spending, account connection choices, cushion settings, and financial decisions.
+          Pip does not make loan, credit, underwriting, insurance, or investment decisions.
         </p>
       </section>
 
@@ -51,6 +52,19 @@ export default function TermsPage() {
           Weekly and monthly plan availability may vary by platform. Cancellation and billing
           support should be handled through the platform or support channel where the subscription
           was started.
+        </p>
+        <p className="mt-3">
+          The Android Play test build is consumption-only and does not include purchase, checkout,
+          upgrade, trial, subscription, or external-payment prompts.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-bold text-ink">AI Responses</h2>
+        <p className="mt-3">
+          Pip may use AI to explain the deterministic Spendable Cash Today calculation and connected
+          account context. AI responses can be incomplete or wrong. Use the in-app report control if
+          a response looks inaccurate, unsafe, misleading, or privacy-sensitive.
         </p>
       </section>
 

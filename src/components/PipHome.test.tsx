@@ -47,6 +47,93 @@ describe("PipHome", () => {
     expect(markup).not.toContain("Data controls");
   });
 
+  it("keeps settings out of app chrome and exposes settings actions as chips", () => {
+    const markup = renderToStaticMarkup(
+      <PipHome
+        authState={{ status: "ready", email: "play-review@animasai.co" }}
+        enableAccountControls
+      />,
+    );
+    const visibleText = markup.replace(/<[^>]*>/g, " ");
+
+    expect(markup).not.toContain('data-testid="pip-settings-button"');
+    expect(markup).not.toContain('role="dialog"');
+    expect(markup).not.toContain('href="/settings"');
+    expect(markup).not.toMatch(/<nav\b|\brole="(menu|tab|tablist)"/i);
+    expect(visibleText).not.toContain("Account and support");
+    expect(visibleText).not.toContain("Pricing");
+
+    const settingsChips = __pipHomeTestHooks.getSettingsPromptChips({
+      canUseAccountActions: true,
+      hasConnectedData: true,
+    });
+    const settingsCard = __pipHomeTestHooks.createSettingsPanelCard({
+      email: "play-review@animasai.co",
+      canUseAccountActions: true,
+      hasConnectedData: true,
+      platform: "web",
+    });
+    const termsCard = __pipHomeTestHooks.createSettingsDetailCard("terms", {
+      canUseAccountActions: true,
+      hasConnectedData: true,
+    });
+
+    expect(settingsChips.map((chip) => chip.id)).toEqual([
+      "settings-support",
+      "settings-privacy",
+      "settings-terms",
+      "settings-connected-accounts",
+      "settings-feedback",
+      "settings-delete-account",
+    ]);
+    expect(settingsChips.slice(0, 3).map((chip) => chip.prompt)).toEqual([
+      "Show support",
+      "Show privacy",
+      "Show terms",
+    ]);
+    expect(settingsCard).toMatchObject({
+      type: "settings_panel",
+      title: "Settings",
+      accountRows: expect.arrayContaining([
+        {
+          label: "Account",
+          value: "play-review@animasai.co",
+        },
+      ]),
+    });
+    expect(settingsCard.actions.map((action) => action.id)).toContain("settings-terms");
+    expect(termsCard).toMatchObject({
+      type: "settings_detail",
+      title: "Terms",
+    });
+    expect(termsCard.rows.map((row) => row.label)).toContain("Accuracy");
+    expect(__pipHomeTestHooks.getChatOnlyRequest({
+      message: "settings",
+      pendingFlow: null,
+    })).toBe("settings");
+    expect(__pipHomeTestHooks.getChatOnlyRequest({
+      message: "terms",
+      pendingFlow: null,
+    })).toBe("terms-detail");
+    expect(__pipHomeTestHooks.getChatOnlyRequest({
+      message: "show privacy",
+      pendingFlow: null,
+    })).toBe("privacy-detail");
+    expect(__pipHomeTestHooks.getChatOnlyRequest({
+      message: "help",
+      pendingFlow: null,
+    })).toBe("support-detail");
+    expect(__pipHomeTestHooks.getChatOnlyRequest({
+      message: "Show terms",
+      selectedPromptChipId: "settings-terms",
+      pendingFlow: null,
+    })).toBe("terms-detail");
+    expect(__pipHomeTestHooks.getChatOnlyRequest({
+      message: "Delete my account",
+      pendingFlow: null,
+    })).toBe("delete-start");
+  });
+
   it("pins account management as the first live ready-state prompt chip", () => {
     const chips = __pipHomeTestHooks.getDefaultPromptChips(
       { status: "ready", email: "tester@example.com" },
@@ -56,12 +143,16 @@ describe("PipHome", () => {
 
     expect(chips.slice(0, 3).map((chip) => chip.id)).toEqual([
       "manage-accounts",
+      "settings",
       "ai-pattern-assumptions",
-      "ai-data-quality",
     ]);
     expect(chips[0]).toMatchObject({
       label: "Manage accounts",
       prompt: "Show connected accounts",
+    });
+    expect(chips[1]).toMatchObject({
+      label: "Settings",
+      prompt: "Settings",
     });
   });
 

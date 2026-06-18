@@ -270,6 +270,16 @@ function composeCardBackedAnswer(
         message: "I checked the connection state.",
         answerPatternId: "connect-account",
       };
+    case "settings_panel":
+      return {
+        message: "Settings are here.",
+        answerPatternId: "settings-panel",
+      };
+    case "settings_detail":
+      return {
+        message: `${card.title} is here.`,
+        answerPatternId: "settings-detail",
+      };
     case "account_connections":
       return {
         message: "I found the accounts connected to Pip.",

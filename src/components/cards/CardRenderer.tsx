@@ -7,8 +7,10 @@ import {
   CreditCard,
   EyeOff,
   Landmark,
+  LifeBuoy,
   ListChecks,
   Repeat,
+  ShieldCheck,
   Sparkles,
   TrendingUp,
 } from "lucide-react";
@@ -354,6 +356,39 @@ export function CardRenderer({
           <p className="text-sm leading-6 text-ink/[0.66]">{card.detail}</p>
         </CardShell>
       );
+
+    case "settings_panel":
+      return (
+        <CardShell icon={<ShieldCheck aria-hidden="true" size={18} />} title={card.title}>
+          <div className="space-y-2">
+            {card.accountRows.map((row) => (
+              <div key={`${row.label}-${row.value}`} className="flex min-h-10 items-start justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
+                <p className="text-sm font-semibold text-ink">{row.label}</p>
+                <p className="pip-wrap-anywhere max-w-[58%] text-right text-sm text-ink/[0.62]">{row.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="mt-3 space-y-2">
+            {card.sections.map((section) => (
+              <SettingsSection key={section.title} title={section.title} body={section.body} />
+            ))}
+          </div>
+          <SettingsActions actions={card.actions} onSubmitPrompt={onSubmitPrompt} />
+        </CardShell>
+      );
+
+    case "settings_detail":
+      return (
+        <CardShell icon={<LifeBuoy aria-hidden="true" size={18} />} title={card.title}>
+          <p className="pip-wrap-anywhere text-sm leading-6 text-ink/[0.68]">{card.summary}</p>
+          <div className="mt-3 space-y-2">
+            {card.rows.map((row) => (
+              <SettingsSection key={row.label} title={row.label} body={row.detail} />
+            ))}
+          </div>
+          <SettingsActions actions={card.actions} onSubmitPrompt={onSubmitPrompt} />
+        </CardShell>
+      );
   }
 }
 
@@ -415,6 +450,48 @@ function GuidanceRow({
         <span className={["h-2.5 w-2.5 shrink-0 rounded-full", dotToneClass(row.tone)].join(" ")} />
       </div>
       <p className="pip-wrap-anywhere mt-1 text-xs leading-5 text-ink/[0.58]">{row.detail}</p>
+    </div>
+  );
+}
+
+function SettingsSection({
+  title,
+  body,
+}: {
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2.5">
+      <p className="pip-wrap-anywhere text-sm font-semibold text-ink">{title}</p>
+      <p className="pip-wrap-anywhere mt-1 text-xs leading-5 text-ink/[0.58]">{body}</p>
+    </div>
+  );
+}
+
+function SettingsActions({
+  actions,
+  onSubmitPrompt,
+}: {
+  actions: Extract<AgentCard, { type: "settings_panel" }>["actions"];
+  onSubmitPrompt?: (prompt: string) => void;
+}) {
+  if (actions.length === 0 || !onSubmitPrompt) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {actions.map((action) => (
+        <button
+          key={action.id}
+          type="button"
+          className={getSettingsActionClassName(action.style)}
+          onClick={() => onSubmitPrompt(action.prompt)}
+        >
+          {action.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -500,6 +577,23 @@ function formatInstitutionStatus(
 
 function getAccountActionClassName(
   style: Extract<AgentCard, { type: "account_connections" }>["institutions"][number]["actions"][number]["style"],
+): string {
+  const base =
+    "focus-ring inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold";
+
+  if (style === "danger") {
+    return `${base} border-coral/30 bg-coral/[0.08] text-coral`;
+  }
+
+  if (style === "primary") {
+    return `${base} border-moss/25 bg-moss/[0.1] text-moss`;
+  }
+
+  return `${base} border-line bg-porcelain/[0.62] text-ink`;
+}
+
+function getSettingsActionClassName(
+  style: Extract<AgentCard, { type: "settings_panel" }>["actions"][number]["style"],
 ): string {
   const base =
     "focus-ring inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold";

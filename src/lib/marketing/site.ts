@@ -4,7 +4,7 @@ export const marketingSite = {
   defaultDescription:
     "Pip is a paid daily money companion that shows Spendable Cash Today, one calm number before you spend. Plans start at $2.99/week.",
   domain: "spendwithpip.com",
-  supportEmail: "support@spendwithpip.com",
+  supportEmail: "tyler@animasai.co",
   appPath: "/app",
 };
 
@@ -37,7 +37,7 @@ export const publicMarketingPages = [
   {
     path: "/support",
     label: "Support",
-    description: "Get support for connection, billing, account data, and deletion questions.",
+    description: "Get support for connection, app access, account data, and deletion questions.",
   },
   {
     path: "/privacy",
@@ -48,6 +48,11 @@ export const publicMarketingPages = [
     path: "/terms",
     label: "Terms",
     description: "Review Pip terms, product boundaries, subscription context, and no-money-movement limits.",
+  },
+  {
+    path: "/delete-account",
+    label: "Delete account",
+    description: "Request deletion of your Pip account and associated app data.",
   },
 ] as const;
 

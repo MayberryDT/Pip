@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
+  AgentCard,
   AgentClientAction,
   AgentResponse,
   PlaidClientActionConfig,
@@ -30,9 +31,10 @@ import {
 import { formatMoney } from "@/lib/money";
 import type { PipCashResult } from "@/lib/types";
 import { AgentInput } from "@/components/AgentInput";
-import { AgentThread } from "@/components/AgentThread";
+import { AgentThread, type AgentReportInput } from "@/components/AgentThread";
 import { PipIntroScene } from "@/components/onboarding/PipIntroScene";
 import { PromptChips } from "@/components/PromptChips";
+import { getClientPipPlatform, type PipPlatform } from "@/lib/platform/android-shell";
 import { openPlaidLink } from "@/lib/providers/plaid/link-browser";
 import type { PlaidEventMetadata } from "@/lib/providers/plaid/link-browser";
 
@@ -74,7 +76,31 @@ const accountManagementPromptChip: PromptChip = {
   label: "Manage accounts",
   prompt: "Show connected accounts",
 };
+const settingsPromptChip: PromptChip = {
+  id: "settings",
+  label: "Settings",
+  prompt: "Settings",
+};
+const settingsCancelPromptChip: PromptChip = {
+  id: "settings-cancel",
+  label: "Cancel",
+  prompt: "Cancel",
+};
 const APP_OPEN_REFRESH_CLIENT_COOLDOWN_MS = 60_000;
+
+type ChatOnlyPendingFlow = "feedback" | "delete-account" | null;
+type SettingsDetailKind = "support" | "privacy" | "terms";
+type ChatOnlyRequest =
+  | "settings"
+  | "support-detail"
+  | "privacy-detail"
+  | "terms-detail"
+  | "feedback-start"
+  | "feedback-send"
+  | "delete-start"
+  | "delete-confirm"
+  | "delete-reject"
+  | "cancel";
 
 export type PipAuthState =
   | {
@@ -111,6 +137,8 @@ export function PipHome({
   const [devHasConnectedData, setDevHasConnectedData] = useState(false);
   const activeAuthState = devOnboardingFlow ? devAuthState : authState;
   const liveAccountControlsEnabled = !devOnboardingFlow && enableAccountControls;
+  const canUseInAppAccountActions =
+    liveAccountControlsEnabled && activeAuthState?.status === "ready";
   const onboardingPromptControlsEnabled = liveAccountControlsEnabled || devOnboardingFlow;
   const [serverResult, setServerResult] = useState<PipHomeServerResult | null>(null);
   const [serverErrorText, setServerErrorText] = useState("");
@@ -144,6 +172,8 @@ export function PipHome({
   const [promptChipRefreshSequence, setPromptChipRefreshSequence] = useState(0);
   const [isSending, setIsSending] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [chatOnlyPendingFlow, setChatOnlyPendingFlow] = useState<ChatOnlyPendingFlow>(null);
+  const [clientPlatform, setClientPlatform] = useState<PipPlatform>("web");
   const seenReactionIdsRef = useRef<Set<string>>(new Set());
   const hasConversation = thread.length > 0;
   const isReadyWithoutData =
@@ -189,6 +219,10 @@ export function PipHome({
 
   useEffect(() => {
     setConversationId(getOrCreateConversationId());
+  }, []);
+
+  useEffect(() => {
+    setClientPlatform(getClientPipPlatform(window.navigator.userAgent));
   }, []);
 
   useEffect(() => {
@@ -428,6 +462,17 @@ export function PipHome({
       return;
     }
 
+    const chatOnlyRequest = getChatOnlyRequest({
+      message,
+      selectedPromptChipId,
+      pendingFlow: chatOnlyPendingFlow,
+    });
+
+    if (chatOnlyRequest) {
+      await handleChatOnlyRequest(chatOnlyRequest, message);
+      return;
+    }
+
     const itemId = createThreadItemId();
     const historyBeforeSend = thread;
     const chipHistoryBeforeSend = mergePromptChipHistory(chipHistory, chips);
@@ -526,6 +571,190 @@ export function PipHome({
     void submitPrompt(chip.prompt, chip.id);
   }
 
+  async function handleChatOnlyRequest(request: ChatOnlyRequest, message: string) {
+    if (request === "settings") {
+      setChatOnlyPendingFlow(null);
+      appendChatOnlyTurn({
+        userText: message,
+        responseMessage: "Settings are here.",
+        cards: [
+          createSettingsPanelCard({
+            email: activeAuthState?.status === "ready" ? activeAuthState.email : undefined,
+            canUseAccountActions: canUseInAppAccountActions,
+            hasConnectedData: Boolean(result),
+            platform: clientPlatform,
+          }),
+        ],
+        nextChips: getSettingsPromptChips({
+          canUseAccountActions: canUseInAppAccountActions,
+          hasConnectedData: Boolean(result),
+        }),
+      });
+      return;
+    }
+
+    if (
+      request === "support-detail" ||
+      request === "privacy-detail" ||
+      request === "terms-detail"
+    ) {
+      setChatOnlyPendingFlow(null);
+      appendChatOnlyTurn({
+        userText: message,
+        responseMessage: getSettingsDetailResponseMessage(request),
+        cards: [
+          createSettingsDetailCard(getSettingsDetailKind(request), {
+            canUseAccountActions: canUseInAppAccountActions,
+            hasConnectedData: Boolean(result),
+          }),
+        ],
+        nextChips: getSettingsPromptChips({
+          canUseAccountActions: canUseInAppAccountActions,
+          hasConnectedData: Boolean(result),
+        }),
+      });
+      return;
+    }
+
+    if (request === "cancel") {
+      setChatOnlyPendingFlow(null);
+      appendChatOnlyTurn({
+        userText: message,
+        responseMessage: "Okay. I did not change anything.",
+        nextChips: getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, result),
+      });
+      return;
+    }
+
+    if (request === "feedback-start") {
+      if (!canUseInAppAccountActions) {
+        appendChatOnlyTurn({
+          userText: message,
+          responseMessage: "Sign in before sending feedback.",
+          nextChips: getSettingsPromptChips({
+            canUseAccountActions: false,
+            hasConnectedData: Boolean(result),
+          }),
+        });
+        return;
+      }
+
+      setChatOnlyPendingFlow("feedback");
+      appendChatOnlyTurn({
+        userText: message,
+        responseMessage: "Tell me what to send as feedback.",
+        nextChips: [settingsCancelPromptChip],
+      });
+      return;
+    }
+
+    if (request === "feedback-send") {
+      if (message.trim().length < 2) {
+        appendChatOnlyTurn({
+          userText: message,
+          responseMessage: "Send at least a couple of words, or tap Cancel.",
+          nextChips: [settingsCancelPromptChip],
+        });
+        return;
+      }
+
+      setIsSending(true);
+
+      try {
+        await submitTesterFeedback(message);
+        setChatOnlyPendingFlow(null);
+        appendChatOnlyTurn({
+          userText: message,
+          responseMessage: "Feedback sent.",
+          nextChips: getSettingsPromptChips({
+            canUseAccountActions: canUseInAppAccountActions,
+            hasConnectedData: Boolean(result),
+          }),
+        });
+      } catch (error) {
+        appendChatOnlyTurn({
+          userText: message,
+          responseMessage: getClientErrorMessage(error),
+          nextChips: [settingsCancelPromptChip],
+        });
+      } finally {
+        setIsSending(false);
+      }
+      return;
+    }
+
+    if (request === "delete-start") {
+      if (!canUseInAppAccountActions) {
+        appendChatOnlyTurn({
+          userText: message,
+          responseMessage: "Sign in before deleting an account.",
+          nextChips: getSettingsPromptChips({
+            canUseAccountActions: false,
+            hasConnectedData: Boolean(result),
+          }),
+        });
+        return;
+      }
+
+      setChatOnlyPendingFlow("delete-account");
+      appendChatOnlyTurn({
+        userText: message,
+        responseMessage:
+          "This deletes the app account, connected financial data, provider token records, settings, product events, AI response reports, and tester feedback tied to the account. Type DELETE to confirm.",
+        nextChips: [settingsCancelPromptChip],
+      });
+      return;
+    }
+
+    if (request === "delete-reject") {
+      appendChatOnlyTurn({
+        userText: message,
+        responseMessage: "I did not delete anything. Type DELETE to confirm, or tap Cancel.",
+        nextChips: [settingsCancelPromptChip],
+      });
+      return;
+    }
+
+    setIsSending(true);
+
+    try {
+      await deleteAccount("DELETE");
+      setChatOnlyPendingFlow(null);
+      appendChatOnlyTurn({
+        userText: message,
+        responseMessage: "Account deletion started.",
+        nextChips: [],
+      });
+    } catch (error) {
+      appendChatOnlyTurn({
+        userText: message,
+        responseMessage: getClientErrorMessage(error),
+        nextChips: [settingsCancelPromptChip],
+      });
+    } finally {
+      setIsSending(false);
+    }
+  }
+
+  function appendChatOnlyTurn(input: {
+    userText: string;
+    responseMessage: string;
+    cards?: AgentCard[];
+    nextChips: PromptChip[];
+  }) {
+    setThread((current) => [
+      ...current,
+      {
+        id: createThreadItemId(),
+        userText: input.userText,
+        response: createChatOnlyResponse(input.responseMessage, input.nextChips, input.cards),
+      },
+    ]);
+    setChips(input.nextChips);
+    setChipHistory((current) => mergePromptChipHistory(current, input.nextChips));
+    setPromptChipRefreshSequence(0);
+  }
+
   async function suppressMissingCardNudge(issuerName: string) {
     if (!liveAccountControlsEnabled) {
       return;
@@ -571,6 +800,66 @@ export function PipHome({
     setChips((current) => current.filter((chip) => chip.id !== "missing-card"));
   }
 
+  async function reportAssistantResponse(input: AgentReportInput) {
+    if (!conversationId) {
+      throw new Error("Report context is still loading.");
+    }
+
+    const response = await fetch("/api/ai-reports", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        conversationId,
+        ...input,
+      }),
+    });
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(getErrorMessage(payload, "Report failed."));
+    }
+  }
+
+  async function submitTesterFeedback(message: string) {
+    const response = await fetch("/api/feedback", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        message,
+      }),
+    });
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(getErrorMessage(payload, "Feedback failed."));
+    }
+  }
+
+  async function deleteAccount(confirmation: string) {
+    const response = await fetch("/api/account/delete", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        confirmation,
+      }),
+    });
+    const payload = await response.json().catch(() => null);
+
+    if (!response.ok) {
+      throw new Error(getErrorMessage(payload, "Account deletion failed."));
+    }
+
+    window.setTimeout(() => {
+      window.location.assign("/app?deleted=account");
+    }, 650);
+  }
+
   useEffect(() => {
     if (!liveAccountControlsEnabled || !hasLoadedServerResult || !result || pipCashTodayCents === undefined) {
       return;
@@ -593,7 +882,7 @@ export function PipHome({
 
   return (
     <main className="pip-app-shell pip-chat-shell px-5 py-5 text-ink sm:px-6">
-      <div className="mx-auto flex h-full min-h-0 w-full max-w-[430px] flex-col">
+      <div className="relative mx-auto flex h-full min-h-0 w-full max-w-[430px] flex-col">
         {showSetupBrand ? (
           <section className="pip-onboarding-brand">
             <h1 className="pip-brand-title">
@@ -657,6 +946,7 @@ export function PipHome({
               thread={thread}
               onSubmitPrompt={submitPrompt}
               onSuppressMissingCard={liveAccountControlsEnabled ? suppressMissingCardNudge : undefined}
+              onReportResponse={canUseInAppAccountActions ? reportAssistantResponse : undefined}
             />
           )}
           {showPromptChips ? <PromptChips chips={chips} onSelect={selectPromptChip} /> : null}
@@ -1174,6 +1464,367 @@ function PlaidConnectedNotice() {
   );
 }
 
+function getPlatformLabel(platform: PipPlatform): string {
+  return platform === "android_webview" ? "Android WebView" : "Web";
+}
+
+type SettingsPanelCard = Extract<AgentCard, { type: "settings_panel" }>;
+type SettingsDetailCard = Extract<AgentCard, { type: "settings_detail" }>;
+type SettingsAction = SettingsPanelCard["actions"][number];
+
+function createSettingsPanelCard(input: {
+  email?: string;
+  canUseAccountActions: boolean;
+  hasConnectedData: boolean;
+  platform: PipPlatform;
+}): SettingsPanelCard {
+  return {
+    type: "settings_panel",
+    title: "Settings",
+    accountRows: [
+      {
+        label: "Account",
+        value: input.email ?? "Not signed in",
+      },
+      {
+        label: "App",
+        value: getPlatformLabel(input.platform),
+      },
+      {
+        label: "Data",
+        value: input.hasConnectedData ? "Connected data loaded" : "No connected data loaded",
+      },
+    ],
+    sections: [
+      {
+        title: "Support",
+        body: "Get help, report answer quality, or send tester feedback from this chat.",
+      },
+      {
+        title: "Privacy and terms",
+        body: "Read the short in-app version here without leaving Pip.",
+      },
+    ],
+    actions: getSettingsActions(input),
+  };
+}
+
+function createSettingsDetailCard(
+  kind: SettingsDetailKind,
+  input: {
+    canUseAccountActions: boolean;
+    hasConnectedData: boolean;
+  },
+): SettingsDetailCard {
+  const sharedActions: SettingsAction[] = [
+    {
+      id: "settings-overview",
+      label: "Settings",
+      prompt: "Settings",
+      style: "secondary",
+    },
+    ...getSettingsActions(input).filter((action) => action.id !== `settings-${kind}`),
+  ];
+
+  if (kind === "support") {
+    return {
+      type: "settings_detail",
+      title: "Support",
+      summary: "Support stays in the chat. Ask for help, report an answer, or send tester feedback here.",
+      rows: [
+        {
+          label: "Get help",
+          detail: "Ask Pip what went wrong or describe the issue you are seeing.",
+        },
+        {
+          label: "Report an answer",
+          detail: "Use the small Report control under a response when the answer itself is the problem.",
+        },
+        {
+          label: "Tester feedback",
+          detail: input.canUseAccountActions
+            ? "Send product feedback from this card and it will attach to your signed-in account."
+            : "Sign in before sending tester feedback.",
+        },
+      ],
+      actions: sharedActions,
+    };
+  }
+
+  if (kind === "privacy") {
+    return {
+      type: "settings_detail",
+      title: "Privacy",
+      summary: "Pip uses connected financial data to calculate Spendable Cash Today and answer your questions.",
+      rows: [
+        {
+          label: "Financial data",
+          detail: "Connected account data is used for in-app calculations, explanations, and chat answers.",
+        },
+        {
+          label: "Reports and feedback",
+          detail: "Reports may include answer context so we can debug product quality.",
+        },
+        {
+          label: "Deletion",
+          detail: "You can start account deletion in chat when signed in.",
+        },
+      ],
+      actions: sharedActions,
+    };
+  }
+
+  return {
+    type: "settings_detail",
+    title: "Terms",
+    summary: "Pip is a spending signal and assistant. It is not a bank, broker, lender, or financial advisor.",
+    rows: [
+      {
+        label: "Use",
+        detail: "Answers are informational and based on available connected data.",
+      },
+      {
+        label: "Accuracy",
+        detail: "Pending, missing, stale, or disconnected data can change Spendable Cash Today.",
+      },
+      {
+        label: "Account",
+        detail: "You are responsible for your account, connected data choices, and spending decisions.",
+      },
+    ],
+    actions: sharedActions,
+  };
+}
+
+function getSettingsActions(input: {
+  canUseAccountActions: boolean;
+  hasConnectedData: boolean;
+}): SettingsAction[] {
+  const actions: SettingsAction[] = [
+    {
+      id: "settings-support",
+      label: "Support",
+      prompt: "Show support",
+      style: "secondary",
+    },
+    {
+      id: "settings-privacy",
+      label: "Privacy",
+      prompt: "Show privacy",
+      style: "secondary",
+    },
+    {
+      id: "settings-terms",
+      label: "Terms",
+      prompt: "Show terms",
+      style: "secondary",
+    },
+  ];
+
+  if (input.hasConnectedData) {
+    actions.push({
+      id: "settings-connected-accounts",
+      label: "Connected accounts",
+      prompt: "Show connected accounts",
+      style: "primary",
+    });
+  }
+
+  if (input.canUseAccountActions) {
+    actions.push(
+      {
+        id: "settings-feedback",
+        label: "Send feedback",
+        prompt: "Send feedback",
+        style: "secondary",
+      },
+      {
+        id: "settings-delete-account",
+        label: "Delete account",
+        prompt: "Delete my account",
+        style: "danger",
+      },
+    );
+  }
+
+  return actions;
+}
+
+function getSettingsPromptChips(input: {
+  canUseAccountActions: boolean;
+  hasConnectedData: boolean;
+}): PromptChip[] {
+  return getSettingsActions(input).map(({ id, label, prompt }) => ({
+    id,
+    label,
+    prompt,
+  }));
+}
+
+function getChatOnlyRequest(input: {
+  message: string;
+  selectedPromptChipId?: string;
+  pendingFlow: ChatOnlyPendingFlow;
+}): ChatOnlyRequest | null {
+  const normalized = normalizeChatOnlyMessage(input.message);
+
+  if (input.selectedPromptChipId === "settings-cancel" || normalized === "cancel") {
+    return "cancel";
+  }
+
+  if (input.pendingFlow === "feedback") {
+    return "feedback-send";
+  }
+
+  if (input.pendingFlow === "delete-account") {
+    return normalized === "delete" ? "delete-confirm" : "delete-reject";
+  }
+
+  if (input.selectedPromptChipId === "settings") {
+    return "settings";
+  }
+
+  if (input.selectedPromptChipId === "settings-support") {
+    return "support-detail";
+  }
+
+  if (input.selectedPromptChipId === "settings-privacy") {
+    return "privacy-detail";
+  }
+
+  if (input.selectedPromptChipId === "settings-terms") {
+    return "terms-detail";
+  }
+
+  if (input.selectedPromptChipId === "settings-feedback") {
+    return "feedback-start";
+  }
+
+  if (input.selectedPromptChipId === "settings-delete-account") {
+    return "delete-start";
+  }
+
+  const settingsDetailRequest = getSettingsDetailRequest(normalized);
+
+  if (settingsDetailRequest) {
+    return settingsDetailRequest;
+  }
+
+  if (isSettingsMessage(normalized)) {
+    return "settings";
+  }
+
+  if (isFeedbackMessage(normalized)) {
+    return "feedback-start";
+  }
+
+  if (isDeleteAccountMessage(normalized)) {
+    return "delete-start";
+  }
+
+  return null;
+}
+
+function getSettingsDetailRequest(message: string): Extract<
+  ChatOnlyRequest,
+  "support-detail" | "privacy-detail" | "terms-detail"
+> | null {
+  if (["support", "show support", "open support", "help", "get help"].includes(message)) {
+    return "support-detail";
+  }
+
+  if (["privacy", "show privacy", "open privacy", "privacy policy"].includes(message)) {
+    return "privacy-detail";
+  }
+
+  if (["terms", "show terms", "open terms", "terms of service"].includes(message)) {
+    return "terms-detail";
+  }
+
+  return null;
+}
+
+function getSettingsDetailKind(
+  request: Extract<ChatOnlyRequest, "support-detail" | "privacy-detail" | "terms-detail">,
+): SettingsDetailKind {
+  if (request === "support-detail") {
+    return "support";
+  }
+
+  if (request === "privacy-detail") {
+    return "privacy";
+  }
+
+  return "terms";
+}
+
+function getSettingsDetailResponseMessage(
+  request: Extract<ChatOnlyRequest, "support-detail" | "privacy-detail" | "terms-detail">,
+): string {
+  if (request === "support-detail") {
+    return "Support is here.";
+  }
+
+  if (request === "privacy-detail") {
+    return "Privacy is here.";
+  }
+
+  return "Terms are here.";
+}
+
+function normalizeChatOnlyMessage(message: string): string {
+  return message
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, "")
+    .replace(/\s+/g, " ");
+}
+
+function isSettingsMessage(message: string): boolean {
+  return [
+    "settings",
+    "account settings",
+    "open settings",
+    "show settings",
+  ].includes(message);
+}
+
+function isFeedbackMessage(message: string): boolean {
+  return [
+    "feedback",
+    "send feedback",
+    "give feedback",
+    "tester feedback",
+  ].includes(message);
+}
+
+function isDeleteAccountMessage(message: string): boolean {
+  return [
+    "delete account",
+    "delete my account",
+    "remove account",
+    "close account",
+  ].includes(message);
+}
+
+function createChatOnlyResponse(
+  message: string,
+  promptChips: PromptChip[],
+  cards: AgentCard[] = [],
+): AgentResponse {
+  return {
+    message,
+    cards,
+    promptChips,
+    usedTools: [],
+    responseMode: "chat_only",
+    audit: {
+      toolNames: [],
+      usedModel: false,
+    },
+  };
+}
+
 function getInputPlaceholder(authState: PipAuthState | undefined): string {
   if (authState?.status === "guest") {
     return "Ask Pip anything...";
@@ -1258,7 +1909,10 @@ function getReadyDataAction(syncStatus: SyncStatusResponse | null): ReadyDataAct
 function withAccountManagementPromptChip(chips: PromptChip[]): PromptChip[] {
   return [
     accountManagementPromptChip,
-    ...chips.filter((chip) => chip.id !== accountManagementPromptChip.id),
+    settingsPromptChip,
+    ...chips.filter(
+      (chip) => chip.id !== accountManagementPromptChip.id && chip.id !== settingsPromptChip.id,
+    ),
   ].slice(0, 3);
 }
 
@@ -1510,6 +2164,9 @@ function getClientActionErrorText(error: unknown): string {
 
 export const __pipHomeTestHooks = {
   AgentRequestError,
+  createSettingsDetailCard,
+  createSettingsPanelCard,
+  getChatOnlyRequest,
   getDefaultPromptChips,
   getDemoPipCashResult: () => calculatePipCash(getFakeSnapshot("default")),
   getAgentErrorText,
@@ -1518,6 +2175,8 @@ export const __pipHomeTestHooks = {
   getNextVisiblePromptChips,
   getReadyDataAction,
   getSafeAgentFailureMessage,
+  getSettingsActions,
+  getSettingsPromptChips,
   withAccountManagementPromptChip,
 };
 

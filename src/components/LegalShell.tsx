@@ -11,7 +11,7 @@ export function LegalShell({
   children: ReactNode;
 }) {
   return (
-    <MarketingLayout>
+    <MarketingLayout showPricingLinks={false}>
       <main>
         <SwissSection folio="Reference / Pip">
           <div className="col-span-12 lg:col-span-3">

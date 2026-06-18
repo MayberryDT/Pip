@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { LegalShell } from "@/components/LegalShell";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
 
@@ -15,8 +16,8 @@ export default function PrivacyPage() {
         <h2 className="text-lg font-bold text-ink">What Pip Stores</h2>
         <p className="mt-3">
           Pip stores normalized financial data, account metadata, sync logs, user settings, AI chat
-          context needed for product behavior, and product events needed to calculate Spendable Cash
-          Today and operate the app.
+          context needed for product behavior, AI response reports you submit, tester feedback, and
+          product events needed to calculate Spendable Cash Today and operate the app.
         </p>
       </section>
 
@@ -34,7 +35,9 @@ export default function PrivacyPage() {
         <p className="mt-3">
           Pip uses connected account and transaction context to calculate Spendable Cash Today, show
           account connection state, explain why the number changed, and support account management.
-          Product events are used to operate and improve the app without selling financial data.
+          AI response reports and feedback are used to investigate confusing, unsafe, or inaccurate
+          responses. Product events are used to operate and improve the app without selling financial
+          data.
         </p>
       </section>
 
@@ -53,14 +56,24 @@ export default function PrivacyPage() {
           billing support questions, and maintain product access. Pip does not need payment context
           to move money and does not initiate transfers or payments.
         </p>
+        <p className="mt-3">
+          The Android Play test build is consumption-only and does not include purchase, checkout,
+          upgrade, or external-payment prompts.
+        </p>
       </section>
 
       <section>
         <h2 className="text-lg font-bold text-ink">Deletion</h2>
         <p className="mt-3">
-          You can ask Pip to delete stored financial data in the chat. Deletion removes financial
-          rows, sync logs, product events, connected institutions, missing-card preferences, provider
-          tokens, and settings for your account.
+          You can delete your account from the in-app settings panel by typing DELETE, or use the{" "}
+          <Link className="font-bold text-moss hover:text-ink" href="/delete-account">
+            public deletion page
+          </Link>{" "}
+          if you cannot access the app. Deletion removes the Supabase auth account, financial rows,
+          sync logs, product events, connected institutions, missing-card preferences, provider
+          tokens, settings, AI response reports, and tester feedback for your account. Pip may retain
+          limited records when required for security, fraud prevention, accounting, or legal
+          obligations.
         </p>
       </section>
     </LegalShell>

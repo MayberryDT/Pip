@@ -17,7 +17,7 @@ export function PromptChips({
       data-testid="prompt-chips"
     >
       <div className="flex w-max min-w-full flex-nowrap justify-center gap-2">
-        {chips.slice(0, 3).map((chip) => (
+        {chips.map((chip) => (
           <button
             key={chip.id}
             type="button"

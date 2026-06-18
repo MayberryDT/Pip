@@ -4,11 +4,14 @@ import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.net.http.SslError;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.Gravity;
@@ -30,7 +33,7 @@ public class MainActivity extends Activity {
     private static final String TAG = "PipNativeShell";
     private static final String PIP_HOST = "spendwithpip.com";
     private static final String LAUNCH_URL = "https://spendwithpip.com/app";
-    private static final String USER_AGENT_SUFFIX = " PipAndroid/1";
+    private static final String USER_AGENT_PRODUCT = "PipAndroid/1";
 
     private WebView webView;
     private FrameLayout root;
@@ -99,7 +102,7 @@ public class MainActivity extends Activity {
         settings.setSupportZoom(false);
         settings.setBuiltInZoomControls(false);
         settings.setDisplayZoomControls(false);
-        settings.setUserAgentString(settings.getUserAgentString() + USER_AGENT_SUFFIX);
+        settings.setUserAgentString(settings.getUserAgentString() + buildUserAgentSuffix());
 
         CookieManager cookieManager = CookieManager.getInstance();
         cookieManager.setAcceptCookie(true);
@@ -153,6 +156,24 @@ public class MainActivity extends Activity {
 
     private boolean isAllowedPipUri(Uri uri) {
         return "https".equalsIgnoreCase(uri.getScheme()) && PIP_HOST.equalsIgnoreCase(uri.getHost());
+    }
+
+    private String buildUserAgentSuffix() {
+        return " " + USER_AGENT_PRODUCT + " VersionCode/" + getVersionCode();
+    }
+
+    @SuppressWarnings("deprecation")
+    private long getVersionCode() {
+        try {
+            PackageInfo packageInfo = getPackageManager().getPackageInfo(getPackageName(), 0);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                return packageInfo.getLongVersionCode();
+            }
+            return packageInfo.versionCode;
+        } catch (PackageManager.NameNotFoundException error) {
+            Log.w(TAG, "versionCodeUnavailable");
+            return 0;
+        }
     }
 
     private boolean shouldOpenExternally(Uri uri) {

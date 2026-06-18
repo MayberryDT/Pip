@@ -157,6 +157,39 @@ export type AgentCard =
       detail: string;
     }
   | {
+      type: "settings_panel";
+      title: string;
+      accountRows: Array<{
+        label: string;
+        value: string;
+      }>;
+      sections: Array<{
+        title: string;
+        body: string;
+      }>;
+      actions: Array<{
+        id: string;
+        label: string;
+        prompt: string;
+        style: "primary" | "secondary" | "danger";
+      }>;
+    }
+  | {
+      type: "settings_detail";
+      title: string;
+      summary: string;
+      rows: Array<{
+        label: string;
+        detail: string;
+      }>;
+      actions: Array<{
+        id: string;
+        label: string;
+        prompt: string;
+        style: "primary" | "secondary" | "danger";
+      }>;
+    }
+  | {
       type: "account_connections";
       title: string;
       institutions: Array<{

@@ -4,17 +4,17 @@ import type { PromptChip } from "@/lib/agent/card-types";
 import { PromptChips } from "@/components/PromptChips";
 
 describe("PromptChips", () => {
-  it("renders a capped, lightweight prompt surface instead of a menu", () => {
+  it("renders a scrollable, lightweight prompt surface instead of a menu", () => {
     const markup = renderToStaticMarkup(
       <PromptChips chips={overflowingPromptChips} onSelect={() => undefined} />,
     );
 
-    expect(markup.match(/<button/g)).toHaveLength(3);
+    expect(markup.match(/<button/g)).toHaveLength(5);
     expect(markup).toContain("Upcoming bills");
     expect(markup).toContain("How should I think about spending?");
     expect(markup).toContain("What would a $25 purchase do?");
-    expect(markup).not.toContain("Show recent transactions");
-    expect(markup).not.toContain("Show the math");
+    expect(markup).toContain("Show recent transactions");
+    expect(markup).toContain("Show the math");
     expect(markup).toContain("flex-nowrap");
     expect(markup).toContain("overflow-x-auto");
     expect(markup).toContain("scrollbar-none");

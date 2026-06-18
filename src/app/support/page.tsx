@@ -6,7 +6,7 @@ import { marketingSite } from "@/lib/marketing/site";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Support",
-  description: "Get Pip support for account connection, billing, account data, and data deletion questions.",
+  description: "Get Pip support for account connection, app access, account data, and data deletion questions.",
   path: "/support",
 });
 
@@ -29,7 +29,9 @@ export default function SupportPage() {
         <h2 className="text-lg font-bold text-ink">App Access</h2>
         <p className="mt-3">
           Use Pip on the web from the App link in the site header. Native App Store and Google Play
-          links can be added when those listings are ready.
+          links can be added when those listings are ready. The Android Play test build is
+          consumption-only and does not include purchase, checkout, upgrade, or external-payment
+          prompts.
         </p>
       </section>
 
@@ -43,18 +45,31 @@ export default function SupportPage() {
       </section>
 
       <section>
-        <h2 className="text-lg font-bold text-ink">Billing Support</h2>
+        <h2 className="text-lg font-bold text-ink">Access Support</h2>
         <p className="mt-3">
-          Pip offers weekly and monthly plans. Subscriptions are managed wherever you start or
-          install Pip. Contact support if your account access does not match your subscription.
+          Contact support if your account access does not match the access you expected. Do not
+          email bank credentials, provider passwords, card numbers, one-time codes, or full account
+          numbers.
         </p>
       </section>
 
       <section>
         <h2 className="text-lg font-bold text-ink">Data Deletion</h2>
         <p className="mt-3">
-          Ask Pip to delete data when you want stored financial data cleared from the app. You can
-          also contact support if you cannot access the chat.
+          Open Settings in the app and type DELETE to delete your account. You can also use the{" "}
+          <Link className="font-bold text-moss hover:text-ink" href="/delete-account">
+            public deletion page
+          </Link>{" "}
+          if you cannot access the app.
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-bold text-ink">AI Response Reports</h2>
+        <p className="mt-3">
+          Use the report control under an assistant response if the answer looks inaccurate,
+          confusing, unsafe, misleading, or privacy-sensitive. Include only the context needed to
+          investigate the response.
         </p>
       </section>
 
@@ -75,10 +90,9 @@ export default function SupportPage() {
           No. Pip does not initiate payments, transfers, card payments, ACH transactions, or other
           money movement.
         </p>
-        <h3 className="mt-4 font-bold text-ink">Where do I get pricing details?</h3>
+        <h3 className="mt-4 font-bold text-ink">Can Pip make credit or lending decisions?</h3>
         <p className="mt-2">
-          See the <Link className="font-bold text-moss hover:text-ink" href="/pricing">pricing page</Link> for weekly
-          and monthly plans.
+          No. Pip does not make loan, credit, underwriting, insurance, or investment decisions.
         </p>
       </section>
     </LegalShell>

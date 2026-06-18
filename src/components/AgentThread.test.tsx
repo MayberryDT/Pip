@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { AgentThread } from "@/components/AgentThread";
+import {
+  __agentThreadTestHooks,
+  AgentThread,
+  ReportResponseControl,
+} from "@/components/AgentThread";
 
 describe("AgentThread", () => {
   it("shows Pip beside the thinking state before the response arrives", () => {
@@ -74,6 +78,62 @@ describe("AgentThread", () => {
     expect(markup).toContain('data-expression="happy"');
   });
 
+  it("shows a subtle AI response report control when reporting is enabled", () => {
+    const markup = renderToStaticMarkup(
+      <AgentThread
+        onReportResponse={async () => undefined}
+        thread={[
+          {
+            id: "reported",
+            userText: "Can I spend this?",
+            response: {
+              message: "You can spend it.",
+              cards: [],
+              promptChips: [],
+              usedTools: [],
+              responseMode: "chat_only",
+              audit: {
+                toolNames: [],
+                usedModel: true,
+              },
+            },
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("Report");
+    expect(markup).not.toContain("Report response");
+    expect(markup).toContain("aria-hidden=\"true\"");
+  });
+
+  it("uses chips rather than a select menu for report reasons", () => {
+    const markup = renderToStaticMarkup(
+      <ReportResponseControl
+        initialOpen
+        messageId="reported"
+        responseExcerpt="You can spend it."
+        onReportResponse={async () => undefined}
+      />,
+    );
+
+    expect(markup).not.toMatch(/<select\b|<option\b/);
+    expect(markup).toContain("Inaccurate");
+    expect(markup).toContain("Unsafe");
+    expect(markup).toContain("Privacy");
+    expect(markup).toContain("Confusing");
+    expect(markup).toContain("Other");
+    expect(markup).toContain("Send");
+    expect(markup).toContain("Cancel");
+  });
+
+  it("keeps report error text specific when the API returns a safe message", () => {
+    expect(__agentThreadTestHooks.getReportErrorText(new Error("Reporting is unavailable in this build."))).toBe(
+      "Reporting is unavailable in this build.",
+    );
+    expect(__agentThreadTestHooks.getReportErrorText(undefined)).toBe("I couldn’t send that report.");
+  });
+
   it("applies long-token wrapping to chat bubbles and assistant text", () => {
     const longToken = "GENERAL_SERVICES_OTHER_GENERAL_SERVICES".repeat(4);
     const markup = renderToStaticMarkup(
@@ -87,7 +147,7 @@ describe("AgentThread", () => {
               cards: [],
               promptChips: [],
               usedTools: [],
-              responseMode: "answer",
+              responseMode: "chat_only",
               audit: {
                 toolNames: [],
                 usedModel: false,

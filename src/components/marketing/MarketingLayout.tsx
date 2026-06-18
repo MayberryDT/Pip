@@ -18,21 +18,30 @@ const footerLinks = [
   { href: "/support", label: "Support" },
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
+  { href: "/delete-account", label: "Delete account" },
   { href: marketingSite.appPath, label: "App" },
 ] as const;
 
-export function MarketingLayout({ children }: { children: ReactNode }) {
+export function MarketingLayout({
+  children,
+  showPricingLinks = true,
+}: {
+  children: ReactNode;
+  showPricingLinks?: boolean;
+}) {
   return (
     <div className="editorial-site swiss-type min-h-screen bg-paper text-ink">
       <MarketingPageView />
-      <MarketingHeader />
+      <MarketingHeader showPricingLinks={showPricingLinks} />
       {children}
-      <MarketingFooter />
+      <MarketingFooter showPricingLinks={showPricingLinks} />
     </div>
   );
 }
 
-export function MarketingHeader() {
+export function MarketingHeader({ showPricingLinks = true }: { showPricingLinks?: boolean }) {
+  const visibleNavLinks = getVisibleMarketingLinks(navLinks, showPricingLinks);
+
   return (
     <>
       <header className="editorial-header">
@@ -49,7 +58,7 @@ export function MarketingHeader() {
             />
           </Link>
           <nav className="editorial-nav" aria-label="Primary">
-            {navLinks.map((link) => (
+            {visibleNavLinks.map((link) => (
               <Link className="focus-ring editorial-nav-link" href={link.href} key={link.href}>
                 {link.label}
               </Link>
@@ -72,7 +81,7 @@ export function MarketingHeader() {
               <Menu aria-hidden="true" size={19} strokeWidth={2.3} />
             </summary>
             <nav className="editorial-mobile-menu-panel" aria-label="Mobile primary">
-              {navLinks.map((link) => (
+              {visibleNavLinks.map((link) => (
                 <Link
                   className="focus-ring editorial-mobile-link"
                   href={link.href}
@@ -95,7 +104,9 @@ export function MarketingHeader() {
   );
 }
 
-export function MarketingFooter() {
+export function MarketingFooter({ showPricingLinks = true }: { showPricingLinks?: boolean }) {
+  const visibleFooterLinks = getVisibleMarketingLinks(footerLinks, showPricingLinks);
+
   return (
     <footer className="editorial-footer">
       <div className="editorial-footer-grid">
@@ -116,7 +127,7 @@ export function MarketingFooter() {
           <p>{marketingSite.supportEmail}</p>
         </div>
         <div className="editorial-footer-links">
-          {footerLinks.map((link) => (
+          {visibleFooterLinks.map((link) => (
             <Link className="focus-ring" href={link.href} key={`${link.href}-${link.label}`}>
               {link.label}
             </Link>
@@ -125,4 +136,11 @@ export function MarketingFooter() {
       </div>
     </footer>
   );
+}
+
+function getVisibleMarketingLinks<T extends readonly { href: string; label: string }[]>(
+  links: T,
+  showPricingLinks: boolean,
+) {
+  return showPricingLinks ? links : links.filter((link) => link.href !== "/pricing");
 }

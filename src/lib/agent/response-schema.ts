@@ -164,6 +164,23 @@ const accountConnectionActionSchema = z.object({
   style: z.enum(["primary", "secondary", "danger"]),
 });
 
+const settingsActionSchema = accountConnectionActionSchema;
+
+const settingsTextRowSchema = z.object({
+  label: z.string().min(1).max(80),
+  value: z.string().min(1).max(180),
+});
+
+const settingsSectionSchema = z.object({
+  title: z.string().min(1).max(80),
+  body: z.string().min(1).max(260),
+});
+
+const settingsDetailRowSchema = z.object({
+  label: z.string().min(1).max(80),
+  detail: z.string().min(1).max(260),
+});
+
 const accountConnectionAccountSchema = z.object({
   accountId: z.string().min(1),
   name: z.string().min(1).max(120),
@@ -299,6 +316,20 @@ export const cardSchema = z.discriminatedUnion("type", [
     type: z.literal("connect_account"),
     title: z.string(),
     detail: z.string(),
+  }),
+  z.object({
+    type: z.literal("settings_panel"),
+    title: z.string().min(1).max(80),
+    accountRows: z.array(settingsTextRowSchema).min(1).max(4),
+    sections: z.array(settingsSectionSchema).min(1).max(4),
+    actions: z.array(settingsActionSchema).min(1).max(8),
+  }),
+  z.object({
+    type: z.literal("settings_detail"),
+    title: z.string().min(1).max(80),
+    summary: z.string().min(1).max(260),
+    rows: z.array(settingsDetailRowSchema).min(1).max(6),
+    actions: z.array(settingsActionSchema).min(1).max(6),
   }),
   z.object({
     type: z.literal("account_connections"),

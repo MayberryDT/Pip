@@ -1,9 +1,24 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/supabase/database.types";
+import {
+  isAndroidAppShellHeaders,
+  isAndroidPaymentRestrictedPath,
+} from "@/lib/platform/android-shell";
 import { getSupabasePublicConfig, isSupabaseConfigured } from "@/lib/supabase/env";
 
 export async function middleware(request: NextRequest) {
+  if (
+    isAndroidAppShellHeaders(request.headers) &&
+    isAndroidPaymentRestrictedPath(request.nextUrl.pathname)
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/android-access";
+    url.search = "";
+
+    return NextResponse.rewrite(url);
+  }
+
   if (!isSupabaseConfigured()) {
     return NextResponse.next({
       request,
