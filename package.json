@@ -25,6 +25,7 @@
     "play:reviewer:seed": "node scripts/play-review/seed-reviewer-account.mjs",
     "play:reviewer:reset": "node scripts/play-review/reset-reviewer-account.mjs",
     "play:reviewer:verify": "node scripts/play-review/verify-reviewer-account.mjs",
+    "play:reporting:verify": "node scripts/play-review/verify-reporting-storage.mjs",
     "privacy:audit-user": "node scripts/privacy/audit-user-data.mjs",
     "privacy:delete-user-data": "node scripts/privacy/delete-user-data.mjs",
     "pip:character:import": "node scripts/pip-character/import-local-pip-assets.mjs",

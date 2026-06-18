@@ -585,9 +585,10 @@ export function PipHome({
             platform: clientPlatform,
           }),
         ],
-        nextChips: getSettingsPromptChips({
-          canUseAccountActions: canUseInAppAccountActions,
-          hasConnectedData: Boolean(result),
+        nextChips: getSettingsConversationPromptChips({
+          authState: activeAuthState,
+          enableAccountControls: onboardingPromptControlsEnabled,
+          result,
         }),
       });
       return;
@@ -608,9 +609,10 @@ export function PipHome({
             hasConnectedData: Boolean(result),
           }),
         ],
-        nextChips: getSettingsPromptChips({
-          canUseAccountActions: canUseInAppAccountActions,
-          hasConnectedData: Boolean(result),
+        nextChips: getSettingsConversationPromptChips({
+          authState: activeAuthState,
+          enableAccountControls: onboardingPromptControlsEnabled,
+          result,
         }),
       });
       return;
@@ -631,9 +633,10 @@ export function PipHome({
         appendChatOnlyTurn({
           userText: message,
           responseMessage: "Sign in before sending feedback.",
-          nextChips: getSettingsPromptChips({
-            canUseAccountActions: false,
-            hasConnectedData: Boolean(result),
+          nextChips: getSettingsConversationPromptChips({
+            authState: activeAuthState,
+            enableAccountControls: onboardingPromptControlsEnabled,
+            result,
           }),
         });
         return;
@@ -666,9 +669,10 @@ export function PipHome({
         appendChatOnlyTurn({
           userText: message,
           responseMessage: "Feedback sent.",
-          nextChips: getSettingsPromptChips({
-            canUseAccountActions: canUseInAppAccountActions,
-            hasConnectedData: Boolean(result),
+          nextChips: getSettingsConversationPromptChips({
+            authState: activeAuthState,
+            enableAccountControls: onboardingPromptControlsEnabled,
+            result,
           }),
         });
       } catch (error) {
@@ -688,9 +692,10 @@ export function PipHome({
         appendChatOnlyTurn({
           userText: message,
           responseMessage: "Sign in before deleting an account.",
-          nextChips: getSettingsPromptChips({
-            canUseAccountActions: false,
-            hasConnectedData: Boolean(result),
+          nextChips: getSettingsConversationPromptChips({
+            authState: activeAuthState,
+            enableAccountControls: onboardingPromptControlsEnabled,
+            result,
           }),
         });
         return;
@@ -1650,15 +1655,49 @@ function getSettingsActions(input: {
   return actions;
 }
 
-function getSettingsPromptChips(input: {
-  canUseAccountActions: boolean;
-  hasConnectedData: boolean;
+const settingsConversationPromptChipExcludedIds = new Set([
+  "manage-accounts",
+  "settings",
+  "settings-overview",
+  "settings-support",
+  "settings-privacy",
+  "settings-terms",
+  "settings-feedback",
+  "settings-delete-account",
+  "settings-connected-accounts",
+]);
+
+const settingsConversationFallbackPromptChips: PromptChip[] = [
+  {
+    id: "what-data-used",
+    label: "What data do you use?",
+    prompt: "What data do you use?",
+  },
+  {
+    id: "why-connect-accounts",
+    label: "Why connect accounts?",
+    prompt: "Why connect accounts?",
+  },
+  {
+    id: "what-is-spendable-cash-today",
+    label: "What is Spendable Cash Today?",
+    prompt: "What is Spendable Cash Today?",
+  },
+];
+
+function getSettingsConversationPromptChips(input: {
+  authState: PipAuthState | undefined;
+  enableAccountControls: boolean;
+  result: PipCashResult | null;
 }): PromptChip[] {
-  return getSettingsActions(input).map(({ id, label, prompt }) => ({
-    id,
-    label,
-    prompt,
-  }));
+  const chips = input.result
+    ? getSuggestedPrompts(input.result)
+    : getDefaultPromptChips(input.authState, input.enableAccountControls, null);
+  const filtered = chips
+    .filter((chip) => !settingsConversationPromptChipExcludedIds.has(chip.id))
+    .slice(0, 3);
+
+  return filtered.length > 0 ? filtered : settingsConversationFallbackPromptChips;
 }
 
 function getChatOnlyRequest(input: {
@@ -2176,7 +2215,7 @@ export const __pipHomeTestHooks = {
   getReadyDataAction,
   getSafeAgentFailureMessage,
   getSettingsActions,
-  getSettingsPromptChips,
+  getSettingsConversationPromptChips,
   withAccountManagementPromptChip,
 };
 

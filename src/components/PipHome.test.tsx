@@ -47,7 +47,7 @@ describe("PipHome", () => {
     expect(markup).not.toContain("Data controls");
   });
 
-  it("keeps settings out of app chrome and exposes settings actions as chips", () => {
+  it("keeps settings out of app chrome while bottom chips stay conversational", () => {
     const markup = renderToStaticMarkup(
       <PipHome
         authState={{ status: "ready", email: "play-review@animasai.co" }}
@@ -63,9 +63,15 @@ describe("PipHome", () => {
     expect(visibleText).not.toContain("Account and support");
     expect(visibleText).not.toContain("Pricing");
 
-    const settingsChips = __pipHomeTestHooks.getSettingsPromptChips({
-      canUseAccountActions: true,
-      hasConnectedData: true,
+    const settingsChips = __pipHomeTestHooks.getSettingsConversationPromptChips({
+      authState: { status: "ready", email: "play-review@animasai.co" },
+      enableAccountControls: true,
+      result: __pipHomeTestHooks.getDemoPipCashResult(),
+    });
+    const noDataSettingsChips = __pipHomeTestHooks.getSettingsConversationPromptChips({
+      authState: { status: "ready", email: "play-review@animasai.co" },
+      enableAccountControls: true,
+      result: null,
     });
     const settingsCard = __pipHomeTestHooks.createSettingsPanelCard({
       email: "play-review@animasai.co",
@@ -79,17 +85,30 @@ describe("PipHome", () => {
     });
 
     expect(settingsChips.map((chip) => chip.id)).toEqual([
+      "ai-pattern-assumptions",
+      "ai-data-quality",
+      "ai-biggest-drivers",
+    ]);
+    expect(settingsChips.slice(0, 3).map((chip) => chip.id)).not.toEqual([
+      "settings-support",
+      "settings-privacy",
+      "settings-terms",
+    ]);
+    for (const actionChipId of [
       "settings-support",
       "settings-privacy",
       "settings-terms",
       "settings-connected-accounts",
       "settings-feedback",
       "settings-delete-account",
-    ]);
-    expect(settingsChips.slice(0, 3).map((chip) => chip.prompt)).toEqual([
-      "Show support",
-      "Show privacy",
-      "Show terms",
+      "settings",
+      "manage-accounts",
+    ]) {
+      expect(settingsChips.map((chip) => chip.id)).not.toContain(actionChipId);
+    }
+    expect(noDataSettingsChips.map((chip) => chip.id)).toEqual([
+      "what-data-used",
+      "why-connect-accounts",
     ]);
     expect(settingsCard).toMatchObject({
       type: "settings_panel",
@@ -101,7 +120,14 @@ describe("PipHome", () => {
         },
       ]),
     });
-    expect(settingsCard.actions.map((action) => action.id)).toContain("settings-terms");
+    expect(settingsCard.actions.map((action) => action.id)).toEqual([
+      "settings-support",
+      "settings-privacy",
+      "settings-terms",
+      "settings-connected-accounts",
+      "settings-feedback",
+      "settings-delete-account",
+    ]);
     expect(termsCard).toMatchObject({
       type: "settings_detail",
       title: "Terms",
