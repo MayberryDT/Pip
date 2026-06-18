@@ -6,6 +6,7 @@ import {
 } from "@/lib/agent/conversation-state";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import { formatMoney } from "@/lib/money";
+import { composeTrustPolicyAnswer } from "@/lib/trust/pip-trust-policy";
 import type { PipCashResult } from "@/lib/types";
 
 export type AgentAnswerModelOutput = {
@@ -251,6 +252,11 @@ function composeCardBackedAnswer(
         message: "I pulled the math behind today's number.",
         answerPatternId: "math-breakdown",
       };
+    case "trust_receipt":
+      return {
+        message: "I pulled the receipt behind today's number.",
+        answerPatternId: "trust-receipt",
+      };
     case "insight_card":
       if (isCutbackInsightCard(card)) {
         return {
@@ -341,6 +347,13 @@ function composeDeterministicNoCardAnswer(
         ? `I found ${formatMoney(getSpendableCents(result))} today. It comes from your normal pattern, bills, protected savings, recent spending pace, and cash reality.`
         : "I estimate today's room from your normal pattern, bills, protected savings, recent spending pace, and cash reality.",
       answerPatternId: "definition",
+    };
+  }
+
+  if (input.usedTools.includes("get_trust_policy")) {
+    return {
+      message: composeTrustPolicyAnswer(input.userMessage).message,
+      answerPatternId: "trust-policy",
     };
   }
 
@@ -464,6 +477,8 @@ function getRepetitionAdjustedMessage(
       return "I grouped the flows again, and the next chips can narrow the view.";
     case "math_breakdown":
       return "I checked the math again, and the next chips can explain the drivers.";
+    case "trust_receipt":
+      return "I checked the receipt again, and the next chips can take it deeper.";
     case "guidance_card":
       return "I checked the read again and kept it tied to the same evidence.";
     default:

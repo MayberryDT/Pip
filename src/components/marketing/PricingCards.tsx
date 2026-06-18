@@ -42,6 +42,7 @@ export function PricingCards({
             </div>
             <h3 className="mt-5 text-xl font-bold text-ink">{plan.tagline}</h3>
             <p className="mt-2 text-sm leading-6 text-ink/66">{plan.description}</p>
+            <p className="mt-3 text-xs font-semibold leading-5 text-ink/50">{plan.annualizedLabel}</p>
             <MarketingCtaLink
               className={[
                 "focus-ring mt-auto inline-flex min-h-11 w-fit items-center justify-center px-5 text-sm font-bold transition",

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LegalShell } from "@/components/LegalShell";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
 import { marketingSite } from "@/lib/marketing/site";
+import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Support",
@@ -42,6 +43,13 @@ export default function SupportPage() {
           connection. If a connection remains stale after refresh, share the institution name and the
           last refresh time with support.
         </p>
+        <p className="mt-3">
+          For calculation context, read{" "}
+          <Link className="font-bold text-moss hover:text-ink" href={pipTrustPolicy.publicLinks.howNumberWorks}>
+            how the number works
+          </Link>
+          .
+        </p>
       </section>
 
       <section>
@@ -76,7 +84,8 @@ export default function SupportPage() {
       <section>
         <h2 className="text-lg font-bold text-ink">Helpful Links</h2>
         <p className="mt-3">
-          Read the <Link className="font-bold text-moss hover:text-ink" href="/security">security overview</Link>,{" "}
+          Read <Link className="font-bold text-moss hover:text-ink" href={pipTrustPolicy.publicLinks.howNumberWorks}>how the number works</Link>,{" "}
+          the <Link className="font-bold text-moss hover:text-ink" href="/security">security overview</Link>,{" "}
           <Link className="font-bold text-moss hover:text-ink" href="/privacy">privacy summary</Link>, and{" "}
           <Link className="font-bold text-moss hover:text-ink" href="/terms">terms</Link> for the current product
           boundaries.
@@ -87,8 +96,7 @@ export default function SupportPage() {
         <h2 className="text-lg font-bold text-ink">FAQ</h2>
         <h3 className="mt-3 font-bold text-ink">Can Pip move my money?</h3>
         <p className="mt-2">
-          No. Pip does not initiate payments, transfers, card payments, ACH transactions, or other
-          money movement.
+          No. {pipTrustPolicy.securityBoundaries[1]}
         </p>
         <h3 className="mt-4 font-bold text-ink">Can Pip make credit or lending decisions?</h3>
         <p className="mt-2">

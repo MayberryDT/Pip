@@ -10,6 +10,7 @@ import { buildFinancialGuidanceToolResult, runAgentTool } from "@/lib/agent/tool
 import { fakeSnapshot } from "@/lib/fake-data";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { formatMoney } from "@/lib/money";
+import { composeTrustPolicyAnswer } from "@/lib/trust/pip-trust-policy";
 
 export function createMockModelClient(): AgentRuntime {
   return {
@@ -96,6 +97,10 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     });
   }
 
+  if (input.selectedPromptChipId === "ai-trust-receipt") {
+    return toolResponse(input, "show_trust_receipt", {});
+  }
+
   if (/^(hi|hello|hey|yo)\b/.test(normalized)) {
     return baseResponse(input, {
       message: "Hi. Ask me about Spendable Cash Today or setup.",
@@ -108,6 +113,17 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
 
   if (isSpendingOpportunityPrompt(normalized)) {
     return toolResponse(input, "show_spending_opportunity", {});
+  }
+
+  if (isTrustReceiptPrompt(normalized)) {
+    return toolResponse(input, "show_trust_receipt", {});
+  }
+
+  if (isTrustPolicyPrompt(normalized)) {
+    return baseResponse(input, {
+      message: composeTrustPolicyAnswer(input.message).message,
+      usedTools: ["get_trust_policy"],
+    });
   }
 
   if (isSpendingPrompt(normalized)) {
@@ -256,6 +272,7 @@ function toolResponse(
     show_spending_opportunity: "get_spending_opportunity",
     get_financial_guidance_context: "get_financial_guidance_context",
     detect_missing_card: "get_data_quality",
+    show_trust_receipt: "get_trust_receipt",
     show_math: "get_pip_cash_math",
     compose_insight_card: "compose_insight_card",
     answer_unrelated: "answer_unrelated",
@@ -422,6 +439,10 @@ function createToolMessage(response: AgentResponse): string {
     return "I pulled the math.";
   }
 
+  if (card?.type === "trust_receipt") {
+    return "I pulled the receipt behind today's number.";
+  }
+
   if (card?.type === "insight_card") {
     if (/\b(cutback|cut back|spending opportunity)\b/i.test(`${card.title} ${card.summary}`)) {
       return `I found a cutback opportunity: ${card.summary}`;
@@ -472,6 +493,31 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
 function isSavingsSetupOrSettingsPrompt(normalized: string): boolean {
   return /\b(protected savings|savings cushion)\b/.test(normalized) ||
     /\bsave\b.{0,24}\b(account settings|settings|preferences)\b/.test(normalized);
+}
+
+function isTrustReceiptPrompt(normalized: string): boolean {
+  if (/\b(trust receipt|receipt behind|receipt for|source receipt)\b/.test(normalized)) {
+    return true;
+  }
+
+  return (
+    /\b(can i trust|trustworthy|how reliable|how accurate|accuracy|complete data|what is missing|what data is missing|what may be missing|what data is counted|what does this include|based on fresh data|up to date|current)\b/.test(normalized) &&
+    /\b(number|spendable cash|spendable cash today|data|accounts?|current|fresh|today|it|this)\b/.test(normalized)
+  );
+}
+
+function isTrustPolicyPrompt(normalized: string): boolean {
+  if (/\b(add|connect|link|repair|reconnect|fix|remove|disconnect)\b.*\b(bank|account|card|institution|plaid|connection)\b/.test(normalized)) {
+    return false;
+  }
+
+  return (
+    /\b(plaid|bank[- ]?data provider|data provider|aggregation provider|aggregator|credentials?|passwords?|provider tokens?|tokens?)\b/.test(normalized) ||
+    /\b(ai provider|ai model|openai|chatgpt|llm|train on|training data|model training|does ai|ai calculate|ai see|ai use)\b/.test(normalized) ||
+    /\b(move (?:my |our |your )?money|transfer (?:my |our |your )?money|withdraw|make payments?|pay bills?|send money|take money|debit my account)\b/.test(normalized) ||
+    /\b(security|privacy|sell my data|sell data|advertising|subprocessors?|data retention|retention|delete my data|delete data)\b/.test(normalized) ||
+    /\b(financial advice|advisor|guarantee|guaranteed|legal entity|who operates|refund|trial|cancel subscription|subscription (?:billing|price|pricing|refund|trial|cancel|cancellation))\b/.test(normalized)
+  );
 }
 
 function isJudgmentalPurchasePrompt(normalized: string): boolean {

@@ -60,7 +60,7 @@ Avoid language like:
 - Get paid early.
 - We move your money.
 - We pay bills for you.
-- Guaranteed safe to spend.
+- Guaranteed spending room.
 - Guaranteed savings.
 - Bank replacement.
 - Financial advisor.
@@ -77,7 +77,7 @@ A calm daily spending signal from your connected account activity.
 Long-description core copy:
 
 ```txt
-Pip shows Spendable Cash Today: one simple number that helps you understand what may be safe to spend today based on connected account activity, upcoming bills, and your savings cushion.
+Pip shows Spendable Cash Today: one simple number that helps you understand today's spending room based on connected account activity, upcoming bills, and your savings cushion.
 
 Pip is read-only. It does not move money, hold funds, initiate transfers, issue loans, make credit decisions, or provide investment, tax, legal, or financial advice.
 ```

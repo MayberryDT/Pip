@@ -3,7 +3,7 @@
 Pip is a paid cute daily money companion for everyday spending decisions.
 
 Core thesis:
-Before you spend, check Pip. Your bank balance shows what exists. Pip shows what is actually okay to use today.
+Before you spend, check Pip. Your bank balance shows what exists. Pip shows the daily spending signal after visible obligations, protected savings, recent spending pace, pending committed spend, and cash reality are considered.
 
 Primary product concept:
 Spendable Cash Today is the one daily number Pip shows by default. It is meant to help users stop guessing from their bank balance without maintaining a budget, spreadsheet, or finance dashboard.
@@ -11,6 +11,8 @@ Spendable Cash Today is the one daily number Pip shows by default. It is meant t
 Pricing:
 - Weekly plan: $2.99/week.
 - Monthly plan: $7.99/month.
+- Weekly is about $155.48/year if kept weekly.
+- Monthly is about $95.88/year if kept monthly.
 - Pip is paid because money data should not be the product. Pip does not position itself as a permanent free product.
 
 Product access:
@@ -20,6 +22,7 @@ Product access:
 Canonical public pages:
 - https://spendwithpip.com/
 - https://spendwithpip.com/how-it-works
+- https://spendwithpip.com/how-the-number-works
 - https://spendwithpip.com/pricing
 - https://spendwithpip.com/security
 - https://spendwithpip.com/blog
@@ -31,6 +34,9 @@ Important boundaries:
 - Pip is not a bank replacement.
 - Pip does not move money.
 - Pip uses read-only account data.
+- Pip connects account data through Plaid.
+- AI explains and answers; AI does not own the Spendable Cash Today calculation.
+- Spendable Cash Today is decision support, not a guarantee that every future obligation is known.
 - Pip is not financial, tax, investment, credit, or legal advice.
 - Pip's public content should be product-led and plain English, not generic financial education.
 

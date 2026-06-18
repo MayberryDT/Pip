@@ -148,6 +148,20 @@ const insightCardRowSchema = z.object({
   tone: moneyToneSchema,
 });
 
+const trustReceiptRowSchema = z.object({
+  id: z.string().min(1).max(80),
+  label: z.string().min(1).max(60),
+  value: z.string().min(1).max(80),
+  detail: z.string().min(1).max(220),
+  tone: moneyToneSchema,
+});
+
+const trustReceiptLimitSchema = z.object({
+  id: z.string().min(1).max(80),
+  label: z.string().min(1).max(80),
+  detail: z.string().min(1).max(260),
+});
+
 const guidanceStanceSchema = z.enum(["stable", "watch", "tight", "shortfall", "uncertain"]);
 
 const guidanceCardRowSchema = z.object({
@@ -296,6 +310,15 @@ export const cardSchema = z.discriminatedUnion("type", [
     behaviorAdjustmentCents: z.number().int().optional(),
     cashRealityAdjustmentCents: z.number().int().optional(),
     legacyRollingDailySurplusCents: z.number().int().optional(),
+  }),
+  z.object({
+    type: z.literal("trust_receipt"),
+    title: z.string().min(1).max(80),
+    summary: z.string().min(1).max(260),
+    asOfLabel: z.string().min(1).max(120),
+    rows: z.array(trustReceiptRowSchema).min(1).max(6),
+    knownLimits: z.array(trustReceiptLimitSchema).max(6),
+    footer: z.string().min(1).max(260),
   }),
   z.object({
     type: z.literal("insight_card"),

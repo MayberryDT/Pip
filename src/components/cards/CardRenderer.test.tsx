@@ -380,6 +380,50 @@ function getRenderableCards(): Array<{
       ],
     },
     {
+      name: "trust_receipt",
+      card: {
+        type: "trust_receipt",
+        title: "Trust receipt",
+        summary: "$43 is based on connected data and visible constraints through the current receipt.",
+        asOfLabel: "Connected data refreshed Jun 18, 2:14 PM",
+        rows: [
+          {
+            id: "freshness",
+            label: "Data freshness",
+            value: "Refreshed",
+            detail: "Last successful provider refresh: Jun 18, 2:14 PM.",
+            tone: "neutral",
+          },
+          {
+            id: "confidence",
+            label: "Confidence",
+            value: "medium",
+            detail: "Confidence comes from the available account and transaction pattern.",
+            tone: "warning",
+          },
+        ],
+        knownLimits: [
+          {
+            id: "pending-transactions",
+            label: "Pending transactions included",
+            detail: "Pending card purchases are included.",
+          },
+        ],
+        footer: "Cash spending and manually paid bills can still change the picture.",
+      },
+      expectedText: [
+        "Trust receipt",
+        "$43 is based on connected data",
+        "Connected data refreshed Jun 18",
+        "Data freshness",
+        "Refreshed",
+        "Confidence",
+        "medium",
+        "Pending transactions included",
+        "Cash spending and manually paid bills",
+      ],
+    },
+    {
       name: "insight_card",
       card: {
         type: "insight_card",

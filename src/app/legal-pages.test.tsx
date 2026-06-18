@@ -13,15 +13,18 @@ describe("public legal and support pages", () => {
     const deletion = renderToStaticMarkup(<DeleteAccountPage />);
 
     expect(privacy).toContain("does not store bank usernames or passwords");
-    expect(privacy).toContain("Provider tokens and credentials are handled server-side only");
+    expect(privacy).toContain("Provider tokens are handled server-side only");
     expect(privacy).toContain("provider tokens");
     expect(privacy).toContain("delete your account from the in-app settings panel");
     expect(privacy).toContain("AI response reports");
+    expect(privacy).toContain("does not intentionally train a Pip-owned AI model");
     expect(terms).toContain("not financial, tax, investment, credit, or legal advice");
-    expect(terms).toContain("does not initiate payments");
+    expect(terms).toContain("cannot move, withdraw, transfer");
+    expect(terms).toContain("No Guarantee");
     expect(terms).toContain("does not make loan, credit, underwriting, insurance, or investment decisions");
     expect(terms).toContain("Android Play test build is consumption-only");
     expect(support).toContain("ask Pip in the chat to refresh data or repair the connection");
+    expect(support).toContain("how the number works");
     expect(support).toContain("Open Settings in the app and type DELETE");
     expect(support).toContain("AI Response Reports");
     expect(support).not.toContain("Billing Support");

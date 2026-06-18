@@ -19,11 +19,12 @@ import {
   pipPricingIncludedFeatures,
   pipSubscriptionCaveat,
 } from "@/lib/marketing/pricing";
+import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 const pricingFaq = [
   {
     title: "What do the plans cost?",
-    copy: `${pipPricing.weekly.displayPrice} or ${pipPricing.monthly.displayPrice}. Monthly is the better value for people who want Pip as a daily habit.`,
+    copy: `${pipPricing.weekly.displayPrice} or ${pipPricing.monthly.displayPrice}. That is about ${pipTrustPolicy.pricing.weeklyAnnualized} weekly or ${pipTrustPolicy.pricing.monthlyAnnualized} monthly over a full year.`,
   },
   {
     title: "Why is Pip paid?",
@@ -40,6 +41,10 @@ const pricingFaq = [
   {
     title: "How are subscriptions managed?",
     copy: pipSubscriptionCaveat,
+  },
+  {
+    title: "Is there a trial or refund policy?",
+    copy: "Trials, refunds, grace periods, and billing recovery depend on the platform and offer shown when you start the subscription.",
   },
 ];
 
@@ -89,9 +94,16 @@ export function PricingPageContent() {
             </SwissText>
             <Link
               className="focus-ring mt-6 inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink"
-              href="/security"
+              href={pipTrustPolicy.publicLinks.security}
             >
               Read the security model
+              <ArrowRight aria-hidden="true" size={16} />
+            </Link>
+            <Link
+              className="focus-ring mt-4 inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink"
+              href={pipTrustPolicy.publicLinks.howNumberWorks}
+            >
+              Read how the number works
               <ArrowRight aria-hidden="true" size={16} />
             </Link>
           </div>

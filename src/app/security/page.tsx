@@ -16,6 +16,7 @@ import { marketingAssets } from "@/lib/marketing/assets";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
 import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
 import { pipPaidTrustLine } from "@/lib/marketing/pricing";
+import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Security",
@@ -27,15 +28,19 @@ export const metadata: Metadata = buildMarketingMetadata({
 const securityFacts = [
   {
     title: "Read-only account data",
-    copy: "Pip connects account and transaction data to calculate Spendable Cash Today. It is an insight layer, not a bank account.",
+    copy: `${pipTrustPolicy.bankDataProvider.name} provides read-only account and transaction data for Spendable Cash Today. Pip is an insight layer, not a bank account.`,
   },
   {
     title: "No money movement",
-    copy: "Pip does not initiate payments, transfers, card payments, ACH transactions, or other money movement.",
+    copy: pipTrustPolicy.securityBoundaries[1],
   },
   {
     title: "Server-side credentials",
-    copy: "Provider access credentials are handled server-side. Browser code receives short-lived connection artifacts only when needed.",
+    copy: "Provider access tokens stay server-side. Browser code receives short-lived connection artifacts only when needed.",
+  },
+  {
+    title: "No bank passwords",
+    copy: pipTrustPolicy.securityBoundaries[2],
   },
   {
     title: "No ads or data selling",
@@ -54,11 +59,19 @@ const paidTrustNotes = [
   },
   {
     title: "Stored product data",
-    copy: "Pip stores normalized financial data, account metadata, sync logs, user settings, AI chat context, AI response reports, tester feedback, and product events needed to operate the app.",
+    copy: pipTrustPolicy.privacyBoundaries[0],
   },
   {
     title: "Provider boundary",
     copy: "Pip does not store bank usernames or passwords. Raw provider payloads should stay minimal and exist only where needed for troubleshooting or normalization.",
+  },
+  {
+    title: "AI boundary",
+    copy: `${pipTrustPolicy.aiProvider.role} AI explanations can be incomplete or wrong.`,
+  },
+  {
+    title: "Independent validation",
+    copy: pipTrustPolicy.securityBoundaries[4],
   },
   {
     title: "Decision-support signal",
@@ -115,10 +128,16 @@ export default function SecurityPage() {
           <div className="col-span-12 flex flex-wrap gap-3 lg:col-span-6 lg:col-start-7">
             <Link
               className="focus-ring inline-flex min-h-11 items-center gap-2 bg-ink px-5 text-sm font-bold text-porcelain hover:bg-moss"
+              href={pipTrustPolicy.publicLinks.howNumberWorks}
+            >
+              How the number works
+              <ArrowRight aria-hidden="true" size={16} />
+            </Link>
+            <Link
+              className="focus-ring inline-flex min-h-11 items-center border border-line bg-porcelain px-5 text-sm font-bold text-ink hover:border-moss"
               href="/privacy"
             >
               Read privacy
-              <ArrowRight aria-hidden="true" size={16} />
             </Link>
             <Link
               className="focus-ring inline-flex min-h-11 items-center border border-line bg-porcelain px-5 text-sm font-bold text-ink hover:border-moss"

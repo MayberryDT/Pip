@@ -311,6 +311,29 @@ export function CardRenderer({
         </CardShell>
       );
 
+    case "trust_receipt":
+      return (
+        <CardShell icon={<ShieldCheck aria-hidden="true" size={18} />} title={card.title}>
+          <p className="pip-wrap-anywhere text-sm leading-6 text-ink/[0.68]">{card.summary}</p>
+          <p className="pip-wrap-anywhere mt-2 text-xs font-semibold uppercase leading-5 tracking-normal text-taupe">
+            {card.asOfLabel}
+          </p>
+          <div className="mt-3 space-y-2">
+            {card.rows.map((row) => (
+              <TrustReceiptRow key={row.id} row={row} />
+            ))}
+          </div>
+          {card.knownLimits.length > 0 ? (
+            <div className="mt-3 space-y-2">
+              {card.knownLimits.map((limit) => (
+                <WarningBlock key={limit.id} detail={limit.detail} label={limit.label} />
+              ))}
+            </div>
+          ) : null}
+          <p className="pip-wrap-anywhere mt-3 text-xs leading-5 text-ink/[0.56]">{card.footer}</p>
+        </CardShell>
+      );
+
     case "insight_card":
       return (
         <CardShell icon={<Sparkles aria-hidden="true" size={18} />} title={card.title}>
@@ -411,6 +434,26 @@ function CardShell({
       </div>
       {children}
     </section>
+  );
+}
+
+function TrustReceiptRow({
+  row,
+}: {
+  row: Extract<AgentCard, { type: "trust_receipt" }>["rows"][number];
+}) {
+  return (
+    <div className="pip-card-row rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2.5">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="pip-wrap-anywhere text-sm font-semibold text-ink">{row.label}</p>
+          <p className="pip-wrap-anywhere mt-1 text-xs leading-5 text-ink/[0.58]">{row.detail}</p>
+        </div>
+        <span className={["shrink-0 whitespace-nowrap text-right text-xs font-bold leading-5", toneClass(row.tone)].join(" ")}>
+          {row.value}
+        </span>
+      </div>
+    </div>
   );
 }
 

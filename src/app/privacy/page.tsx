@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalShell } from "@/components/LegalShell";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
+import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Privacy",
@@ -13,27 +14,33 @@ export default function PrivacyPage() {
   return (
     <LegalShell title="Privacy">
       <section>
+        <h2 className="text-lg font-bold text-ink">Effective Date</h2>
+        <p className="mt-3">
+          Effective {pipTrustPolicy.effectiveDate}. Last updated {pipTrustPolicy.revisionDate}.
+          Contact {pipTrustPolicy.supportEmail} for privacy questions.
+        </p>
+      </section>
+
+      <section>
         <h2 className="text-lg font-bold text-ink">What Pip Stores</h2>
         <p className="mt-3">
-          Pip stores normalized financial data, account metadata, sync logs, user settings, AI chat
-          context needed for product behavior, AI response reports you submit, tester feedback, and
-          product events needed to calculate Spendable Cash Today and operate the app.
+          {pipTrustPolicy.privacyBoundaries[0]} This can include balances, transactions, merchant
+          names, income patterns, account labels, and connection state.
         </p>
       </section>
 
       <section>
         <h2 className="text-lg font-bold text-ink">What Pip Does Not Store</h2>
         <p className="mt-3">
-          Pip does not store bank usernames or passwords and does not move money. Provider tokens and
-          credentials are handled server-side only. Raw provider payloads should be kept minimal and
-          used for troubleshooting or normalization only when needed.
+          Pip does not store bank usernames or passwords and does not move money. Provider tokens are
+          handled server-side only. {pipTrustPolicy.privacyBoundaries[1]}
         </p>
       </section>
 
       <section>
         <h2 className="text-lg font-bold text-ink">How Data Is Used</h2>
         <p className="mt-3">
-          Pip uses connected account and transaction context to calculate Spendable Cash Today, show
+          Pip uses {pipTrustPolicy.bankDataProvider.name} connected account and transaction context to calculate Spendable Cash Today, show
           account connection state, explain why the number changed, and support account management.
           AI response reports and feedback are used to investigate confusing, unsafe, or inaccurate
           responses. Product events are used to operate and improve the app without selling financial
@@ -42,10 +49,19 @@ export default function PrivacyPage() {
       </section>
 
       <section>
+        <h2 className="text-lg font-bold text-ink">AI Context</h2>
+        <p className="mt-3">
+          {pipTrustPolicy.aiProvider.role} Pip does not intentionally train a Pip-owned AI model on
+          user financial records. Third-party AI handling depends on the deployed model provider and
+          gateway terms.
+        </p>
+      </section>
+
+      <section>
         <h2 className="text-lg font-bold text-ink">Paid Product Model</h2>
         <p className="mt-3">
-          Pip is a paid product because financial data should not be the product. Pip does not use an
-          ad-supported or financial-data-selling model.
+          Pip is a paid product because financial data should not be the product.{" "}
+          {pipTrustPolicy.privacyBoundaries[2]}
         </p>
       </section>
 
@@ -69,11 +85,7 @@ export default function PrivacyPage() {
           <Link className="font-bold text-moss hover:text-ink" href="/delete-account">
             public deletion page
           </Link>{" "}
-          if you cannot access the app. Deletion removes the Supabase auth account, financial rows,
-          sync logs, product events, connected institutions, missing-card preferences, provider
-          tokens, settings, AI response reports, and tester feedback for your account. Pip may retain
-          limited records when required for security, fraud prevention, accounting, or legal
-          obligations.
+          if you cannot access the app. {pipTrustPolicy.deletionSummary}
         </p>
       </section>
     </LegalShell>

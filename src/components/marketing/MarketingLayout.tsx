@@ -8,6 +8,7 @@ import { getProductAccessHref, productAccess } from "@/lib/marketing/product-acc
 
 const navLinks = [
   { href: "/how-it-works", label: "How it works" },
+  { href: "/how-the-number-works", label: "Number" },
   { href: "/pricing", label: "Pricing" },
   { href: "/security", label: "Security" },
   { href: "/blog", label: "Blog" },

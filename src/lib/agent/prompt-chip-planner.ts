@@ -30,6 +30,7 @@ export type PromptChipFamilyId =
   | "ai-spending-breakdown"
   | "ai-show-math"
   | "ai-true-balances"
+  | "ai-trust-receipt"
   | "ai-data-quality"
   | "ai-missing-card"
   | "ai-pending-items"
@@ -189,6 +190,12 @@ const readyChipCatalog: Record<PromptChipFamilyId, ChipDefinition> = {
     label: "Show actual account balances",
     prompt: "Show my true balances",
     mode: "context",
+  },
+  "ai-trust-receipt": {
+    id: "ai-trust-receipt",
+    label: "Show the receipt",
+    prompt: "Show the trust receipt behind today's number",
+    mode: "diagnostic",
   },
   "ai-data-quality": {
     id: "ai-data-quality",
@@ -434,6 +441,10 @@ function getQuestionChipFamilyIds(message: string | undefined): PromptChipFamily
     ids.push("ai-show-math");
   }
 
+  if (/\b(trust|receipt|reliable|accurate|current|fresh|missing data)\b/.test(normalized)) {
+    ids.push("ai-trust-receipt");
+  }
+
   if (/\b(test|try|purchase|spend amount|different amount)\b/.test(normalized)) {
     ids.push("ai-test-purchase");
   }
@@ -515,7 +526,7 @@ function getJobChipFamilyIds(job: ConversationJob): PromptChipFamilyId[] {
     case "true_balances":
       return ["ai-why-today", "ai-test-purchase", "ai-next-few-days"];
     case "data_quality":
-      return ["ai-why-today", "ai-recent-charges", "ai-refresh-data"];
+      return ["ai-trust-receipt", "ai-why-today", "ai-recent-charges", "ai-refresh-data"];
     case "financial_guidance":
       return ["ai-cutback-opportunity", "ai-spending-pressure", "ai-upcoming-bills", "ai-next-few-days"];
     case "definition":

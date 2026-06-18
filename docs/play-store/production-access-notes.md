@@ -134,7 +134,7 @@ A calm daily spending signal from your connected account activity.
 Long-description anchor:
 
 ```txt
-Pip shows Spendable Cash Today: one simple number that helps you understand what may be safe to spend today based on connected account activity, upcoming bills, and your savings cushion.
+Pip shows Spendable Cash Today: one simple number that helps you understand today's spending room based on connected account activity, upcoming bills, and your savings cushion.
 ```
 
 Required listing claims:

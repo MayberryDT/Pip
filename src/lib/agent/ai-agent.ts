@@ -39,8 +39,10 @@ import {
   getDisplayedSpendableCashTodayCents,
   getSpendableCashTodayState,
 } from "@/lib/pip-cash/spendable-cash-today";
+import { buildSpendableTrustReceipt } from "@/lib/pip-cash/trust-receipt";
 import { formatMoney, formatMoneyWithCents } from "@/lib/money";
 import type { PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
+import { composeTrustPolicyAnswer, pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 import type { FinancialSnapshot } from "@/lib/types";
 
 export const PIP_AI_MODEL = "gpt-5-nano";
@@ -199,6 +201,8 @@ type DeterministicAgentToolName =
   | "get_true_balances"
   | "get_data_quality"
   | "get_sync_status"
+  | "get_trust_receipt"
+  | "get_trust_policy"
   | "get_pip_cash_math"
   | "compose_insight_card";
 
@@ -283,6 +287,12 @@ export async function runAIAgent(
     return runtime.run(input);
   }
 
+  const deterministicTrustResponse = createDeterministicTrustResponse(input);
+
+  if (deterministicTrustResponse) {
+    return deterministicTrustResponse;
+  }
+
   if (!shouldUseModel()) {
     throw new AgentUnavailableError({
       code: "missing-openai-config",
@@ -349,6 +359,73 @@ export async function runAIAgent(
   });
 }
 
+function createDeterministicTrustResponse(input: RunAiAgentInput): AgentResponse | null {
+  const forcedTool = getForcedAgentTool(input);
+
+  if (forcedTool?.toolName === "get_trust_policy") {
+    const answer = composeTrustPolicyAnswer(input.message);
+
+    return agentResponseSchema.parse({
+      message: answer.message,
+      cards: [],
+      promptChips: createDeterministicTrustPromptChips(input),
+      usedTools: ["get_trust_policy"],
+      responseMode: "chat_only",
+      audit: {
+        toolNames: ["get_trust_policy"],
+        usedModel: false,
+      },
+    });
+  }
+
+  if (forcedTool?.toolName === "get_trust_receipt") {
+    const snapshot = input.snapshot ?? (input.onboardingState ? undefined : fakeSnapshot);
+
+    if (!snapshot) {
+      return null;
+    }
+
+    const result = calculatePipCash(snapshot);
+    const receipt = buildSpendableTrustReceipt({
+      result,
+      syncStatus: input.syncStatus,
+    });
+    const cards: AgentCard[] = [
+      {
+        type: "trust_receipt",
+        ...receipt,
+      },
+    ];
+
+    return agentResponseSchema.parse({
+      message: "I pulled the receipt behind today's number.",
+      cards,
+      promptChips: getSuggestedPrompts(result),
+      usedTools: ["get_trust_receipt"],
+      responseMode: "show_card",
+      audit: {
+        toolNames: ["get_trust_receipt"],
+        usedModel: false,
+      },
+    });
+  }
+
+  return null;
+}
+
+function createDeterministicTrustPromptChips(input: RunAiAgentInput): PromptChip[] {
+  const snapshot = input.snapshot ?? (input.onboardingState ? undefined : fakeSnapshot);
+
+  if (snapshot) {
+    return getSuggestedPrompts(calculatePipCash(snapshot));
+  }
+
+  return getOnboardingPromptChips(input.onboardingState ?? {
+    status: "ready",
+    hasFinancialData: false,
+  });
+}
+
 function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined {
   const message = input.message.trim();
   const normalized = normalizePrompt(message);
@@ -386,6 +463,22 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
   if (isGeneralSpendingQuestion(normalized) && isSpendingPrompt(normalized)) {
     return {
       toolName: "get_pip_cash_snapshot",
+      args: {},
+      requireCard: false,
+    };
+  }
+
+  if (isTrustReceiptPrompt(normalized)) {
+    return {
+      toolName: "get_trust_receipt",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (isTrustPolicyPrompt(normalized)) {
+    return {
+      toolName: "get_trust_policy",
       args: {},
       requireCard: false,
     };
@@ -630,6 +723,14 @@ function getForcedPromptChipTool(
   if (selectedPromptChipId === "ai-spending-pressure") {
     return {
       toolName: "get_recent_spending_pressure",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (selectedPromptChipId === "ai-trust-receipt") {
+    return {
+      toolName: "get_trust_receipt",
       args: {},
       requireCard: true,
     };
@@ -1615,6 +1716,78 @@ function createPipTools() {
       },
     }),
     tool<typeof emptyToolParameters, PipAgentContext>({
+      name: "get_trust_receipt",
+      description:
+        "Create a receipt for the current Spendable Cash Today number, including freshness, accounts counted, time horizon, pending spend, confidence, and known limits.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_trust_receipt");
+        const snapshot = context.snapshot;
+
+        if (!snapshot) {
+          return noFinancialDataToolResult(context);
+        }
+
+        const result = calculatePipCash(snapshot);
+        const receipt = buildSpendableTrustReceipt({
+          result,
+          syncStatus: context.syncStatus,
+        });
+        const cards: AgentCard[] = [
+          {
+            type: "trust_receipt",
+            ...receipt,
+          },
+        ];
+        addAvailableCards(context, cards);
+
+        return {
+          availableCards: cards,
+          receipt: {
+            asOfLabel: receipt.asOfLabel,
+            rowCount: receipt.rows.length,
+            knownLimitCount: receipt.knownLimits.length,
+            knownLimits: receipt.knownLimits.map((limit) => limit.label),
+          },
+          publicLinks: {
+            howNumberWorks: pipTrustPolicy.publicLinks.howNumberWorks,
+            security: pipTrustPolicy.publicLinks.security,
+            privacy: pipTrustPolicy.publicLinks.privacy,
+          },
+          suggestedPrompts: getSuggestedPrompts(result),
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, PipAgentContext>({
+      name: "get_trust_policy",
+      description:
+        "Answer public trust, security, privacy, provider, AI, pricing, deletion, money-movement, and advice-boundary questions from Pip's vetted policy.",
+      parameters: emptyToolParameters,
+      strict: true,
+      execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "get_trust_policy");
+        const answer = composeTrustPolicyAnswer(context.inputMessage);
+
+        return {
+          answer,
+          policy: {
+            effectiveDate: pipTrustPolicy.effectiveDate,
+            revisionDate: pipTrustPolicy.revisionDate,
+            bankDataProvider: pipTrustPolicy.bankDataProvider,
+            aiProvider: pipTrustPolicy.aiProvider,
+            productBoundaries: pipTrustPolicy.productBoundaries,
+            securityBoundaries: pipTrustPolicy.securityBoundaries,
+            privacyBoundaries: pipTrustPolicy.privacyBoundaries,
+            supportEmail: pipTrustPolicy.supportEmail,
+            publicLinks: pipTrustPolicy.publicLinks,
+          },
+        };
+      },
+    }),
+    tool<typeof emptyToolParameters, PipAgentContext>({
       name: "get_pip_cash_math",
       description:
         "Get the deterministic math breakdown behind Spendable Cash Today. Use only when the user explicitly asks for math, formula, or calculation details.",
@@ -1691,6 +1864,10 @@ function createPipInstructions(runContext: {
     "There is no dashboard, dashboard page, budget page, transaction page, tab view, or separate area to send the user to.",
     "Do not mention dashboards, pages, tabs, sections, navigation, budgeting apps, expense tracking, or financial planning.",
     "Never calculate money yourself. Use tools for any current financial fact, balance, transaction, driver, data-quality status, or purchase simulation.",
+    "Use get_trust_policy for questions about Plaid, bank-data providers, AI providers, AI training, privacy, security, deletion, subscriptions, money movement, guarantees, or financial-advice boundaries.",
+    "Use get_trust_receipt when the user asks whether the current number is fresh, current, trustworthy, based on complete data, what it includes, what it may be missing, or asks for a receipt behind the number.",
+    "The Spendable Cash Today number is calculated by Pip's product logic. AI explains and answers; AI does not own the money calculation.",
+    "Pip uses Plaid for read-only account connection. Pip cannot move money, withdraw funds, transfer funds, make payments, or store bank usernames and passwords.",
     "Use tools for setup and account actions. Do not pretend an action happened unless the matching tool returned ok.",
     "You can help users manage connected accounts through tools. Use account tools when the user asks what accounts are connected, wants to add a bank/card, repair a connection, change selected accounts, exclude or include an account, mark protected savings, or remove an institution.",
     "Account management stays chat-owned. Do not mention settings pages, dashboards, menus, tabs, or separate account screens.",
@@ -1728,6 +1905,7 @@ function createPipInstructions(runContext: {
     "For purchase simulations, answer directly from the tool result. Explain Spendable Cash after the purchase as current Spendable Cash minus the purchase. Never mention internal engine version names, recomputed daily room, or daily effect in visible replies. If guidanceContext is present, also give a brief read on pressure from the purchase. If there is a shortfall, say it adds to the shortfall; do not describe the number as a bank balance.",
     "If the user asks generally whether $0 or a shortfall means they cannot spend money, use get_pip_cash_snapshot and explain the signal conversationally without treating it as a purchase simulation.",
     "Spendable Cash Today floors at $0 in shortfall states. That is a warning about today's pattern and cash reality; it does not literally mean every dollar of spending is impossible.",
+    "If a trust receipt card is returned, write one short bridge sentence. Do not repeat every receipt row in chat.",
     "Only call get_recent_transactions when the user plainly asks to show, list, or identify transactions, charges, purchases, or recent activity.",
     "Do not call get_recent_transactions for general why, math, negative Spendable Cash Today, or can-I-spend questions.",
     "Prefer a short answer plus a structured card. For card answers, keep your sentence short and let the card carry the detail.",
@@ -2247,6 +2425,7 @@ function hasDeterministicNoCardFallback(context: PipAgentContext): boolean {
       "get_pip_cash_snapshot",
       "get_spendable_cash_definition",
       "get_sync_status",
+      "get_trust_policy",
     ].includes(toolName),
   );
 }
@@ -2265,6 +2444,8 @@ function createFallbackFinalMessage(context: PipAgentContext): string {
       return "I found the main drivers behind today's number.";
     case "math_breakdown":
       return "I pulled the math behind today's number.";
+    case "trust_receipt":
+      return "I pulled the receipt behind today's number.";
     case "recent_transactions":
       return "I found recent charges in the current window.";
     case "spending_breakdown":
@@ -2880,6 +3061,7 @@ function isSupportedCardPrompt(normalized: string): boolean {
     isFlexiblePipCashDriversPrompt(normalized) ||
     isPaydayImpactPrompt(normalized) ||
     isSpendableFactorsInsightPrompt(normalized) ||
+    isTrustReceiptPrompt(normalized) ||
     isDataQualityPrompt(normalized) ||
     (isSpecificSpendSimulationPrompt(normalized) && extractExplicitPurchaseAmountCents(normalized) !== null)
   );
@@ -3698,6 +3880,31 @@ function isSavingsSetupOrSettingsPrompt(normalized: string): boolean {
 function isDataQualityPrompt(normalized: string): boolean {
   return /\b(missing card|card missing|missing data|data missing|connect(ed)? data|repair data|stale data|data quality|pending transactions?|pending items?)\b/.test(
     normalized,
+  );
+}
+
+function isTrustReceiptPrompt(normalized: string): boolean {
+  if (/\b(trust receipt|receipt behind|receipt for|source receipt)\b/.test(normalized)) {
+    return true;
+  }
+
+  return (
+    /\b(can i trust|trustworthy|how reliable|how accurate|accuracy|complete data|what is missing|what data is missing|what may be missing|what data is counted|what does this include|based on fresh data|up to date|current)\b/.test(normalized) &&
+    /\b(number|spendable cash|spendable cash today|data|accounts?|current|fresh|today|it|this)\b/.test(normalized)
+  );
+}
+
+function isTrustPolicyPrompt(normalized: string): boolean {
+  if (/\b(add|connect|link|repair|reconnect|fix|remove|disconnect)\b.*\b(bank|account|card|institution|plaid|connection)\b/.test(normalized)) {
+    return false;
+  }
+
+  return (
+    /\b(plaid|bank[- ]?data provider|data provider|aggregation provider|aggregator|credentials?|passwords?|provider tokens?|tokens?)\b/.test(normalized) ||
+    /\b(ai provider|ai model|openai|chatgpt|llm|train on|training data|model training|does ai|ai calculate|ai see|ai use)\b/.test(normalized) ||
+    /\b(move (?:my |our |your )?money|transfer (?:my |our |your )?money|withdraw|make payments?|pay bills?|send money|take money|debit my account)\b/.test(normalized) ||
+    /\b(security|privacy|sell my data|sell data|advertising|subprocessors?|data retention|retention|delete my data|delete data)\b/.test(normalized) ||
+    /\b(financial advice|advisor|guarantee|guaranteed|legal entity|who operates|refund|trial|cancel subscription|subscription (?:billing|price|pricing|refund|trial|cancel|cancellation))\b/.test(normalized)
   );
 }
 

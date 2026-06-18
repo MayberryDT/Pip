@@ -9,6 +9,8 @@ export default function robots(): MetadataRoute.Robots {
         allow: [
           "/",
           "/how-it-works",
+          "/how-the-number-works",
+          "/pricing",
           "/security",
           "/support",
           "/privacy",

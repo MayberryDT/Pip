@@ -20,6 +20,11 @@ export const publicMarketingPages = [
     description: "See how Pip turns account data into Spendable Cash Today.",
   },
   {
+    path: "/how-the-number-works",
+    label: "How the number works",
+    description: "See the inputs, limits, and receipt behind Spendable Cash Today.",
+  },
+  {
     path: "/pricing",
     label: "Pricing",
     description: "See Pip weekly and monthly pricing.",

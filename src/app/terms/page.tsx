@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { LegalShell } from "@/components/LegalShell";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
 import { pipSubscriptionCaveat } from "@/lib/marketing/pricing";
+import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Terms",
@@ -13,10 +14,18 @@ export default function TermsPage() {
   return (
     <LegalShell title="Terms">
       <section>
+        <h2 className="text-lg font-bold text-ink">Effective Date</h2>
+        <p className="mt-3">
+          Effective {pipTrustPolicy.effectiveDate}. Last updated {pipTrustPolicy.revisionDate}.
+          Contact {pipTrustPolicy.supportEmail} for support or policy questions.
+        </p>
+      </section>
+
+      <section>
         <h2 className="text-lg font-bold text-ink">Product Boundary</h2>
         <p className="mt-3">
-          Pip is a decision-support tool for everyday spending. It shows a deterministic Spendable
-          Cash Today signal from available data and provides context when you ask for the why.
+          Pip is a decision-support tool for everyday spending. {pipTrustPolicy.calculationSummary}
+          It provides context when you ask for the why.
         </p>
       </section>
 
@@ -32,8 +41,16 @@ export default function TermsPage() {
       <section>
         <h2 className="text-lg font-bold text-ink">No Money Movement</h2>
         <p className="mt-3">
-          Pip does not initiate payments, transfers, card payments, ACH transactions, Zelle payments,
-          or any other money movement.
+          {pipTrustPolicy.securityBoundaries[1]}
+        </p>
+      </section>
+
+      <section>
+        <h2 className="text-lg font-bold text-ink">No Guarantee</h2>
+        <p className="mt-3">
+          Spendable Cash Today is an estimate from connected data and settings. It is not a guarantee
+          that every obligation, refund, reimbursement, transfer, authorization, cash purchase,
+          shared-account change, or manually paid bill is known.
         </p>
       </section>
 
@@ -49,9 +66,14 @@ export default function TermsPage() {
         <h2 className="text-lg font-bold text-ink">Subscriptions and Cancellation</h2>
         <p className="mt-3">{pipSubscriptionCaveat}</p>
         <p className="mt-3">
-          Weekly and monthly plan availability may vary by platform. Cancellation and billing
-          support should be handled through the platform or support channel where the subscription
-          was started.
+          Pip currently lists {pipTrustPolicy.pricing.weekly} and{" "}
+          {pipTrustPolicy.pricing.monthly}. Weekly and monthly plan availability may vary by
+          platform. Cancel through the platform where the subscription started before renewal.
+        </p>
+        <p className="mt-3">
+          Trials, refunds, grace periods, and billing recovery depend on the platform and offer shown
+          when you start the subscription. Email support if product access and platform billing do
+          not match.
         </p>
         <p className="mt-3">
           The Android Play test build is consumption-only and does not include purchase, checkout,
@@ -69,6 +91,15 @@ export default function TermsPage() {
       </section>
 
       <section>
+        <h2 className="text-lg font-bold text-ink">Service Availability</h2>
+        <p className="mt-3">
+          Pip may change product behavior, supported providers, pricing, models, or availability as
+          the product evolves. Sync jobs, providers, app hosting, and AI services can be delayed or
+          unavailable.
+        </p>
+      </section>
+
+      <section>
         <h2 className="text-lg font-bold text-ink">Acceptable Use</h2>
         <p className="mt-3">
           Do not misuse Pip, attempt to access another person's account, interfere with connected
@@ -80,7 +111,7 @@ export default function TermsPage() {
         <h2 className="text-lg font-bold text-ink">Changes and Contact</h2>
         <p className="mt-3">
           Pip may update product behavior, supported providers, pricing, or these terms as the
-          product changes. Contact support for account-specific questions.
+          product changes. The current public support contact is {pipTrustPolicy.supportEmail}.
         </p>
       </section>
     </LegalShell>

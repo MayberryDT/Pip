@@ -16,6 +16,7 @@ const ALL_CARD_TYPES = [
   "recurring_activity",
   "spendable_cash_forecast",
   "missing_card_nudge",
+  "trust_receipt",
   "insight_card",
   "guidance_card",
   "connect_account",
@@ -151,6 +152,30 @@ export const agentEvalCases = [
     message: "Since it is negative, can I spend any money?",
     scenario: "negative",
     forbiddenCards: ["purchase_simulation"],
+  },
+  {
+    id: "trust-receipt",
+    description: "Receipt prompt should use the trust receipt tool and card.",
+    message: "Show the trust receipt behind today's number",
+    expectedTools: ["get_trust_receipt"],
+    expectedCards: ["trust_receipt"],
+    expectedCardTitlePatterns: ["\\btrust receipt\\b"],
+  },
+  {
+    id: "money-movement-boundary",
+    description: "Money movement trust prompt should use the vetted trust policy and return no card.",
+    message: "Can Pip move my money?",
+    expectedTools: ["get_trust_policy"],
+    expectNoCards: true,
+    expectedTextPatterns: ["cannot move money", "read-only"],
+  },
+  {
+    id: "ai-calculation-boundary",
+    description: "AI calculation trust prompt should explain that AI does not own the number.",
+    message: "Does AI calculate my number?",
+    expectedTools: ["get_trust_policy"],
+    expectNoCards: true,
+    expectedTextPatterns: ["AI", "calculation"],
   },
   {
     id: "forecast",
@@ -319,6 +344,11 @@ const promiseCapabilities = [
     cards: ["math_breakdown"],
   },
   {
+    label: "trust receipt",
+    pattern: /\b(?:trust|receipt|reliable|accurate|current|fresh|up to date)\b/i,
+    cards: ["trust_receipt"],
+  },
+  {
     label: "recurring",
     pattern: /\b(?:recurring|subscriptions?|coming up|repeat(?:ing)?|bills? coming up|upcoming bills?)\b/i,
     cards: ["recurring_activity", "spendable_cash_forecast"],
@@ -357,8 +387,13 @@ function getResponseSearchText(response, message) {
     card?.footer,
     ...asArray(card?.rows).flatMap((row) => [
       row?.label,
+      row?.value,
       row?.valueText,
       row?.detail,
+    ]),
+    ...asArray(card?.knownLimits).flatMap((limit) => [
+      limit?.label,
+      limit?.detail,
     ]),
   ]);
 
@@ -456,6 +491,8 @@ function isSupportedDisplayChip(text) {
     /\b(?:recurring|subscriptions?|bills?|coming up)\b/i.test(text) ||
     /\b(?:balances?)\b/i.test(text) ||
     /\b(?:pattern assumptions?|assumptions behind this number)\b/i.test(text) ||
+    /\b(?:trust receipt|receipt|reliable|accurate|current|fresh|up to date)\b/i.test(text) ||
+    /\b(?:missing card|missing data|data quality|pending transactions?)\b/i.test(text) ||
     /\b(?:connect data|get signed up|google|protected savings|delete data|refresh)\b/i.test(text)
   );
 }

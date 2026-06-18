@@ -8,6 +8,7 @@ import AppPage from "@/app/app/page";
 import BlogIndexPage from "@/app/blog/page";
 import ArticlePage from "@/app/blog/[slug]/page";
 import HowItWorksPage from "@/app/how-it-works/page";
+import HowTheNumberWorksPage from "@/app/how-the-number-works/page";
 import { PricingPageContent } from "@/components/marketing/PricingPageContent";
 import PrivacyPage from "@/app/privacy/page";
 import SecurityPage from "@/app/security/page";
@@ -172,6 +173,7 @@ describe("marketing website pages", () => {
 
   it("renders required public support pages", () => {
     expect(renderToStaticMarkup(<HowItWorksPage />)).toContain("Pip turns money noise into one daily number");
+    expect(renderToStaticMarkup(<HowTheNumberWorksPage />)).toContain("Spendable Cash Today is simple on purpose");
     expect(renderToStaticMarkup(<PricingPageContent />)).toContain("Simple pricing for one daily number");
     expect(renderToStaticMarkup(<SecurityPage />)).toContain("No money movement");
     expect(renderToStaticMarkup(<SupportPage />)).toContain("Account Connection Help");
@@ -223,6 +225,7 @@ describe("marketing website pages", () => {
     const urls = sitemap().map((entry) => entry.url);
 
     expect(urls).toContain("https://spendwithpip.com/");
+    expect(urls).toContain("https://spendwithpip.com/how-the-number-works");
     expect(urls).toContain("https://spendwithpip.com/pricing");
     expect(urls).toContain("https://spendwithpip.com/delete-account");
     expect(urls).toContain("https://spendwithpip.com/blog/what-is-spendable-cash-today");
@@ -231,7 +234,9 @@ describe("marketing website pages", () => {
   });
 
   it("keeps robots focused on public marketing pages", () => {
-    expect(robots()).toMatchObject({
+    const robotsResult = robots();
+
+    expect(robotsResult).toMatchObject({
       rules: [
         {
           userAgent: "*",
@@ -240,6 +245,11 @@ describe("marketing website pages", () => {
       ],
       sitemap: "https://spendwithpip.com/sitemap.xml",
     });
+    const firstRule = Array.isArray(robotsResult.rules) ? robotsResult.rules[0] : robotsResult.rules;
+
+    expect(firstRule?.allow).toEqual(
+      expect.arrayContaining(["/how-the-number-works", "/pricing"]),
+    );
   });
 
   it("ships llms.txt with the product thesis and public page map", () => {
@@ -247,8 +257,10 @@ describe("marketing website pages", () => {
 
     expect(llms).toContain("Spendable Cash Today");
     expect(llms).toContain("$2.99/week");
+    expect(llms).toContain("https://spendwithpip.com/how-the-number-works");
     expect(llms).toContain("https://spendwithpip.com/security");
     expect(llms).toContain("Pip does not move money");
+    expect(llms).toContain("AI explains and answers");
     expect(llms).not.toMatch(stalePublicMarketingPattern);
   });
 

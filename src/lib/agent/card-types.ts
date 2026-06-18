@@ -12,6 +12,7 @@ import type {
   RollingWindow,
   Transaction,
 } from "@/lib/types";
+import type { SpendableTrustReceipt } from "@/lib/pip-cash/trust-receipt";
 import type { PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
 
 export type PromptChip = {
@@ -124,6 +125,9 @@ export type AgentCard =
       cashRealityAdjustmentCents?: number;
       legacyRollingDailySurplusCents?: number;
     }
+  | ({
+      type: "trust_receipt";
+    } & SpendableTrustReceipt)
   | {
       type: "insight_card";
       title: string;

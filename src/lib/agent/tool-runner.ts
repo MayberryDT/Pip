@@ -15,6 +15,7 @@ import {
 import { buildFinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
 import { buildFinancialRead } from "@/lib/pip-cash/financial-read";
 import type { SpendingOpportunity } from "@/lib/pip-cash/spending-opportunities";
+import { buildSpendableTrustReceipt } from "@/lib/pip-cash/trust-receipt";
 import { fakeSnapshot } from "@/lib/fake-data";
 import { formatMoney } from "@/lib/money";
 import type { FinancialSnapshot } from "@/lib/types";
@@ -33,6 +34,7 @@ export const agentToolNames = [
   "show_recent_spending_pressure",
   "show_spending_opportunity",
   "detect_missing_card",
+  "show_trust_receipt",
   "show_math",
   "compose_insight_card",
   "answer_unrelated",
@@ -113,6 +115,9 @@ export function runAgentTool(
     case "detect_missing_card":
       emptyArgsSchema.parse(rawArgs ?? {});
       return detectMissingCard(snapshot);
+    case "show_trust_receipt":
+      emptyArgsSchema.parse(rawArgs ?? {});
+      return showTrustReceipt(snapshot);
     case "show_math":
       emptyArgsSchema.parse(rawArgs ?? {});
       return showMath(snapshot);
@@ -368,6 +373,24 @@ function detectMissingCard(snapshot: FinancialSnapshot): AgentResponse {
     cards,
     promptChips: getSuggestedPrompts(result),
     ...baseResponse("detect_missing_card", cards),
+  };
+}
+
+function showTrustReceipt(snapshot: FinancialSnapshot): AgentResponse {
+  const result = calculatePipCash(snapshot);
+  const receipt = buildSpendableTrustReceipt({ result });
+  const cards: AgentResponse["cards"] = [
+    {
+      type: "trust_receipt",
+      ...receipt,
+    },
+  ];
+
+  return {
+    message: "",
+    cards,
+    promptChips: getSuggestedPrompts(result),
+    ...baseResponse("show_trust_receipt", cards),
   };
 }
 

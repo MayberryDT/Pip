@@ -77,6 +77,7 @@ const cardJobByType: Partial<Record<AgentCard["type"], ConversationJob>> = {
   spending_breakdown: "spending_breakdown",
   math_breakdown: "math",
   true_balances: "true_balances",
+  trust_receipt: "data_quality",
   missing_card_nudge: "data_quality",
   connect_account: "data_quality",
 };
@@ -97,6 +98,8 @@ const toolJobByName: Record<string, ConversationJob> = {
   get_true_balances: "true_balances",
   get_data_quality: "data_quality",
   get_sync_status: "data_quality",
+  get_trust_receipt: "data_quality",
+  get_trust_policy: "data_quality",
   get_spendable_cash_definition: "definition",
   get_onboarding_state: "setup",
   start_google_oauth: "setup",

@@ -3677,6 +3677,16 @@ button {
     font-size 420ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+.pip-metric-receipt {
+  width: min(100%, 20rem);
+  margin: 0.58rem auto 0;
+  color: var(--pip-app-muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: center;
+}
+
 .pip-metric-subtitle-row {
   display: flex;
   align-items: center;

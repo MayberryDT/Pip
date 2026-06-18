@@ -3,6 +3,7 @@ import Link from "next/link";
 import { LegalShell } from "@/components/LegalShell";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
 import { marketingSite } from "@/lib/marketing/site";
+import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Delete your Pip account",
@@ -36,10 +37,7 @@ export default function DeleteAccountPage() {
       <section>
         <h2 className="text-lg font-bold text-ink">What deletion covers</h2>
         <p className="mt-3">
-          Deleting your account deletes your app account and associated financial data, including
-          connected account metadata, balances, transactions, sync logs, provider token records,
-          settings, product events tied to your account, AI chat history, AI reports, and tester
-          feedback tied to your account.
+          {pipTrustPolicy.deletionSummary}
         </p>
       </section>
 
@@ -57,6 +55,7 @@ export default function DeleteAccountPage() {
         <p className="mt-3">
           In-app account deletion starts immediately. Email deletion requests are reviewed as soon
           as practical. Read the <Link className="font-bold text-moss hover:text-ink" href="/privacy">privacy policy</Link>{" "}
+          and <Link className="font-bold text-moss hover:text-ink" href={pipTrustPolicy.publicLinks.howNumberWorks}>how the number works</Link>{" "}
           for more detail about Pip data handling.
         </p>
       </section>

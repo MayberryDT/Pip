@@ -28,6 +28,10 @@ import {
   getSpendableCashTodaySubtitle,
   getSpendableCashTodayState,
 } from "@/lib/pip-cash/spendable-cash-today";
+import {
+  buildSpendableTrustReceipt,
+  formatTrustReceiptInline,
+} from "@/lib/pip-cash/trust-receipt";
 import { formatMoney } from "@/lib/money";
 import type { PipCashResult } from "@/lib/types";
 import { AgentInput } from "@/components/AgentInput";
@@ -37,6 +41,7 @@ import { PromptChips } from "@/components/PromptChips";
 import { getClientPipPlatform, type PipPlatform } from "@/lib/platform/android-shell";
 import { openPlaidLink } from "@/lib/providers/plaid/link-browser";
 import type { PlaidEventMetadata } from "@/lib/providers/plaid/link-browser";
+import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 type ThreadItem = {
   id: string;
@@ -158,6 +163,10 @@ export function PipHome({
       : liveAccountControlsEnabled
         ? serverResult
         : localResult;
+  const trustReceipt = useMemo(
+    () => result ? buildSpendableTrustReceipt({ result, syncStatus }) : null,
+    [result, syncStatus],
+  );
   const hasLoadedServerResult = Boolean(result);
   const pipCashTodayCents = result ? getDisplayedSpendableCashTodayCents(result) : undefined;
   const [thread, setThread] = useState<ThreadItem[]>([]);
@@ -922,6 +931,11 @@ export function PipHome({
                 >
                   {result ? formatMoney(getDisplayedSpendableCashTodayCents(result)) : "$--"}
                 </div>
+                {trustReceipt ? (
+                  <p className="pip-metric-receipt" data-testid="pip-trust-receipt">
+                    {formatTrustReceiptInline(trustReceipt)}
+                  </p>
+                ) : null}
               </>
             ) : null}
           </section>
@@ -1509,6 +1523,10 @@ function createSettingsPanelCard(input: {
         title: "Privacy and terms",
         body: "Read the short in-app version here without leaving Pip.",
       },
+      {
+        title: "Trust receipt",
+        body: "Ask for the receipt behind the number to see freshness, counted accounts, confidence, and known limits.",
+      },
     ],
     actions: getSettingsActions(input),
   };
@@ -1564,7 +1582,11 @@ function createSettingsDetailCard(
       rows: [
         {
           label: "Financial data",
-          detail: "Connected account data is used for in-app calculations, explanations, and chat answers.",
+          detail: `${pipTrustPolicy.bankDataProvider.name} provides read-only connected account data for calculations, explanations, and chat answers.`,
+        },
+        {
+          label: "AI role",
+          detail: "AI explains and answers; it does not own the Spendable Cash Today calculation.",
         },
         {
           label: "Reports and feedback",
@@ -1572,7 +1594,7 @@ function createSettingsDetailCard(
         },
         {
           label: "Deletion",
-          detail: "You can start account deletion in chat when signed in.",
+          detail: pipTrustPolicy.deletionSummary,
         },
       ],
       actions: sharedActions,
@@ -1591,6 +1613,10 @@ function createSettingsDetailCard(
       {
         label: "Accuracy",
         detail: "Pending, missing, stale, or disconnected data can change Spendable Cash Today.",
+      },
+      {
+        label: "Money movement",
+        detail: "Pip connections are read-only. Pip cannot move, withdraw, transfer, invest, borrow, or pay money from a connected account.",
       },
       {
         label: "Account",

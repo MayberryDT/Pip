@@ -11,6 +11,7 @@ export const pipPricing = {
     displayPrice: "$2.99/week",
     tagline: "Start small",
     description: "For people who want the lowest commitment.",
+    annualizedLabel: "About $155.48/year if kept weekly",
     recommended: false,
   },
   monthly: {
@@ -21,6 +22,7 @@ export const pipPricing = {
     displayPrice: "$7.99/month",
     tagline: "Best value",
     description: "For people who want Pip as a daily habit.",
+    annualizedLabel: "About $95.88/year if kept monthly",
     recommended: true,
   },
 } as const;

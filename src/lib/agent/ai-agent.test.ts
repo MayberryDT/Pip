@@ -618,10 +618,26 @@ describe("runAIAgent", () => {
     }
   });
 
-  it("routes currentness and update-status prompts to sync status", () => {
+  it("routes currentness prompts to the trust receipt", () => {
     for (const message of [
       "Is this number current?",
       "Is my Spendable Cash Today up to date?",
+      "Can I trust this number?",
+      "What data is missing from this number?",
+    ]) {
+      expect(
+        __agentTestHooks.getForcedAgentTool({
+          message,
+        }),
+      ).toMatchObject({
+        toolName: "get_trust_receipt",
+        requireCard: true,
+      });
+    }
+  });
+
+  it("routes update-status prompts to sync status", () => {
+    for (const message of [
       "Did you refresh?",
       "Did you refresh my data?",
       "Why is this not updating?",
@@ -644,6 +660,44 @@ describe("runAIAgent", () => {
     ).not.toMatchObject({
       toolName: "get_sync_status",
     });
+  });
+
+  it("answers trust policy prompts without model-invented card data", async () => {
+    const response = await runAIAgent(
+      { message: "Can Pip move my money?" },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_trust_policy"]);
+    expect(response.cards).toHaveLength(0);
+    expect(response.message).toContain("cannot move money");
+    expect(response.message).toContain("read-only");
+  });
+
+  it("routes AI calculation prompts to trust policy", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Does AI calculate my number?",
+      }),
+    ).toMatchObject({
+      toolName: "get_trust_policy",
+      requireCard: false,
+    });
+  });
+
+  it("shows a trust receipt card for receipt prompts", async () => {
+    const response = await runAIAgent(
+      { message: "Show the trust receipt behind today's number" },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_trust_receipt"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "trust_receipt",
+      title: "Trust receipt",
+    });
+    expect(response.message).toContain("receipt");
   });
 
   it("routes brand-new bank prompts to connect instead of repair", () => {

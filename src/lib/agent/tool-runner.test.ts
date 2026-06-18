@@ -77,6 +77,18 @@ describe("agent tool runner", () => {
       type: "missing_card_nudge",
       issuerName: "Capital One",
     });
+    expect(runAgentTool("show_trust_receipt", {}, fakeSnapshot).cards[0]).toMatchObject({
+      type: "trust_receipt",
+      title: "Trust receipt",
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          id: "freshness",
+        }),
+        expect.objectContaining({
+          id: "confidence",
+        }),
+      ]),
+    });
     expect(runAgentTool("show_spending_breakdown", {}, fakeSnapshot).cards[0]).toMatchObject({
       type: "spending_breakdown",
       title: "Spending breakdown",

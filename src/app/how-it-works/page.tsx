@@ -15,6 +15,7 @@ import {
 import { marketingAssets } from "@/lib/marketing/assets";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
 import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
+import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 export const metadata: Metadata = buildMarketingMetadata({
   title: "How Pip Works",
@@ -92,6 +93,13 @@ export default function HowItWorksPage() {
               If you want to inspect balances or transactions, ask Pip. They are not the default
               screen because the default screen should shape the next spending decision.
             </SwissText>
+            <Link
+              className="focus-ring mt-6 inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink"
+              href={pipTrustPolicy.publicLinks.howNumberWorks}
+            >
+              Read how the number works
+              <ArrowRight aria-hidden="true" size={16} />
+            </Link>
           </div>
           <div className="col-span-12 border-t border-line pt-5 lg:col-span-2">
             <p className="text-sm font-black uppercase leading-6 tracking-[0.08em] text-moss">
