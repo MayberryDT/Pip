@@ -13,6 +13,7 @@ const userScopedTables = [
   "pip_sync_jobs",
   "agent_chat_turns",
   "product_events",
+  "savings_goals",
   "pip_cash_snapshots",
   "sync_runs",
   "missing_card_preferences",

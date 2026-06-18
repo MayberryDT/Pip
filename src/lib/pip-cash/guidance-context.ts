@@ -185,7 +185,7 @@ export function buildFinancialGuidanceContext(result: PipCashResult): FinancialG
     id: "baseline-room",
     label: "Normal room",
     amountCents: metric.baselineDailyAllowanceCents,
-    detail: "Pattern-based daily room after recurring bills, savings, and cushion.",
+    detail: "Pattern-based daily room after recurring bills, monthly savings, and the safety reserve.",
     tone: metric.baselineDailyAllowanceCents > 0 ? "positive" : "neutral",
     source: "pattern",
   });
@@ -193,7 +193,7 @@ export function buildFinancialGuidanceContext(result: PipCashResult): FinancialG
     id: "normal-room",
     label: "Normal room",
     amountCents: metric.baselineDailyAllowanceCents,
-    detail: "Pattern-based daily room after recurring bills, savings, and cushion.",
+    detail: "Pattern-based daily room after recurring bills, monthly savings, and the safety reserve.",
     tone: metric.baselineDailyAllowanceCents > 0 ? "positive" : "neutral",
     source: "pattern",
   });
@@ -215,17 +215,17 @@ export function buildFinancialGuidanceContext(result: PipCashResult): FinancialG
   });
   evidence.add({
     id: "protected-savings",
-    label: "Protected savings",
+    label: "Monthly savings",
     amountCents: -metric.protectedSavingsMonthlyCents,
-    detail: "Monthly savings cushion held back before today's number.",
+    detail: "Your chosen monthly savings are kept out of today's number.",
     tone: "neutral",
     source: "user_settings",
   });
   evidence.add({
     id: "hidden-cushion",
-    label: "Small cushion",
+    label: "Safety reserve",
     amountCents: -metric.hiddenCushionCents,
-    detail: "A small cushion is held back so the number is not too aggressive.",
+    detail: "A small safety reserve is held back so the number is not too aggressive.",
     tone: "neutral",
     source: "pattern",
   });
@@ -313,7 +313,7 @@ export function buildFinancialGuidanceContext(result: PipCashResult): FinancialG
       id: "pattern-shortfall",
       label: "Pattern shortfall",
       amountCents: -metric.patternShortfallCents,
-      detail: "The completed-month pattern leaves less than the held-back bills, savings, and cushion.",
+      detail: "The completed-month pattern leaves less than the held-back bills, monthly savings, and safety reserve.",
       tone: "negative",
       source: "pattern",
     });
@@ -620,7 +620,7 @@ function buildPossibleMoves(
     reasonEvidenceIds: ["cash-guardrail", "cash-tight"],
   });
   addMove({
-    id: "keep-cushion-for-now",
+    id: "keep-monthly-savings-for-now",
     domain: "savings_cushion",
     strength: "soft",
     reasonEvidenceIds: ["protected-savings", "baseline-room", "recent-spending-hot"],

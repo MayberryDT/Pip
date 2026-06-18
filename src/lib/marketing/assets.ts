@@ -98,7 +98,7 @@ export const marketingAssets = {
     src: "/marketing/home/how-pip-works-three-step-set.png",
     width: 1672,
     height: 941,
-    alt: "Three product screens showing account connection, cushion setup, and checking Spendable Cash Today.",
+    alt: "Three product screens showing account connection, monthly savings setup, and checking Spendable Cash Today.",
     decorative: false,
     priority: false,
     placement: "How-it-works page primary visual.",

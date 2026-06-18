@@ -44,7 +44,7 @@ export const pipTrustPolicy = {
   subscriptionSummary:
     "Subscriptions are managed where they start or install. Cancel through that platform before renewal; email support for access or billing mismatch questions.",
   calculationSummary:
-    "Spendable Cash Today starts from connected balances and transactions, subtracts recurring obligations and protected savings, accounts for pending committed spend, adjusts for recent spending pace, and caps the result against available cash.",
+    "Spendable Cash Today starts from connected balances and transactions, subtracts recurring obligations and monthly savings, accounts for pending committed spend, adjusts for recent spending pace, and caps the result against available cash.",
   publicLinks: {
     howNumberWorks: "/how-the-number-works",
     security: "/security",
@@ -148,7 +148,7 @@ export function composeTrustPolicyAnswer(message: string): TrustPolicyAnswer {
   return {
     category: "calculation",
     message:
-      "I calculate the number from connected data, protected savings, likely commitments, recent spending pace, pending spend, and cash reality.",
+      "I calculate the number from connected data, monthly savings, likely commitments, recent spending pace, pending spend, and cash reality.",
     linkLabel: "How the number works",
     href: pipTrustPolicy.publicLinks.howNumberWorks,
   };

@@ -257,6 +257,18 @@ function composeCardBackedAnswer(
         message: "I pulled the receipt behind today's number.",
         answerPatternId: "trust-receipt",
       };
+    case "savings_goal_plan":
+      return {
+        message: "I set up the savings goal plan.",
+        answerPatternId: "savings-goal-plan",
+      };
+    case "savings_goals_summary":
+      return {
+        message: card.activeGoalCount > 0
+          ? "I pulled your savings goals."
+          : "You do not have active savings goals yet.",
+        answerPatternId: "savings-goals-summary",
+      };
     case "insight_card":
       if (isCutbackInsightCard(card)) {
         return {
@@ -344,8 +356,8 @@ function composeDeterministicNoCardAnswer(
   if (input.usedTools.includes("get_spendable_cash_definition")) {
     return {
       message: result
-        ? `I found ${formatMoney(getSpendableCents(result))} today. It comes from your normal pattern, bills, protected savings, recent spending pace, and cash reality.`
-        : "I estimate today's room from your normal pattern, bills, protected savings, recent spending pace, and cash reality.",
+        ? `I found ${formatMoney(getSpendableCents(result))} today. It comes from your normal pattern, bills, monthly savings, recent spending pace, and cash reality.`
+        : "I estimate today's room from your normal pattern, bills, monthly savings, recent spending pace, and cash reality.",
       answerPatternId: "definition",
     };
   }

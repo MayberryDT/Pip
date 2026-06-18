@@ -26,11 +26,70 @@ describe("Spendable Cash Today V2", () => {
       confidence: "high",
       averageMonthlyIncomeCents: 420000,
       averageMonthlyRecurringObligationsCents: 172000,
+      monthlySavingsCents: 20000,
+      savingsGoalMonthlyCents: 0,
+      totalSavingsProtectedMonthlyCents: 20000,
       protectedSavingsMonthlyCents: 20000,
       hiddenCushionCents: 12600,
       monthlyEverydayPoolCents: 215400,
       baselineDailyAllowanceCents: 7076,
     });
+  });
+
+  it("keeps tracked-only savings goals out of Spendable Cash Today", () => {
+    const base = calculatePipCash(healthyPipSnapshot).spendableCashToday;
+    const trackedOnly = calculatePipCash({
+      ...healthyPipSnapshot,
+      savingsGoals: [
+        {
+          id: "goal-1",
+          userId: "user-1",
+          name: "Trip",
+          targetAmountCents: 500000,
+          targetDate: "2027-06-18",
+          startingAmountCents: 0,
+          currentAmountCents: 100000,
+          monthlyContributionCents: 50000,
+          includeInSpendableCash: false,
+          status: "active",
+          createdAt: "2026-06-18T00:00:00.000Z",
+          updatedAt: "2026-06-18T00:00:00.000Z",
+        },
+      ],
+    }).spendableCashToday;
+
+    expect(trackedOnly?.monthlyEverydayPoolCents).toBe(base?.monthlyEverydayPoolCents);
+    expect(trackedOnly?.savingsGoalMonthlyCents).toBe(0);
+  });
+
+  it("holds protected savings goal contributions out separately", () => {
+    const base = calculatePipCash(healthyPipSnapshot).spendableCashToday;
+    const protectedGoal = calculatePipCash({
+      ...healthyPipSnapshot,
+      savingsGoals: [
+        {
+          id: "goal-1",
+          userId: "user-1",
+          name: "Trip",
+          targetAmountCents: 500000,
+          targetDate: "2027-06-18",
+          startingAmountCents: 0,
+          currentAmountCents: 100000,
+          monthlyContributionCents: 3044,
+          includeInSpendableCash: true,
+          status: "active",
+          createdAt: "2026-06-18T00:00:00.000Z",
+          updatedAt: "2026-06-18T00:00:00.000Z",
+        },
+      ],
+    }).spendableCashToday;
+
+    expect(protectedGoal?.savingsGoalMonthlyCents).toBe(3044);
+    expect(protectedGoal?.totalSavingsProtectedMonthlyCents).toBe(23044);
+    expect(protectedGoal?.monthlyEverydayPoolCents).toBe(
+      (base?.monthlyEverydayPoolCents ?? 0) - 3044,
+    );
+    expect(protectedGoal?.drivers.map((driver) => driver.id)).toContain("savings-goals");
   });
 
   it("lowers today's room when current-month everyday spending is ahead of pace", () => {

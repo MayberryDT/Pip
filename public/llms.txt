@@ -3,7 +3,7 @@
 Pip is a paid cute daily money companion for everyday spending decisions.
 
 Core thesis:
-Before you spend, check Pip. Your bank balance shows what exists. Pip shows the daily spending signal after visible obligations, protected savings, recent spending pace, pending committed spend, and cash reality are considered.
+Before you spend, check Pip. Your bank balance shows what exists. Pip shows the daily spending signal after visible obligations, monthly savings, recent spending pace, pending committed spend, and cash reality are considered.
 
 Primary product concept:
 Spendable Cash Today is the one daily number Pip shows by default. It is meant to help users stop guessing from their bank balance without maintaining a budget, spreadsheet, or finance dashboard.
@@ -45,5 +45,6 @@ Primary content topics:
 - why bank balances can be misleading
 - no-budget spending
 - daily money habits
-- savings cushions
+- monthly savings
+- savings goals
 - cute, low-pressure financial product design

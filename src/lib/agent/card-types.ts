@@ -129,6 +129,39 @@ export type AgentCard =
       type: "trust_receipt";
     } & SpendableTrustReceipt)
   | {
+      type: "savings_goal_plan";
+      title: string;
+      goalId: string;
+      name: string;
+      targetAmountCents: number;
+      currentAmountCents: number;
+      remainingCents: number;
+      targetDate?: string;
+      recommendedMonthlyContributionCents?: number;
+      monthlyContributionCents: number;
+      includeInSpendableCash: boolean;
+      onTrack?: boolean;
+      summary: string;
+    }
+  | {
+      type: "savings_goals_summary";
+      title: string;
+      summary: string;
+      activeGoalCount: number;
+      protectedMonthlyContributionCents: number;
+      goals: Array<{
+        goalId: string;
+        name: string;
+        targetAmountCents: number;
+        currentAmountCents: number;
+        remainingCents: number;
+        targetDate?: string;
+        monthlyContributionCents: number;
+        includeInSpendableCash: boolean;
+        onTrack?: boolean;
+      }>;
+    }
+  | {
       type: "insight_card";
       title: string;
       summary: string;

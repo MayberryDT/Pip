@@ -26,14 +26,14 @@ export function ProtectedSavingsPicker({
   const [status, setStatus] = useState<SaveStatus>("idle");
   const [error, setError] = useState("");
   const amountCents = useMemo(() => centsFromDollarText(amountText), [amountText]);
-  const amountLabel = formatCushionAmount(amountCents);
-  const inputId = `${idPrefix}-savings-cushion`;
+  const amountLabel = formatMonthlySavingsAmount(amountCents);
+  const inputId = `${idPrefix}-monthly-savings`;
   const isSaving = status === "saving";
 
   async function saveAmount() {
     if (amountCents > maxProtectedSavingsCents) {
       setStatus("error");
-      setError("Keep the cushion at $100,000 or less.");
+      setError("Keep monthly savings at $100,000 or less.");
       return;
     }
 
@@ -51,13 +51,13 @@ export function ProtectedSavingsPicker({
   return (
     <div className="space-y-3" data-testid="protected-savings-picker">
       <div>
-        <p className="text-xs font-bold uppercase tracking-normal text-taupe">Savings cushion</p>
+        <p className="text-xs font-bold uppercase tracking-normal text-taupe">Monthly savings</p>
         <p className="mt-1 text-xs leading-5 text-ink/[0.62]">
-          Pick a monthly amount for Pip to keep out of your spendable cash.
+          Pick how much you want Pip to keep out of your daily spending number each month.
         </p>
       </div>
 
-      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Savings cushion options">
+      <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Monthly savings options">
         {quickAmounts.map((option) => {
           const active = amountCents === option.amountCents;
 
@@ -110,10 +110,10 @@ export function ProtectedSavingsPicker({
         disabled={isSaving}
         onClick={saveAmount}
       >
-        {isSaving ? "Saving cushion..." : `Use ${amountLabel} cushion`}
+        {isSaving ? "Saving amount..." : `Save ${amountLabel}/month`}
       </button>
 
-      <p className="text-xs leading-5 text-ink/50">You can change this later.</p>
+      <p className="text-xs leading-5 text-ink/50">You can change this later. Pip does not move money.</p>
       {error ? (
         <p className="rounded-[10px] border border-red-200 bg-red-50/80 px-3 py-2 text-sm leading-6 text-red-800">
           {error}
@@ -135,7 +135,7 @@ function dollarsFromCents(amountCents: number): string {
   return String(Math.max(0, Math.round(amountCents / 100)));
 }
 
-function formatCushionAmount(amountCents: number): string {
+function formatMonthlySavingsAmount(amountCents: number): string {
   return `$${Math.round(amountCents / 100).toLocaleString("en-US")}`;
 }
 
@@ -144,11 +144,11 @@ function getSaveErrorText(error: unknown): string {
     return error.message;
   }
 
-  return "I couldn’t save that cushion yet. Please try again.";
+  return "I couldn’t save that amount yet. Please try again.";
 }
 
 export const __protectedSavingsPickerTestHooks = {
   centsFromDollarText,
   sanitizeDollarText,
-  formatCushionAmount,
+  formatMonthlySavingsAmount,
 };

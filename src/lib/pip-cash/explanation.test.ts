@@ -19,16 +19,16 @@ describe("Spendable Cash explanation primitives", () => {
 
   it("uses the V2 top driver when V2 metric is available", () => {
     expect(getPrimaryDriver(calculatePipCash(fakeSnapshot))).toBe(
-      "Pattern-based daily room after recurring obligations and protected savings.",
+      "Pattern-based daily room after recurring obligations and monthly savings.",
     );
   });
 
   it("falls back to the V2 baseline driver for sparse aggregate snapshots", () => {
     expect(getPrimaryDriver(calculatePipCash(spendingSnapshot))).toBe(
-      "Pattern-based daily room after recurring obligations and protected savings.",
+      "Pattern-based daily room after recurring obligations and monthly savings.",
     );
     expect(getPrimaryDriver(calculatePipCash(incomeOnlySnapshot))).toBe(
-      "Pattern-based daily room after recurring obligations and protected savings.",
+      "Pattern-based daily room after recurring obligations and monthly savings.",
     );
   });
 });

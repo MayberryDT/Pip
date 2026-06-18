@@ -20,9 +20,9 @@ export const guestOnboardingPromptChips: PromptChip[] = [
 
 export const consentOnboardingPromptChips: PromptChip[] = [
   {
-    id: "why-savings-cushion",
-    label: "Why this cushion?",
-    prompt: "Why does Pip need a savings cushion?",
+    id: "why-monthly-savings",
+    label: "Why monthly savings?",
+    prompt: "Why does Pip ask for monthly savings?",
   },
 ];
 

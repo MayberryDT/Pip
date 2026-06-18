@@ -112,6 +112,35 @@ values
     'user_excluded'
   );
 
+insert into public.savings_goals (
+  user_id,
+  name,
+  target_amount_cents,
+  target_date,
+  current_amount_cents,
+  monthly_contribution_cents,
+  include_in_spendable_cash
+)
+values
+  (
+    '00000000-0000-0000-0000-00000000a101',
+    'Trip A',
+    500000,
+    current_date + interval '1 year',
+    100000,
+    40000,
+    true
+  ),
+  (
+    '00000000-0000-0000-0000-00000000b202',
+    'Trip B',
+    600000,
+    current_date + interval '1 year',
+    200000,
+    50000,
+    true
+  );
+
 insert into public.transactions (
   user_id,
   account_id,
@@ -248,6 +277,12 @@ attempted_cross_user_account_preference_update as (
   where user_id = '00000000-0000-0000-0000-00000000b202'
   returning id
 ),
+attempted_cross_user_savings_goal_update as (
+  update public.savings_goals
+  set monthly_contribution_cents = 99999
+  where user_id = '00000000-0000-0000-0000-00000000b202'
+  returning id
+),
 attempted_cross_user_transaction_delete as (
   delete from public.transactions
   where user_id = '00000000-0000-0000-0000-00000000b202'
@@ -265,6 +300,7 @@ select
   (select count(*) from public.connected_institutions) as visible_connected_institutions,
   (select count(*) from public.accounts) as visible_accounts,
   (select count(*) from public.account_preferences) as visible_account_preferences,
+  (select count(*) from public.savings_goals) as visible_savings_goals,
   (select count(*) from public.transactions) as visible_transactions,
   (select count(*) from public.sync_runs) as visible_sync_runs,
   (select count(*) from public.pip_cash_snapshots) as visible_pip_cash_snapshots,
@@ -273,9 +309,11 @@ select
   (select count(*) from public.data_deletion_requests) as visible_data_deletion_requests,
   (select count(*) from public.accounts where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_accounts,
   (select count(*) from public.account_preferences where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_account_preferences,
+  (select count(*) from public.savings_goals where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_savings_goals,
   (select count(*) from public.transactions where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_transactions,
   (select count(*) from attempted_cross_user_account_update) as cross_user_account_updates,
   (select count(*) from attempted_cross_user_account_preference_update) as cross_user_account_preference_updates,
+  (select count(*) from attempted_cross_user_savings_goal_update) as cross_user_savings_goal_updates,
   (select count(*) from attempted_cross_user_transaction_delete) as cross_user_transaction_deletes,
   (select count(*) from attempted_cross_user_event_delete) as cross_user_event_deletes;
 

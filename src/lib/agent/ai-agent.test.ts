@@ -618,6 +618,53 @@ describe("runAIAgent", () => {
     }
   });
 
+  it("routes savings goal prompts through the real forced-tool classifier", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "I want to save for a trip that costs $5,000",
+      }),
+    ).toMatchObject({
+      toolName: "create_savings_goal",
+      args: {
+        name: "Trip",
+        target_amount_cents: 500000,
+      },
+      requireCard: true,
+    });
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Show my savings goals",
+      }),
+    ).toMatchObject({
+      toolName: "list_savings_goals",
+      requireCard: true,
+    });
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Keep my trip goal out of Spendable Cash at $300/month",
+      }),
+    ).toMatchObject({
+      toolName: "set_savings_goal_protection",
+      args: {
+        name: "Trip",
+        include_in_spendable_cash: true,
+        monthly_contribution_cents: 30000,
+      },
+      requireCard: true,
+    });
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "How can I save money this week?",
+      }),
+    ).toMatchObject({
+      toolName: "get_spending_opportunity",
+      requireCard: true,
+    });
+  });
+
   it("routes currentness prompts to the trust receipt", () => {
     for (const message of [
       "Is this number current?",

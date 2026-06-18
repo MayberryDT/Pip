@@ -49,7 +49,7 @@ The primary reviewer account must:
 The seeded state should include:
 
 - Checking account.
-- Savings or protected cushion.
+- Savings or monthly savings setup.
 - Credit card account if supported.
 - Recent income.
 - Upcoming recurring bills.

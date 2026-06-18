@@ -115,6 +115,14 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return toolResponse(input, "show_spending_opportunity", {});
   }
 
+  if (isSavingsGoalListPrompt(normalized)) {
+    return savingsGoalSummaryResponse(input);
+  }
+
+  if (isSavingsGoalPrompt(normalized)) {
+    return savingsGoalPlanResponse(input, amountCents ?? 500000);
+  }
+
   if (isTrustReceiptPrompt(normalized)) {
     return toolResponse(input, "show_trust_receipt", {});
   }
@@ -245,6 +253,56 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     message: result.pipCashTodayCents < 0
       ? "Spendable Cash Today is below zero right now."
       : "I can help with Spendable Cash Today.",
+  });
+}
+
+function savingsGoalPlanResponse(input: RunAiAgentInput, targetAmountCents: number): AgentResponse {
+  const card: AgentResponse["cards"][number] = {
+    type: "savings_goal_plan",
+    title: "Savings goal",
+    goalId: "goal-trip",
+    name: "Trip",
+    targetAmountCents,
+    currentAmountCents: 0,
+    remainingCents: targetAmountCents,
+    monthlyContributionCents: 0,
+    includeInSpendableCash: false,
+    summary: `${formatMoney(targetAmountCents)} left for Trip. Tracked only for now.`,
+  };
+
+  return baseResponse(input, {
+    message: "I set up the savings goal plan.",
+    cards: [card],
+    usedTools: ["create_savings_goal"],
+    responseMode: "show_card",
+  });
+}
+
+function savingsGoalSummaryResponse(input: RunAiAgentInput): AgentResponse {
+  const card: AgentResponse["cards"][number] = {
+    type: "savings_goals_summary",
+    title: "Savings goals",
+    summary: "1 active savings goal tracked.",
+    activeGoalCount: 1,
+    protectedMonthlyContributionCents: 0,
+    goals: [
+      {
+        goalId: "goal-trip",
+        name: "Trip",
+        targetAmountCents: 500000,
+        currentAmountCents: 0,
+        remainingCents: 500000,
+        monthlyContributionCents: 0,
+        includeInSpendableCash: false,
+      },
+    ],
+  };
+
+  return baseResponse(input, {
+    message: "I pulled your savings goals.",
+    cards: [card],
+    usedTools: ["list_savings_goals"],
+    responseMode: "show_card",
   });
 }
 
@@ -443,6 +501,14 @@ function createToolMessage(response: AgentResponse): string {
     return "I pulled the receipt behind today's number.";
   }
 
+  if (card?.type === "savings_goal_plan") {
+    return "I set up the savings goal plan.";
+  }
+
+  if (card?.type === "savings_goals_summary") {
+    return "I pulled your savings goals.";
+  }
+
   if (card?.type === "insight_card") {
     if (/\b(cutback|cut back|spending opportunity)\b/i.test(`${card.title} ${card.summary}`)) {
       return `I found a cutback opportunity: ${card.summary}`;
@@ -464,7 +530,7 @@ function isSpendingPrompt(normalized: string): boolean {
 
 function isFinancialGuidancePrompt(normalized: string): boolean {
   return (
-    /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|is my spending bad|am i broke|why am i broke|i'?m broke|in trouble|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized) ||
+    /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|is my spending bad|am i broke|why am i broke|i'?m broke|in trouble|should i lower my monthly savings|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized) ||
     /\bwhy\b.{0,40}\b(can'?t|cannot|cant)\b.{0,40}\bspend\b/.test(normalized)
   );
 }
@@ -491,8 +557,19 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
 }
 
 function isSavingsSetupOrSettingsPrompt(normalized: string): boolean {
-  return /\b(protected savings|savings cushion)\b/.test(normalized) ||
+  return /\b(monthly savings|protected savings|savings cushion)\b/.test(normalized) ||
     /\bsave\b.{0,24}\b(account settings|settings|preferences)\b/.test(normalized);
+}
+
+function isSavingsGoalPrompt(normalized: string): boolean {
+  return /\bsavings? goals?\b/.test(normalized) ||
+    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
+    /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized);
+}
+
+function isSavingsGoalListPrompt(normalized: string): boolean {
+  return /\b(show|list|what|which|update|progress|how are)\b.{0,32}\bsavings? goals?\b/.test(normalized) ||
+    /^savings? goals?$/.test(normalized);
 }
 
 function isTrustReceiptPrompt(normalized: string): boolean {

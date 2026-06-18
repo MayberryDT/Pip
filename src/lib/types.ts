@@ -1,3 +1,5 @@
+import type { SavingsGoal } from "@/lib/savings-goals/types";
+
 export type AccountKind = "checking" | "savings" | "credit_card" | "loan" | "other";
 
 export type TransactionKind =
@@ -136,6 +138,9 @@ export type SpendableCashTodayResult = {
   averageMonthlyIncomeCents: number;
   averageMonthlyRecurringObligationsCents: number;
   averageMonthlyEverydaySpendCents: number;
+  monthlySavingsCents?: number;
+  savingsGoalMonthlyCents?: number;
+  totalSavingsProtectedMonthlyCents?: number;
   protectedSavingsMonthlyCents: number;
   hiddenCushionCents: number;
   allowedSoFarThisMonthCents: number;
@@ -165,6 +170,9 @@ export type PipCashResult = {
   incomeTotalCents: number;
   spendingTotalCents: number;
   refundTotalCents: number;
+  monthlySavingsCents?: number;
+  savingsGoalMonthlyCents?: number;
+  totalSavingsProtectedMonthlyCents?: number;
   protectedSavingsMonthlyCents: number;
   window: RollingWindow;
   drivers: PipCashDriver[];
@@ -178,6 +186,7 @@ export type FinancialSnapshot = {
   accounts: Account[];
   transactions: Transaction[];
   settings: UserSettings;
+  savingsGoals?: SavingsGoal[];
 };
 
 export type FinancialDataState = {

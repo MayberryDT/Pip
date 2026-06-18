@@ -20,6 +20,7 @@ import {
 } from "@/lib/pip-cash/dedupe-credit-card-payments";
 import { calculateSpendableCashToday } from "@/lib/pip-cash/spendable-cash-today";
 import { toPipCashSnapshot } from "@/lib/pip-cash/account-filters";
+import { getProtectedSavingsGoalMonthlyCents } from "@/lib/savings-goals/plan";
 
 const MATERIAL_PENDING_THRESHOLD_CENTS = 2000;
 
@@ -67,16 +68,20 @@ export function calculatePipCash(snapshot: FinancialSnapshot): PipCashResult {
   }
 
   const spendingTotalCents = Math.max(0, grossSpendingCents - refundTotalCents);
+  const savingsGoalMonthlyCents = getProtectedSavingsGoalMonthlyCents(snapshot.savingsGoals);
+  const totalSavingsProtectedMonthlyCents =
+    snapshot.settings.protectedSavingsMonthlyCents + savingsGoalMonthlyCents;
   const rollingNetCents =
     incomeTotalCents -
     spendingTotalCents -
-    snapshot.settings.protectedSavingsMonthlyCents;
+    totalSavingsProtectedMonthlyCents;
   const pipCashTodayCents = Math.round(rollingNetCents / window.dayCount);
   const drivers = buildDrivers({
     incomeTotalCents,
     spendingTotalCents,
     refundTotalCents,
     protectedSavingsMonthlyCents: snapshot.settings.protectedSavingsMonthlyCents,
+    savingsGoalMonthlyCents,
     dedupedPaymentCount,
     windowTransactions,
     allTransactions: transactions,
@@ -112,6 +117,7 @@ function buildDrivers(input: {
   spendingTotalCents: number;
   refundTotalCents: number;
   protectedSavingsMonthlyCents: number;
+  savingsGoalMonthlyCents: number;
   dedupedPaymentCount: number;
   windowTransactions: Transaction[];
   allTransactions: Transaction[];
@@ -143,12 +149,22 @@ function buildDrivers(input: {
     },
     {
       id: "protected-savings",
-      label: "Protected savings",
-      detail: "Savings held back before Spendable Cash Today is calculated.",
+      label: "Monthly savings",
+      detail: "Your chosen monthly savings are kept out of today's number.",
       amountCents: -input.protectedSavingsMonthlyCents,
       tone: "neutral",
     },
   ];
+
+  if (input.savingsGoalMonthlyCents > 0) {
+    drivers.push({
+      id: "savings-goals",
+      label: "Savings goals",
+      detail: "Protected goal contributions are kept out of Spendable Cash Today.",
+      amountCents: -input.savingsGoalMonthlyCents,
+      tone: "neutral",
+    });
+  }
 
   if (rentTotalCents > 0) {
     drivers.push({

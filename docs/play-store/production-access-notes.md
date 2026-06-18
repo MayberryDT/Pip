@@ -72,7 +72,7 @@ Replace with actual fixes:
 ### What is the app value and intended audience?
 
 ```txt
-Pip is for people who want a calm, simple daily spending signal instead of another financial dashboard. It uses read-only connected account activity, upcoming bills, and a user-controlled cushion to show Spendable Cash Today and answer plain-language questions about day-to-day spending context.
+Pip is for people who want a calm, simple daily spending signal instead of another financial dashboard. It uses read-only connected account activity, upcoming bills, and user-controlled monthly savings to show Spendable Cash Today and answer plain-language questions about day-to-day spending context.
 
 Pip does not move money, hold funds, issue loans, make credit decisions, or provide investment, tax, legal, or formal financial advice.
 ```
@@ -134,7 +134,7 @@ A calm daily spending signal from your connected account activity.
 Long-description anchor:
 
 ```txt
-Pip shows Spendable Cash Today: one simple number that helps you understand today's spending room based on connected account activity, upcoming bills, and your savings cushion.
+Pip shows Spendable Cash Today: one simple number that helps you understand today's spending room based on connected account activity, upcoming bills, and your monthly savings.
 ```
 
 Required listing claims:

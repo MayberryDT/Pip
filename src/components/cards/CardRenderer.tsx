@@ -298,7 +298,7 @@ export function CardRenderer({
               <>
                 <FormulaRow label="Income" value={card.incomeTotalCents} />
                 <FormulaRow label="Spending" value={-card.spendingTotalCents} />
-                <FormulaRow label="Protected savings" value={-card.protectedSavingsMonthlyCents} />
+                <FormulaRow label="Monthly savings" value={-card.protectedSavingsMonthlyCents} />
                 <FormulaRow label="Rolling net" value={card.rollingNetCents} strong />
               </>
             )}
@@ -331,6 +331,53 @@ export function CardRenderer({
             </div>
           ) : null}
           <p className="pip-wrap-anywhere mt-3 text-xs leading-5 text-ink/[0.56]">{card.footer}</p>
+        </CardShell>
+      );
+
+    case "savings_goal_plan":
+      return (
+        <CardShell icon={<TrendingUp aria-hidden="true" size={18} />} title={card.title}>
+          <p className="pip-wrap-anywhere text-sm leading-6 text-ink/[0.68]">{card.summary}</p>
+          <div className="mt-3 space-y-2 text-sm">
+            <FormulaRow label="Target" value={card.targetAmountCents} />
+            <FormulaRow label="Tracked" value={card.currentAmountCents} />
+            <FormulaRow label="Remaining" value={card.remainingCents} strong />
+            <FormulaRow
+              label="Monthly plan"
+              value={card.monthlyContributionCents || card.recommendedMonthlyContributionCents || 0}
+            />
+          </div>
+          <p className="pip-wrap-anywhere mt-3 text-xs leading-5 text-ink/[0.56]">
+            {card.includeInSpendableCash
+              ? "This monthly contribution is kept out of Spendable Cash Today."
+              : "Tracked only. Not held out of today's number."}
+          </p>
+        </CardShell>
+      );
+
+    case "savings_goals_summary":
+      return (
+        <CardShell icon={<TrendingUp aria-hidden="true" size={18} />} title={card.title}>
+          <p className="pip-wrap-anywhere text-sm leading-6 text-ink/[0.68]">{card.summary}</p>
+          <div className="mt-3 space-y-2">
+            {card.goals.map((goal) => (
+              <div key={goal.goalId} className="rounded-[1rem] border border-line bg-porcelain/[0.45] px-3 py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <span className="min-w-0 text-sm font-semibold text-ink">{goal.name}</span>
+                  <span className="shrink-0 text-sm font-semibold text-moss">
+                    {formatMoney(goal.remainingCents)} left
+                  </span>
+                </div>
+                <p className="pip-wrap-anywhere mt-1 text-xs leading-5 text-ink/[0.56]">
+                  {formatMoney(goal.currentAmountCents)} of {formatMoney(goal.targetAmountCents)} tracked.
+                  {" "}
+                  {goal.includeInSpendableCash
+                    ? `${formatMoney(goal.monthlyContributionCents)}/month kept out.`
+                    : "Tracked only."}
+                </p>
+              </div>
+            ))}
+          </div>
         </CardShell>
       );
 

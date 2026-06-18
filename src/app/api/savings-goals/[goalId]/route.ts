@@ -1,0 +1,160 @@
+import { NextResponse } from "next/server";
+import {
+  markPipCashSnapshotsStaleForUser,
+} from "@/lib/data/financial-repository";
+import {
+  archiveSavingsGoalForUser,
+  loadSavingsGoalForUser,
+  updateSavingsGoalForUser,
+} from "@/lib/data/savings-goals-repository";
+import { recordProductEventSafely } from "@/lib/data/product-events";
+import { isSavingsGoalsEnabled } from "@/lib/savings-goals/feature-flags";
+import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+import {
+  savingsGoalUpdateSchema,
+  shouldStalePipCashForGoalArchive,
+  shouldStalePipCashForGoalChange,
+  toSavingsGoalPlanResponse,
+  validateSavingsGoalInput,
+} from "@/app/api/savings-goals/route-helpers";
+
+type RouteContext = {
+  params: Promise<{ goalId: string }>;
+};
+
+export async function PATCH(request: Request, context: RouteContext) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+  }
+
+  if (!isSavingsGoalsEnabled()) {
+    return NextResponse.json({ error: "Savings goals are not enabled." }, { status: 404 });
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+
+    const { goalId } = await context.params;
+    const existing = await loadSavingsGoalForUser(supabase, user.id, goalId);
+    if (!existing) {
+      return NextResponse.json({ error: "Savings goal not found." }, { status: 404 });
+    }
+
+    const body = await request.json().catch(() => null);
+    const parsed = savingsGoalUpdateSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return NextResponse.json({ error: "Invalid savings goal." }, { status: 400 });
+    }
+
+    const validationError = validateSavingsGoalInput(parsed.data, existing);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
+
+    const goal = await updateSavingsGoalForUser(supabase, user.id, goalId, parsed.data);
+    if (shouldStalePipCashForGoalChange(existing, goal)) {
+      await markPipCashSnapshotsStaleForUser(supabase, user.id);
+    }
+
+    await recordProductEventSafely(supabase, user.id, "savings_goal_updated", {
+      goalId: goal.id,
+      includeInSpendableCash: goal.includeInSpendableCash,
+      monthlyContributionCents: goal.monthlyContributionCents,
+    });
+
+    if (!existing.includeInSpendableCash && goal.includeInSpendableCash) {
+      await recordProductEventSafely(
+        supabase,
+        user.id,
+        "savings_goal_spendable_protection_enabled",
+        {
+          goalId: goal.id,
+          monthlyContributionCents: goal.monthlyContributionCents,
+        },
+      );
+    } else if (existing.includeInSpendableCash && !goal.includeInSpendableCash) {
+      await recordProductEventSafely(
+        supabase,
+        user.id,
+        "savings_goal_spendable_protection_disabled",
+        {
+          goalId: goal.id,
+        },
+      );
+    }
+
+    return NextResponse.json(toSavingsGoalPlanResponse(goal));
+  } catch (error) {
+    return NextResponse.json(toErrorBody(error), { status: 500 });
+  }
+}
+
+export async function DELETE(_request: Request, context: RouteContext) {
+  if (!isSupabaseConfigured()) {
+    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+  }
+
+  if (!isSavingsGoalsEnabled()) {
+    return NextResponse.json({ error: "Savings goals are not enabled." }, { status: 404 });
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+    }
+
+    const { goalId } = await context.params;
+    const existing = await loadSavingsGoalForUser(supabase, user.id, goalId);
+    if (!existing) {
+      return NextResponse.json({ error: "Savings goal not found." }, { status: 404 });
+    }
+
+    const goal = await archiveSavingsGoalForUser(supabase, user.id, goalId);
+    if (shouldStalePipCashForGoalArchive(existing)) {
+      await markPipCashSnapshotsStaleForUser(supabase, user.id);
+    }
+
+    await recordProductEventSafely(supabase, user.id, "savings_goal_archived", {
+      goalId: goal.id,
+      wasProtected: existing.includeInSpendableCash,
+    });
+
+    return NextResponse.json(toSavingsGoalPlanResponse(goal));
+  } catch (error) {
+    return NextResponse.json(toErrorBody(error), { status: 500 });
+  }
+}
+
+function toErrorBody(error: unknown) {
+  if (error instanceof SupabaseConfigError) {
+    return {
+      error: error.message,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      error: error.message,
+    };
+  }
+
+  return {
+    error: "Savings goals request failed.",
+  };
+}

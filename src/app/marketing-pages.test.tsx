@@ -76,7 +76,7 @@ describe("marketing website pages", () => {
     expect(html).toContain("Same habit");
     expect(html).toContain("Better number");
     expect(html).toContain("Read-only data");
-    expect(html).toContain("Cushion protected");
+    expect(html).toContain("Savings protected");
     expect(html).toContain("One daily number");
     expect(html).toContain("Read the blog");
     expect(html).toContain("Featured read");

@@ -340,7 +340,7 @@ function defineSpendableCash(snapshot: FinancialSnapshot): AgentResponse {
 
   return {
     message: metric
-      ? `Spendable Cash Today is ${formatMoney(metric.spendableCashTodayCents)} today based on your normal money pattern, protected savings, recurring bills, recent spending pace, and available cash.`
+      ? `Spendable Cash Today is ${formatMoney(metric.spendableCashTodayCents)} today based on your normal money pattern, monthly savings, recurring bills, recent spending pace, and available cash.`
       : "",
     cards: [],
     promptChips: getSuggestedPrompts(result),
@@ -449,7 +449,7 @@ function buildPaydayImpactCard(result: ReturnType<typeof calculatePipCash>): Ext
       type: "insight_card",
       title: "Payday impact",
       summary:
-        `Income averages ${formatMoney(metric.averageMonthlyIncomeCents)} per month before bills, protected savings, and the cushion are held back.`,
+        `Income averages ${formatMoney(metric.averageMonthlyIncomeCents)} per month before bills, monthly savings, and the safety reserve are held back.`,
       rows: [
         {
           id: "income-average",
@@ -467,7 +467,7 @@ function buildPaydayImpactCard(result: ReturnType<typeof calculatePipCash>): Ext
         },
         {
           id: "savings",
-          label: "Protected savings",
+          label: "Monthly savings",
           amountCents: -metric.protectedSavingsMonthlyCents,
           detail: "Held back before today exists.",
           tone: "neutral",
@@ -490,7 +490,7 @@ function buildPaydayImpactCard(result: ReturnType<typeof calculatePipCash>): Ext
     type: "insight_card",
     title: "Payday impact",
     summary:
-      `Income adds ${formatMoney(result.incomeTotalCents)} inside this rolling month. Spread over ${result.window.dayCount} days, that is about ${formatMoney(dailyIncomeCents)} per day before spending and protected savings.`,
+      `Income adds ${formatMoney(result.incomeTotalCents)} inside this rolling month. Spread over ${result.window.dayCount} days, that is about ${formatMoney(dailyIncomeCents)} per day before spending and monthly savings.`,
     rows: [
       {
         id: "income",
@@ -515,7 +515,7 @@ function buildPaydayImpactCard(result: ReturnType<typeof calculatePipCash>): Ext
       },
       {
         id: "protected-savings",
-        label: "Protected savings",
+        label: "Monthly savings",
         amountCents: -result.protectedSavingsMonthlyCents,
         detail: "Held out before I calculate Spendable Cash Today.",
         tone: result.protectedSavingsMonthlyCents > 0 ? "neutral" : "positive",
@@ -524,7 +524,7 @@ function buildPaydayImpactCard(result: ReturnType<typeof calculatePipCash>): Ext
         id: "today",
         label: "Today",
         amountCents: result.pipCashTodayCents,
-        detail: "After income, spending, and protected savings.",
+        detail: "After income, spending, and monthly savings.",
         tone: toneForAmount(result.pipCashTodayCents),
       },
     ],

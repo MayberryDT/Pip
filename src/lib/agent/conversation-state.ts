@@ -324,7 +324,7 @@ function getRecentJobs(input: ConversationStateInput): ConversationJob[] {
 }
 
 function isSetupPrompt(normalized: string): boolean {
-  return /\b(sign|signed|signup|start|continue|connect|plaid|google|consent|savings cushion|protected savings|delete data|refresh|sync|reload)\b/.test(normalized);
+  return /\b(sign|signed|signup|start|continue|connect|plaid|google|consent|monthly savings|savings cushion|protected savings|delete data|refresh|sync|reload)\b/.test(normalized);
 }
 
 function isDataQualityPrompt(normalized: string): boolean {
@@ -370,7 +370,7 @@ function isPurchasePrompt(normalized: string, history: ConversationHistoryItem[]
 }
 
 function isFinancialGuidancePrompt(normalized: string): boolean {
-  return /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|am i broke|why am i broke|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized);
+  return /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|am i broke|why am i broke|should i lower my monthly savings|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized);
 }
 
 function isDefinitionPrompt(normalized: string): boolean {

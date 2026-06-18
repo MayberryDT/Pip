@@ -95,6 +95,7 @@ export type Database = {
         | "connection_repaired"
         | "cash_tight"
         | "low_confidence";
+      savings_goal_status: "active" | "paused" | "completed" | "archived";
     };
     Tables: {
       user_settings: {
@@ -239,6 +240,48 @@ export type Database = {
           is_protected_savings_override?: boolean | null;
           user_label?: string | null;
           hidden_reason?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      savings_goals: {
+        Row: {
+          id: string;
+          user_id: string;
+          name: string;
+          target_amount_cents: number;
+          target_date: string | null;
+          starting_amount_cents: number;
+          current_amount_cents: number;
+          monthly_contribution_cents: number;
+          include_in_spendable_cash: boolean;
+          status: Database["public"]["Enums"]["savings_goal_status"];
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          name: string;
+          target_amount_cents: number;
+          target_date?: string | null;
+          starting_amount_cents?: number;
+          current_amount_cents?: number;
+          monthly_contribution_cents?: number;
+          include_in_spendable_cash?: boolean;
+          status?: Database["public"]["Enums"]["savings_goal_status"];
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          name?: string;
+          target_amount_cents?: number;
+          target_date?: string | null;
+          starting_amount_cents?: number;
+          current_amount_cents?: number;
+          monthly_contribution_cents?: number;
+          include_in_spendable_cash?: boolean;
+          status?: Database["public"]["Enums"]["savings_goal_status"];
           updated_at?: string;
         };
         Relationships: [];
@@ -824,4 +867,5 @@ export type Database = {
 export type UserSettingsRow = Database["public"]["Tables"]["user_settings"]["Row"];
 export type AccountRow = Database["public"]["Tables"]["accounts"]["Row"];
 export type AccountPreferenceRow = Database["public"]["Tables"]["account_preferences"]["Row"];
+export type SavingsGoalRow = Database["public"]["Tables"]["savings_goals"]["Row"];
 export type TransactionRow = Database["public"]["Tables"]["transactions"]["Row"];

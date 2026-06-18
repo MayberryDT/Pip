@@ -36,7 +36,7 @@ const steps = [
     copy: "Link read-only accounts so Pip can understand the money coming in and going out.",
   },
   {
-    title: "Protect the cushion",
+    title: "Choose monthly savings",
     copy: "Pick the amount you want held outside everyday spending decisions.",
   },
   {
@@ -49,7 +49,7 @@ const steps = [
   },
 ];
 
-const identityProofs = ["Read-only data", "Cushion protected", "One daily number"];
+const identityProofs = ["Read-only data", "Savings protected", "One daily number"];
 
 const trustProofs = [
   "Read-only data in",

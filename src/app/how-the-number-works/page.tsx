@@ -32,8 +32,8 @@ const inputs = [
     copy: "Recent deposits, purchases, refunds, transfers, fees, card payments, and recurring-looking items shape the current money picture.",
   },
   {
-    title: "Protected savings",
-    copy: "Your chosen cushion is held back before the daily number is shown.",
+    title: "Monthly savings",
+    copy: "Your chosen monthly savings are held back before the daily number is shown.",
   },
   {
     title: "Visible commitments",

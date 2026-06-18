@@ -374,7 +374,7 @@ function getRenderableCards(): Array<{
         "Math breakdown",
         "Income",
         "Spending",
-        "Protected savings",
+        "Monthly savings",
         "Rolling net",
         "$1,780",
       ],

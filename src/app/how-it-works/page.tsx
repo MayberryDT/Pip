@@ -20,7 +20,7 @@ import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 export const metadata: Metadata = buildMarketingMetadata({
   title: "How Pip Works",
   description:
-    "Connect read-only account data, choose a savings cushion, check Spendable Cash Today, and ask Pip when you want the why.",
+    "Connect read-only account data, choose monthly savings, check Spendable Cash Today, and ask Pip when you want the why.",
   path: "/how-it-works",
 });
 
@@ -30,8 +30,8 @@ const steps = [
     copy: "Pip reads balances and transactions through a read-only connection.",
   },
   {
-    title: "Choose your cushion",
-    copy: "Pick the savings cushion Pip should protect before showing today's room.",
+    title: "Choose monthly savings",
+    copy: "Pick what you want Pip to keep out of today's number. Pip does not move money.",
   },
   {
     title: "Check one daily number",

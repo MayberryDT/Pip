@@ -18,7 +18,7 @@ export function ConsentGate({ email }: { email: string }) {
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
-      throw new Error(payload?.error ?? "I couldn’t save that cushion yet. Please try again.");
+      throw new Error(payload?.error ?? "I couldn’t save that amount yet. Please try again.");
     }
 
     window.location.reload();
@@ -29,7 +29,7 @@ export function ConsentGate({ email }: { email: string }) {
       <section className="w-full max-w-sm">
         <PipIntroScene
           priority
-          title="Let’s set aside a little cushion first."
+          title="Choose monthly savings."
           messageClassName="onboarding-intro-message"
         >
           <p>
@@ -39,6 +39,10 @@ export function ConsentGate({ email }: { email: string }) {
           <p className="mt-3">
             Connecting checking accounts and cards makes Spendable Cash Today more accurate because
             card spend can be counted before a payment settles.
+          </p>
+          <p className="mt-3">
+            Pick what you want Pip to keep out of your daily spending number each month.
+            Pip does not move money.
           </p>
           <p className="mt-3 text-xs leading-5 text-ink/50">{email}</p>
           <div className="mt-5">

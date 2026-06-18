@@ -40,6 +40,7 @@ import {
   getSpendableCashTodayState,
 } from "@/lib/pip-cash/spendable-cash-today";
 import { buildSpendableTrustReceipt } from "@/lib/pip-cash/trust-receipt";
+import type { SavingsGoalInput, SavingsGoalUpdate } from "@/lib/savings-goals/types";
 import { formatMoney, formatMoneyWithCents } from "@/lib/money";
 import type { PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
 import { composeTrustPolicyAnswer, pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
@@ -118,6 +119,18 @@ export type PipAgentActions = {
     accountName?: string;
     isProtectedSavings: boolean;
   }) => Promise<PipAgentActionResult>;
+  createSavingsGoal?: (input: SavingsGoalInput) => Promise<PipAgentActionResult>;
+  listSavingsGoals?: () => Promise<PipAgentActionResult>;
+  updateSavingsGoal?: (input: {
+    goalId?: string;
+    name?: string;
+  } & SavingsGoalUpdate) => Promise<PipAgentActionResult>;
+  setSavingsGoalProtection?: (input: {
+    goalId?: string;
+    name?: string;
+    includeInSpendableCash: boolean;
+    monthlyContributionCents?: number;
+  }) => Promise<PipAgentActionResult>;
   requestRemoveInstitutionConfirmation?: (input: {
     institutionId?: string;
     institutionName?: string;
@@ -181,6 +194,10 @@ type DeterministicAgentToolName =
   | "start_account_selection_update"
   | "set_account_inclusion"
   | "set_account_protected_savings"
+  | "create_savings_goal"
+  | "list_savings_goals"
+  | "update_savings_goal"
+  | "set_savings_goal_protection"
   | "request_remove_institution_confirmation"
   | "remove_institution"
   | "refresh_financial_data"
@@ -234,6 +251,31 @@ const protectedSavingsAccountParameters = z.object({
   account_id: z.string().min(1).max(120).optional(),
   account_name: z.string().min(1).max(160).optional(),
   is_protected_savings: z.boolean(),
+});
+const savingsGoalTargetParameters = z.object({
+  goal_id: z.string().min(1).max(120).optional(),
+  name: z.string().min(1).max(80).optional(),
+});
+const createSavingsGoalParameters = z.object({
+  name: z.string().trim().min(1).max(80),
+  target_amount_cents: z.number().int().positive().max(100_000_000),
+  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  starting_amount_cents: z.number().int().min(0).max(100_000_000).optional(),
+  current_amount_cents: z.number().int().min(0).max(100_000_000).optional(),
+  monthly_contribution_cents: z.number().int().min(0).max(100_000_000).optional(),
+  include_in_spendable_cash: z.boolean().optional(),
+});
+const updateSavingsGoalParameters = savingsGoalTargetParameters.extend({
+  target_amount_cents: z.number().int().positive().max(100_000_000).optional(),
+  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  current_amount_cents: z.number().int().min(0).max(100_000_000).optional(),
+  monthly_contribution_cents: z.number().int().min(0).max(100_000_000).optional(),
+  include_in_spendable_cash: z.boolean().optional(),
+  status: z.enum(["active", "paused", "completed", "archived"]).optional(),
+});
+const savingsGoalProtectionParameters = savingsGoalTargetParameters.extend({
+  include_in_spendable_cash: z.boolean(),
+  monthly_contribution_cents: z.number().int().min(0).max(100_000_000).optional(),
 });
 const removeInstitutionParameters = institutionTargetParameters.extend({
   confirmation_text: z.string().min(1).max(160),
@@ -444,6 +486,28 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     return undefined;
   }
 
+  if (isTrustReceiptPrompt(normalized)) {
+    return {
+      toolName: "get_trust_receipt",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (isTrustPolicyPrompt(normalized)) {
+    return {
+      toolName: "get_trust_policy",
+      args: {},
+      requireCard: false,
+    };
+  }
+
+  const savingsGoalTool = getSavingsGoalForcedTool(message, normalized);
+
+  if (savingsGoalTool) {
+    return savingsGoalTool;
+  }
+
   if (isSpendingOpportunityPrompt(normalized)) {
     return {
       toolName: "get_spending_opportunity",
@@ -463,22 +527,6 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
   if (isGeneralSpendingQuestion(normalized) && isSpendingPrompt(normalized)) {
     return {
       toolName: "get_pip_cash_snapshot",
-      args: {},
-      requireCard: false,
-    };
-  }
-
-  if (isTrustReceiptPrompt(normalized)) {
-    return {
-      toolName: "get_trust_receipt",
-      args: {},
-      requireCard: true,
-    };
-  }
-
-  if (isTrustPolicyPrompt(normalized)) {
-    return {
-      toolName: "get_trust_policy",
       args: {},
       requireCard: false,
     };
@@ -792,7 +840,7 @@ function createPipTools() {
     tool<typeof emptyToolParameters, PipAgentContext>({
       name: "get_onboarding_state",
       description:
-        "Read the user's current Pip setup state, including whether they are signed in, need protected savings, need connected data, or already have financial data.",
+        "Read the user's current Pip setup state, including whether they are signed in, need monthly savings, need connected data, or already have financial data.",
       parameters: emptyToolParameters,
       strict: true,
       execute(_input, runContext) {
@@ -833,7 +881,7 @@ function createPipTools() {
     tool<typeof saveProtectedSavingsParameters, PipAgentContext>({
       name: "save_protected_savings",
       description:
-        "Save the monthly protected savings amount. Use when the user gives a dollar amount for protected savings or chooses the default protected savings step.",
+        "Save the user's monthly savings amount. Use when the user gives a dollar amount for monthly savings or chooses the default monthly savings step.",
       parameters: saveProtectedSavingsParameters,
       strict: true,
       async execute(input, runContext) {
@@ -845,7 +893,7 @@ function createPipTools() {
           return {
             ok: false,
             status: "sign_in_required",
-            message: "The user must sign in before protected savings can be saved.",
+            message: "The user must sign in before monthly savings can be saved.",
           };
         }
 
@@ -876,7 +924,7 @@ function createPipTools() {
           return {
             ok: false,
             status: "protected_savings_required",
-            message: "The user must choose protected savings before Plaid can open.",
+            message: "The user must choose monthly savings before Plaid can open.",
           };
         }
 
@@ -1072,6 +1120,115 @@ function createPipTools() {
           accountId: toolInput.account_id,
           accountName: toolInput.account_name,
           isProtectedSavings: toolInput.is_protected_savings,
+        }));
+      },
+    }),
+    tool<typeof createSavingsGoalParameters, PipAgentContext>({
+      name: "create_savings_goal",
+      description:
+        "Create a savings goal for a future purchase, trip, emergency fund, or other target amount. Use when the user says they want to save for something or create a goal.",
+      parameters: createSavingsGoalParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "create_savings_goal", input, createSavingsGoalParameters);
+        recordTool(context, "create_savings_goal");
+
+        if (!context.actions?.createSavingsGoal) {
+          return {
+            ok: false,
+            status: "savings_goals_unavailable",
+            message: "Savings goals are not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.createSavingsGoal({
+          name: toolInput.name,
+          targetAmountCents: toolInput.target_amount_cents,
+          targetDate: toolInput.target_date,
+          startingAmountCents: toolInput.starting_amount_cents,
+          currentAmountCents: toolInput.current_amount_cents,
+          monthlyContributionCents: toolInput.monthly_contribution_cents,
+          includeInSpendableCash: toolInput.include_in_spendable_cash,
+        }));
+      },
+    }),
+    tool<typeof emptyToolParameters, PipAgentContext>({
+      name: "list_savings_goals",
+      description:
+        "List the user's savings goals and show current progress. Use when the user asks what goals are tracked or wants an update on goals.",
+      parameters: emptyToolParameters,
+      strict: true,
+      async execute(_input, runContext) {
+        const context = getToolContext(runContext);
+        recordTool(context, "list_savings_goals");
+
+        if (!context.actions?.listSavingsGoals) {
+          return {
+            ok: false,
+            status: "savings_goals_unavailable",
+            message: "Savings goals are not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.listSavingsGoals());
+      },
+    }),
+    tool<typeof updateSavingsGoalParameters, PipAgentContext>({
+      name: "update_savings_goal",
+      description:
+        "Update progress, target amount, target date, monthly contribution, or status for one savings goal.",
+      parameters: updateSavingsGoalParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "update_savings_goal", input, updateSavingsGoalParameters);
+        recordTool(context, "update_savings_goal");
+
+        if (!context.actions?.updateSavingsGoal) {
+          return {
+            ok: false,
+            status: "savings_goals_unavailable",
+            message: "Savings goals are not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.updateSavingsGoal({
+          goalId: toolInput.goal_id,
+          name: toolInput.name,
+          targetAmountCents: toolInput.target_amount_cents,
+          targetDate: toolInput.target_date,
+          currentAmountCents: toolInput.current_amount_cents,
+          monthlyContributionCents: toolInput.monthly_contribution_cents,
+          includeInSpendableCash: toolInput.include_in_spendable_cash,
+          status: toolInput.status,
+        }));
+      },
+    }),
+    tool<typeof savingsGoalProtectionParameters, PipAgentContext>({
+      name: "set_savings_goal_protection",
+      description:
+        "Choose whether a savings goal's monthly contribution is kept out of Spendable Cash Today.",
+      parameters: savingsGoalProtectionParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "set_savings_goal_protection", input, savingsGoalProtectionParameters);
+        recordTool(context, "set_savings_goal_protection");
+
+        if (!context.actions?.setSavingsGoalProtection) {
+          return {
+            ok: false,
+            status: "savings_goals_unavailable",
+            message: "Savings goals are not available in this environment.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.setSavingsGoalProtection({
+          goalId: toolInput.goal_id,
+          name: toolInput.name,
+          includeInSpendableCash: toolInput.include_in_spendable_cash,
+          monthlyContributionCents: toolInput.monthly_contribution_cents,
         }));
       },
     }),
@@ -1357,14 +1514,14 @@ function createPipTools() {
           state: getSpendableCashTodayState(result),
           confidence: metric?.confidence,
           definition:
-            "Spendable Cash Today is the amount I estimate is okay to use today from your normal money pattern, recurring obligations, protected savings, recent spending pace, and available cash.",
+            "Spendable Cash Today is the amount I estimate is okay to use today from your normal money pattern, recurring obligations, monthly savings, recent spending pace, and available cash.",
           risesWhen: [
             "your normal income pattern leaves more room after bills and savings",
             "recent everyday spending runs lighter than pace",
             "available cash stops capping the pattern-based number",
           ],
           fallsWhen: [
-            "recurring obligations or protected savings take more of the monthly pattern",
+            "recurring obligations or monthly savings take more of the monthly pattern",
             "recent everyday spending runs ahead of pace",
             "available cash caps the pattern-based number",
           ],
@@ -1856,7 +2013,7 @@ function createPipInstructions(runContext: {
     "You may give a grounded financial read when the user asks what you think, asks what to do, asks how they are doing, asks about a purchase, or when guidance context shows tight, shortfall, missing-data, or low-confidence state.",
     "Use get_financial_guidance_context before giving a read based on the user's actual finances, unless a judgmental purchase simulation already returned guidanceContext in the same turn.",
     "For a grounded read, use evidence IDs from guidanceContext. Do not invent facts, categories, merchants, balances, bills, or dollar amounts.",
-    "You may be direct about spending pace, whether things look stable or tight, whether a purchase adds pressure, whether the savings cushion looks reasonable for now, whether bills or everyday spending are the bigger pressure, whether cash reality is limiting the number, whether data quality limits the read, and general high-interest debt priority.",
+    "You may be direct about spending pace, whether things look stable or tight, whether a purchase adds pressure, whether monthly savings look reasonable for now, whether bills or everyday spending are the bigger pressure, whether cash reality is limiting the number, whether data quality limits the read, and general high-interest debt priority.",
     "You may gently disagree with the user when evidence conflicts with their assumption. Use phrases like my read, I'd treat this as, the conservative move, this adds pressure, this looks stable, this looks tight, I would be careful with that, or I would not treat that as open room.",
     "Do not call this financial advice. Do not use canned responses, moralize, shame, or over-explain.",
     "Do not give securities advice, crypto advice, tax advice, legal advice, bankruptcy advice, specific credit-card recommendations, specific loan recommendations, specific lender recommendations, insurance product recommendations, or instructions to skip required bills.",
@@ -1875,6 +2032,10 @@ function createPipInstructions(runContext: {
     "Use start_new_account_connection for adding a new bank or card. Use repair_account_connection for reconnecting one stale or broken institution. Use start_account_selection_update for changing which accounts Pip can see at an existing institution.",
     "Use set_account_inclusion when the user wants to ignore, exclude, include, or use an account again without disconnecting its institution.",
     "Use set_account_protected_savings when the user wants to mark or unmark a specific account as protected savings.",
+    "Use savings goal tools when the user wants to save for a trip, big purchase, emergency fund, or named goal.",
+    "Use create_savings_goal when the user gives a target amount for a new goal. Use list_savings_goals when they ask what goals are tracked or want an update.",
+    "Use update_savings_goal when the user changes progress, target amount, target date, monthly contribution, or status. Use set_savings_goal_protection when they want a goal's monthly plan kept out of Spendable Cash Today.",
+    "Savings goals are tracking and planning only. Pip does not move money, open a savings account, or transfer funds for a goal.",
     "For institution removal, call request_remove_institution_confirmation first. Only call remove_institution when the latest user message matches the exact confirmation text.",
     "For greetings, do not mention forecasts, cards, views, breakdowns, transactions, or app features. Just invite one simple next question.",
     "Use get_onboarding_state when the user's setup state matters or when you are unsure what step they are on.",
@@ -1896,7 +2057,7 @@ function createPipInstructions(runContext: {
     "If the user asks what pattern, assumptions, confidence, or baseline I am using, call get_pattern_assumptions.",
     "If the user asks how recent spending affects today's number, pace, over/under pattern, or spending pressure, call get_recent_spending_pressure.",
     "If the user asks what to cut back on, where they are overspending, what spending looks wasteful, or how to save money from recent spending, call get_spending_opportunity.",
-    "If the user asks how they are doing, what you think, what they should do, whether spending is too high, whether to lower the cushion, whether they are broke, or asks for your read, call get_financial_guidance_context.",
+    "If the user asks how they are doing, what you think, what they should do, whether spending is too high, whether to lower monthly savings, whether they are broke, or asks for your read, call get_financial_guidance_context.",
     "If the user asks for a trend, forecast, projection, or next-days view, call forecast_spendable_cash.",
     "If the user asks about recurring bills, subscriptions, monthly charges, or likely upcoming repeats, call get_recurring_activity.",
     "If the user asks for a complete, item, category, merchant, income, spending, refund, or card-payment breakdown, call get_spending_breakdown.",
@@ -1919,7 +2080,7 @@ function createPipInstructions(runContext: {
     "Do not invent card data, rows, balances, merchants, dates, or transaction details.",
     "Only say show, list, pull, view, card, trend view, forecast, or breakdown when a matching tool returned a card in this same turn.",
     "For broad personal-finance basics without a matching Pip card, teach one simple concept conversationally. Do not promise to show data.",
-    "For broad money basics, keep the answer general unless a tool was called in this same turn. Do not mention the user's current number, bills, cushion, cards, data, or say I see.",
+    "For broad money basics, keep the answer general unless a tool was called in this same turn. Do not mention the user's current number, bills, monthly savings, cards, data, or say I see.",
     "Forecasts are pattern guesses only. If mentioning a forecast caveat, use one short sentence: Forecast only; not guaranteed.",
     "Do not use guarantee language except the exact forecast caveat phrase: not guaranteed.",
     "Use at most one card unless the user explicitly asks for multiple details.",
@@ -2136,7 +2297,7 @@ function getAccountManagementUnavailableResult(context: PipAgentContext): Record
     return {
       ok: false,
       status: "protected_savings_required",
-      message: "The user must choose protected savings before account management is available.",
+      message: "The user must choose monthly savings before account management is available.",
     };
   }
 
@@ -2446,6 +2607,12 @@ function createFallbackFinalMessage(context: PipAgentContext): string {
       return "I pulled the math behind today's number.";
     case "trust_receipt":
       return "I pulled the receipt behind today's number.";
+    case "savings_goal_plan":
+      return "I set up the savings goal plan.";
+    case "savings_goals_summary":
+      return latestCard.activeGoalCount > 0
+        ? "I pulled your savings goals."
+        : "You do not have active savings goals yet.";
     case "recent_transactions":
       return "I found recent charges in the current window.";
     case "spending_breakdown":
@@ -2729,7 +2896,7 @@ function createDataOrCommitmentGuidanceRow(
 
   return {
     label: "Bills and savings",
-    detail: "Recurring commitments and protected savings are already held back.",
+    detail: "Recurring commitments and monthly savings are already held back.",
     tone: "neutral",
     evidenceIds: pickGuidanceEvidenceIds(context, [
       "bills-held-back",
@@ -3061,6 +3228,7 @@ function isSupportedCardPrompt(normalized: string): boolean {
     isFlexiblePipCashDriversPrompt(normalized) ||
     isPaydayImpactPrompt(normalized) ||
     isSpendableFactorsInsightPrompt(normalized) ||
+    isSavingsGoalPrompt(normalized) ||
     isTrustReceiptPrompt(normalized) ||
     isDataQualityPrompt(normalized) ||
     (isSpecificSpendSimulationPrompt(normalized) && extractExplicitPurchaseAmountCents(normalized) !== null)
@@ -3873,8 +4041,96 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
 }
 
 function isSavingsSetupOrSettingsPrompt(normalized: string): boolean {
-  return /\b(protected savings|savings cushion)\b/.test(normalized) ||
+  return /\b(monthly savings|protected savings|savings cushion)\b/.test(normalized) ||
     /\bsave\b.{0,24}\b(account settings|settings|preferences)\b/.test(normalized);
+}
+
+function getSavingsGoalForcedTool(
+  message: string,
+  normalized: string,
+): ForcedAgentTool | undefined {
+  if (!isSavingsGoalPrompt(normalized)) {
+    return undefined;
+  }
+
+  const targetAmountCents = extractSavingsGoalAmountCents(message);
+  const monthlyContributionCents = extractMonthlyContributionCents(message);
+  const name = inferSavingsGoalName(message, normalized);
+
+  if (isSavingsGoalListPrompt(normalized)) {
+    return {
+      toolName: "list_savings_goals",
+      args: {},
+      requireCard: true,
+    };
+  }
+
+  if (isSavingsGoalProtectionPrompt(normalized)) {
+    return {
+      toolName: "set_savings_goal_protection",
+      args: {
+        name,
+        include_in_spendable_cash: !/\b(track only|don'?t protect|do not protect|stop protecting|not in spendable|don'?t keep|do not keep)\b/.test(normalized),
+        ...(monthlyContributionCents === null ? {} : { monthly_contribution_cents: monthlyContributionCents }),
+      },
+      requireCard: true,
+    };
+  }
+
+  if (isSavingsGoalProgressPrompt(normalized) && targetAmountCents !== null) {
+    return {
+      toolName: "update_savings_goal",
+      args: {
+        name,
+        current_amount_cents: targetAmountCents,
+      },
+      requireCard: true,
+    };
+  }
+
+  if (targetAmountCents !== null && isSavingsGoalCreatePrompt(normalized)) {
+    return {
+      toolName: "create_savings_goal",
+      args: {
+        name,
+        target_amount_cents: targetAmountCents,
+        ...(monthlyContributionCents === null ? {} : { monthly_contribution_cents: monthlyContributionCents }),
+        include_in_spendable_cash:
+          monthlyContributionCents !== null &&
+          /\b(keep|hold|reserve|protect|out of spendable|spendable cash|monthly plan)\b/.test(normalized),
+      },
+      requireCard: true,
+    };
+  }
+
+  return undefined;
+}
+
+function isSavingsGoalPrompt(normalized: string): boolean {
+  return /\bsavings? goals?\b/.test(normalized) ||
+    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
+    /\b(for|toward|towards)\b.{0,32}\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b/.test(normalized) ||
+    /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized);
+}
+
+function isSavingsGoalCreatePrompt(normalized: string): boolean {
+  return /\b(create|start|set up|make|add|track|want|need|help)\b/.test(normalized) ||
+    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized);
+}
+
+function isSavingsGoalListPrompt(normalized: string): boolean {
+  return /\b(show|list|what|which|update|progress|how are)\b.{0,32}\bsavings? goals?\b/.test(normalized) ||
+    /^savings? goals?$/.test(normalized);
+}
+
+function isSavingsGoalProtectionPrompt(normalized: string): boolean {
+  return /\b(keep|hold|reserve|protect|track only|don'?t protect|do not protect|stop protecting)\b.{0,48}\b(goal|spendable cash|spendable)\b/.test(normalized) ||
+    /\b(goal|savings? goal)\b.{0,48}\b(out of spendable|out of today'?s number|not in spendable|kept out)\b/.test(normalized);
+}
+
+function isSavingsGoalProgressPrompt(normalized: string): boolean {
+  return /\b(saved|have|already have|tracked|progress|current)\b.{0,32}\b\$?\d/.test(normalized) &&
+    /\b(goal|savings? goal|toward|towards|for)\b/.test(normalized);
 }
 
 function isDataQualityPrompt(normalized: string): boolean {
@@ -4306,7 +4562,7 @@ function isFinancialGuidancePrompt(normalized: string): boolean {
   }
 
   return (
-    /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|is my spending bad|am i broke|why am i broke|i'?m broke|in trouble|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized) ||
+    /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|is my spending bad|am i broke|why am i broke|i'?m broke|in trouble|should i lower my monthly savings|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized) ||
     /\bwhy\b.{0,40}\b(can'?t|cannot|cant)\b.{0,40}\bspend\b/.test(normalized) ||
     /\b(can'?t|cannot|cant)\b.{0,40}\bspend\b.{0,40}\b(because|why|if|when)\b/.test(normalized)
   );
@@ -4378,6 +4634,139 @@ function extractExplicitPurchaseAmountCents(message: string): number | null {
   candidates.sort((left, right) => right.score - left.score || right.index - left.index);
 
   return candidates[0].amountCents;
+}
+
+function extractSavingsGoalAmountCents(message: string): number | null {
+  const candidates = extractMoneyAmountCandidates(message, 100_000_000);
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  candidates.sort((left, right) => right.score - left.score || right.index - left.index);
+
+  return candidates[0].amountCents;
+}
+
+function extractMonthlyContributionCents(message: string): number | null {
+  const monthlyPattern =
+    /(?:\$|usd\s*)\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\s*(?:\/|per\s+|a\s+)?month|\b(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)?\s*(?:\/|per\s+|a\s+)?month\b/gi;
+
+  for (const match of message.matchAll(monthlyPattern)) {
+    const rawAmount = match[1] ?? match[2];
+    const amount = Number(rawAmount.replaceAll(",", ""));
+
+    if (!Number.isFinite(amount)) {
+      continue;
+    }
+
+    const amountCents = Math.round(amount * 100);
+
+    if (amountCents > 0 && amountCents <= 100_000_000) {
+      return amountCents;
+    }
+  }
+
+  return null;
+}
+
+function extractMoneyAmountCandidates(message: string, maxCents: number) {
+  const amountPattern =
+    /(?:\$|usd\s*)\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)|(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)/gi;
+  const normalized = message.toLowerCase();
+  const candidates: Array<{ amountCents: number; index: number; score: number }> = [];
+
+  for (const match of message.matchAll(amountPattern)) {
+    const rawAmount = match[1] ?? match[2];
+    const amount = Number(rawAmount.replaceAll(",", ""));
+
+    if (!Number.isFinite(amount)) {
+      continue;
+    }
+
+    const amountCents = Math.round(amount * 100);
+
+    if (amountCents <= 0 || amountCents > maxCents) {
+      continue;
+    }
+
+    const index = match.index ?? 0;
+    candidates.push({
+      amountCents,
+      index,
+      score: scoreSavingsGoalAmountCandidate(normalized, index),
+    });
+  }
+
+  return candidates;
+}
+
+function scoreSavingsGoalAmountCandidate(message: string, index: number): number {
+  const before = message.slice(Math.max(0, index - 64), index);
+  const after = message.slice(index, index + 64);
+  let score = 0;
+
+  if (/\b(goal|target|cost|costs|save|saving|trip|vacation|travel|car|home|house|wedding|emergency fund|big purchase)\b/.test(before)) {
+    score += 8;
+  }
+
+  if (/\b(goal|target|cost|costs|save|saving|trip|vacation|travel|car|home|house|wedding|emergency fund|big purchase)\b/.test(after)) {
+    score += 6;
+  }
+
+  if (/\bper month|\/month|a month\b/.test(after)) {
+    score -= 4;
+  }
+
+  return score;
+}
+
+function inferSavingsGoalName(message: string, normalized: string): string {
+  const saveForMatch = /\bsave\b.{0,16}\b(?:for|toward|towards)\s+(?:a |an |the |my )?([^,.?]+?)(?:\s+(?:that|which|and|but|for|by|with|it'?s|it's|it is|costs?|will|would)\b|$)/i.exec(message);
+
+  if (saveForMatch?.[1]) {
+    return cleanSavingsGoalName(saveForMatch[1]);
+  }
+
+  if (/\b(emergency fund)\b/.test(normalized)) {
+    return "Emergency fund";
+  }
+
+  if (/\b(vacation|travel|trip)\b/.test(normalized)) {
+    return "Trip";
+  }
+
+  if (/\b(car)\b/.test(normalized)) {
+    return "Car";
+  }
+
+  if (/\b(wedding)\b/.test(normalized)) {
+    return "Wedding";
+  }
+
+  if (/\b(house|home)\b/.test(normalized)) {
+    return "Home";
+  }
+
+  if (/\bbig purchase\b/.test(normalized)) {
+    return "Big purchase";
+  }
+
+  return "Savings goal";
+}
+
+function cleanSavingsGoalName(value: string): string {
+  const cleaned = value
+    .replace(/\b(it'?s|it is|that'?s|that is)\b.*$/i, "")
+    .replace(/\b(costs?|will cost|would cost|for)\b.*$/i, "")
+    .replace(/\$\s*\d[\d,]*(?:\.\d{1,2})?/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const trimmed = cleaned || "Savings goal";
+
+  return trimmed
+    .slice(0, 80)
+    .replace(/^./, (char) => char.toUpperCase());
 }
 
 function scorePurchaseAmountCandidate(message: string, index: number): number {

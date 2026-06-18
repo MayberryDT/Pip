@@ -33,7 +33,7 @@ export default function TermsPage() {
         <h2 className="text-lg font-bold text-ink">No Advice</h2>
         <p className="mt-3">
           Pip is not financial, tax, investment, credit, or legal advice. You are responsible for
-          your spending, account connection choices, cushion settings, and financial decisions.
+          your spending, account connection choices, monthly savings settings, savings goals, and financial decisions.
           Pip does not make loan, credit, underwriting, insurance, or investment decisions.
         </p>
       </section>

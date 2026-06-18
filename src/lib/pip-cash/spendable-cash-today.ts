@@ -5,6 +5,7 @@ import {
   isDedupedCreditCardPayment,
 } from "@/lib/pip-cash/dedupe-credit-card-payments";
 import { toPipCashSnapshot } from "@/lib/pip-cash/account-filters";
+import { getProtectedSavingsGoalMonthlyCents } from "@/lib/savings-goals/plan";
 import type {
   Account,
   ClassifiedSpendableTransaction,
@@ -106,11 +107,14 @@ export function calculateSpendableCashToday(
     ),
   );
   const protectedSavingsMonthlyCents = snapshot.settings.protectedSavingsMonthlyCents;
+  const monthlySavingsCents = protectedSavingsMonthlyCents;
+  const savingsGoalMonthlyCents = getProtectedSavingsGoalMonthlyCents(snapshot.savingsGoals);
+  const totalSavingsProtectedMonthlyCents = monthlySavingsCents + savingsGoalMonthlyCents;
   const hiddenCushionCents = calculateHiddenCushion(averageMonthlyIncomeCents);
   const monthlyEverydayPoolCents =
     averageMonthlyIncomeCents -
     averageMonthlyRecurringObligationsCents -
-    protectedSavingsMonthlyCents -
+    totalSavingsProtectedMonthlyCents -
     hiddenCushionCents;
   const patternShortfallCents = Math.max(0, -monthlyEverydayPoolCents);
   const baselineDailyAllowanceCents = Math.max(
@@ -222,6 +226,9 @@ export function calculateSpendableCashToday(
     averageMonthlyIncomeCents,
     averageMonthlyRecurringObligationsCents,
     averageMonthlyEverydaySpendCents,
+    monthlySavingsCents,
+    savingsGoalMonthlyCents,
+    totalSavingsProtectedMonthlyCents,
     protectedSavingsMonthlyCents,
     hiddenCushionCents,
     allowedSoFarThisMonthCents,
@@ -244,6 +251,7 @@ export function calculateSpendableCashToday(
       materialDailyChangeCents,
       averageMonthlyRecurringObligationsCents,
       protectedSavingsMonthlyCents,
+      savingsGoalMonthlyCents,
       hiddenCushionCents,
       cashRealityAdjustmentCents,
       confidence,
@@ -705,6 +713,7 @@ function buildSpendableDrivers(input: {
   materialDailyChangeCents: number;
   averageMonthlyRecurringObligationsCents: number;
   protectedSavingsMonthlyCents: number;
+  savingsGoalMonthlyCents: number;
   hiddenCushionCents: number;
   cashRealityAdjustmentCents: number;
   confidence: SpendableCashConfidence;
@@ -715,7 +724,7 @@ function buildSpendableDrivers(input: {
     {
       id: "baseline-room",
       label: "Normal room",
-      detail: "Pattern-based daily room after recurring obligations and protected savings.",
+      detail: "Pattern-based daily room after recurring obligations and monthly savings.",
       amountCents: input.baselineDailyAllowanceCents,
       tone: input.baselineDailyAllowanceCents > 0 ? "positive" : "neutral",
     },
@@ -744,15 +753,24 @@ function buildSpendableDrivers(input: {
     },
     {
       id: "protected-savings",
-      label: "Protected savings",
-      detail: "Savings held back before Spendable Cash Today is calculated.",
+      label: "Monthly savings",
+      detail: "Your chosen monthly savings are kept out of today's number.",
       amountCents: -input.protectedSavingsMonthlyCents,
       tone: "neutral",
     },
+    ...(input.savingsGoalMonthlyCents > 0
+      ? [{
+          id: "savings-goals",
+          label: "Savings goals",
+          detail: "Protected goal contributions are kept out of Spendable Cash Today.",
+          amountCents: -input.savingsGoalMonthlyCents,
+          tone: "neutral" as const,
+        }]
+      : []),
     {
       id: "hidden-cushion",
-      label: "Small cushion",
-      detail: "A small cushion is held back so the number is not too aggressive.",
+      label: "Safety reserve",
+      detail: "A small safety reserve is held back so the number is not too aggressive.",
       amountCents: -input.hiddenCushionCents,
       tone: "neutral",
     },

@@ -149,14 +149,14 @@ async function assertAuthenticatedSession(page: Page) {
 }
 
 async function completeConsentIfNeeded(page: Page) {
-  if (!(await page.getByText("Let’s set aside a little cushion first.").isVisible().catch(() => false))) {
+  if (!(await page.getByText("Choose monthly savings.").isVisible().catch(() => false))) {
     return;
   }
 
   const consentResponse = page.waitForResponse((response) => {
     return response.url().includes("/api/auth/consent") && response.request().method() === "POST";
   });
-  await page.getByRole("button", { name: "Use $200 cushion" }).click();
+  await page.getByRole("button", { name: "Save $200/month" }).click();
   await expect((await consentResponse).ok()).toBe(true);
   await page.waitForLoadState("domcontentloaded");
 }

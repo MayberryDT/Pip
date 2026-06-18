@@ -41,6 +41,7 @@ import { PromptChips } from "@/components/PromptChips";
 import { getClientPipPlatform, type PipPlatform } from "@/lib/platform/android-shell";
 import { openPlaidLink } from "@/lib/providers/plaid/link-browser";
 import type { PlaidEventMetadata } from "@/lib/providers/plaid/link-browser";
+import { isSavingsGoalsClientEnabled } from "@/lib/savings-goals/feature-flags";
 import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 type ThreadItem = {
@@ -169,6 +170,12 @@ export function PipHome({
   );
   const hasLoadedServerResult = Boolean(result);
   const pipCashTodayCents = result ? getDisplayedSpendableCashTodayCents(result) : undefined;
+  const protectedSavingsGoalMonthlyCents =
+    result?.savingsGoalMonthlyCents ??
+    result?.spendableCashToday?.savingsGoalMonthlyCents ??
+    0;
+  const showSavingsGoalMetricNote =
+    isSavingsGoalsClientEnabled() && protectedSavingsGoalMonthlyCents > 0;
   const [thread, setThread] = useState<ThreadItem[]>([]);
   const [chips, setChips] = useState<PromptChip[]>(() =>
     getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, result),
@@ -936,6 +943,11 @@ export function PipHome({
                     {formatTrustReceiptInline(trustReceipt)}
                   </p>
                 ) : null}
+                {showSavingsGoalMetricNote ? (
+                  <p className="pip-metric-receipt" data-testid="pip-savings-goal-note">
+                    Savings goals: {formatMoney(protectedSavingsGoalMonthlyCents)}/month kept out.
+                  </p>
+                ) : null}
               </>
             ) : null}
           </section>
@@ -1078,7 +1090,7 @@ export function PipHome({
     const payload = await response.json().catch(() => null);
 
     if (!response.ok) {
-      throw new Error(getErrorMessage(payload, "I couldn’t save that cushion yet. Please try again."));
+      throw new Error(getErrorMessage(payload, "I couldn’t save that amount yet. Please try again."));
     }
 
     window.setTimeout(() => window.location.reload(), 650);
@@ -1300,23 +1312,23 @@ function OnboardingIntro({
   onStartDevSignIn?: () => void;
   onSaveProtectedSavings: (amountCents: number) => Promise<void>;
 }) {
-  const [isSavingCushion, setIsSavingCushion] = useState(false);
-  const [cushionError, setCushionError] = useState("");
+  const [isSavingMonthlySavings, setIsSavingMonthlySavings] = useState(false);
+  const [monthlySavingsError, setMonthlySavingsError] = useState("");
 
-  async function saveDefaultCushion() {
-    if (isSavingCushion) {
+  async function saveDefaultMonthlySavings() {
+    if (isSavingMonthlySavings) {
       return;
     }
 
-    setIsSavingCushion(true);
-    setCushionError("");
+    setIsSavingMonthlySavings(true);
+    setMonthlySavingsError("");
 
     try {
       await onSaveProtectedSavings(20000);
     } catch (error) {
-      setCushionError(getSaveCushionErrorText(error));
+      setMonthlySavingsError(getSaveMonthlySavingsErrorText(error));
     } finally {
-      setIsSavingCushion(false);
+      setIsSavingMonthlySavings(false);
     }
   }
 
@@ -1325,24 +1337,24 @@ function OnboardingIntro({
       <div className="onboarding-step-panel" data-testid="agent-thread">
         <PipIntroScene
           priority
-          title="Set your savings cushion."
+          title="Choose monthly savings."
           className="onboarding-step-scene"
           actions={
             <button
               type="button"
               className="focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)] transition disabled:bg-ink/30"
-              disabled={isSavingCushion}
-              onClick={saveDefaultCushion}
+              disabled={isSavingMonthlySavings}
+              onClick={saveDefaultMonthlySavings}
             >
-              {isSavingCushion ? "Saving cushion..." : "Use $200 cushion"}
+              {isSavingMonthlySavings ? "Saving amount..." : "Save $200/month"}
             </button>
           }
           messageClassName="onboarding-intro-message"
         >
-          <p>I’ll keep this protected before I answer spending questions.</p>
-          {cushionError ? (
+          <p>I’ll keep this out of your daily spending number. Pip does not move money.</p>
+          {monthlySavingsError ? (
             <p className="mt-3 rounded-[10px] border border-red-200 bg-red-50/80 px-3 py-2 text-sm leading-6 text-red-800">
-              {cushionError}
+              {monthlySavingsError}
             </p>
           ) : null}
         </PipIntroScene>
@@ -1377,7 +1389,7 @@ function OnboardingIntro({
         }
         messageClassName="onboarding-intro-message"
       >
-        <p>First we’ll sign in. Then we’ll set your cushion and connect data.</p>
+        <p>First we’ll sign in. Then we’ll choose monthly savings and connect data.</p>
       </PipIntroScene>
     </div>
   );
@@ -1989,12 +2001,12 @@ function getErrorMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-function getSaveCushionErrorText(error: unknown): string {
+function getSaveMonthlySavingsErrorText(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
   }
 
-  return "I couldn’t save that cushion yet. Please try again.";
+  return "I couldn’t save that amount yet. Please try again.";
 }
 
 class AgentRequestError extends Error {

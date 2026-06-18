@@ -35,7 +35,7 @@ describe("prompt chips", () => {
     ]);
     expect(
       getOnboardingPromptChips({ status: "needs-consent", hasFinancialData: false }).map((chip) => chip.id),
-    ).toEqual(["why-savings-cushion"]);
+    ).toEqual(["why-monthly-savings"]);
     expect(
       getOnboardingPromptChips({ status: "ready", hasFinancialData: false }).map((chip) => chip.id),
     ).toEqual(["what-data-used", "why-connect-accounts"]);

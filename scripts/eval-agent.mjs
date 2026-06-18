@@ -17,6 +17,8 @@ const ALL_CARD_TYPES = [
   "spendable_cash_forecast",
   "missing_card_nudge",
   "trust_receipt",
+  "savings_goal_plan",
+  "savings_goals_summary",
   "insight_card",
   "guidance_card",
   "connect_account",
@@ -349,6 +351,11 @@ const promiseCapabilities = [
     cards: ["trust_receipt"],
   },
   {
+    label: "savings goals",
+    pattern: /\b(?:savings? goals?|save for|save toward|save towards|trip|vacation|big purchase)\b/i,
+    cards: ["savings_goal_plan", "savings_goals_summary"],
+  },
+  {
     label: "recurring",
     pattern: /\b(?:recurring|subscriptions?|coming up|repeat(?:ing)?|bills? coming up|upcoming bills?)\b/i,
     cards: ["recurring_activity", "spendable_cash_forecast"],
@@ -493,7 +500,7 @@ function isSupportedDisplayChip(text) {
     /\b(?:pattern assumptions?|assumptions behind this number)\b/i.test(text) ||
     /\b(?:trust receipt|receipt|reliable|accurate|current|fresh|up to date)\b/i.test(text) ||
     /\b(?:missing card|missing data|data quality|pending transactions?)\b/i.test(text) ||
-    /\b(?:connect data|get signed up|google|protected savings|delete data|refresh)\b/i.test(text)
+    /\b(?:connect data|get signed up|google|monthly savings|protected savings|delete data|refresh)\b/i.test(text)
   );
 }
 

@@ -232,8 +232,9 @@ describe("PipHome", () => {
     );
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
-    expect(visibleText).toContain("Set your savings cushion.");
-    expect(visibleText).toContain("Use $200 cushion");
+    expect(visibleText).toContain("Choose monthly savings.");
+    expect(visibleText).toContain("Save $200/month");
+    expect(visibleText).toContain("Pip does not move money.");
     expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
     expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(0);
     expect(markup).toContain("pip-character-medium");

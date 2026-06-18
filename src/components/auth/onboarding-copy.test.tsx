@@ -16,14 +16,15 @@ describe("onboarding copy", () => {
     expect(markup).toContain("/brand/pip-character/v001/medium/onboarding-wave.png");
   });
 
-  it("explains consent, server-side provider tokens, no money movement, and protected savings", () => {
+  it("explains consent, server-side provider tokens, no money movement, and monthly savings", () => {
     const markup = renderToStaticMarkup(<ConsentGate email="tester@example.com" />);
 
     expect(markup).toContain("provider tokens on the server");
     expect(markup).toContain("never stores bank credentials or moves money");
     expect(markup).toContain("Connecting checking accounts and cards makes Spendable Cash Today more accurate");
-    expect(markup).toContain("Savings cushion");
-    expect(markup).toContain("Use $200 cushion");
+    expect(markup).toContain("Monthly savings");
+    expect(markup).toContain("Save $200/month");
+    expect(markup).toContain("Pip does not move money");
     expect(markup).toContain("pip-character-medium");
     expect(markup).toContain("/brand/pip-character/v001/medium/onboarding-wave.png");
   });

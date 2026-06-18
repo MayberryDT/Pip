@@ -8,9 +8,9 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await page.waitForLoadState("networkidle");
 
   await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
-  await expect(page.getByRole("button", { name: "What does my $104 mean?" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Why is it $104 today?" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Teach me a money basic" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "What pattern are you using?" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Check if the data looks right" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show the biggest drivers" })).toBeVisible();
   await expect(page.getByText("Why this number?")).toHaveCount(0);
   await expect(page.getByText("Can I spend $50?")).toHaveCount(0);
   await expect(page.getByText("What changed?")).toHaveCount(0);
@@ -125,6 +125,19 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByText("I see a payment to Capital One")).toHaveCount(2);
   await expect(page.getByRole("heading", { name: "Math breakdown" })).toBeVisible();
   await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
+
+  await input.fill("I want to save for a trip that costs $5,000");
+  const [goalResponse] = await Promise.all([
+    waitForAgentResponse(page),
+    page.getByRole("button", { name: "Send" }).click(),
+  ]);
+  const goalJson = await goalResponse.json();
+
+  expect(goalJson.audit.toolNames).toEqual(["create_savings_goal"]);
+  await expect(page.getByRole("heading", { name: "Savings goal" })).toBeVisible();
+  await expect(page.getByText("$5,000 left for Trip.")).toBeVisible();
+  await expect(page.getByText("Tracked only. Not held out of today's number.")).toBeVisible();
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 });
 
 test("mobile viewport keeps the one-number layout from overlapping or overflowing", async ({
@@ -223,13 +236,13 @@ test("chat send feels responsive while the agent is thinking", async ({ page }) 
   await page.getByRole("button", { name: "Send" }).click();
 
   await expect(page.getByText("hi", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Ask Pip")).toBeFocused();
   await expect(page.getByLabel("Ask Pip")).toHaveValue("");
+  await expect(page.getByLabel("Ask Pip")).toBeEnabled();
   await expect(page.getByTestId("agent-thinking")).toBeVisible();
   await expectHeaderToBeCompact(page);
   await responsePromise;
   await expect(page.getByTestId("agent-thinking")).toBeHidden();
-  await expect(page.getByLabel("Ask Pip")).toBeFocused();
+  await expect(page.getByLabel("Ask Pip")).toBeEnabled();
   await expect(page.getByText("Hi. Ask me about Spendable Cash Today or setup.")).toBeVisible();
 });
 
@@ -244,12 +257,10 @@ test("guest onboarding starts Google OAuth from the Pip screen", async ({ page }
   await page.goto("/app?onboarding=guest");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByText("Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today.")).toBeVisible();
-  await expect(page.getByTestId("pip-cash-number")).toHaveText("$--");
-  await expect(page.getByLabel("Ask Pip")).toHaveAttribute(
-    "placeholder",
-    "Ask Pip anything...",
-  );
+  await expect(page.getByText("Hi, I’m Pip. I’ll help you find what’s okay to spend today.")).toBeVisible();
+  await expect(page.getByText("First we’ll sign in. Then we’ll choose monthly savings and connect data.")).toBeVisible();
+  await expect(page.getByTestId("pip-cash-number")).toHaveCount(0);
+  await expect(page.getByTestId("agent-input")).toHaveCount(0);
 
   await expect(page.getByRole("link", { name: "Continue with Google" })).toHaveAttribute(
     "href",
@@ -271,21 +282,20 @@ test("consent onboarding stays on the Pip screen before loading the number", asy
   await page.goto("/app?onboarding=consent");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByText("Let’s set aside a little cushion first.")).toBeVisible();
-  await expect(page.getByText("Savings cushion")).toBeVisible();
-  await expect(page.getByTestId("pip-cash-number")).toHaveText("$--");
+  await expect(page.getByText("Choose monthly savings.")).toBeVisible();
+  await expect(page.getByText("Pip does not move money.")).toBeVisible();
+  await expect(page.getByTestId("pip-cash-number")).toHaveCount(0);
   await expect(page.getByTestId("agent-input")).toHaveCount(0);
 
   const responsePromise = page.waitForResponse((response) =>
     response.url().includes("/api/auth/consent") && response.request().method() === "POST",
   );
-  await page.getByRole("button", { name: "$250" }).click();
-  await page.getByRole("button", { name: "Use $250 cushion" }).click();
+  await page.getByRole("button", { name: "Save $200/month" }).click();
 
   const response = await responsePromise;
   expect(response.ok()).toBe(true);
   expect(consentPayload).toMatchObject({
-    protectedSavingsMonthlyCents: 25000,
+    protectedSavingsMonthlyCents: 20000,
   });
 });
 
@@ -294,24 +304,23 @@ test("dev test onboarding walks a fresh local user through setup", async ({ page
   await page.goto("/app?onboarding=test");
   await page.waitForLoadState("networkidle");
 
-  await expect(page.getByText("Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today.")).toBeVisible();
-  await expect(page.getByTestId("pip-cash-number")).toHaveText("$--");
+  await expect(page.getByText("Hi, I’m Pip. I’ll help you find what’s okay to spend today.")).toBeVisible();
+  await expect(page.getByTestId("pip-cash-number")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Continue with Google" })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Continue with Google" }).click();
-  await expect(page.getByText("Let’s set aside a little cushion first.")).toBeVisible();
+  await expect(page.getByText("Choose monthly savings.")).toBeVisible();
   await expect(page.getByTestId("agent-input")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "$250" }).click();
-  await page.getByRole("button", { name: "Use $250 cushion" }).click();
-  await expect(
-    page.getByText("Almost there. Connect your account data and I’ll start showing your spendable cash."),
-  ).toBeVisible();
-  await expect(page.getByTestId("pip-cash-number")).toHaveText("$--");
+  await page.getByRole("button", { name: "Save $200/month" }).click();
+  await expect(page.getByText("Connect your account data.")).toBeVisible();
+  await expect(page.getByText("I’ll open Plaid, then we’ll move into chat.")).toBeVisible();
+  await expect(page.getByTestId("pip-cash-number")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Connect data" }).click();
   await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
-  await expect(page.getByText("Hi, I’m Pip. I’ll show what’s actually spendable today.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Manage accounts" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "What pattern are you using?" })).toBeVisible();
 });
 
 test("connect data does not leave the chat stuck while Plaid is loading", async ({ page }) => {
@@ -383,9 +392,8 @@ test("connect data does not leave the chat stuck while Plaid is loading", async 
   await page.goto("/app?onboarding=ready");
   await page.waitForLoadState("networkidle");
 
-  await expect(
-    page.getByText("Almost there. Connect your account data and I’ll start showing your spendable cash."),
-  ).toBeVisible();
+  await expect(page.getByText("Connect your account data.")).toBeVisible();
+  await expect(page.getByText("I’ll open Plaid, then we’ll move into chat.")).toBeVisible();
   await page.getByRole("button", { name: "Connect data" }).click();
 
   await expect(page.getByText("I’ll open Plaid now.")).toBeVisible();
@@ -514,9 +522,8 @@ test("connect data completes Plaid exchange and syncs back to the same Pip scree
   await page.goto("/app?onboarding=ready");
   await page.waitForLoadState("networkidle");
 
-  await expect(
-    page.getByText("Almost there. Connect your account data and I’ll start showing your spendable cash."),
-  ).toBeVisible();
+  await expect(page.getByText("Connect your account data.")).toBeVisible();
+  await expect(page.getByText("I’ll open Plaid, then we’ll move into chat.")).toBeVisible();
   await page.getByRole("button", { name: "Connect data" }).click();
 
   await expect(page.getByText("I’ll open Plaid now.")).toBeVisible();
@@ -549,7 +556,7 @@ test("connect data completes Plaid exchange and syncs back to the same Pip scree
   });
 });
 
-test("live data loading does not wipe same-screen onboarding chat cards", async ({ page }) => {
+test("live data loading keeps onboarding focused until the number is ready", async ({ page }) => {
   let releasePipCash: (() => Promise<void>) | undefined;
 
   await page.route("**/api/agent", async (route) => {
@@ -610,10 +617,9 @@ test("live data loading does not wipe same-screen onboarding chat cards", async 
   await page.goto("/app?onboarding=ready");
   await page.waitForLoadState("domcontentloaded");
 
-  await page.getByLabel("Ask Pip").fill("Tell me how Pip works");
-  await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("I turn your connected account activity")).toBeVisible();
-  await expect(page.getByTestId("pip-cash-number")).toHaveText("$--");
+  await expect(page.getByText("I’m checking your connected data.")).toBeVisible();
+  await expect(page.getByText("If I do not find data, connect data is next.")).toBeVisible();
+  await expect(page.getByTestId("agent-input")).toHaveCount(0);
 
   await expect
     .poll(() => Boolean(releasePipCash), {
@@ -624,8 +630,7 @@ test("live data loading does not wipe same-screen onboarding chat cards", async 
   await releasePipCash?.();
 
   await expect(page.getByTestId("pip-cash-number")).toHaveText("$78");
-  await expect(page.getByText("Tell me how Pip works", { exact: true })).toBeVisible();
-  await expect(page.getByText("I turn your connected account activity")).toBeVisible();
+  await expect(page.getByLabel("Ask Pip")).toBeVisible();
 });
 
 function waitForAgentResponse(page: Page) {
@@ -909,6 +914,30 @@ function createMockAgentResponse(
     });
   }
 
+  if (/\bsave\b.{0,32}\b(for|toward|towards)\b|\bsavings? goals?\b|\btrip\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized)) {
+    const targetAmountCents = extractTestMoneyCents(userMessage) ?? 500000;
+
+    return baseAgentResponse({
+      message: "I set up the savings goal plan.",
+      usedTools: ["create_savings_goal"],
+      responseMode: "show_card",
+      cards: [
+        {
+          type: "savings_goal_plan",
+          title: "Savings goal",
+          goalId: "goal-trip",
+          name: "Trip",
+          targetAmountCents,
+          currentAmountCents: 0,
+          remainingCents: targetAmountCents,
+          monthlyContributionCents: 0,
+          includeInSpendableCash: false,
+          summary: `${formatTestMoney(targetAmountCents)} left for Trip. Tracked only for now.`,
+        },
+      ],
+    });
+  }
+
   const amountMatch = userMessage.match(/\$(\d+)/);
   if (amountMatch) {
     const amountCents = Number(amountMatch[1]) * 100;
@@ -972,7 +1001,17 @@ function formatTestMoney(amountCents: number) {
   const sign = amountCents < 0 ? "-" : "";
   const absoluteDollars = Math.abs(Math.round(amountCents / 100));
 
-  return `${sign}$${absoluteDollars}`;
+  return `${sign}$${absoluteDollars.toLocaleString("en-US")}`;
+}
+
+function extractTestMoneyCents(message: string): number | null {
+  const match = message.match(/\$\s*(\d{1,6}(?:,\d{3})*)/);
+
+  if (!match) {
+    return null;
+  }
+
+  return Number(match[1].replaceAll(",", "")) * 100;
 }
 
 async function expectNoDocumentHorizontalOverflow(page: Page) {

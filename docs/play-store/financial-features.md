@@ -7,7 +7,7 @@ Status: conservative declaration notes for Play Console. Final answers must matc
 Pip should be positioned as a finance-adjacent support service:
 
 ```txt
-Pip is a read-only daily spending companion. It helps users understand a simple Spendable Cash Today signal based on connected account activity, upcoming bills, and a user-controlled savings cushion. Pip does not hold funds, move money, issue loans, make credit decisions, provide investment advice, or act as a bank.
+Pip is a read-only daily spending companion. It helps users understand a simple Spendable Cash Today signal based on connected account activity, upcoming bills, and user-controlled monthly savings. Pip does not hold funds, move money, issue loans, make credit decisions, provide investment advice, or act as a bank.
 ```
 
 Recommended Financial features declaration:
@@ -45,7 +45,7 @@ Use language like:
 - Decision support.
 - Connected account activity.
 - Upcoming bills.
-- Protected cushion.
+- Monthly savings kept out of Spendable Cash Today.
 - No money movement.
 - Not a bank.
 - No loans or credit decisions.
@@ -77,7 +77,7 @@ A calm daily spending signal from your connected account activity.
 Long-description core copy:
 
 ```txt
-Pip shows Spendable Cash Today: one simple number that helps you understand today's spending room based on connected account activity, upcoming bills, and your savings cushion.
+Pip shows Spendable Cash Today: one simple number that helps you understand today's spending room based on connected account activity, upcoming bills, and your monthly savings.
 
 Pip is read-only. It does not move money, hold funds, initiate transfers, issue loans, make credit decisions, or provide investment, tax, legal, or financial advice.
 ```

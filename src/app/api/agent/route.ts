@@ -19,6 +19,12 @@ import {
   upsertAccountProtectedSavingsPreference,
   upsertUserSettings,
 } from "@/lib/data/financial-repository";
+import {
+  createSavingsGoalForUser,
+  listSavingsGoalsForUser,
+  loadSavingsGoalForUser,
+  updateSavingsGoalForUser,
+} from "@/lib/data/savings-goals-repository";
 import { runManualSync, ManualSyncRateLimitError } from "@/lib/data/manual-sync";
 import {
   getAgentProductEventNames,
@@ -38,6 +44,17 @@ import {
   getDisplayedSpendableCashTodayCents,
   getSpendableCashTodayState,
 } from "@/lib/pip-cash/spendable-cash-today";
+import {
+  shouldStalePipCashForGoalChange,
+  toSavingsGoalPlanResponse,
+  validateSavingsGoalInput,
+} from "@/app/api/savings-goals/route-helpers";
+import {
+  buildSavingsGoalPlanCard,
+  buildSavingsGoalsSummaryCard,
+} from "@/lib/savings-goals/cards";
+import { isSavingsGoalsEnabled } from "@/lib/savings-goals/feature-flags";
+import type { SavingsGoalUpdate } from "@/lib/savings-goals/types";
 import type { FakeDataScenario } from "@/lib/fake-data";
 import type {
   ConnectSession,
@@ -618,6 +635,216 @@ function createAgentActions(input: {
         },
       };
     },
+    async createSavingsGoal(goalInput) {
+      if (!isSavingsGoalsEnabled()) {
+        return {
+          ok: false,
+          status: "savings_goals_disabled",
+          message: "Savings goals are not available yet.",
+        };
+      }
+
+      const { supabase, userId } = input.eventContext;
+      const validationError = validateSavingsGoalInput(goalInput);
+
+      if (validationError) {
+        return {
+          ok: false,
+          status: "invalid_savings_goal",
+          message: validationError,
+        };
+      }
+
+      const goal = await createSavingsGoalForUser(supabase, userId, goalInput);
+      const shouldStale = shouldStalePipCashForGoalChange(null, goal);
+
+      if (shouldStale) {
+        await markPipCashSnapshotsStaleForUser(supabase, userId);
+      }
+
+      await recordProductEventSafely(supabase, userId, "savings_goal_created", {
+        goalId: goal.id,
+        targetAmountCents: goal.targetAmountCents,
+        monthlyContributionCents: goal.monthlyContributionCents,
+        includeInSpendableCash: goal.includeInSpendableCash,
+      });
+
+      if (goal.includeInSpendableCash) {
+        await recordProductEventSafely(
+          supabase,
+          userId,
+          "savings_goal_spendable_protection_enabled",
+          {
+            goalId: goal.id,
+            monthlyContributionCents: goal.monthlyContributionCents,
+          },
+        );
+      }
+
+      return {
+        ok: true,
+        status: "savings_goal_created",
+        cards: [buildSavingsGoalPlanCard(toSavingsGoalPlanResponse(goal))],
+        ...(shouldStale
+          ? {
+              clientAction: {
+                type: "reload" as const,
+              },
+            }
+          : {}),
+      };
+    },
+    async listSavingsGoals() {
+      if (!isSavingsGoalsEnabled()) {
+        return {
+          ok: false,
+          status: "savings_goals_disabled",
+          message: "Savings goals are not available yet.",
+        };
+      }
+
+      const { supabase, userId } = input.eventContext;
+      const goals = await listSavingsGoalsForUser(supabase, userId);
+      const plans = goals.map(toSavingsGoalPlanResponse);
+
+      return {
+        ok: true,
+        status: "savings_goals_loaded",
+        cards: [buildSavingsGoalsSummaryCard(plans)],
+      };
+    },
+    async updateSavingsGoal(goalInput) {
+      if (!isSavingsGoalsEnabled()) {
+        return {
+          ok: false,
+          status: "savings_goals_disabled",
+          message: "Savings goals are not available yet.",
+        };
+      }
+
+      const { goalId, name, ...update } = goalInput;
+      const { supabase, userId } = input.eventContext;
+      const resolved = await resolveSavingsGoalTarget(supabase, {
+        userId,
+        goalId,
+        name,
+        allowSingleDefault: false,
+      });
+
+      if ("ok" in resolved) {
+        return resolved;
+      }
+
+      const existing = await loadSavingsGoalForUser(supabase, userId, resolved.goalId);
+      const validationError = validateSavingsGoalInput(update, existing ?? undefined);
+
+      if (validationError) {
+        return {
+          ok: false,
+          status: "invalid_savings_goal",
+          message: validationError,
+        };
+      }
+
+      const goal = await updateSavingsGoalForUser(supabase, userId, resolved.goalId, update);
+      const shouldStale = shouldStalePipCashForGoalChange(existing, goal);
+
+      if (shouldStale) {
+        await markPipCashSnapshotsStaleForUser(supabase, userId);
+      }
+
+      await recordProductEventSafely(supabase, userId, "savings_goal_updated", {
+        goalId: goal.id,
+        targetAmountCents: goal.targetAmountCents,
+        monthlyContributionCents: goal.monthlyContributionCents,
+        includeInSpendableCash: goal.includeInSpendableCash,
+        status: goal.status,
+      });
+
+      return {
+        ok: true,
+        status: "savings_goal_updated",
+        cards: [buildSavingsGoalPlanCard(toSavingsGoalPlanResponse(goal))],
+        ...(shouldStale
+          ? {
+              clientAction: {
+                type: "reload" as const,
+              },
+            }
+          : {}),
+      };
+    },
+    async setSavingsGoalProtection(goalInput) {
+      if (!isSavingsGoalsEnabled()) {
+        return {
+          ok: false,
+          status: "savings_goals_disabled",
+          message: "Savings goals are not available yet.",
+        };
+      }
+
+      const { goalId, name, includeInSpendableCash, monthlyContributionCents } = goalInput;
+      const { supabase, userId } = input.eventContext;
+      const resolved = await resolveSavingsGoalTarget(supabase, {
+        userId,
+        goalId,
+        name,
+        allowSingleDefault: true,
+      });
+
+      if ("ok" in resolved) {
+        return resolved;
+      }
+
+      const existing = await loadSavingsGoalForUser(supabase, userId, resolved.goalId);
+      const update: SavingsGoalUpdate = {
+        includeInSpendableCash,
+        ...(monthlyContributionCents === undefined ? {} : { monthlyContributionCents }),
+      };
+      const validationError = validateSavingsGoalInput(update, existing ?? undefined);
+
+      if (validationError) {
+        return {
+          ok: false,
+          status: "invalid_savings_goal",
+          message: validationError,
+        };
+      }
+
+      const goal = await updateSavingsGoalForUser(supabase, userId, resolved.goalId, update);
+      const shouldStale = shouldStalePipCashForGoalChange(existing, goal);
+
+      if (shouldStale) {
+        await markPipCashSnapshotsStaleForUser(supabase, userId);
+      }
+
+      await recordProductEventSafely(
+        supabase,
+        userId,
+        includeInSpendableCash
+          ? "savings_goal_spendable_protection_enabled"
+          : "savings_goal_spendable_protection_disabled",
+        {
+          goalId: goal.id,
+          monthlyContributionCents: goal.monthlyContributionCents,
+        },
+      );
+
+      return {
+        ok: true,
+        status: includeInSpendableCash
+          ? "savings_goal_protection_enabled"
+          : "savings_goal_protection_disabled",
+        cards: [buildSavingsGoalPlanCard(toSavingsGoalPlanResponse(goal))],
+        ...(shouldStale
+          ? {
+              clientAction: {
+                type: "reload" as const,
+              },
+            }
+          : {}),
+      };
+    },
     async requestRemoveInstitutionConfirmation({ institutionId, institutionName }) {
       const { supabase, userId } = input.eventContext;
       const resolved = await resolveInstitutionTarget(supabase, {
@@ -975,6 +1202,70 @@ function buildAccountConnectionActions(
   });
 
   return actions;
+}
+
+type SavingsGoalResolution =
+  | {
+      needsSelection?: false;
+      goalId: string;
+    }
+  | PipAgentActionResult;
+
+async function resolveSavingsGoalTarget(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    goalId?: string;
+    name?: string;
+    allowSingleDefault?: boolean;
+  },
+): Promise<SavingsGoalResolution> {
+  const goals = await listSavingsGoalsForUser(supabase, input.userId);
+  const visibleGoals = goals.filter((goal) => goal.status !== "archived");
+
+  if (input.goalId) {
+    const match = visibleGoals.find((goal) => goal.id === input.goalId);
+
+    if (match) {
+      return {
+        goalId: match.id,
+      };
+    }
+  }
+
+  const target = normalizeTarget(input.name);
+
+  if (target) {
+    const matches = visibleGoals.filter((goal) => normalizeTarget(goal.name).includes(target));
+
+    if (matches.length === 1) {
+      return {
+        goalId: matches[0].id,
+      };
+    }
+
+    return {
+      ok: false,
+      status: matches.length > 1 ? "ambiguous_savings_goal" : "savings_goal_not_found",
+      message: matches.length > 1
+        ? "More than one savings goal matched that name."
+        : "I could not find that savings goal.",
+      cards: [buildSavingsGoalsSummaryCard(goals.map(toSavingsGoalPlanResponse))],
+    };
+  }
+
+  if (input.allowSingleDefault && visibleGoals.length === 1) {
+    return {
+      goalId: visibleGoals[0].id,
+    };
+  }
+
+  return {
+    ok: false,
+    status: "savings_goal_choice_required",
+    message: "Choose which savings goal to update.",
+    cards: [buildSavingsGoalsSummaryCard(goals.map(toSavingsGoalPlanResponse))],
+  };
 }
 
 type InstitutionResolution =

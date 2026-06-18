@@ -32,7 +32,7 @@ export const pipPricingPlans = [pipPricing.weekly, pipPricing.monthly] as const;
 export const pipPricingIncludedFeatures = [
   "Spendable Cash Today",
   "Read-only account connection",
-  "Savings cushion",
+  "Monthly savings",
   "Ask Pip why the number changed",
   "Purchase checks",
   "Account management",

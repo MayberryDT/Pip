@@ -39,10 +39,45 @@ describe("buildSpendableTrustReceipt", () => {
       "freshness",
       "accounts",
       "time-horizon",
+      "monthly-savings",
       "pending",
       "confidence",
     ]);
+    expect(receipt.rows.find((row) => row.id === "monthly-savings")).toMatchObject({
+      label: "Monthly savings",
+    });
     expect(formatTrustReceiptInline(receipt)).toMatch(/known limit|no active warning/);
+  });
+
+  it("shows protected savings goals separately from base monthly savings", () => {
+    const result = calculatePipCash({
+      ...fakeSnapshot,
+      savingsGoals: [
+        {
+          id: "goal-1",
+          userId: "user-1",
+          name: "Trip",
+          targetAmountCents: 500000,
+          targetDate: "2027-06-18",
+          startingAmountCents: 0,
+          currentAmountCents: 100000,
+          monthlyContributionCents: 35000,
+          includeInSpendableCash: true,
+          status: "active",
+          createdAt: "2026-06-18T00:00:00.000Z",
+          updatedAt: "2026-06-18T00:00:00.000Z",
+        },
+      ],
+    });
+    const receipt = buildSpendableTrustReceipt({ result });
+
+    expect(receipt.rows.find((row) => row.id === "monthly-savings")).toMatchObject({
+      label: "Monthly savings",
+    });
+    expect(receipt.rows.find((row) => row.id === "savings-goals")).toMatchObject({
+      label: "Savings goals",
+      value: "-$350",
+    });
   });
 
   it("surfaces stale connections as known limits", () => {
