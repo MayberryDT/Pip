@@ -22,6 +22,10 @@ export function isAndroidPaymentRestrictedPath(pathname: string): boolean {
   return androidPaymentRestrictedPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
 }
 
+export function isAndroidMarketingRestrictedPath(pathname: string): boolean {
+  return androidMarketingRestrictedPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+}
+
 const androidPaymentRestrictedPaths = [
   "/pricing",
   "/checkout",
@@ -29,4 +33,12 @@ const androidPaymentRestrictedPaths = [
   "/subscribe",
   "/subscription",
   "/upgrade",
+] as const;
+
+const androidMarketingRestrictedPaths = [
+  "/",
+  "/how-it-works",
+  "/how-the-number-works",
+  "/blog",
+  "/llms.txt",
 ] as const;

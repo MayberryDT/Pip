@@ -31,8 +31,7 @@ export default function SupportPage() {
         <p className="mt-3">
           Use Pip on the web from the App link in the site header. Native App Store and Google Play
           links can be added when those listings are ready. The Android Play test build is
-          consumption-only and does not include purchase, checkout, upgrade, or external-payment
-          prompts.
+          consumption-only and does not include purchase or external-payment prompts.
         </p>
       </section>
 

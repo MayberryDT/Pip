@@ -25,6 +25,12 @@ import {
 import {
   composeAgentVisibleAnswer,
 } from "@/lib/agent/answer-composer";
+import type { DeterministicAgentToolName } from "@/lib/agent/intent-catalog";
+import {
+  getIntentRouterMode,
+  isCatalogSupportedPrompt as isCatalogSupportedCardPrompt,
+  resolveIntentRoute,
+} from "@/lib/agent/intent-router";
 import {
   planPromptChips,
   type PromptChipPlan,
@@ -42,6 +48,7 @@ import {
 import { buildSpendableTrustReceipt } from "@/lib/pip-cash/trust-receipt";
 import type { SavingsGoalInput, SavingsGoalUpdate } from "@/lib/savings-goals/types";
 import { formatMoney, formatMoneyWithCents } from "@/lib/money";
+import type { PipPlatform } from "@/lib/platform/android-shell";
 import type { PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
 import { composeTrustPolicyAnswer, pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 import type { FinancialSnapshot } from "@/lib/types";
@@ -151,6 +158,7 @@ export type RunAiAgentInput = {
   history?: AgentHistoryItem[];
   conversationState?: AgentConversationState;
   syncStatus?: SyncStatus | null;
+  platform?: PipPlatform;
   onboardingState?: PipAgentOnboardingState;
   selectedPromptChipId?: string;
   actions?: PipAgentActions;
@@ -169,6 +177,7 @@ type PipAgentContext = {
   requestKind: "chat" | "prompt_chips";
   snapshot?: FinancialSnapshot;
   syncStatus?: SyncStatus | null;
+  platform: PipPlatform;
   onboardingState: PipAgentOnboardingState;
   actions?: PipAgentActions;
   conversationState: Required<AgentConversationState>;
@@ -182,46 +191,6 @@ type PipAgentContext = {
   fallbackFinalOutput?: boolean;
   clientAction?: AgentClientAction;
 };
-
-type DeterministicAgentToolName =
-  | "get_onboarding_state"
-  | "start_google_oauth"
-  | "save_protected_savings"
-  | "start_plaid_link"
-  | "get_connected_accounts"
-  | "start_new_account_connection"
-  | "repair_account_connection"
-  | "start_account_selection_update"
-  | "set_account_inclusion"
-  | "set_account_protected_savings"
-  | "create_savings_goal"
-  | "list_savings_goals"
-  | "update_savings_goal"
-  | "set_savings_goal_protection"
-  | "request_remove_institution_confirmation"
-  | "remove_institution"
-  | "refresh_financial_data"
-  | "request_delete_data_confirmation"
-  | "delete_user_data"
-  | "get_pip_cash_snapshot"
-  | "get_financial_guidance_context"
-  | "get_pip_cash_drivers"
-  | "get_spendable_cash_definition"
-  | "get_pattern_assumptions"
-  | "get_recent_spending_pressure"
-  | "get_spending_opportunity"
-  | "get_spending_breakdown"
-  | "get_recurring_activity"
-  | "forecast_spendable_cash"
-  | "simulate_purchase"
-  | "get_recent_transactions"
-  | "get_true_balances"
-  | "get_data_quality"
-  | "get_sync_status"
-  | "get_trust_receipt"
-  | "get_trust_policy"
-  | "get_pip_cash_math"
-  | "compose_insight_card";
 
 type ForcedAgentTool = {
   toolName: DeterministicAgentToolName;
@@ -405,7 +374,9 @@ function createDeterministicTrustResponse(input: RunAiAgentInput): AgentResponse
   const forcedTool = getForcedAgentTool(input);
 
   if (forcedTool?.toolName === "get_trust_policy") {
-    const answer = composeTrustPolicyAnswer(input.message);
+    const answer = composeTrustPolicyAnswer(input.message, {
+      platform: input.platform,
+    });
 
     return agentResponseSchema.parse({
       message: answer.message,
@@ -469,6 +440,39 @@ function createDeterministicTrustPromptChips(input: RunAiAgentInput): PromptChip
 }
 
 function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined {
+  const promptChipTool = getForcedPromptChipTool(
+    input.selectedPromptChipId,
+    input.onboardingState,
+    input.syncStatus,
+  );
+
+  if (promptChipTool) {
+    return promptChipTool;
+  }
+
+  if (getIntentRouterMode() !== "legacy") {
+    const decision = resolveIntentRoute({
+      message: input.message,
+      history: input.history,
+      shownCards: input.conversationState?.shownCards,
+      lastToolNames: input.conversationState?.lastToolNames,
+      selectedPromptChipId: input.selectedPromptChipId,
+      hasSnapshot: Boolean(input.snapshot) || !input.onboardingState,
+    });
+
+    if (decision.kind === "route") {
+      return {
+        toolName: decision.toolName,
+        args: decision.args,
+        requireCard: decision.requireCard,
+      };
+    }
+  }
+
+  return getLegacyForcedAgentTool(input);
+}
+
+function getLegacyForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined {
   const message = input.message.trim();
   const normalized = normalizePrompt(message);
   const amountCents = extractExplicitPurchaseAmountCents(message);
@@ -1926,7 +1930,9 @@ function createPipTools() {
       execute(_input, runContext) {
         const context = getToolContext(runContext);
         recordTool(context, "get_trust_policy");
-        const answer = composeTrustPolicyAnswer(context.inputMessage);
+        const answer = composeTrustPolicyAnswer(context.inputMessage, {
+          platform: context.platform,
+        });
 
         return {
           answer,
@@ -2191,6 +2197,7 @@ function createPipContext(
     requestKind: input.requestKind ?? "chat",
     snapshot,
     syncStatus: input.syncStatus ?? null,
+    platform: input.platform ?? "web",
     onboardingState: {
       ...onboardingState,
       hasFinancialData: Boolean(snapshot),
@@ -2409,6 +2416,7 @@ function buildAgentResponse(
       syncStatus: context.syncStatus,
       onboardingState: context.onboardingState,
     },
+    platform: context.platform,
     cards,
     usedTools,
     selectedPromptChipId: input.selectedPromptChipId,
@@ -3217,6 +3225,10 @@ function hasPromptChipDisplayVerb(normalized: string): boolean {
 }
 
 function isSupportedCardPrompt(normalized: string): boolean {
+  if (isCatalogSupportedCardPrompt(normalized)) {
+    return true;
+  }
+
   return (
     isExplicitForecastPrompt(normalized) ||
     isExplicitRecurringPrompt(normalized) ||
@@ -4160,6 +4172,7 @@ function isTrustPolicyPrompt(normalized: string): boolean {
     /\b(ai provider|ai model|openai|chatgpt|llm|train on|training data|model training|does ai|ai calculate|ai see|ai use)\b/.test(normalized) ||
     /\b(move (?:my |our |your )?money|transfer (?:my |our |your )?money|withdraw|make payments?|pay bills?|send money|take money|debit my account)\b/.test(normalized) ||
     /\b(security|privacy|sell my data|sell data|advertising|subprocessors?|data retention|retention|delete my data|delete data)\b/.test(normalized) ||
+    /\b(how much|what|price|pricing|cost)\b.{0,24}\bpip\b|\bpip\b.{0,24}\b(price|pricing|cost)\b/.test(normalized) ||
     /\b(financial advice|advisor|guarantee|guaranteed|legal entity|who operates|refund|trial|cancel subscription|subscription (?:billing|price|pricing|refund|trial|cancel|cancellation))\b/.test(normalized)
   );
 }
@@ -4405,8 +4418,13 @@ function extractExactRemoveConfirmationTarget(message: string): string | null {
 }
 
 function isConnectedAccountsPrompt(normalized: string): boolean {
+  if (isExplicitBalancesPrompt(normalized)) {
+    return false;
+  }
+
   return (
-    /\b(show|list|what|which)\b.{0,30}\b(connected )?(accounts?|banks?|cards?|institutions?)\b/.test(normalized) ||
+    /\b(show|list|what|which)\b.{0,40}\b(connected|linked|selected)\s+(accounts?|banks?|cards?|institutions?)\b/.test(normalized) ||
+    /\b(what|which)\b.{0,40}\baccounts?\b.{0,24}\b(connected|linked|selected|used)\b/.test(normalized) ||
     /\bwhat is pip using\b/.test(normalized) ||
     /\bwhat accounts affect today'?s number\b/.test(normalized) ||
     /\bwhich accounts are used\b/.test(normalized)
@@ -4548,7 +4566,31 @@ function isExplicitTransactionsPrompt(normalized: string): boolean {
 function isExplicitBalancesPrompt(normalized: string): boolean {
   return (
     /^(show( me| my)? )?((true|real|actual|account) )?balances?$/.test(normalized) ||
-    /^what are my (true|real|actual|account) balances?$/.test(normalized)
+    /^what are my (true|real|actual|account) balances?$/.test(normalized) ||
+    isNaturalAccountBalancePrompt(normalized)
+  );
+}
+
+function isNaturalAccountBalancePrompt(normalized: string): boolean {
+  if (!/\bbalances?\b/.test(normalized)) {
+    return false;
+  }
+
+  if (/\bbalance transfer\b/.test(normalized)) {
+    return false;
+  }
+
+  if (/\b(connected|linked|selected|using|used|count|counts|affect|add|connect|link|repair|reconnect|fix|remove|disconnect|unlink|institution)\b/.test(normalized)) {
+    return false;
+  }
+
+  return (
+    /\b(account|accounts|bank|banks|checking|savings|available|current|true|real|actual)\b.{0,48}\bbalances?\b/.test(normalized) ||
+    /\bbalances?\b.{0,48}\b(account|accounts|bank|banks|checking|savings|available|current)\b/.test(normalized) ||
+    /\bwhat(?:'s| is)?\s+my\s+balances?\b/.test(normalized) ||
+    /\bshow\b.{0,24}\bmy\b.{0,24}\bbalances?\b/.test(normalized) ||
+    /\bhow much\b.{0,48}\b(have|checking|savings|account|bank)\b/.test(normalized) ||
+    /\b(can'?t|cant|cannot)\b.{0,48}\bshow\b.{0,48}\bbalances?\b/.test(normalized)
   );
 }
 
@@ -4818,6 +4860,8 @@ function explicitlyRequestsTransactions(message: string): boolean {
   return (
     /\b(transactions?|charges?|activity)\b/.test(normalized) ||
     /\b(recent|latest|show|list)\b.*\b(purchases?|spending|spend)\b/.test(normalized) ||
+    /\bwhat did i (?:buy|spend)\b/.test(normalized) ||
+    /\b(?:buy|bought|spend|spent)\b.{0,24}\b(lately|recently|this week|yesterday)\b/.test(normalized) ||
     /\bwhat did i spend (on|money on)\b/.test(normalized) ||
     /\bwhich purchases?\b/.test(normalized)
   );

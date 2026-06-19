@@ -670,7 +670,6 @@ describe("runAIAgent", () => {
       "Is this number current?",
       "Is my Spendable Cash Today up to date?",
       "Can I trust this number?",
-      "What data is missing from this number?",
     ]) {
       expect(
         __agentTestHooks.getForcedAgentTool({
@@ -681,6 +680,62 @@ describe("runAIAgent", () => {
         requireCard: true,
       });
     }
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "What data is missing from this number?",
+      }),
+    ).toMatchObject({
+      toolName: "get_data_quality",
+      requireCard: true,
+    });
+  });
+
+  it("routes natural card requests through the catalog router", () => {
+    const cases = [
+      ["show my bank balance", "get_true_balances"],
+      ["what is my account balance", "get_true_balances"],
+      ["what is my bank account balance", "get_true_balances"],
+      ["what is my current account balance", "get_true_balances"],
+      ["you can't show my bank account balance?", "get_true_balances"],
+      ["how much do I have in checking", "get_true_balances"],
+      ["what did I buy lately", "get_recent_transactions"],
+      ["what charges hit this week", "get_recent_transactions"],
+      ["where is my money going by category", "get_spending_breakdown"],
+      ["what repeats every month", "get_recurring_activity"],
+      ["where will I be in a few days", "forecast_spendable_cash"],
+      ["how did you calculate this", "get_pip_cash_math"],
+    ] as const;
+
+    for (const [message, toolName] of cases) {
+      expect(
+        __agentTestHooks.getForcedAgentTool({
+          message,
+        }),
+      ).toMatchObject({
+        toolName,
+        requireCard: true,
+      });
+    }
+  });
+
+  it("routes delete-data requests to confirmation before policy fallback", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Delete my data",
+      }),
+    ).toMatchObject({
+      toolName: "request_delete_data_confirmation",
+      requireCard: false,
+    });
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "DELETE DATA",
+      }),
+    ).toMatchObject({
+      toolName: "delete_user_data",
+      requireCard: false,
+    });
   });
 
   it("routes update-status prompts to sync status", () => {
@@ -719,6 +774,20 @@ describe("runAIAgent", () => {
     expect(response.cards).toHaveLength(0);
     expect(response.message).toContain("cannot move money");
     expect(response.message).toContain("read-only");
+  });
+
+  it("answers Android pricing prompts without web prices or pricing links", async () => {
+    const response = await runAIAgent(
+      {
+        message: "How much does Pip cost?",
+        platform: "android_webview",
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_trust_policy"]);
+    expect(response.message).toBe("Purchases and subscriptions are not available in this Android build.");
+    expect(response.message).not.toMatch(/\$2\.99|\$7\.99|pricing/i);
   });
 
   it("routes AI calculation prompts to trust policy", () => {
@@ -1561,7 +1630,7 @@ function createGuidanceSelectorContext(
     availablePromptChips: [],
     guidanceContext: buildFinancialGuidanceContext(calculatePipCash(fakeSnapshot)),
     fallbackFinalOutput: options.fallbackFinalOutput,
-  } as Parameters<typeof __agentTestHooks.selectGuidanceCard>[1];
+  } as unknown as Parameters<typeof __agentTestHooks.selectGuidanceCard>[1];
 }
 
 function createNormalReadyResult() {

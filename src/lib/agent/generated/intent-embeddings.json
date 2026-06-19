@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "generatedAt": "2026-06-18T18:53:48.906Z",
+  "provider": "static-local",
+  "model": "pip-static-token-hash-v1",
+  "catalogHash": "17c86e9caa6801497a9a65cbe2efaedb3bcddf2ff8f108c219618e7ecdcc1a24",
+  "dimensions": 96,
+  "examples": []
+}

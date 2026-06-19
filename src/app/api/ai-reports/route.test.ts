@@ -84,7 +84,7 @@ describe("POST /api/ai-reports", () => {
 
     const response = await POST(
       jsonRequest(validReportBody(), {
-        "user-agent": "Mozilla/5.0 PipAndroid/1 VersionCode/12",
+        "user-agent": "Mozilla/5.0 PipAndroid/1 VersionCode/13",
       }),
     );
 
@@ -101,8 +101,8 @@ describe("POST /api/ai-reports", () => {
       details: "The math did not match.",
       response_excerpt: "You can spend it.",
       platform: "android_webview",
-      app_version: "android-version-code-12",
-      user_agent: "Mozilla/5.0 PipAndroid/1 VersionCode/12",
+      app_version: "android-version-code-13",
+      user_agent: "Mozilla/5.0 PipAndroid/1 VersionCode/13",
     });
   });
 });

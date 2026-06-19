@@ -3,11 +3,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/lib/supabase/database.types";
 import {
   isAndroidAppShellHeaders,
+  isAndroidMarketingRestrictedPath,
   isAndroidPaymentRestrictedPath,
 } from "@/lib/platform/android-shell";
 import { getSupabasePublicConfig, isSupabaseConfigured } from "@/lib/supabase/env";
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   if (
     isAndroidAppShellHeaders(request.headers) &&
     isAndroidPaymentRestrictedPath(request.nextUrl.pathname)
@@ -17,6 +18,17 @@ export async function middleware(request: NextRequest) {
     url.search = "";
 
     return NextResponse.rewrite(url);
+  }
+
+  if (
+    isAndroidAppShellHeaders(request.headers) &&
+    isAndroidMarketingRestrictedPath(request.nextUrl.pathname)
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/app";
+    url.search = "";
+
+    return NextResponse.redirect(url);
   }
 
   if (!isSupabaseConfigured()) {

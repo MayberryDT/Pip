@@ -7,6 +7,7 @@ import {
   ManualSyncRateLimitError,
 } from "@/lib/data/manual-sync";
 import { loadSyncStatusForUser } from "@/lib/data/sync-status";
+import { loadManualRefreshOnlyForUser } from "@/lib/data/user-settings";
 import type { FinancialProviderName } from "@/lib/providers/FinancialDataProvider";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { ProviderUnavailableError } from "@/lib/providers/provider-registry";
@@ -39,6 +40,15 @@ export async function POST(request: Request) {
 
     if (!parsed.success) {
       return NextResponse.json({ error: "Invalid sync request." }, { status: 400 });
+    }
+
+    const isManualRefreshOnly = await loadManualRefreshOnlyForUser(supabase, user.id);
+
+    if (isManualRefreshOnly) {
+      return NextResponse.json({
+        status: "skipped_manual_only",
+        message: "Automatic refresh is disabled for this account.",
+      });
     }
 
     const provider = parsed.data.provider as FinancialProviderName;

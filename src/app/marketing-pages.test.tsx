@@ -240,7 +240,7 @@ describe("marketing website pages", () => {
       rules: [
         {
           userAgent: "*",
-          disallow: expect.arrayContaining(["/api/", "/auth/", "/plaid/", "/app"]),
+          disallow: expect.arrayContaining(["/api/", "/auth/", "/plaid/", "/app", "/reviewer-login"]),
         },
       ],
       sitemap: "https://spendwithpip.com/sitemap.xml",
@@ -250,6 +250,15 @@ describe("marketing website pages", () => {
     expect(firstRule?.allow).toEqual(
       expect.arrayContaining(["/how-the-number-works", "/pricing"]),
     );
+  });
+
+  it("keeps reviewer login out of public indexing", async () => {
+    const { metadata } = await import("@/app/reviewer-login/page");
+
+    expect(metadata.robots).toMatchObject({
+      index: false,
+      follow: false,
+    });
   });
 
   it("ships llms.txt with the product thesis and public page map", () => {

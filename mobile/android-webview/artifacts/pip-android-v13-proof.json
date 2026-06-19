@@ -1,0 +1,143 @@
+{
+  "timestamp": "2026-06-18T12:21:00-06:00",
+  "gitSha": "fa51eb01496548df4b7aa9feb8f612b36181fcd2",
+  "worktreeDirtyAtBuild": true,
+  "packageName": "com.spendwithpip.app",
+  "versionCode": 13,
+  "versionName": "0.1.0-play-internal.1",
+  "launchUrl": "https://spendwithpip.com/app",
+  "launchableActivity": "com.spendwithpip.app.MainActivity",
+  "targetSdk": 35,
+  "compileSdk": 36,
+  "backupPolicy": {
+    "allowBackup": false,
+    "sourceManifest": "mobile/android-webview/app/src/main/AndroidManifest.xml",
+    "mergedReleaseManifest": "mobile/android-webview/app/build/intermediates/merged_manifests/release/processReleaseManifest/AndroidManifest.xml",
+    "bundleReleaseManifest": "mobile/android-webview/app/build/intermediates/bundle_manifest/release/processApplicationManifestReleaseForBundle/AndroidManifest.xml"
+  },
+  "artifacts": {
+    "apk": {
+      "path": "mobile/android-webview/artifacts/pip-android-v13.apk",
+      "sourcePath": "mobile/android-webview/app/build/outputs/apk/release/app-release.apk",
+      "sizeBytes": 230184,
+      "sha256": "f6d4f6e864202cc3f349ddc66b5748cdcb62fb884ca1cc1bd0ab4a80ad2d53ff"
+    },
+    "aab": {
+      "path": "mobile/android-webview/artifacts/pip-android-v13.aab",
+      "sourcePath": "mobile/android-webview/app/build/outputs/bundle/release/app-release.aab",
+      "sizeBytes": 230167,
+      "sha256": "79eaca6bf49be5f6875ff6d4221119f48229816cb38f8003d8cc77e48bb04fad"
+    }
+  },
+  "permissions": [
+    "android.permission.INTERNET",
+    "android.permission.ACCESS_NETWORK_STATE"
+  ],
+  "signing": {
+    "apkVerified": true,
+    "v1": false,
+    "v2": true,
+    "v3": false,
+    "v31": false,
+    "v4": false,
+    "sourceStamp": false,
+    "numberOfSigners": 1,
+    "certificateDn": "CN=Pip, OU=Mobile, O=Pip, L=Denver, ST=Colorado, C=US",
+    "certificateSha256": "e322ba05fc3450ce30627f5012d051343e5c0bffdf702a55e5d5ad4eb5daa2f3"
+  },
+  "iconPackaging": {
+    "usesAdaptiveIconResource": true,
+    "aaptApplicationIcon": "res/BW.xml",
+    "restoresExistingMaskableAssetsFromTwaWrapper": true,
+    "generatedNewIconArtwork": false
+  },
+  "nativeShellEvidence": {
+    "usesAndroidSystemWebView": true,
+    "dexIncludes": [
+      "PipAndroid/1",
+      "PipNativeShell",
+      "android/webkit/WebView"
+    ],
+    "dexDoesNotInclude": [
+      "androidbrowserhelper",
+      "trustedwebactivity",
+      "customtabs"
+    ],
+    "normalLauncherShouldForeground": "com.spendwithpip.app"
+  },
+  "verificationCommands": [
+    "npm run play:android-copy:verify",
+    "JAVA_HOME=/home/tyler/.bubblewrap/jdk/jdk-17.0.11+9 PATH=/home/tyler/.bubblewrap/jdk/jdk-17.0.11+9/bin:$PATH ./gradlew :app:assembleRelease :app:bundleRelease",
+    "/home/tyler/.bubblewrap/android_sdk/build-tools/35.0.0/aapt dump badging mobile/android-webview/app/build/outputs/apk/release/app-release.apk",
+    "/home/tyler/.bubblewrap/android_sdk/build-tools/35.0.0/aapt dump permissions mobile/android-webview/app/build/outputs/apk/release/app-release.apk",
+    "/home/tyler/.bubblewrap/android_sdk/build-tools/35.0.0/apksigner verify --verbose --print-certs mobile/android-webview/app/build/outputs/apk/release/app-release.apk"
+  ],
+  "verificationResults": {
+    "androidVisibleCopyGuard": "passed",
+    "gradleAssembleRelease": "passed",
+    "gradleBundleRelease": "passed",
+    "aaptBadging": "versionCode=13, versionName=0.1.0-play-internal.1, targetSdkVersion=35",
+    "aaptPermissions": "INTERNET and ACCESS_NETWORK_STATE only",
+    "releaseManifest": "versionCode=13, versionName=0.1.0-play-internal.1, allowBackup=false",
+    "apkSigning": "verified with APK Signature Scheme v2"
+  },
+  "deviceSmoke": {
+    "status": "not_run",
+    "reason": "No physical Android device was attached in this Codex session.",
+    "requiredPassCondition": "Launching package com.spendwithpip.app must foreground com.spendwithpip.app/MainActivity and the web request user agent must include PipAndroid/1 VersionCode/13."
+  },
+  "productionBackendProof": {
+    "status": "partial",
+    "verifiedAt": "2026-06-18T12:41:00-06:00",
+    "verifiedVia": "Supabase MCP connector against project qevvmulexfoebjmlxbts",
+    "reportingStorage": {
+      "status": "passed",
+      "aiResponseReports": "exists, RLS enabled, authenticated select/insert/delete grants, owner insert policy",
+      "testerFeedback": "exists, RLS enabled, authenticated select/insert/delete grants, owner insert policy",
+      "deletionRpcExists": true,
+      "deleteSupportTables": [
+        "data_deletion_requests",
+        "savings_goals"
+      ]
+    },
+    "savingsGoalsMigration": {
+      "status": "applied_and_verified",
+      "migrationName": "savings_goals",
+      "rlsEnabled": true,
+      "authenticatedGrants": [
+        "select",
+        "insert",
+        "update",
+        "delete"
+      ],
+      "serviceRoleGrants": [
+        "select",
+        "insert",
+        "update",
+        "delete"
+      ],
+      "ownerPolicies": [
+        "SELECT",
+        "INSERT",
+        "UPDATE",
+        "DELETE"
+      ],
+      "deletionRpcDeletesSavingsGoals": true
+    },
+    "reviewerAccounts": {
+      "status": "blocked",
+      "reason": "Production auth users play-review@animasai.co and play-delete-test@animasai.co are absent, and the reusable Play reviewer password is intentionally not stored in the repo or local secrets.",
+      "requiredCommands": [
+        "PIP_PLAY_REVIEWER_PASSWORD='[Play Console password]' npm run play:reviewer:reset",
+        "npm run play:reviewer:verify",
+        "PIP_PLAY_REVIEWER_PASSWORD='[Play Console password]' npm run play:reviewer:reset -- --email=play-delete-test@animasai.co",
+        "npm run play:reviewer:verify -- --email=play-delete-test@animasai.co"
+      ]
+    },
+    "liveAndroidDeletion": {
+      "status": "not_run",
+      "reason": "The deletion-test account must be recreated with the reusable reviewer password and deleted from the actual Android app before privacy:audit-user can prove zero rows.",
+      "requiredCommandAfterDeletion": "npm run privacy:audit-user -- --email=play-delete-test@animasai.co"
+    }
+  }
+}

@@ -129,7 +129,9 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
 
   if (isTrustPolicyPrompt(normalized)) {
     return baseResponse(input, {
-      message: composeTrustPolicyAnswer(input.message).message,
+      message: composeTrustPolicyAnswer(input.message, {
+        platform: input.platform,
+      }).message,
       usedTools: ["get_trust_policy"],
     });
   }
@@ -593,6 +595,7 @@ function isTrustPolicyPrompt(normalized: string): boolean {
     /\b(ai provider|ai model|openai|chatgpt|llm|train on|training data|model training|does ai|ai calculate|ai see|ai use)\b/.test(normalized) ||
     /\b(move (?:my |our |your )?money|transfer (?:my |our |your )?money|withdraw|make payments?|pay bills?|send money|take money|debit my account)\b/.test(normalized) ||
     /\b(security|privacy|sell my data|sell data|advertising|subprocessors?|data retention|retention|delete my data|delete data)\b/.test(normalized) ||
+    /\b(how much|what|price|pricing|cost)\b.{0,24}\bpip\b|\bpip\b.{0,24}\b(price|pricing|cost)\b/.test(normalized) ||
     /\b(financial advice|advisor|guarantee|guaranteed|legal entity|who operates|refund|trial|cancel subscription|subscription (?:billing|price|pricing|refund|trial|cancel|cancellation))\b/.test(normalized)
   );
 }

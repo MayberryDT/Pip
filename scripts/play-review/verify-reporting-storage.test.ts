@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -26,8 +27,8 @@ describe("verify-reporting-storage", () => {
     await expect(
       runVerifyReportingStorage({
         env: { ...env },
-        stdout: (line) => stdout.push(line),
-        stderr: (line) => stderr.push(line),
+        stdout: (line: string) => stdout.push(line),
+        stderr: (line: string) => stderr.push(line),
         queryReadiness,
         checkRestSchema,
       }),
@@ -62,6 +63,16 @@ describe("verify-reporting-storage", () => {
     );
   });
 
+  it("fails clearly when the deletion RPC is missing", () => {
+    const rows = readyRows({
+      deletion_rpc_exists: false,
+    });
+
+    expect(evaluateReportingStorageReadiness(rows)).toContain(
+      "Missing public.delete_current_user_financial_data().",
+    );
+  });
+
   it("fails clearly on RLS, grant, and owner insert policy gaps", () => {
     const rows = readyRows({
       rls_enabled: false,
@@ -86,7 +97,7 @@ describe("verify-reporting-storage", () => {
       runVerifyReportingStorage({
         env: { ...env },
         stdout: () => undefined,
-        stderr: (line) => stderr.push(line),
+        stderr: (line: string) => stderr.push(line),
         queryReadiness: async () => readyRows(),
         checkRestSchema: async () => {
           throw new Error("REST schema check failed for public.ai_response_reports: table not found");
@@ -118,6 +129,7 @@ describe("verify-reporting-storage", () => {
         readiness: {
           localMigrationApplied: true,
           connectorMigrationPresent: false,
+          deletionRpcExists: true,
           tables: readyRows().map(({ local_migration_applied, connector_migration_present, migration_applied, ...row }) => row),
         },
       },
@@ -152,8 +164,8 @@ describe("verify-reporting-storage", () => {
   });
 });
 
-function readyRows(overrides: Partial<Record<string, boolean>> = {}) {
-  return requiredReportingTables.map((table) => ({
+function readyRows(overrides: Partial<Record<string, boolean>> = {}): Array<Record<string, boolean | string>> {
+  return requiredReportingTables.map((table: string) => ({
     table_name: table,
     table_exists: true,
     rls_enabled: true,
@@ -164,6 +176,7 @@ function readyRows(overrides: Partial<Record<string, boolean>> = {}) {
     local_migration_applied: true,
     connector_migration_present: false,
     migration_applied: true,
+    deletion_rpc_exists: true,
     ...overrides,
   }));
 }

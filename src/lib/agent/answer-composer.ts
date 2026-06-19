@@ -6,6 +6,7 @@ import {
 } from "@/lib/agent/conversation-state";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import { formatMoney } from "@/lib/money";
+import type { PipPlatform } from "@/lib/platform/android-shell";
 import { composeTrustPolicyAnswer } from "@/lib/trust/pip-trust-policy";
 import type { PipCashResult } from "@/lib/types";
 
@@ -36,6 +37,7 @@ export type ComposeAgentVisibleAnswerInput = {
   conversationState?: AgentAnswerConversationState;
   cards: AgentCard[];
   usedTools: string[];
+  platform?: PipPlatform;
   selectedPromptChipId?: string;
   maxChars: number;
   maxWords: number;
@@ -364,7 +366,9 @@ function composeDeterministicNoCardAnswer(
 
   if (input.usedTools.includes("get_trust_policy")) {
     return {
-      message: composeTrustPolicyAnswer(input.userMessage).message,
+      message: composeTrustPolicyAnswer(input.userMessage, {
+        platform: input.platform,
+      }).message,
       answerPatternId: "trust-policy",
     };
   }

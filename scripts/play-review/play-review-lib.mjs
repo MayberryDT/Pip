@@ -4,6 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export const defaultPlayReviewerEmail = "play-review@animasai.co";
 export const defaultPlayDeleteTestEmail = "play-delete-test@animasai.co";
+export const durableReviewerStaleAfter = "2099-01-01T00:00:00.000Z";
 
 const userScopedTables = [
   "ai_response_reports",
@@ -191,7 +192,7 @@ export async function seedReviewerAppData(admin, userId) {
         provider_institution_id: "play-review-bank",
         status: "connected",
         last_successful_sync_at: now.toISOString(),
-        stale_after: new Date(now.getTime() + 86_400_000).toISOString(),
+        stale_after: durableReviewerStaleAfter,
       })
       .select("id")
       .single(),
@@ -366,6 +367,67 @@ export async function auditUserAppData(admin, userId) {
   }
 
   return rows;
+}
+
+export async function loadReviewerReadiness(admin, userId) {
+  const [settingsResult, institutionsResult] = await Promise.all([
+    admin
+      .from("user_settings")
+      .select("manual_refresh_only")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    admin
+      .from("connected_institutions")
+      .select("id, institution_name, status, last_successful_sync_at, stale_after")
+      .eq("user_id", userId),
+  ]);
+
+  if (settingsResult.error) {
+    throw settingsResult.error;
+  }
+
+  if (institutionsResult.error) {
+    throw institutionsResult.error;
+  }
+
+  return {
+    settings: settingsResult.data ?? null,
+    institutions: institutionsResult.data ?? [],
+  };
+}
+
+export function evaluateReviewerReadiness(readiness, {
+  now = new Date(),
+} = {}) {
+  const failures = [];
+
+  if (!readiness.settings) {
+    failures.push("Reviewer account is missing user_settings.");
+  } else if (readiness.settings.manual_refresh_only !== true) {
+    failures.push("Reviewer account must have manual_refresh_only=true.");
+  }
+
+  if (readiness.institutions.length === 0) {
+    failures.push("Reviewer account is missing connected institutions.");
+  }
+
+  for (const institution of readiness.institutions) {
+    const name = institution.institution_name ?? institution.id ?? "unknown institution";
+
+    if (["failed", "revoked", "stale"].includes(institution.status)) {
+      failures.push(`Reviewer institution ${name} has status ${institution.status}.`);
+    }
+
+    if (!institution.last_successful_sync_at) {
+      failures.push(`Reviewer institution ${name} is missing last_successful_sync_at.`);
+    }
+
+    if (institution.stale_after && new Date(institution.stale_after).getTime() <= now.getTime()) {
+      failures.push(`Reviewer institution ${name} is already stale.`);
+    }
+  }
+
+  return failures;
 }
 
 export async function deleteAuthUser(admin, userId) {

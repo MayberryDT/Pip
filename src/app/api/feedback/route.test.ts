@@ -86,7 +86,7 @@ describe("POST /api/feedback", () => {
       jsonRequest(
         { message: "The number loaded." },
         {
-          "user-agent": "Mozilla/5.0 PipAndroid/1 VersionCode/12",
+          "user-agent": "Mozilla/5.0 PipAndroid/1 VersionCode/13",
         },
       ),
     );
@@ -101,8 +101,8 @@ describe("POST /api/feedback", () => {
       email: "play-review@animasai.co",
       message: "The number loaded.",
       platform: "android_webview",
-      app_version: "android-version-code-12",
-      user_agent: "Mozilla/5.0 PipAndroid/1 VersionCode/12",
+      app_version: "android-version-code-13",
+      user_agent: "Mozilla/5.0 PipAndroid/1 VersionCode/13",
     });
   });
 });

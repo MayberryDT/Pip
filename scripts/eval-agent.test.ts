@@ -15,6 +15,15 @@ describe("Pip agent eval harness", () => {
     expect(packageJson.scripts["eval:agent"]).toBe("node scripts/eval-agent.mjs");
   });
 
+  it("keeps the router dogfood commands available as package scripts", () => {
+    const packageJson = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
+      scripts: Record<string, string>;
+    };
+
+    expect(packageJson.scripts["dogfood:router"]).toBe("vitest run src/lib/agent/intent-router-dogfood.test.ts");
+    expect(packageJson.scripts["dogfood:router:live"]).toBe("vite-node scripts/dogfood-agent-router.mjs");
+  });
+
   it("passes a tool-backed forecast answer with the short forecast caveat", async () => {
     const { evaluateAgentResponse } = await loadEvalHarness();
     const result = evaluateAgentResponse({
@@ -53,6 +62,59 @@ describe("Pip agent eval harness", () => {
     expect(result.failures.join("\n")).toContain("dashboard");
     expect(result.failures.join("\n")).toContain("you can afford");
     expect(result.failures.join("\n")).toContain("money shorthand");
+  });
+
+  it("routing-only cases skip visible-copy checks but still enforce tools and cards", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        routingOnly: true,
+        expectedTools: ["get_true_balances"],
+        expectedCards: ["true_balances"],
+      },
+      response: {
+        message: `Your ${"Free" + " Cash"} dashboard says you can afford $0.21k.`,
+        responseMode: "show_card",
+        usedTools: ["get_true_balances"],
+        cards: [{ type: "true_balances" }],
+        promptChips: [],
+      },
+    });
+    const anyCard = evaluateAgentResponse({
+      caseDef: {
+        routingOnly: true,
+        expectedAnyCards: ["missing_card_nudge", "connect_account"],
+      },
+      response: {
+        message: "I found a data-quality issue.",
+        responseMode: "show_card",
+        usedTools: ["get_data_quality"],
+        cards: [{ type: "missing_card_nudge" }],
+        promptChips: [],
+      },
+    });
+    const wrongTool = evaluateAgentResponse({
+      caseDef: {
+        routingOnly: true,
+        expectedTools: ["get_true_balances"],
+        expectedCards: ["true_balances"],
+      },
+      response: {
+        message: `Your ${"Free" + " Cash"} dashboard says you can afford $0.21k.`,
+        responseMode: "show_card",
+        usedTools: ["get_connected_accounts"],
+        cards: [{ type: "account_connections" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+    expect(anyCard.ok).toBe(true);
+    expect(anyCard.failures).toEqual([]);
+    expect(wrongTool.ok).toBe(false);
+    expect(wrongTool.failures.join("\n")).toContain("expected tool not used: get_true_balances");
+    expect(wrongTool.failures.join("\n")).toContain("expected card not returned: true_balances");
   });
 
   it("fails third-person Pip self-reference in visible replies", async () => {
@@ -182,7 +244,7 @@ describe("Pip agent eval harness", () => {
     const { runAgentEval } = await loadEvalHarness();
     const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-eval-"));
     const reportPath = join(tempDir, "report.json");
-    const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
+    const requests: Array<{ url: string; headers: Record<string, string>; body: Record<string, unknown> }> = [];
 
     try {
       const report = await runAgentEval({
@@ -199,9 +261,13 @@ describe("Pip agent eval harness", () => {
         ],
         conversationPrefix: "test-eval",
         log: () => undefined,
-        fetchImpl: async (url: string, options: { body?: string }) => {
+        headers: { Cookie: "sb-test-auth=secret" },
+        includeRawResponse: false,
+        redactReport: true,
+        fetchImpl: async (url: string, options: { body?: string; headers?: Record<string, string> }) => {
           requests.push({
             url,
+            headers: options.headers ?? {},
             body: JSON.parse(options.body ?? "{}") as Record<string, unknown>,
           });
 
@@ -224,6 +290,9 @@ describe("Pip agent eval harness", () => {
       expect(requests).toHaveLength(1);
       expect(requests[0]).toMatchObject({
         url: "http://localhost:3999/api/agent",
+        headers: {
+          Cookie: "sb-test-auth=secret",
+        },
         body: {
           message: "hi",
           scenario: "default",
@@ -236,12 +305,16 @@ describe("Pip agent eval harness", () => {
         },
       });
 
-      expect(JSON.parse(readFileSync(reportPath, "utf8"))).toMatchObject({
+      const writtenReport = JSON.parse(readFileSync(reportPath, "utf8"));
+
+      expect(writtenReport).toMatchObject({
         status: "passed",
         baseUrl: "http://localhost:3999",
         caseCount: 1,
         failureCount: 0,
       });
+      expect(writtenReport.cases[0].message).toBe("[redacted]");
+      expect(writtenReport.cases[0]).not.toHaveProperty("rawResponse");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -341,6 +414,46 @@ describe("Pip agent eval harness", () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("can run the dedicated routing-only case pool", async () => {
+    const { runAgentEval } = await loadEvalHarness();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-eval-"));
+    const reportPath = join(tempDir, "report.json");
+    const messages: string[] = [];
+
+    try {
+      const report = await runAgentEval({
+        baseUrl: "http://localhost:3999",
+        reportPath,
+        routingOnly: true,
+        caseIds: "routing-bank-balance-natural",
+        conversationPrefix: "test-eval",
+        log: () => undefined,
+        fetchImpl: async (_url: string, options: { body?: string }) => {
+          const body = JSON.parse(options.body ?? "{}") as { message: string };
+          messages.push(body.message);
+
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              message: `Your ${"Free" + " Cash"} dashboard says you can afford $0.21k.`,
+              responseMode: "show_card",
+              usedTools: ["get_true_balances"],
+              cards: [{ type: "true_balances" }],
+              promptChips: [],
+            }),
+          };
+        },
+      });
+
+      expect(report.status).toBe("passed");
+      expect(report.routingOnly).toBe(true);
+      expect(messages).toEqual(["Show my bank balance"]);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
 
 async function loadEvalHarness() {
@@ -364,6 +477,7 @@ async function loadEvalHarness() {
     runAgentEval: (input: Record<string, unknown>) => Promise<{
       status: "passed" | "failed";
       failureCount: number;
+      routingOnly?: boolean;
       cases: Array<{ failures: string[] }>;
     }>;
   };

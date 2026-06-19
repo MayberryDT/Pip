@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { getAppOpenSyncDecision } from "@/lib/data/app-open-sync";
 import { POST } from "@/app/api/sync/app-open/route";
@@ -8,6 +8,7 @@ const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   loadPendingPipSyncJobsForUser: vi.fn(),
   loadSyncStatusForUser: vi.fn(),
+  loadManualRefreshOnlyForUser: vi.fn(),
   runProviderSync: vi.fn(),
 }));
 
@@ -23,9 +24,17 @@ vi.mock("@/lib/data/sync-status", () => ({
   loadSyncStatusForUser: routeMocks.loadSyncStatusForUser,
 }));
 
+vi.mock("@/lib/data/user-settings", () => ({
+  loadManualRefreshOnlyForUser: routeMocks.loadManualRefreshOnlyForUser,
+}));
+
 vi.mock("@/lib/data/manual-sync", () => ({
   runProviderSync: routeMocks.runProviderSync,
 }));
+
+beforeEach(() => {
+  routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(false);
+});
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -43,6 +52,25 @@ describe("POST /api/sync/app-open", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Authentication required.",
     });
+    expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
+  });
+
+  it("skips app-open refresh for manual-refresh-only reviewer accounts", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "reviewer-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(true);
+
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "skipped_manual_only",
+      message: "Automatic refresh is disabled for this account.",
+    });
+    expect(routeMocks.loadManualRefreshOnlyForUser).toHaveBeenCalledWith(supabase, "reviewer-1");
+    expect(routeMocks.loadSyncStatusForUser).not.toHaveBeenCalled();
+    expect(routeMocks.loadPendingPipSyncJobsForUser).not.toHaveBeenCalled();
     expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
   });
 

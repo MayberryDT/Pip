@@ -62,10 +62,21 @@ migration_state as (
       from supabase_migrations.schema_migrations
       where name = '${reportingMigrationName}'
     ) as connector_migration_present
+),
+deletion_rpc_state as (
+  select exists(
+    select 1
+    from pg_proc
+    join pg_namespace on pg_namespace.oid = pg_proc.pronamespace
+    where pg_namespace.nspname = 'public'
+      and pg_proc.proname = 'delete_current_user_financial_data'
+      and pg_get_function_identity_arguments(pg_proc.oid) = ''
+  ) as deletion_rpc_exists
 )
 select jsonb_build_object(
   'localMigrationApplied', migration_state.local_migration_applied,
   'connectorMigrationPresent', migration_state.connector_migration_present,
+  'deletionRpcExists', deletion_rpc_state.deletion_rpc_exists,
   'tables', jsonb_agg(
     jsonb_build_object(
       'table_name', table_state.table_name,
@@ -83,7 +94,11 @@ from table_state
 join table_grants using (table_name)
 left join insert_policies using (table_name)
 cross join migration_state
-group by migration_state.local_migration_applied, migration_state.connector_migration_present;
+cross join deletion_rpc_state
+group by
+  migration_state.local_migration_applied,
+  migration_state.connector_migration_present,
+  deletion_rpc_state.deletion_rpc_exists;
 `.trim();
 }
 
@@ -149,12 +164,14 @@ export function normalizeReadinessRows(value) {
     const localMigrationApplied = toBoolean(value.localMigrationApplied);
     const connectorMigrationPresent = toBoolean(value.connectorMigrationPresent);
     const migrationApplied = localMigrationApplied || connectorMigrationPresent;
+    const deletionRpcExists = toBoolean(value.deletionRpcExists);
 
     return value.tables.map((row) => ({
       ...row,
       local_migration_applied: localMigrationApplied,
       connector_migration_present: connectorMigrationPresent,
       migration_applied: migrationApplied,
+      deletion_rpc_exists: deletionRpcExists,
     }));
   }
 
@@ -169,12 +186,14 @@ export function normalizeReadinessRows(value) {
       const migrationApplied = toBoolean(row.migration_applied ?? row.migrationApplied)
         || localMigrationApplied
         || connectorMigrationPresent;
+      const deletionRpcExists = toBoolean(row.deletion_rpc_exists ?? row.deletionRpcExists);
 
       return {
         ...row,
         local_migration_applied: localMigrationApplied,
         connector_migration_present: connectorMigrationPresent,
         migration_applied: migrationApplied,
+        deletion_rpc_exists: deletionRpcExists,
       };
     });
   }
@@ -191,6 +210,10 @@ export function evaluateReportingStorageReadiness(readinessRows) {
     failures.push(
       `Migration ${localReportingMigrationVersion} or ${reportingMigrationName} is not recorded.`,
     );
+  }
+
+  if (!rows.some((row) => toBoolean(row.deletion_rpc_exists ?? row.deletionRpcExists))) {
+    failures.push("Missing public.delete_current_user_financial_data().");
   }
 
   for (const table of requiredReportingTables) {

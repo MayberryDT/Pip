@@ -20,6 +20,11 @@ describe("conversation state", () => {
     expect(inferConversationJob("Show the math")).toBe("math");
     expect(inferConversationJob("Show my true balances")).toBe("true_balances");
     expect(inferConversationJob("Is a card missing from Spendable Cash Today?")).toBe("data_quality");
+    expect(inferConversationJob("Show my bank balance")).toBe("true_balances");
+    expect(inferConversationJob("What is my account balance?")).toBe("true_balances");
+    expect(inferConversationJob("You can't show my bank account balance?")).toBe("true_balances");
+    expect(inferConversationJob("What did I buy lately?")).toBe("recent_transactions");
+    expect(inferConversationJob("Where is my money going by category?")).toBe("spending_breakdown");
   });
 
   it("uses short history to classify purchase amount follow-ups", () => {

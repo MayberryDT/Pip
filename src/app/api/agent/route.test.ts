@@ -750,6 +750,24 @@ describe("POST /api/agent", () => {
     );
   });
 
+  it("passes Android shell platform context into the agent", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse());
+
+    const response = await POST(jsonRequest(
+      { message: "How much does Pip cost?" },
+      { "user-agent": "Mozilla/5.0 PipAndroid/1 VersionCode/13" },
+    ));
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        platform: "android_webview",
+      }),
+    );
+  });
+
   it("rejects oversized history before calling the model", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
 

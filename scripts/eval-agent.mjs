@@ -25,6 +25,76 @@ const ALL_CARD_TYPES = [
   "account_connections",
 ];
 
+export const agentRoutingEvalCases = [
+  {
+    id: "routing-bank-balance-natural",
+    description: "Natural bank-balance wording should show actual balances, not account management.",
+    message: "Show my bank balance",
+    expectedTools: ["get_true_balances"],
+    expectedCards: ["true_balances"],
+    forbiddenTools: ["get_connected_accounts"],
+    routingOnly: true,
+  },
+  {
+    id: "routing-account-balance-natural",
+    description: "Natural account-balance wording should show actual balances, not account management.",
+    message: "What is my account balance?",
+    expectedTools: ["get_true_balances"],
+    expectedCards: ["true_balances"],
+    forbiddenTools: ["get_connected_accounts"],
+    routingOnly: true,
+  },
+  {
+    id: "routing-bank-balance-denial-follow-up",
+    description: "A balance denial follow-up should retry actual balances instead of account management.",
+    message: "You can't show my bank account balance?",
+    expectedTools: ["get_true_balances"],
+    expectedCards: ["true_balances"],
+    forbiddenTools: ["get_connected_accounts"],
+    routingOnly: true,
+  },
+  {
+    id: "routing-connected-banks-natural",
+    description: "Connected-bank wording should show account connections, not balances.",
+    message: "Show connected banks",
+    expectedTools: ["get_connected_accounts"],
+    forbiddenTools: ["get_true_balances"],
+    routingOnly: true,
+  },
+  {
+    id: "routing-recent-buy-lately",
+    description: "Natural purchase-history wording should show recent transactions.",
+    message: "What did I buy lately?",
+    expectedTools: ["get_recent_transactions"],
+    expectedCards: ["recent_transactions"],
+    routingOnly: true,
+  },
+  {
+    id: "routing-spending-category-natural",
+    description: "Natural category wording should show spending breakdown.",
+    message: "Where is my money going by category?",
+    expectedTools: ["get_spending_breakdown"],
+    expectedCards: ["spending_breakdown"],
+    routingOnly: true,
+  },
+  {
+    id: "routing-recurring-natural",
+    description: "Natural recurring wording should show recurring activity.",
+    message: "What repeats every month?",
+    expectedTools: ["get_recurring_activity"],
+    expectedCards: ["recurring_activity"],
+    routingOnly: true,
+  },
+  {
+    id: "routing-delete-data-confirmation",
+    description: "Natural delete-data wording should request confirmation, not execute deletion.",
+    message: "Delete my data",
+    expectedTools: ["request_delete_data_confirmation"],
+    forbiddenTools: ["delete_user_data"],
+    routingOnly: true,
+  },
+];
+
 export const agentEvalCases = [
   {
     id: "greeting",
@@ -589,6 +659,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
   const usedTools = getUsedTools(response);
   const promptChips = getPromptChips(response);
   const responseMode = typeof response?.responseMode === "string" ? response.responseMode : "";
+  const routingOnly = Boolean(caseDef.routingOnly);
 
   if (!httpOk) {
     failures.push(`HTTP ${httpStatus}`);
@@ -606,14 +677,16 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     failures.push("assistant message is empty.");
   }
 
-  validateVisibleText({ label: "assistant message", text: message, failures });
-  validateDisplayPromise({ label: "assistant message", text: message, cardTypes, failures });
-  if (cardTypes.length > 0 && /\?\s*$/.test(message.trim())) {
-    failures.push("assistant message ends with a follow-up question after returning a card.");
+  if (!routingOnly) {
+    validateVisibleText({ label: "assistant message", text: message, failures });
+    validateDisplayPromise({ label: "assistant message", text: message, cardTypes, failures });
+    if (cardTypes.length > 0 && /\?\s*$/.test(message.trim())) {
+      failures.push("assistant message ends with a follow-up question after returning a card.");
+    }
+    validatePromptChips({ promptChips, failures });
+    validateConversationProgression({ caseDef, message, usedTools, promptChips, failures });
+    validateExpectedResponseText({ caseDef, response, message, failures });
   }
-  validatePromptChips({ promptChips, failures });
-  validateConversationProgression({ caseDef, message, usedTools, promptChips, failures });
-  validateExpectedResponseText({ caseDef, response, message, failures });
 
   for (const toolName of asArray(caseDef.expectedTools)) {
     if (!usedTools.includes(toolName)) {
@@ -625,6 +698,12 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     if (!cardTypes.includes(cardType)) {
       failures.push(`expected card not returned: ${cardType}`);
     }
+  }
+
+  const expectedAnyCards = asArray(caseDef.expectedAnyCards);
+
+  if (expectedAnyCards.length > 0 && !expectedAnyCards.some((cardType) => cardTypes.includes(cardType))) {
+    failures.push(`expected one of these cards but got ${cardTypes.join(", ") || "none"}: ${expectedAnyCards.join(", ")}`);
   }
 
   for (const toolName of asArray(caseDef.forbiddenTools)) {
@@ -714,9 +793,13 @@ async function readJson(response) {
 export async function runAgentEval({
   baseUrl = process.env.PIP_AGENT_EVAL_BASE_URL || DEFAULT_BASE_URL,
   reportPath = process.env.PIP_AGENT_EVAL_REPORT || DEFAULT_REPORT_PATH,
-  cases = agentEvalCases,
+  routingOnly = process.env.PIP_AGENT_EVAL_ROUTING_ONLY === "1",
+  cases,
   caseIds = process.env.PIP_AGENT_EVAL_CASE_IDS,
   fetchImpl = globalThis.fetch,
+  headers = {},
+  includeRawResponse = process.env.PIP_AGENT_EVAL_INCLUDE_RAW !== "0",
+  redactReport = false,
   timeoutMs = Number(process.env.PIP_AGENT_EVAL_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
   conversationPrefix = process.env.PIP_AGENT_EVAL_CONVERSATION_PREFIX || `eval-${Date.now()}`,
   log = console.log,
@@ -727,10 +810,11 @@ export async function runAgentEval({
 
   const startedAt = new Date().toISOString();
   const agentUrl = new URL("/api/agent", baseUrl).toString();
-  const selectedCases = selectEvalCases(cases, caseIds);
+  const casePool = cases ?? (routingOnly ? agentRoutingEvalCases : agentEvalCases);
+  const selectedCases = selectEvalCases(casePool, caseIds);
   const results = [];
 
-  log(`Running ${selectedCases.length} Pip agent eval cases against ${agentUrl}`);
+  log(`Running ${selectedCases.length} Pip agent eval cases${routingOnly ? " (routing only)" : ""} against ${agentUrl}`);
 
   for (const caseDef of selectedCases) {
     const caseStart = Date.now();
@@ -748,7 +832,7 @@ export async function runAgentEval({
         agentUrl,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...headers },
           body: JSON.stringify(requestBody),
         },
         timeoutMs,
@@ -767,6 +851,7 @@ export async function runAgentEval({
       httpOk,
       error: networkError,
     });
+    const reportEvaluation = redactReport ? redactEvaluationForReport(evaluation) : evaluation;
 
     const result = {
       id: caseDef.id,
@@ -776,8 +861,8 @@ export async function runAgentEval({
       selectedPromptChipId: requestBody.selectedPromptChipId,
       httpStatus,
       durationMs: Date.now() - caseStart,
-      ...evaluation,
-      rawResponse: payload,
+      ...reportEvaluation,
+      ...(includeRawResponse ? { rawResponse: payload } : {}),
     };
 
     results.push(result);
@@ -793,6 +878,7 @@ export async function runAgentEval({
     agentUrl,
     caseCount: results.length,
     failureCount,
+    routingOnly,
     cases: results,
   };
 
@@ -821,8 +907,22 @@ function selectEvalCases(cases, caseIds) {
   return cases.filter((caseDef) => wantedIds.includes(caseDef.id));
 }
 
+function redactEvaluationForReport(evaluation) {
+  return {
+    ...evaluation,
+    message: evaluation.message ? "[redacted]" : "",
+    promptChips: evaluation.promptChips.map((chip) => ({
+      id: chip.id,
+      label: chip.label ? "[redacted]" : chip.label,
+      prompt: chip.prompt ? "[redacted]" : chip.prompt,
+    })),
+  };
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runAgentEval()
+  runAgentEval({
+    routingOnly: process.argv.slice(2).includes("--routing-only") || process.env.PIP_AGENT_EVAL_ROUTING_ONLY === "1",
+  })
     .then((report) => {
       process.exitCode = report.failureCount === 0 ? 0 : 1;
     })

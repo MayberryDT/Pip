@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 import {
   auditUserAppData,
   createSupabaseAdminFromEnv,
+  evaluateReviewerReadiness,
   findUserByEmail,
   getReviewerEmail,
+  loadReviewerReadiness,
   loadEnvFiles,
   parseArgs,
   summarizeAudit,
@@ -32,6 +34,8 @@ export async function runVerifyReviewerAccount({
     }
 
     const auditRows = await auditUserAppData(admin, user.id);
+    const reviewerReadiness = await loadReviewerReadiness(admin, user.id);
+    const readinessFailures = evaluateReviewerReadiness(reviewerReadiness);
     const missingTables = requiredSeedTables.filter((table) => {
       const row = auditRows.find((item) => item.table === table);
 
@@ -41,6 +45,13 @@ export async function runVerifyReviewerAccount({
     stdout(`Verified Play reviewer auth user: ${email}`);
     stdout(`User id: ${user.id}`);
     stdout(`App rows: ${summarizeAudit(auditRows)}`);
+
+    if (readinessFailures.length > 0) {
+      for (const failure of readinessFailures) {
+        stderr(failure);
+      }
+      return 1;
+    }
 
     if (missingTables.length > 0) {
       stderr(`Reviewer account is missing seeded rows in: ${missingTables.join(", ")}`);

@@ -2,11 +2,17 @@ import type { Metadata } from "next";
 import { ReviewerLoginForm } from "@/components/ReviewerLoginForm";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
 
-export const metadata: Metadata = buildMarketingMetadata({
-  title: "Play review sign in",
-  description: "Sign in to Pip with the Play review account.",
-  path: "/reviewer-login",
-});
+export const metadata: Metadata = {
+  ...buildMarketingMetadata({
+    title: "Play review sign in",
+    description: "Sign in to Pip with the Play review account.",
+    path: "/reviewer-login",
+  }),
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
 
 export default function ReviewerLoginPage() {
   return (

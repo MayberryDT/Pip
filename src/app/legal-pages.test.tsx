@@ -15,6 +15,14 @@ describe("public legal and support pages", () => {
     expect(privacy).toContain("does not store bank usernames or passwords");
     expect(privacy).toContain("Provider tokens are handled server-side only");
     expect(privacy).toContain("provider tokens");
+    expect(privacy).toContain("Supabase user ID");
+    expect(privacy).toContain("Supabase provides authentication");
+    expect(privacy).toContain("Netlify provides hosting");
+    expect(privacy).toContain("Plaid provides read-only account connection data");
+    expect(privacy).toContain("OpenAI or Netlify AI Gateway");
+    expect(privacy).toContain("IP address");
+    expect(privacy).toContain("Android build version");
+    expect(privacy).toContain("encrypted connections in transit");
     expect(privacy).toContain("delete your account from the in-app settings panel");
     expect(privacy).toContain("AI response reports");
     expect(privacy).toContain("does not intentionally train a Pip-owned AI model");
@@ -32,5 +40,6 @@ describe("public legal and support pages", () => {
     expect(deletion).toContain("To delete your Pip account");
     expect(deletion).toContain("typing DELETE");
     expect([privacy, terms, support, deletion].join("\n")).not.toMatch(/\b(?:beta|waitlist)\b|join-beta/i);
+    expect([privacy, terms, support, deletion].join("\n")).not.toMatch(/\$2\.99|\$7\.99|href="\/pricing"|View pricing|Pricing details/);
   });
 });

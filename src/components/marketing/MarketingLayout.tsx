@@ -26,28 +26,36 @@ const footerLinks = [
 export function MarketingLayout({
   children,
   showPricingLinks = true,
+  homeHref = "/",
 }: {
   children: ReactNode;
   showPricingLinks?: boolean;
+  homeHref?: string;
 }) {
   return (
     <div className="editorial-site swiss-type min-h-screen bg-paper text-ink">
       <MarketingPageView />
-      <MarketingHeader showPricingLinks={showPricingLinks} />
+      <MarketingHeader showPricingLinks={showPricingLinks} homeHref={homeHref} />
       {children}
       <MarketingFooter showPricingLinks={showPricingLinks} />
     </div>
   );
 }
 
-export function MarketingHeader({ showPricingLinks = true }: { showPricingLinks?: boolean }) {
+export function MarketingHeader({
+  showPricingLinks = true,
+  homeHref = "/",
+}: {
+  showPricingLinks?: boolean;
+  homeHref?: string;
+}) {
   const visibleNavLinks = getVisibleMarketingLinks(navLinks, showPricingLinks);
 
   return (
     <>
       <header className="editorial-header">
         <div className="editorial-header-grid">
-          <Link className="focus-ring editorial-logo" href="/" aria-label="Pip home">
+          <Link className="focus-ring editorial-logo" href={homeHref} aria-label="Pip home">
             <img
               src="/brand/pip-logo.png"
               alt="Pip"

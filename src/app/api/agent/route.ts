@@ -68,6 +68,7 @@ import {
   ProviderUnavailableError,
 } from "@/lib/providers/provider-registry";
 import { getSafeErrorMessage, sanitizeSensitiveText } from "@/lib/security/error-messages";
+import { getClientPipPlatform } from "@/lib/platform/android-shell";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database, Json } from "@/lib/supabase/database.types";
@@ -171,6 +172,7 @@ export async function POST(request: Request) {
         message: parsed.data.message,
         snapshot: routeContext.snapshot,
         requestKind: parsed.data.requestKind,
+        platform: getClientPipPlatform(request.headers.get("user-agent")),
         history: parsed.data.history,
         conversationState: parsed.data.conversationState,
         syncStatus: routeContext.syncStatus,

@@ -1,4 +1,5 @@
 import type { AgentCard, PromptChip } from "@/lib/agent/card-types";
+import { resolveIntentConversationJob } from "@/lib/agent/intent-router";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import { getSpendableCashTodayState } from "@/lib/pip-cash/spendable-cash-today";
 import type { PipCashResult } from "@/lib/types";
@@ -102,9 +103,17 @@ const toolJobByName: Record<string, ConversationJob> = {
   get_trust_policy: "data_quality",
   get_spendable_cash_definition: "definition",
   get_onboarding_state: "setup",
+  get_connected_accounts: "setup",
   start_google_oauth: "setup",
   save_protected_savings: "setup",
   start_plaid_link: "setup",
+  start_new_account_connection: "setup",
+  repair_account_connection: "setup",
+  start_account_selection_update: "setup",
+  set_account_inclusion: "setup",
+  set_account_protected_savings: "setup",
+  request_remove_institution_confirmation: "setup",
+  remove_institution: "setup",
   refresh_financial_data: "setup",
   request_delete_data_confirmation: "setup",
   delete_user_data: "setup",
@@ -193,6 +202,12 @@ export function inferConversationJob(
 
   if (!normalized) {
     return "home";
+  }
+
+  const catalogJob = resolveIntentConversationJob(message, history);
+
+  if (catalogJob) {
+    return catalogJob;
   }
 
   if (isSetupPrompt(normalized)) {

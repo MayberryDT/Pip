@@ -11,11 +11,11 @@ export function LegalShell({
   children: ReactNode;
 }) {
   return (
-    <MarketingLayout showPricingLinks={false}>
+    <MarketingLayout showPricingLinks={false} homeHref="/app">
       <main>
         <SwissSection folio="Reference / Pip">
           <div className="col-span-12 lg:col-span-3">
-            <Link className="focus-ring text-sm font-bold text-moss hover:text-ink" href="/">
+            <Link className="focus-ring text-sm font-bold text-moss hover:text-ink" href="/app">
               Pip
             </Link>
             <SwissKicker className="mt-8">Reference</SwissKicker>

@@ -17,12 +17,12 @@ The APK is intentionally small because it does not bundle Chromium, the web app,
 ```txt
 App name: Pip
 Package name: com.spendwithpip.app
-Version code: 12
-Version name: 0.1.0-native-shell.3
+Version code: 13
+Version name: 0.1.0-play-internal.1
 Launch URL: https://spendwithpip.com/app
-Play internal-test AAB: mobile/android-webview/artifacts/pip-android-v12.aab
-Smoke-test APK: mobile/android-webview/artifacts/pip-android-v12.apk
-WebView user agent suffix: PipAndroid/1 VersionCode/12
+Play internal-test AAB: mobile/android-webview/artifacts/pip-android-v13.aab
+Smoke-test APK: mobile/android-webview/artifacts/pip-android-v13.apk
+WebView user agent suffix: PipAndroid/1 VersionCode/13
 ```
 
 The version code is intentionally higher than the deprecated TWA build's version code `4` so Android can update over the old app if the signing certificate matches.
@@ -49,9 +49,9 @@ export JAVA_HOME=/home/tyler/.bubblewrap/jdk/jdk-17.0.11+9
 export PATH="$JAVA_HOME/bin:$PATH"
 ./gradlew clean :app:assembleRelease :app:bundleRelease
 mkdir -p artifacts
-cp app/build/outputs/apk/release/app-release.apk artifacts/pip-android-v12.apk
-cp app/build/outputs/bundle/release/app-release.aab artifacts/pip-android-v12.aab
-sha256sum artifacts/pip-android-v12.apk artifacts/pip-android-v12.aab
+cp app/build/outputs/apk/release/app-release.apk artifacts/pip-android-v13.apk
+cp app/build/outputs/bundle/release/app-release.aab artifacts/pip-android-v13.aab
+sha256sum artifacts/pip-android-v13.apk artifacts/pip-android-v13.aab
 ```
 
 The signed release APK and Play upload bundle are generated at:
@@ -72,19 +72,19 @@ For a no-network local validation pass after dependencies are cached, add `--off
 ## Verify
 
 ```bash
-/home/tyler/.bubblewrap/android_sdk/build-tools/35.0.0/aapt dump badging mobile/android-webview/artifacts/pip-android-v12.apk
-/home/tyler/.bubblewrap/android_sdk/build-tools/35.0.0/aapt dump permissions mobile/android-webview/artifacts/pip-android-v12.apk
-/home/tyler/.bubblewrap/android_sdk/build-tools/35.0.0/apksigner verify --verbose --print-certs mobile/android-webview/artifacts/pip-android-v12.apk
-sha256sum mobile/android-webview/artifacts/pip-android-v12.apk mobile/android-webview/artifacts/pip-android-v12.aab
-unzip -p mobile/android-webview/artifacts/pip-android-v12.apk classes.dex | strings | rg -i "PipNativeShell|PipAndroid/1|VersionCode/|android/webkit|androidbrowserhelper|trustedwebactivity|customtabs"
+/home/tyler/.bubblewrap/android_sdk/build-tools/35.0.0/aapt dump badging mobile/android-webview/artifacts/pip-android-v13.apk
+/home/tyler/.bubblewrap/android_sdk/build-tools/35.0.0/aapt dump permissions mobile/android-webview/artifacts/pip-android-v13.apk
+/home/tyler/.bubblewrap/android_sdk/build-tools/35.0.0/apksigner verify --verbose --print-certs mobile/android-webview/artifacts/pip-android-v13.apk
+sha256sum mobile/android-webview/artifacts/pip-android-v13.apk mobile/android-webview/artifacts/pip-android-v13.aab
+unzip -p mobile/android-webview/artifacts/pip-android-v13.apk classes.dex | strings | rg -i "PipNativeShell|PipAndroid/1|VersionCode/|android/webkit|androidbrowserhelper|trustedwebactivity|customtabs"
 ```
 
-Expected static proof for `pip-android-v12.apk`:
+Expected static proof for `pip-android-v13.apk`:
 
 ```txt
 package: com.spendwithpip.app
-versionCode: 12
-versionName: 0.1.0-native-shell.3
+versionCode: 13
+versionName: 0.1.0-play-internal.1
 launchable activity: com.spendwithpip.app.MainActivity
 permissions: INTERNET, ACCESS_NETWORK_STATE
 signature: verifies with APK Signature Scheme v2
@@ -97,14 +97,14 @@ classes.dex does not include: androidbrowserhelper, trustedwebactivity, customta
 ## Device Smoke
 
 ```bash
-adb install -r /home/tyler/Documents/FreeCash/mobile/android-webview/artifacts/pip-android-v12.apk
+adb install -r /home/tyler/Documents/FreeCash/mobile/android-webview/artifacts/pip-android-v13.apk
 adb shell monkey -p com.spendwithpip.app 1
 adb shell dumpsys activity activities | rg "mResumedActivity|topResumedActivity|com.spendwithpip.app|com.android.chrome"
 adb logcat -d | rg "PipNativeShell"
 ```
 
 Normal launcher start must foreground `com.spendwithpip.app`, not Chrome.
-During Android smoke, verify the loaded web request user agent contains `PipAndroid/1 VersionCode/12`.
+During Android smoke, verify the loaded web request user agent contains `PipAndroid/1 VersionCode/13`.
 
 If a phone still opens Chrome after installing this artifact, collect these outputs from that phone before changing code:
 

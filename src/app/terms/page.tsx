@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { LegalShell } from "@/components/LegalShell";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
-import { pipSubscriptionCaveat } from "@/lib/marketing/pricing";
 import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 export const metadata: Metadata = buildMarketingMetadata({
@@ -64,11 +63,10 @@ export default function TermsPage() {
 
       <section>
         <h2 className="text-lg font-bold text-ink">Subscriptions and Cancellation</h2>
-        <p className="mt-3">{pipSubscriptionCaveat}</p>
         <p className="mt-3">
-          Pip currently lists {pipTrustPolicy.pricing.weekly} and{" "}
-          {pipTrustPolicy.pricing.monthly}. Weekly and monthly plan availability may vary by
-          platform. Cancel through the platform where the subscription started before renewal.
+          Purchases and subscriptions are not available in the Android Play test build. Where Pip
+          offers paid access on another platform, cancel through the platform where the subscription
+          started before renewal.
         </p>
         <p className="mt-3">
           Trials, refunds, grace periods, and billing recovery depend on the platform and offer shown
@@ -76,8 +74,8 @@ export default function TermsPage() {
           not match.
         </p>
         <p className="mt-3">
-          The Android Play test build is consumption-only and does not include purchase, checkout,
-          upgrade, trial, subscription, or external-payment prompts.
+          The Android Play test build is consumption-only and does not include purchase or
+          external-payment prompts.
         </p>
       </section>
 

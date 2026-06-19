@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { ProviderUnavailableError } from "@/lib/providers/provider-registry";
 import { POST } from "@/app/api/sync/manual/route";
@@ -17,6 +17,7 @@ const routeMocks = vi.hoisted(() => {
   return {
     createSupabaseServerClient: vi.fn(),
     loadSyncStatusForUser: vi.fn(),
+    loadManualRefreshOnlyForUser: vi.fn(),
     assertManualSyncAllowed: vi.fn(),
     runManualSync: vi.fn(),
     runProviderSync: vi.fn(),
@@ -39,6 +40,14 @@ vi.mock("@/lib/data/sync-status", () => ({
   loadSyncStatusForUser: routeMocks.loadSyncStatusForUser,
 }));
 
+vi.mock("@/lib/data/user-settings", () => ({
+  loadManualRefreshOnlyForUser: routeMocks.loadManualRefreshOnlyForUser,
+}));
+
+beforeEach(() => {
+  routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(false);
+});
+
 afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
@@ -56,6 +65,48 @@ describe("POST /api/sync/manual", () => {
       error: "Authentication required.",
     });
     expect(routeMocks.runManualSync).not.toHaveBeenCalled();
+  });
+
+  it("skips manual refreshes for manual-refresh-only reviewer accounts", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "reviewer-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(true);
+
+    const response = await POST(jsonRequest({ provider: "plaid" }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "skipped_manual_only",
+      message: "Automatic refresh is disabled for this account.",
+    });
+    expect(routeMocks.loadManualRefreshOnlyForUser).toHaveBeenCalledWith(supabase, "reviewer-1");
+    expect(routeMocks.loadSyncStatusForUser).not.toHaveBeenCalled();
+    expect(routeMocks.assertManualSyncAllowed).not.toHaveBeenCalled();
+    expect(routeMocks.runManualSync).not.toHaveBeenCalled();
+    expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
+  });
+
+  it("skips repair/provider refreshes for manual-refresh-only reviewer accounts", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "reviewer-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(true);
+
+    const response = await POST(jsonRequest({
+      provider: "plaid",
+      reason: "repair",
+    }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "skipped_manual_only",
+      message: "Automatic refresh is disabled for this account.",
+    });
+    expect(routeMocks.loadSyncStatusForUser).not.toHaveBeenCalled();
+    expect(routeMocks.assertManualSyncAllowed).not.toHaveBeenCalled();
+    expect(routeMocks.runManualSync).not.toHaveBeenCalled();
+    expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
   });
 
   it("requires authenticated callers to choose a provider explicitly", async () => {

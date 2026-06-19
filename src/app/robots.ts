@@ -18,7 +18,7 @@ export default function robots(): MetadataRoute.Robots {
           "/delete-account",
           "/blog",
         ],
-        disallow: ["/api/", "/auth/", "/plaid/", "/app"],
+        disallow: ["/api/", "/auth/", "/plaid/", "/app", "/reviewer-login"],
       },
     ],
     sitemap: `${getMarketingOrigin()}/sitemap.xml`,

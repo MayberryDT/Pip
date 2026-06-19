@@ -3,6 +3,7 @@ import { getAppOpenSyncDecision } from "@/lib/data/app-open-sync";
 import { loadPendingPipSyncJobsForUser } from "@/lib/data/sync-jobs";
 import { loadSyncStatusForUser } from "@/lib/data/sync-status";
 import { runProviderSync } from "@/lib/data/manual-sync";
+import { loadManualRefreshOnlyForUser } from "@/lib/data/user-settings";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { ProviderUnavailableError } from "@/lib/providers/provider-registry";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
@@ -25,6 +26,15 @@ export async function POST() {
     }
 
     const now = new Date();
+    const isManualRefreshOnly = await loadManualRefreshOnlyForUser(supabase, user.id);
+
+    if (isManualRefreshOnly) {
+      return NextResponse.json({
+        status: "skipped_manual_only",
+        message: "Automatic refresh is disabled for this account.",
+      });
+    }
+
     const [syncStatus, pendingJobs] = await Promise.all([
       loadSyncStatusForUser(supabase, user.id, now),
       loadPendingPipSyncJobsForUser(supabase, user.id),

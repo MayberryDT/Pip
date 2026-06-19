@@ -24,4 +24,18 @@ describe("pipTrustPolicy", () => {
       href: "/security",
     });
   });
+
+  it("keeps Android pricing answers free of prices and pricing links", () => {
+    const answer = composeTrustPolicyAnswer("How much does Pip cost?", {
+      platform: "android_webview",
+    });
+
+    expect(answer).toMatchObject({
+      category: "pricing",
+      message: "Purchases and subscriptions are not available in this Android build.",
+      href: "/support",
+    });
+    expect(answer.message).not.toMatch(/\$2\.99|\$7\.99|pricing/i);
+    expect(answer.href).not.toBe("/pricing");
+  });
 });

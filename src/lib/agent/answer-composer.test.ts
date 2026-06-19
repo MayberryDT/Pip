@@ -365,4 +365,23 @@ describe("answer composer", () => {
       repetitionAdjusted: true,
     });
   });
+
+  it("keeps Android trust-policy pricing bridges free of web prices", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "Pip lists $2.99/week.",
+      },
+      userMessage: "What does Pip cost?",
+      cards: [],
+      usedTools: ["get_trust_policy"],
+      platform: "android_webview",
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "Purchases and subscriptions are not available in this Android build.",
+      answerPatternId: "trust-policy",
+    });
+  });
 });

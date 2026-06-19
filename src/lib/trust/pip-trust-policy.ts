@@ -1,11 +1,12 @@
 import { marketingSite } from "@/lib/marketing/site";
 import { pipPricing } from "@/lib/marketing/pricing";
+import type { PipPlatform } from "@/lib/platform/android-shell";
 
 export const pipTrustPolicy = {
   effectiveDate: "June 18, 2026",
   revisionDate: "June 18, 2026",
   supportEmail: marketingSite.supportEmail,
-  legalOperatorLabel: "Pip support",
+  legalOperatorLabel: "Pip / Animas AI support",
   bankDataProvider: {
     name: "Plaid",
     role: "Read-only account connection for balances, transactions, and account metadata.",
@@ -14,6 +15,24 @@ export const pipTrustPolicy = {
     label: "OpenAI-compatible model endpoints through Netlify AI Gateway or OpenAI direct",
     role: "Conversation, explanation, and answer quality support. AI does not own the Spendable Cash Today calculation.",
   },
+  processors: [
+    {
+      name: "Supabase",
+      role: "Authentication, database, storage of app rows, row-level security, and server-side account deletion support.",
+    },
+    {
+      name: "Netlify",
+      role: "Hosting, serverless functions, request routing, request logs, and deployment infrastructure.",
+    },
+    {
+      name: "Plaid",
+      role: "Read-only financial account connection, balances, transactions, account metadata, and connection state.",
+    },
+    {
+      name: "OpenAI or Netlify AI Gateway",
+      role: "AI answer generation, explanation support, and assistant quality handling for prompts and selected context.",
+    },
+  ],
   pricing: {
     weekly: pipPricing.weekly.displayPrice,
     monthly: pipPricing.monthly.displayPrice,
@@ -33,14 +52,14 @@ export const pipTrustPolicy = {
     "Pip does not publicly claim SOC 2, a third-party penetration test, or an independent security audit yet.",
   ],
   privacyBoundaries: [
-    "Pip stores normalized financial data, account metadata, sync logs, settings, AI conversation context, reports, tester feedback, and product events needed to run the app.",
+    "Pip stores email address, Supabase user ID, normalized financial data, account metadata, sync logs, settings, AI conversation context, reports, tester feedback, product events, request metadata, and diagnostics needed to run the app.",
     "Raw provider payload storage is intended to stay minimal, with normalized records used for the product surface.",
     "Pip does not sell financial data and does not run an advertising model.",
     "Pip does not intentionally train a Pip-owned AI model on user financial records.",
     "Third-party AI handling depends on the deployed model provider and gateway terms.",
   ],
   deletionSummary:
-    "Deletion removes account and financial rows, balances, transactions, sync logs, settings, reports, and provider tokens, while limited records may be retained for fraud prevention, security, tax, accounting, or legal obligations.",
+    "Deletion removes account and financial rows, balances, transactions, sync logs, settings, reports, feedback, chat context, product events, and provider tokens, while limited records may be retained for fraud prevention, security, tax, accounting, or legal obligations.",
   subscriptionSummary:
     "Subscriptions are managed where they start or install. Cancel through that platform before renewal; email support for access or billing mismatch questions.",
   calculationSummary:
@@ -73,7 +92,12 @@ export type TrustPolicyAnswer = {
   href: string;
 };
 
-export function composeTrustPolicyAnswer(message: string): TrustPolicyAnswer {
+export function composeTrustPolicyAnswer(
+  message: string,
+  options: {
+    platform?: PipPlatform;
+  } = {},
+): TrustPolicyAnswer {
   const normalized = message.toLowerCase();
 
   if (/\b(ai|model|chatgpt|openai|train|training|learn from|llm)\b/.test(normalized)) {
@@ -116,6 +140,15 @@ export function composeTrustPolicyAnswer(message: string): TrustPolicyAnswer {
   }
 
   if (/\b(price|pricing|cost|subscription|weekly|monthly|refund|trial|cancel)\b/.test(normalized)) {
+    if (options.platform === "android_webview") {
+      return {
+        category: "pricing",
+        message: "Purchases and subscriptions are not available in this Android build.",
+        linkLabel: "Support details",
+        href: pipTrustPolicy.publicLinks.support,
+      };
+    }
+
     return {
       category: "pricing",
       message:

@@ -1,9 +1,17 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { PipIntroScene } from "@/components/onboarding/PipIntroScene";
+import { getClientPipPlatform } from "@/lib/platform/android-shell";
 
 export function LoginPanel() {
+  const [showReviewerSignIn, setShowReviewerSignIn] = useState(false);
+
+  useEffect(() => {
+    setShowReviewerSignIn(shouldShowAndroidReviewerSignIn(window.navigator.userAgent));
+  }, []);
+
   return (
     <main className="pip-app-shell grid min-h-screen place-items-center px-4 py-8 text-ink">
       <section className="w-full max-w-sm">
@@ -29,6 +37,11 @@ export function LoginPanel() {
           </p>
         </PipIntroScene>
         <div className="mt-8 flex gap-4 text-xs font-semibold text-ink/[0.45]">
+          {showReviewerSignIn ? (
+            <Link className="hover:text-ink" href="/reviewer-login">
+              Play reviewer sign-in
+            </Link>
+          ) : null}
           <Link className="hover:text-ink" href="/privacy">
             Privacy
           </Link>
@@ -42,4 +55,8 @@ export function LoginPanel() {
       </section>
     </main>
   );
+}
+
+export function shouldShowAndroidReviewerSignIn(userAgent: string | null | undefined): boolean {
+  return getClientPipPlatform(userAgent) === "android_webview";
 }
