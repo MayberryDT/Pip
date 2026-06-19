@@ -6,6 +6,7 @@ const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   getFinancialDataProvider: vi.fn(),
   getCurrentFinancialSnapshot: vi.fn(),
+  loadRecentAgentChatHistory: vi.fn(),
   recordAgentChatTurnSafely: vi.fn(),
   recordProductEventSafely: vi.fn(),
   runAIAgent: vi.fn(),
@@ -34,6 +35,7 @@ vi.mock("@/lib/data/product-events", async (importOriginal) => {
 });
 
 vi.mock("@/lib/data/agent-chat-turns", () => ({
+  loadRecentAgentChatHistory: routeMocks.loadRecentAgentChatHistory,
   recordAgentChatTurnSafely: routeMocks.recordAgentChatTurnSafely,
 }));
 
@@ -66,6 +68,7 @@ import {
 
 afterEach(() => {
   vi.clearAllMocks();
+  routeMocks.loadRecentAgentChatHistory.mockReset();
   vi.unstubAllEnvs();
 });
 
@@ -276,6 +279,128 @@ describe("POST /api/agent", () => {
             },
           ],
           lastToolNames: ["get_pip_cash_drivers"],
+        },
+      }),
+    );
+  });
+
+  it("hydrates short authenticated history from recent chat turns for the same conversation", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.loadRecentAgentChatHistory.mockResolvedValue([
+      {
+        role: "user",
+        content: "Can I save for Bali?",
+      },
+      {
+        role: "assistant",
+        content: "How much do you want to save for Bali?",
+      },
+    ]);
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
+      usedTools: ["create_savings_goal"],
+      responseMode: "show_card",
+    }));
+
+    const response = await POST(
+      jsonRequest({
+        message: "$5,000",
+        conversationId: "phone-conversation",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.loadRecentAgentChatHistory).toHaveBeenCalledWith(supabase, {
+      userId: "user-1",
+      conversationId: "phone-conversation",
+    });
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        history: [
+          {
+            role: "user",
+            content: "Can I save for Bali?",
+          },
+          {
+            role: "assistant",
+            content: "How much do you want to save for Bali?",
+          },
+        ],
+      }),
+    );
+  });
+
+  it("does not hydrate prompt-chip refresh requests from chat turns", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
+      message: "Ready.",
+      promptChips: [
+        {
+          id: "ai-upcoming-bills",
+          label: "Upcoming bills",
+          prompt: "What bills are coming up?",
+        },
+      ],
+    }));
+
+    const response = await POST(
+      jsonRequest({
+        message: "Create prompt chips for the current Pip screen.",
+        requestKind: "prompt_chips",
+        conversationId: "phone-conversation",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.loadRecentAgentChatHistory).not.toHaveBeenCalled();
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        history: undefined,
+      }),
+    );
+  });
+
+  it("accepts pending actions in conversation state and forwards feature flags to the agent", async () => {
+    enableSupabaseEnv();
+    vi.stubEnv("PIP_SAVINGS_GOALS_ENABLED", "true");
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
+      usedTools: ["create_savings_goal"],
+      responseMode: "show_card",
+    }));
+
+    const response = await POST(
+      jsonRequest({
+        message: "yes",
+        conversationState: {
+          pendingAction: {
+            type: "create_savings_goal",
+            name: "Bali",
+            targetAmountCents: 500000,
+          },
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationState: expect.objectContaining({
+          pendingAction: {
+            type: "create_savings_goal",
+            name: "Bali",
+            targetAmountCents: 500000,
+          },
+        }),
+        features: {
+          savingsGoals: true,
         },
       }),
     );

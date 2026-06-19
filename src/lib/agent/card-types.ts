@@ -46,6 +46,27 @@ export type AgentClientAction =
       type: "none";
     };
 
+export type AgentPendingAction =
+  | {
+      type: "create_savings_goal";
+      name: string;
+      targetAmountCents?: number;
+      targetDate?: string;
+      startingAmountCents?: number;
+      currentAmountCents?: number;
+      monthlyContributionCents?: number;
+      includeInSpendableCash?: boolean;
+      missing?: Array<"target_amount">;
+    }
+  | {
+      type: "set_savings_goal_protection";
+      goalId?: string;
+      name?: string;
+      includeInSpendableCash: boolean;
+      monthlyContributionCents?: number;
+      missing?: Array<"goal">;
+    };
+
 export type AgentCard =
   | {
       type: "pip_cash_explanation";
@@ -262,6 +283,7 @@ export type AgentResponse = {
   usedTools: string[];
   responseMode: "chat_only" | "show_card" | "update_context" | "clarify" | "guidance";
   clientAction?: AgentClientAction;
+  pendingAction?: AgentPendingAction;
   audit: {
     toolNames: string[];
     usedModel: boolean;

@@ -110,7 +110,7 @@ Pass 1 does not need a flag because it is copy and label correction.
 
 Pass 2 should be gated until fully verified:
 
-- Server flag: `SAVINGS_GOALS_ENABLED=true`
+- Server flag: `PIP_SAVINGS_GOALS_ENABLED=true`
 - Client flag: `NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=true`
 
 Recommended helper:
@@ -123,6 +123,43 @@ Behavior:
 - Client UI should hide the goals module when the client flag is off.
 - Agent tools should not be registered or should return a disabled response when the server flag is off.
 - The database table can exist while the feature is disabled.
+
+## Production Dogfood Flags
+
+Keep the checked-in defaults hidden:
+
+```env
+PIP_SAVINGS_GOALS_ENABLED=false
+NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=false
+```
+
+Production dogfood override:
+
+```env
+PIP_SAVINGS_GOALS_ENABLED=true
+NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=true
+```
+
+Full-enabled behavior:
+
+- API routes accept savings-goal CRUD requests.
+- Ask Pip can create, list, update, and protect savings goals.
+- The app can show goal cards and any compact goals module.
+- Protected goals may affect Spendable Cash Today only after the trust receipt and calculation integration are enabled.
+
+Full-hidden behavior:
+
+- Savings-goal UI is hidden.
+- Savings-goal API routes return the disabled response or `404`.
+- Ask Pip does not expose savings-goal tools and should clarify or answer conversationally instead of promising goal cards.
+- Existing `savings_goals` rows remain stored for a later re-enable.
+
+Rollback guidance:
+
+- Set both flags to `false`.
+- Redeploy and verify `/app`, `npm run eval:agent`, and the phone dogfood E2E path no longer expose goal creation.
+- If protected goal contributions affected cached Spendable Cash Today results, mark current Pip Cash snapshots stale before or during rollback.
+- Do not drop `savings_goals` unless a separate data-retention decision is made.
 
 ## Phase 0: Baseline And Guardrails
 
@@ -937,7 +974,7 @@ Pass 1 rollback:
 
 Pass 2 rollback:
 
-- Set `SAVINGS_GOALS_ENABLED=false`.
+- Set `PIP_SAVINGS_GOALS_ENABLED=false`.
 - Set `NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=false`.
 - Keep the table and user data in place.
 - Hide UI and disable agent tools.

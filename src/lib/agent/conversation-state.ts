@@ -21,6 +21,7 @@ export type ConversationJob =
   | "true_balances"
   | "data_quality"
   | "financial_guidance"
+  | "savings_goal"
   | "definition"
   | "setup"
   | "broad_chat"
@@ -81,6 +82,8 @@ const cardJobByType: Partial<Record<AgentCard["type"], ConversationJob>> = {
   trust_receipt: "data_quality",
   missing_card_nudge: "data_quality",
   connect_account: "data_quality",
+  savings_goal_plan: "savings_goal",
+  savings_goals_summary: "savings_goal",
 };
 
 const toolJobByName: Record<string, ConversationJob> = {
@@ -114,6 +117,10 @@ const toolJobByName: Record<string, ConversationJob> = {
   set_account_protected_savings: "setup",
   request_remove_institution_confirmation: "setup",
   remove_institution: "setup",
+  create_savings_goal: "savings_goal",
+  list_savings_goals: "savings_goal",
+  update_savings_goal: "savings_goal",
+  set_savings_goal_protection: "savings_goal",
   refresh_financial_data: "setup",
   request_delete_data_confirmation: "setup",
   delete_user_data: "setup",
@@ -244,6 +251,10 @@ export function inferConversationJob(
 
   if (isPurchasePrompt(normalized, history)) {
     return "purchase_test";
+  }
+
+  if (isSavingsGoalPrompt(normalized)) {
+    return "savings_goal";
   }
 
   if (isFinancialGuidancePrompt(normalized)) {
@@ -382,6 +393,14 @@ function isPurchasePrompt(normalized: string, history: ConversationHistoryItem[]
   return (history ?? [])
     .slice(-4)
     .some((item) => item.role === "user" && /\b(spend|buy|purchase|order|afford|pay|cost)\b/.test(normalizeText(item.content)));
+}
+
+function isSavingsGoalPrompt(normalized: string): boolean {
+  return /\bsavings? goals?\b/.test(normalized) ||
+    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
+    /\b(for|toward|towards)\b.{0,32}\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b/.test(normalized) ||
+    /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized) ||
+    /^(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)$/.test(normalized);
 }
 
 function isFinancialGuidancePrompt(normalized: string): boolean {

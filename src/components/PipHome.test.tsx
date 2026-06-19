@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { PipHome, __pipHomeTestHooks } from "@/components/PipHome";
 import type { SyncStatusResponse } from "@/components/data-controls-helpers";
-import type { PromptChip } from "@/lib/agent/card-types";
+import type { AgentResponse, PromptChip } from "@/lib/agent/card-types";
 
 describe("PipHome", () => {
   it("keeps the Pip home surface to one number, assistant intro, and the agent input", () => {
@@ -17,6 +17,9 @@ describe("PipHome", () => {
     expect(visibleText).toContain("Spendable Cash Today");
     expect(visibleText).toContain("$104");
     expect(visibleText).toContain("I’m missing a card, so I may adjust this after you connect it.");
+    expect(markup).not.toContain('data-testid="pip-trust-receipt"');
+    expect(visibleText).not.toContain("Current money window ends");
+    expect(visibleText).not.toMatch(/known limit|no active warning/i);
     expect(markup).not.toContain("pip-metric-subtitle");
     expect(markup).not.toContain("This may change if you connect the missing card.");
     expect(markup).toContain("Ask Pip anything...");
@@ -300,7 +303,18 @@ describe("PipHome", () => {
         liveAccountControlsEnabled: true,
         authStatus: "ready",
         syncStatus: stalePlaidSyncStatus(),
-        hasAttemptedDailyRefresh: false,
+        hasRecentAppOpenRefresh: false,
+      }),
+    ).toBe("plaid");
+  });
+
+  it("selects an app-open refresh provider even when data already synced today", () => {
+    expect(
+      __pipHomeTestHooks.getAppOpenRefreshProvider({
+        liveAccountControlsEnabled: true,
+        authStatus: "ready",
+        syncStatus: currentPlaidSyncStatus(),
+        hasRecentAppOpenRefresh: false,
       }),
     ).toBe("plaid");
   });
@@ -311,10 +325,102 @@ describe("PipHome", () => {
         liveAccountControlsEnabled: true,
         authStatus: "ready",
         syncStatus: stalePlaidSyncStatus(),
-        hasAttemptedDailyRefresh: false,
+        hasRecentAppOpenRefresh: false,
         hasPendingSyncJob: true,
       }),
     ).toBeNull();
+  });
+
+  it("skips app-open refresh during the short client duplicate guard", () => {
+    expect(
+      __pipHomeTestHooks.getAppOpenRefreshProvider({
+        liveAccountControlsEnabled: true,
+        authStatus: "ready",
+        syncStatus: currentPlaidSyncStatus(),
+        hasRecentAppOpenRefresh: true,
+      }),
+    ).toBeNull();
+  });
+
+  it("passes the latest completed assistant pending action in conversation state", () => {
+    const pendingAction: AgentResponse["pendingAction"] = {
+      type: "create_savings_goal",
+      name: "Bali",
+      missing: ["target_amount"],
+    };
+
+    expect(
+      __pipHomeTestHooks.getConversationState(
+        [
+          {
+            id: "turn-1",
+            userText: "remove bank",
+            response: createAgentResponseWithPendingAction({
+              pendingAction: {
+                type: "create_savings_goal",
+                name: "Older goal",
+                missing: ["target_amount"],
+              },
+            }),
+          },
+          {
+            id: "turn-2",
+            userText: "yes",
+            isPending: true,
+            response: createAgentResponseWithPendingAction({
+              pendingAction: {
+                type: "create_savings_goal",
+                name: "Pending turn goal",
+                missing: ["target_amount"],
+              },
+            }),
+          },
+          {
+            id: "turn-3",
+            userText: "remove this bank",
+            response: createAgentResponseWithPendingAction({
+              pendingAction,
+            }),
+          },
+        ],
+        [],
+        [],
+      ),
+    ).toMatchObject({
+      shownCards: [],
+      lastToolNames: [],
+      promptChips: [],
+      pendingAction,
+    });
+  });
+
+  it("clears stale assistant pending actions after the latest completed response has none", () => {
+    const stalePendingAction: AgentResponse["pendingAction"] = {
+      type: "create_savings_goal",
+      name: "Bali",
+      missing: ["target_amount"],
+    };
+
+    expect(
+      __pipHomeTestHooks.getConversationState(
+        [
+          {
+            id: "turn-1",
+            userText: "I want to save for Bali",
+            response: createAgentResponseWithPendingAction({
+              pendingAction: stalePendingAction,
+            }),
+          },
+          {
+            id: "turn-2",
+            userText: "no",
+            response: createAgentResponseWithPendingAction({}),
+          },
+        ],
+        [],
+        [],
+      ),
+    ).not.toHaveProperty("pendingAction");
   });
 
   it("maps agent failures to short PIP-safe visible messages", () => {
@@ -406,5 +512,41 @@ function repairablePlaidSyncStatus(): SyncStatusResponse {
     ],
     latestSyncRun: null,
     hasStaleInstitution: true,
+  };
+}
+
+function currentPlaidSyncStatus(): SyncStatusResponse {
+  return {
+    institutions: [
+      {
+        id: "institution-1",
+        institutionName: "Northstar Bank",
+        provider: "plaid",
+        status: "connected",
+        lastSuccessfulSyncAt: new Date().toISOString(),
+        staleAfter: null,
+        isStale: false,
+        errorMessage: null,
+      },
+    ],
+    latestSyncRun: null,
+    hasStaleInstitution: false,
+  };
+}
+
+function createAgentResponseWithPendingAction(input: {
+  pendingAction?: AgentResponse["pendingAction"];
+}): AgentResponse {
+  return {
+    message: "Assistant message",
+    cards: [],
+    promptChips: [],
+    usedTools: [],
+    responseMode: "chat_only" as const,
+    ...(input.pendingAction ? { pendingAction: input.pendingAction } : {}),
+    audit: {
+      toolNames: [],
+      usedModel: false,
+    },
   };
 }

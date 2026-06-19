@@ -48,6 +48,10 @@ export function getRefreshProvider(syncStatus: SyncStatusResponse | null): Finan
   return null;
 }
 
+export function shouldAttemptAppOpenRefresh(syncStatus: SyncStatusResponse | null): boolean {
+  return Boolean(getRefreshProvider(syncStatus)) && canRefreshData(syncStatus);
+}
+
 export function getRefreshLabel(syncStatus: SyncStatusResponse | null): string {
   if (!getRefreshProvider(syncStatus)) {
     return "Connect data first";

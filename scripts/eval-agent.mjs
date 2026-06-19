@@ -334,6 +334,39 @@ export const agentEvalCases = [
     expectedResponseMode: "chat_only",
   },
   {
+    id: "phone-save-trip-bali",
+    description: "Phone dogfood savings goal should clarify missing details and keep a pending create-goal action.",
+    message: "Now I want to save for a trip to Bali.",
+    expectNoCards: true,
+    expectedResponseMode: "clarify",
+    expectedPendingActionType: "create_savings_goal",
+    forbiddenTextPatterns: ["I'm not sure", "\\bcushion\\b"],
+  },
+  {
+    id: "phone-save-big-purchase",
+    description: "Generic big-purchase savings goal should clarify rather than route as generic spendable snapshot help.",
+    message: "I want to save money for a big purchase",
+    expectNoCards: true,
+    expectedResponseMode: "clarify",
+    expectedPendingActionType: "create_savings_goal",
+    forbiddenTools: ["get_pip_cash_snapshot"],
+  },
+  {
+    id: "phone-why-monthly-savings",
+    description: "Old cushion wording should be answered with Monthly Savings language.",
+    message: "Why does Pip need a savings cushion?",
+    expectedTextPatterns: ["monthly savings"],
+    forbiddenTextPatterns: ["\\bcushion\\b"],
+  },
+  {
+    id: "phone-show-bank-accounts",
+    description: "Account list prompt should use connected-account data and avoid placeholder bank names.",
+    message: "Show my bank accounts",
+    expectedTools: ["get_connected_accounts"],
+    expectedCards: ["account_connections"],
+    forbiddenTextPatterns: ["\\bBank A\\b", "\\bBank B\\b"],
+  },
+  {
     id: "how-it-works",
     description: "Product explanation should not say PIP Cash or point to screens.",
     message: "Tell me how Pip works",
@@ -566,6 +599,34 @@ function getPromptChips(response) {
   return asArray(response?.promptChips);
 }
 
+function getPendingActionType(response) {
+  const pendingAction = response?.conversationState?.pendingAction ?? response?.pendingAction;
+
+  return typeof pendingAction?.type === "string" ? pendingAction.type : "";
+}
+
+function collectStrings(value, output = []) {
+  if (typeof value === "string") {
+    output.push(value);
+    return output;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectStrings(item, output);
+    }
+    return output;
+  }
+
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) {
+      collectStrings(item, output);
+    }
+  }
+
+  return output;
+}
+
 function getResponseSearchText(response, message) {
   const cardText = asArray(response?.cards).flatMap((card) => [
     card?.title,
@@ -584,7 +645,7 @@ function getResponseSearchText(response, message) {
     ]),
   ]);
 
-  return [message, ...cardText]
+  return [message, ...cardText, ...collectStrings(response?.cards), ...collectStrings(response?.promptChips)]
     .filter((value) => typeof value === "string")
     .join(" ");
 }
@@ -760,6 +821,14 @@ function validateExpectedResponseText({ caseDef, response, message, failures }) 
       }
     }
   }
+
+  for (const patternSource of asArray(caseDef.forbiddenTextPatterns)) {
+    const pattern = new RegExp(String(patternSource), "i");
+
+    if (pattern.test(responseText)) {
+      failures.push(`forbidden response text pattern found: ${patternSource}`);
+    }
+  }
 }
 
 export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, httpOk = true, error = null }) {
@@ -768,6 +837,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
   const cardTypes = getCardTypes(response);
   const usedTools = getUsedTools(response);
   const promptChips = getPromptChips(response);
+  const pendingActionType = getPendingActionType(response);
   const responseMode = typeof response?.responseMode === "string" ? response.responseMode : "";
   const routingOnly = Boolean(caseDef.routingOnly);
 
@@ -836,6 +906,12 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     failures.push(`expected responseMode ${caseDef.expectedResponseMode} but got ${responseMode || "none"}.`);
   }
 
+  if (caseDef.expectedPendingActionType && pendingActionType !== caseDef.expectedPendingActionType) {
+    failures.push(
+      `expected pending action type ${caseDef.expectedPendingActionType} but got ${pendingActionType || "none"}.`,
+    );
+  }
+
   for (const cardType of cardTypes) {
     if (!ALL_CARD_TYPES.includes(cardType)) {
       failures.push(`unknown card type returned: ${cardType}`);
@@ -849,6 +925,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     responseMode,
     usedTools,
     cardTypes,
+    pendingActionType,
     promptChips: promptChips.map((chip) => ({
       id: chip?.id,
       label: chip?.label,
@@ -873,6 +950,7 @@ function buildRequestBody(caseDef, conversationId) {
         })),
       lastToolNames: providedState.lastToolNames ?? caseDef.recentToolNames ?? [],
       promptChips: providedState.promptChips ?? caseDef.previousPromptChips ?? [],
+      ...(providedState.pendingAction ? { pendingAction: providedState.pendingAction } : {}),
     },
     conversationId,
   };

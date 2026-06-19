@@ -17,7 +17,7 @@ import {
   getConnectLabel,
   getConnectionStatusMessage,
   getRefreshProvider,
-  shouldRefreshConnectedDataForToday,
+  shouldAttemptAppOpenRefresh,
   type FinancialProvider,
   type SyncStatusResponse,
 } from "@/components/data-controls-helpers";
@@ -28,10 +28,6 @@ import {
   getSpendableCashTodaySubtitle,
   getSpendableCashTodayState,
 } from "@/lib/pip-cash/spendable-cash-today";
-import {
-  buildSpendableTrustReceipt,
-  formatTrustReceiptInline,
-} from "@/lib/pip-cash/trust-receipt";
 import { formatMoney } from "@/lib/money";
 import type { PipCashResult } from "@/lib/types";
 import { AgentInput } from "@/components/AgentInput";
@@ -164,10 +160,6 @@ export function PipHome({
       : liveAccountControlsEnabled
         ? serverResult
         : localResult;
-  const trustReceipt = useMemo(
-    () => result ? buildSpendableTrustReceipt({ result, syncStatus }) : null,
-    [result, syncStatus],
-  );
   const hasLoadedServerResult = Boolean(result);
   const pipCashTodayCents = result ? getDisplayedSpendableCashTodayCents(result) : undefined;
   const protectedSavingsGoalMonthlyCents =
@@ -938,11 +930,6 @@ export function PipHome({
                 >
                   {result ? formatMoney(getDisplayedSpendableCashTodayCents(result)) : "$--"}
                 </div>
-                {trustReceipt ? (
-                  <p className="pip-metric-receipt" data-testid="pip-trust-receipt">
-                    {formatTrustReceiptInline(trustReceipt)}
-                  </p>
-                ) : null}
                 {showSavingsGoalMetricNote ? (
                   <p className="pip-metric-receipt" data-testid="pip-savings-goal-note">
                     Savings goals: {formatMoney(protectedSavingsGoalMonthlyCents)}/month kept out.
@@ -2108,12 +2095,28 @@ function getConversationState(
     ...thread.flatMap((item) => item.response?.promptChips ?? []),
     ...visibleChips,
   ].slice(-24);
+  const pendingAction = getLatestCompletedPendingAction(thread);
 
   return {
     shownCards,
     lastToolNames,
     promptChips,
+    ...(pendingAction === undefined ? {} : { pendingAction }),
   };
+}
+
+function getLatestCompletedPendingAction(thread: ThreadItem[]) {
+  const latestCompletedTurn = thread.filter((item) => !item.isPending).at(-1);
+
+  return getResponsePendingAction(latestCompletedTurn?.response);
+}
+
+function getResponsePendingAction(response: AgentResponse | undefined) {
+  if (!response || !("pendingAction" in response)) {
+    return undefined;
+  }
+
+  return response.pendingAction;
 }
 
 function mergePromptChipHistory(...chipSets: PromptChip[][]): PromptChip[] {
@@ -2154,16 +2157,16 @@ function getAppOpenRefreshProvider(input: {
   liveAccountControlsEnabled: boolean;
   authStatus?: PipAuthState["status"];
   syncStatus: SyncStatusResponse | null;
-  hasAttemptedDailyRefresh: boolean;
+  hasRecentAppOpenRefresh: boolean;
   hasPendingSyncJob?: boolean;
 }): FinancialProvider | null {
   if (
     !input.liveAccountControlsEnabled ||
     input.authStatus !== "ready" ||
     !input.syncStatus ||
-    input.hasAttemptedDailyRefresh ||
+    input.hasRecentAppOpenRefresh ||
     input.hasPendingSyncJob ||
-    !shouldRefreshConnectedDataForToday(input.syncStatus)
+    !shouldAttemptAppOpenRefresh(input.syncStatus)
   ) {
     return null;
   }
@@ -2249,6 +2252,7 @@ export const __pipHomeTestHooks = {
   getAgentErrorText,
   getAppOpenRefreshProvider,
   getClientActionErrorText,
+  getConversationState,
   getNextVisiblePromptChips,
   getReadyDataAction,
   getSafeAgentFailureMessage,

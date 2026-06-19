@@ -25,6 +25,9 @@ describe("conversation state", () => {
     expect(inferConversationJob("You can't show my bank account balance?")).toBe("true_balances");
     expect(inferConversationJob("What did I buy lately?")).toBe("recent_transactions");
     expect(inferConversationJob("Where is my money going by category?")).toBe("spending_breakdown");
+    expect(inferConversationJob("Save for Bali")).toBe("savings_goal");
+    expect(inferConversationJob("Show my savings goals")).toBe("savings_goal");
+    expect(inferConversationJob("Car")).toBe("savings_goal");
   });
 
   it("uses short history to classify purchase amount follow-ups", () => {
@@ -156,6 +159,24 @@ describe("conversation state", () => {
     });
 
     expect(summary.recentJobs).toEqual(["purchase_test", "forecast", "recent_transactions"]);
+  });
+
+  it("summarizes savings-goal cards and tools as savings-goal jobs", () => {
+    const summary = summarizeConversationState({
+      message: "yes",
+      shownCards: [
+        {
+          type: "savings_goal_plan",
+          title: "Savings goal",
+        },
+      ],
+      lastToolNames: ["create_savings_goal"],
+      responseToolNames: ["set_savings_goal_protection"],
+    });
+
+    expect(summary.currentJob).toBe("savings_goal");
+    expect(summary.lastAnsweredJob).toBe("savings_goal");
+    expect(summary.recentJobs).toEqual(["savings_goal"]);
   });
 
   it("detects exact and high-overlap assistant repetition", () => {

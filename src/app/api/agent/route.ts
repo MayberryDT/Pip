@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { AgentCard, AgentResponse } from "@/lib/agent/card-types";
+import { pendingActionSchema } from "@/lib/agent/response-schema";
 import {
   AuthenticationRequiredError,
   getCurrentFinancialSnapshot,
   NoFinancialDataError,
 } from "@/lib/data/current-snapshot";
-import { recordAgentChatTurnSafely } from "@/lib/data/agent-chat-turns";
+import { loadRecentAgentChatHistory, recordAgentChatTurnSafely } from "@/lib/data/agent-chat-turns";
 import {
   type ConnectedAccountsResult,
   deleteCurrentUserFinancialData,
@@ -128,6 +129,7 @@ const requestSchema = z.object({
         )
         .max(24)
         .optional(),
+      pendingAction: pendingActionSchema.optional(),
     })
     .optional(),
 });
@@ -167,18 +169,22 @@ export async function POST(request: Request) {
     routeContext = await createRouteAgentContext({
       scenario: parsed.data.scenario,
     });
+    const historyPreparation = await prepareAgentHistory(parsed.data, routeContext, conversationId);
     const response = await runAIAgent(
       {
         message: parsed.data.message,
         snapshot: routeContext.snapshot,
         requestKind: parsed.data.requestKind,
         platform: getClientPipPlatform(request.headers.get("user-agent")),
-        history: parsed.data.history,
+        history: historyPreparation.history,
         conversationState: parsed.data.conversationState,
         syncStatus: routeContext.syncStatus,
         onboardingState: routeContext.onboardingState,
         selectedPromptChipId: parsed.data.selectedPromptChipId,
         actions: routeContext.actions,
+        features: {
+          savingsGoals: isSavingsGoalsEnabled(),
+        },
       },
     );
 
@@ -189,6 +195,7 @@ export async function POST(request: Request) {
         recordAgentEvents(routeContext.eventContext, {
           message: parsed.data.message,
           historyLength: parsed.data.history?.length ?? 0,
+          hydratedHistoryLength: historyPreparation.history?.length ?? 0,
           response,
           pipCashTodayCents: routeResult
             ? getDisplayedSpendableCashTodayCents(routeResult)
@@ -226,6 +233,51 @@ export async function POST(request: Request) {
 
     return NextResponse.json(body, { status });
   }
+}
+
+async function prepareAgentHistory(
+  input: AgentRouteRequest,
+  routeContext: RouteAgentContext,
+  conversationId: string,
+): Promise<{
+  history: AgentRouteRequest["history"];
+}> {
+  const clientHistory = input.history?.slice(-8);
+
+  if (
+    input.requestKind === "prompt_chips" ||
+    !routeContext.eventContext ||
+    (clientHistory?.length ?? 0) >= 8
+  ) {
+    return { history: clientHistory };
+  }
+
+  let hydratedHistory: NonNullable<AgentRouteRequest["history"]> = [];
+
+  try {
+    hydratedHistory = await loadRecentAgentChatHistory(routeContext.eventContext.supabase, {
+      userId: routeContext.eventContext.userId,
+      conversationId,
+    }) ?? [];
+  } catch {
+    hydratedHistory = [];
+  }
+
+  if (hydratedHistory.length === 0) {
+    return { history: clientHistory };
+  }
+
+  const clientKeys = new Set((clientHistory ?? []).map((item) => getHistoryItemKey(item)));
+  const merged = [
+    ...hydratedHistory.filter((item) => !clientKeys.has(getHistoryItemKey(item))),
+    ...(clientHistory ?? []),
+  ];
+
+  return { history: merged.slice(-8) };
+}
+
+function getHistoryItemKey(item: { role: "user" | "assistant"; content: string }): string {
+  return `${item.role}\u0000${item.content}`;
 }
 
 function createChatTurnRequestMetadata(
@@ -1015,6 +1067,7 @@ async function recordAgentEvents(
   input: {
     message: string;
     historyLength: number;
+    hydratedHistoryLength: number;
     response: AgentResponse;
     pipCashTodayCents: number | null;
     isShortfall?: boolean;
@@ -1039,6 +1092,7 @@ async function recordAgentEvents(
         clientAction: input.response.clientAction?.type ?? "none",
         messageLength: input.message.length,
         historyLength: input.historyLength,
+        hydratedHistoryLength: input.hydratedHistoryLength,
         isFollowUp: input.historyLength > 0,
         pipCashTodayCents: input.pipCashTodayCents,
         guidance: input.response.audit.guidance

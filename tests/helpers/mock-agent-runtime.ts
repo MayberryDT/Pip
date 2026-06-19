@@ -25,6 +25,7 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
   const result = calculatePipCash(snapshot);
   const normalized = input.message.trim().toLowerCase();
   const amountCents = extractDollarAmount(input.message);
+  const pendingAction = getPendingAction(input.conversationState);
 
   if (input.requestKind === "prompt_chips") {
     return baseResponse(input, {
@@ -119,8 +120,18 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return savingsGoalSummaryResponse(input);
   }
 
+  if (pendingAction?.type === "create_savings_goal" && amountCents !== null) {
+    return savingsGoalPlanResponse(input, amountCents, getPendingSavingsGoalName(pendingAction) ?? "Savings goal");
+  }
+
   if (isSavingsGoalPrompt(normalized)) {
-    return savingsGoalPlanResponse(input, amountCents ?? 500000);
+    const goalName = inferSavingsGoalName(input.message);
+
+    if (amountCents === null) {
+      return savingsGoalClarifyResponse(input, goalName);
+    }
+
+    return savingsGoalPlanResponse(input, amountCents, goalName);
   }
 
   if (isTrustReceiptPrompt(normalized)) {
@@ -158,6 +169,10 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
 
   if (isShortPurchaseFollowUp(normalized, input.history) && amountCents !== null) {
     return toolResponse(input, "simulate_purchase", { amount_cents: amountCents });
+  }
+
+  if (isConnectedAccountsPrompt(normalized)) {
+    return accountConnectionsResponse(input);
   }
 
   if (/\bbalances?\b|actual balance|true balance/.test(normalized)) {
@@ -258,24 +273,90 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
   });
 }
 
-function savingsGoalPlanResponse(input: RunAiAgentInput, targetAmountCents: number): AgentResponse {
+function savingsGoalClarifyResponse(input: RunAiAgentInput, name: string): AgentResponse {
+  return {
+    ...baseResponse(input, {
+      message: `What amount should I target for ${name}?`,
+      responseMode: "clarify",
+    }),
+    pendingAction: {
+      type: "create_savings_goal",
+      name,
+    },
+  } as AgentResponse;
+}
+
+function savingsGoalPlanResponse(input: RunAiAgentInput, targetAmountCents: number, name = "Trip"): AgentResponse {
   const card: AgentResponse["cards"][number] = {
     type: "savings_goal_plan",
     title: "Savings goal",
     goalId: "goal-trip",
-    name: "Trip",
+    name,
     targetAmountCents,
     currentAmountCents: 0,
     remainingCents: targetAmountCents,
     monthlyContributionCents: 0,
     includeInSpendableCash: false,
-    summary: `${formatMoney(targetAmountCents)} left for Trip. Tracked only for now.`,
+    summary: `${formatMoney(targetAmountCents)} left for ${name}. Tracked only for now.`,
   };
 
   return baseResponse(input, {
     message: "I set up the savings goal plan.",
     cards: [card],
     usedTools: ["create_savings_goal"],
+    responseMode: "show_card",
+  });
+}
+
+function accountConnectionsResponse(input: RunAiAgentInput): AgentResponse {
+  const card: AgentResponse["cards"][number] = {
+    type: "account_connections",
+    title: "Connected accounts",
+    institutions: [
+      {
+        institutionId: "northstar-bank",
+        institutionName: "Northstar Bank",
+        provider: "mock",
+        status: "connected",
+        lastSuccessfulSyncAt: "2026-06-18T12:00:00.000Z",
+        accounts: [
+          {
+            accountId: "checking-1",
+            name: "Everyday Checking",
+            kind: "checking",
+            lastFour: "1111",
+            includedInPipCash: true,
+            isProtectedSavings: false,
+            active: true,
+            roleLabel: "Included in Spendable Cash Today",
+          },
+          {
+            accountId: "savings-1",
+            name: "Travel Savings",
+            kind: "savings",
+            lastFour: "2222",
+            includedInPipCash: false,
+            isProtectedSavings: true,
+            active: true,
+            roleLabel: "Savings account",
+          },
+        ],
+        actions: [
+          {
+            id: "refresh-northstar-bank",
+            label: "Refresh",
+            prompt: "Refresh my data",
+            style: "secondary",
+          },
+        ],
+      },
+    ],
+  };
+
+  return baseResponse(input, {
+    message: "I found your connected accounts.",
+    cards: [card],
+    usedTools: ["get_connected_accounts"],
     responseMode: "show_card",
   });
 }
@@ -542,6 +623,10 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
     return false;
   }
 
+  if (isSavingsGoalPrompt(normalized)) {
+    return false;
+  }
+
   const hasOpportunityTerm =
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b/.test(normalized) ||
     /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
@@ -567,6 +652,17 @@ function isSavingsGoalPrompt(normalized: string): boolean {
   return /\bsavings? goals?\b/.test(normalized) ||
     /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
     /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized);
+}
+
+function isConnectedAccountsPrompt(normalized: string): boolean {
+  if (/\b(true|actual|real)\s+balances?\b/.test(normalized)) {
+    return false;
+  }
+
+  return (
+    /\b(show|list|manage|view|see)\b.{0,32}\b(bank accounts?|accounts?|connected accounts?|connections?|institutions?)\b/.test(normalized) ||
+    /\b(bank accounts?|connected accounts?|account connections?)\b/.test(normalized)
+  );
 }
 
 function isSavingsGoalListPrompt(normalized: string): boolean {
@@ -663,6 +759,61 @@ function extractDollarAmount(message: string): number | null {
   candidates.sort((left, right) => right.score - left.score || right.index - left.index);
 
   return candidates[0]?.amountCents ?? null;
+}
+
+function getPendingAction(conversationState: RunAiAgentInput["conversationState"]) {
+  const candidate = (conversationState as { pendingAction?: unknown } | undefined)?.pendingAction;
+
+  if (!candidate || typeof candidate !== "object" || !("type" in candidate)) {
+    return null;
+  }
+
+  return candidate as {
+    type?: string;
+    name?: string;
+  };
+}
+
+function getPendingSavingsGoalName(pendingAction: ReturnType<typeof getPendingAction>): string | null {
+  if (!pendingAction) {
+    return null;
+  }
+
+  return pendingAction.name ?? null;
+}
+
+function inferSavingsGoalName(message: string): string {
+  const normalized = message.toLowerCase();
+
+  if (/\bbali\b/.test(normalized)) {
+    return "Trip to Bali";
+  }
+
+  if (/\bbig purchase\b/.test(normalized)) {
+    return "Big purchase";
+  }
+
+  if (/\btrip|vacation|travel\b/.test(normalized)) {
+    return "Trip";
+  }
+
+  if (/\bcar\b/.test(normalized)) {
+    return "Car";
+  }
+
+  if (/\bhouse|home\b/.test(normalized)) {
+    return "Home";
+  }
+
+  if (/\bwedding\b/.test(normalized)) {
+    return "Wedding";
+  }
+
+  if (/\bemergency fund\b/.test(normalized)) {
+    return "Emergency fund";
+  }
+
+  return "Savings goal";
 }
 
 function scorePurchaseAmountCandidate(message: string, index: number): number {

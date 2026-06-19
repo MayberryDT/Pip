@@ -1,7 +1,7 @@
 import type { SyncStatus } from "@/lib/data/sync-status";
 import type { FinancialProviderName } from "@/lib/providers/FinancialDataProvider";
 
-const APP_OPEN_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
+const APP_OPEN_SYNC_DUPLICATE_GUARD_MS = 60 * 1000;
 const refreshableProviders = new Set<FinancialProviderName>(["plaid", "teller"]);
 const reconnectRequiredErrorCodes = new Set(["provider-token-decrypt-failed"]);
 const repairablePlaidErrorCodes = new Set([
@@ -46,10 +46,7 @@ export function getAppOpenSyncDecision(input: {
 }): AppOpenSyncDecision {
   const repairInstitution = input.syncStatus.institutions.find(isRepairOnlyInstitution);
   const refreshableInstitutions = getRefreshableInstitutions(input.syncStatus);
-  const dueInstitution = refreshableInstitutions.find((institution) =>
-    isInstitutionDueForAppOpen(institution, input.now),
-  );
-  const provider = (dueInstitution ?? refreshableInstitutions[0])?.provider ?? null;
+  const provider = refreshableInstitutions[0]?.provider ?? null;
 
   if (!provider) {
     if (repairInstitution) {
@@ -69,17 +66,17 @@ export function getAppOpenSyncDecision(input: {
     };
   }
 
-  if (input.hasPendingSyncJob) {
+  const latestSyncRun =
+    input.syncStatus.latestSyncRun?.provider === provider ? input.syncStatus.latestSyncRun : null;
+
+  if (input.hasPendingSyncJob || isSyncRunPending(latestSyncRun?.status)) {
     return {
       status: "skipped_pending",
       message: "A refresh is already queued or running.",
     };
   }
 
-  const latestStartedAt =
-    input.syncStatus.latestSyncRun?.provider === provider && input.syncStatus.latestSyncRun.startedAt
-      ? new Date(input.syncStatus.latestSyncRun.startedAt)
-      : null;
+  const latestStartedAt = latestSyncRun?.startedAt ? new Date(latestSyncRun.startedAt) : null;
   const lastSuccessfulSyncAt = getLastSuccessfulSyncAt(input.syncStatus, provider);
   const retryAfterSeconds = getCooldownRetryAfterSeconds(latestStartedAt, input.now);
 
@@ -92,17 +89,9 @@ export function getAppOpenSyncDecision(input: {
     };
   }
 
-  if (dueInstitution) {
-    return {
-      status: "run",
-      provider,
-    };
-  }
-
   return {
-    status: "skipped_fresh",
-    message: "Connected data is already fresh for this app open.",
-    ...(lastSuccessfulSyncAt ? { lastSuccessfulSyncAt } : {}),
+    status: "run",
+    provider,
   };
 }
 
@@ -118,20 +107,6 @@ function getRefreshableInstitutions(syncStatus: SyncStatus): RefreshableInstitut
 
     return !isRepairOnlyInstitution(item);
   });
-}
-
-function isInstitutionDueForAppOpen(
-  institution: SyncStatus["institutions"][number],
-  now: Date,
-): boolean {
-  if (!institution.lastSuccessfulSyncAt || institution.isStale) {
-    return true;
-  }
-
-  return (
-    now.getTime() - new Date(institution.lastSuccessfulSyncAt).getTime() >=
-    APP_OPEN_SYNC_COOLDOWN_MS
-  );
 }
 
 function isRepairOnlyInstitution(institution: SyncStatus["institutions"][number]): boolean {
@@ -150,6 +125,10 @@ function isRepairOnlyInstitution(institution: SyncStatus["institutions"][number]
   }
 
   return institution.provider === "plaid" && repairablePlaidErrorCodes.has(errorCode);
+}
+
+function isSyncRunPending(status: string | undefined): boolean {
+  return status === "pending" || status === "running";
 }
 
 function getLastSuccessfulSyncAt(
@@ -173,9 +152,9 @@ function getCooldownRetryAfterSeconds(latestStartedAt: Date | null, now: Date): 
 
   const elapsedMs = now.getTime() - latestStartedAt.getTime();
 
-  if (elapsedMs >= APP_OPEN_SYNC_COOLDOWN_MS) {
+  if (elapsedMs >= APP_OPEN_SYNC_DUPLICATE_GUARD_MS) {
     return 0;
   }
 
-  return Math.ceil((APP_OPEN_SYNC_COOLDOWN_MS - elapsedMs) / 1000);
+  return Math.ceil((APP_OPEN_SYNC_DUPLICATE_GUARD_MS - elapsedMs) / 1000);
 }

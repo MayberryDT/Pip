@@ -622,6 +622,9 @@ describe("runAIAgent", () => {
     expect(
       __agentTestHooks.getForcedAgentTool({
         message: "I want to save for a trip that costs $5,000",
+        features: {
+          savingsGoals: true,
+        },
       }),
     ).toMatchObject({
       toolName: "create_savings_goal",
@@ -635,6 +638,9 @@ describe("runAIAgent", () => {
     expect(
       __agentTestHooks.getForcedAgentTool({
         message: "Show my savings goals",
+        features: {
+          savingsGoals: true,
+        },
       }),
     ).toMatchObject({
       toolName: "list_savings_goals",
@@ -644,6 +650,9 @@ describe("runAIAgent", () => {
     expect(
       __agentTestHooks.getForcedAgentTool({
         message: "Keep my trip goal out of Spendable Cash at $300/month",
+        features: {
+          savingsGoals: true,
+        },
       }),
     ).toMatchObject({
       toolName: "set_savings_goal_protection",
@@ -671,6 +680,9 @@ describe("runAIAgent", () => {
 
     const response = await runAIAgent({
       message: "I want to save for a trip that costs $5,000",
+      features: {
+        savingsGoals: true,
+      },
       onboardingState: {
         status: "guest",
         hasFinancialData: false,
@@ -682,6 +694,308 @@ describe("runAIAgent", () => {
     expect(response.responseMode).toBe("chat_only");
     expect(response.cards).toEqual([]);
     expect(response.message.toLowerCase()).toContain("sign in");
+  });
+
+  it("does not route or advertise savings goal tools when the feature is disabled", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "I want to save for Bali and need $5,000",
+        features: {
+          savingsGoals: false,
+        },
+      }),
+    ).toBeUndefined();
+
+    const instructions = __agentTestHooks.createPipInstructionsForTest({
+      message: "I want to save for Bali and need $5,000",
+      features: {
+        savingsGoals: false,
+      },
+    });
+
+    expect(instructions).not.toContain("Use savings goal tools");
+    expect(instructions).not.toContain("Use create_savings_goal");
+    expect(instructions).toContain("Savings goals are not available");
+  });
+
+  it("clarifies amountless savings goal prompts with a typed pending action", async () => {
+    const createSavingsGoal = vi.fn();
+
+    for (const message of ["save for Bali", "big purchase", "car", "vacation"]) {
+      const response = await runAIAgent({
+        message,
+        features: {
+          savingsGoals: true,
+        },
+        actions: {
+          createSavingsGoal,
+        },
+      });
+
+      expect(response.responseMode).toBe("clarify");
+      expect(response.usedTools).toEqual([]);
+      expect(response.pendingAction).toMatchObject({
+        type: "create_savings_goal",
+        missing: ["target_amount"],
+      });
+      expect(response.message.toLowerCase()).toContain("how much");
+      expect(response.message.toLowerCase()).not.toContain("cushion");
+    }
+
+    expect(createSavingsGoal).not.toHaveBeenCalled();
+  });
+
+  it("creates savings goals from amount-bearing natural prompts when actions are available", async () => {
+    const createSavingsGoal = vi.fn().mockResolvedValue({
+      ok: true,
+      status: "savings_goal_created",
+      cards: [
+        {
+          type: "savings_goal_plan",
+          title: "Savings goal",
+          goalId: "goal-bali",
+          name: "Bali",
+          targetAmountCents: 500000,
+          currentAmountCents: 0,
+          remainingCents: 500000,
+          monthlyContributionCents: 0,
+          includeInSpendableCash: false,
+          summary: "$5,000 left for Bali.",
+        },
+      ],
+    });
+
+    const response = await runAIAgent({
+      message: "save for Bali with a $5,000 target",
+      features: {
+        savingsGoals: true,
+      },
+      actions: {
+        createSavingsGoal,
+      },
+    });
+
+    expect(createSavingsGoal).toHaveBeenCalledWith({
+      name: "Bali",
+      targetAmountCents: 500000,
+      targetDate: undefined,
+      startingAmountCents: undefined,
+      currentAmountCents: undefined,
+      monthlyContributionCents: undefined,
+      includeInSpendableCash: false,
+    });
+    expect(response.usedTools).toEqual(["create_savings_goal"]);
+    expect(response.audit).toMatchObject({
+      toolNames: ["create_savings_goal"],
+      usedModel: false,
+    });
+    expect(response.cards[0]).toMatchObject({
+      type: "savings_goal_plan",
+      name: "Bali",
+    });
+    expect(response.pendingAction).toBeUndefined();
+  });
+
+  it("executes complete pending savings actions before generic affirmative routing", async () => {
+    const createSavingsGoal = vi.fn().mockResolvedValue({
+      ok: true,
+      status: "savings_goal_created",
+      cards: [
+        {
+          type: "savings_goal_plan",
+          title: "Savings goal",
+          goalId: "goal-bali",
+          name: "Bali",
+          targetAmountCents: 500000,
+          currentAmountCents: 0,
+          remainingCents: 500000,
+          monthlyContributionCents: 0,
+          includeInSpendableCash: false,
+          summary: "$5,000 left for Bali.",
+        },
+      ],
+    });
+
+    const response = await runAIAgent({
+      message: "yes",
+      features: {
+        savingsGoals: true,
+      },
+      conversationState: {
+        pendingAction: {
+          type: "create_savings_goal",
+          name: "Bali",
+          targetAmountCents: 500000,
+        },
+      },
+      actions: {
+        createSavingsGoal,
+      },
+      history: [
+        {
+          role: "assistant",
+          content: "I can show daily amounts for the next 14 days.",
+        },
+      ],
+    });
+
+    expect(createSavingsGoal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Bali",
+        targetAmountCents: 500000,
+      }),
+    );
+    expect(response.usedTools).toEqual(["create_savings_goal"]);
+    expect(response.cards[0]?.type).toBe("savings_goal_plan");
+  });
+
+  it("asks for the target amount when an affirmative reply confirms an incomplete pending savings action", async () => {
+    const createSavingsGoal = vi.fn();
+
+    const response = await runAIAgent({
+      message: "yes",
+      features: {
+        savingsGoals: true,
+      },
+      conversationState: {
+        pendingAction: {
+          type: "create_savings_goal",
+          name: "Bali",
+          missing: ["target_amount"],
+        },
+      },
+      actions: {
+        createSavingsGoal,
+      },
+    });
+
+    expect(createSavingsGoal).not.toHaveBeenCalled();
+    expect(response.responseMode).toBe("clarify");
+    expect(response.pendingAction).toMatchObject({
+      type: "create_savings_goal",
+      name: "Bali",
+      missing: ["target_amount"],
+    });
+    expect(response.message.toLowerCase()).toContain("how much");
+  });
+
+  it("uses an amount reply to complete a pending savings goal", async () => {
+    const createSavingsGoal = vi.fn().mockResolvedValue({
+      ok: true,
+      status: "savings_goal_created",
+      cards: [
+        {
+          type: "savings_goal_plan",
+          title: "Savings goal",
+          goalId: "goal-bali",
+          name: "Bali",
+          targetAmountCents: 500000,
+          currentAmountCents: 0,
+          remainingCents: 500000,
+          monthlyContributionCents: 0,
+          includeInSpendableCash: false,
+          summary: "$5,000 left for Bali.",
+        },
+      ],
+    });
+
+    const response = await runAIAgent({
+      message: "$5,000",
+      features: {
+        savingsGoals: true,
+      },
+      conversationState: {
+        pendingAction: {
+          type: "create_savings_goal",
+          name: "Bali",
+          missing: ["target_amount"],
+        },
+      },
+      actions: {
+        createSavingsGoal,
+      },
+    });
+
+    expect(createSavingsGoal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Bali",
+        targetAmountCents: 500000,
+      }),
+    );
+    expect(response.usedTools).toEqual(["create_savings_goal"]);
+    expect(response.pendingAction).toBeUndefined();
+  });
+
+  it("executes pending savings goal protection confirmations", async () => {
+    const setSavingsGoalProtection = vi.fn().mockResolvedValue({
+      ok: true,
+      status: "savings_goal_protection_enabled",
+      cards: [
+        {
+          type: "savings_goal_plan",
+          title: "Savings goal",
+          goalId: "goal-car",
+          name: "Car",
+          targetAmountCents: 1000000,
+          currentAmountCents: 0,
+          remainingCents: 1000000,
+          monthlyContributionCents: 30000,
+          includeInSpendableCash: true,
+          summary: "$300 per month is protected for Car.",
+        },
+      ],
+    });
+
+    const response = await runAIAgent({
+      message: "yes",
+      features: {
+        savingsGoals: true,
+      },
+      conversationState: {
+        pendingAction: {
+          type: "set_savings_goal_protection",
+          name: "Car",
+          includeInSpendableCash: true,
+          monthlyContributionCents: 30000,
+        },
+      },
+      actions: {
+        setSavingsGoalProtection,
+      },
+    });
+
+    expect(setSavingsGoalProtection).toHaveBeenCalledWith({
+      goalId: undefined,
+      name: "Car",
+      includeInSpendableCash: true,
+      monthlyContributionCents: 30000,
+    });
+    expect(response.usedTools).toEqual(["set_savings_goal_protection"]);
+    expect(response.cards[0]?.type).toBe("savings_goal_plan");
+  });
+
+  it("accepts pending actions at the response schema boundary", () => {
+    expect(
+      agentResponseSchema.parse({
+        message: "How much do you want to save for Bali?",
+        cards: [],
+        promptChips: [],
+        usedTools: [],
+        responseMode: "clarify",
+        pendingAction: {
+          type: "create_savings_goal",
+          name: "Bali",
+          missing: ["target_amount"],
+        },
+        audit: {
+          toolNames: [],
+          usedModel: false,
+        },
+      }).pendingAction,
+    ).toMatchObject({
+      type: "create_savings_goal",
+      name: "Bali",
+    });
   });
 
   it("routes currentness prompts to the trust receipt", () => {
@@ -909,6 +1223,40 @@ describe("runAIAgent", () => {
       toolName: "get_connected_accounts",
       requireCard: true,
     });
+  });
+
+  it("routes natural account list and balance requests to real tools", () => {
+    for (const message of [
+      "What accounts are connected?",
+      "What accounts do I have connected?",
+      "List my banks",
+      "Are my accounts connected?",
+    ]) {
+      expect(
+        __agentTestHooks.getForcedAgentTool({
+          message,
+        }),
+      ).toMatchObject({
+        toolName: "get_connected_accounts",
+        requireCard: true,
+      });
+    }
+
+    for (const message of [
+      "How much is in my checking account?",
+      "What is my bank balance?",
+      "Show my bank balances",
+      "How much money is in my accounts?",
+    ]) {
+      expect(
+        __agentTestHooks.getForcedAgentTool({
+          message,
+        }),
+      ).toMatchObject({
+        toolName: "get_true_balances",
+        requireCard: true,
+      });
+    }
   });
 
   it("can discuss broad finance topics without pretending to show a card", async () => {
@@ -1519,6 +1867,19 @@ describe("runAIAgent", () => {
     ).toBe("I can talk through what is driving today if you like.");
   });
 
+  it("repairs legacy cushion and placeholder bank wording from visible replies", () => {
+    const legacy = __agentTestHooks.guardVisibleFinalMessage(
+      "Your savings cushion may be too high for today.",
+    );
+    expect(legacy).toBe("Your Monthly Savings may be too high for today.");
+    expect(legacy.toLowerCase()).not.toContain("cushion");
+
+    const placeholder = __agentTestHooks.guardVisibleFinalMessage(
+      "Bank A has $100 and Bank B has $200.",
+    );
+    expect(placeholder).not.toMatch(/\bBank A\b|\bBank B\b/);
+  });
+
   it("allows broad money basics that mention lists or credit cards without promising UI cards", () => {
     expect(
       __agentTestHooks.guardVisibleFinalMessage(
@@ -1639,6 +2000,7 @@ function createGuidanceSelectorContext(
     requestKind: "chat",
     onboardingState: { status: "ready", hasFinancialData: true },
     conversationState: { shownCards: [], lastToolNames: [], promptChips: [] },
+    features: { savingsGoals: false },
     forcedTool: {
       toolName: "get_financial_guidance_context",
       args: {},

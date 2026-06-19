@@ -5,6 +5,11 @@ import type { Database, Json } from "@/lib/supabase/database.types";
 
 type AgentChatTurnRow = Database["public"]["Tables"]["agent_chat_turns"]["Row"];
 
+export type AgentChatHistoryItem = {
+  role: "user" | "assistant";
+  content: string;
+};
+
 export type AgentChatTurnInput = {
   userId?: string | null;
   conversationId: string;
@@ -109,6 +114,44 @@ export async function loadOperatorAgentChats(
   }
 
   return (data ?? []).map(mapAgentChatTurnRow);
+}
+
+export async function loadRecentAgentChatHistory(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    conversationId: string;
+  },
+): Promise<AgentChatHistoryItem[]> {
+  const { data, error } = await supabase
+    .from("agent_chat_turns")
+    .select("id, user_id, conversation_id, user_message, assistant_message, error_message, created_at")
+    .eq("user_id", input.userId)
+    .eq("conversation_id", input.conversationId)
+    .is("error_message", null)
+    .order("created_at", { ascending: false })
+    .limit(8);
+
+  if (error) {
+    throw error;
+  }
+
+  const messages = (data ?? [])
+    .filter((turn) => !turn.error_message && turn.assistant_message)
+    .sort((left, right) => left.created_at.localeCompare(right.created_at))
+    .flatMap((turn): AgentChatHistoryItem[] => [
+      {
+        role: "user",
+        content: turn.user_message,
+      },
+      {
+        role: "assistant",
+        content: turn.assistant_message ?? "",
+      },
+    ])
+    .filter((item) => item.content.trim().length > 0);
+
+  return messages.slice(-8);
 }
 
 export async function loadLocalOperatorAgentChats(

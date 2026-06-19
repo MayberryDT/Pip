@@ -25,6 +25,35 @@ describe("Pip agent eval harness", () => {
     expect(packageJson.scripts["dogfood:router:live"]).toBe("vite-node scripts/dogfood-agent-router.mjs");
   });
 
+  it("includes phone dogfood savings and account transcript cases", async () => {
+    const { agentEvalCases } = await loadEvalHarness();
+    const casesById = new Map(agentEvalCases.map((caseDef) => [caseDef.id, caseDef]));
+
+    expect(casesById.get("phone-save-trip-bali")).toMatchObject({
+      message: "Now I want to save for a trip to Bali.",
+      expectedResponseMode: "clarify",
+      expectedPendingActionType: "create_savings_goal",
+      forbiddenTextPatterns: expect.arrayContaining(["I'm not sure", "\\bcushion\\b"]),
+    });
+    expect(casesById.get("phone-save-big-purchase")).toMatchObject({
+      message: "I want to save money for a big purchase",
+      expectedResponseMode: "clarify",
+      expectedPendingActionType: "create_savings_goal",
+      forbiddenTools: expect.arrayContaining(["get_pip_cash_snapshot"]),
+    });
+    expect(casesById.get("phone-why-monthly-savings")).toMatchObject({
+      message: "Why does Pip need a savings cushion?",
+      expectedTextPatterns: expect.arrayContaining(["monthly savings"]),
+      forbiddenTextPatterns: expect.arrayContaining(["\\bcushion\\b"]),
+    });
+    expect(casesById.get("phone-show-bank-accounts")).toMatchObject({
+      message: "Show my bank accounts",
+      expectedTools: expect.arrayContaining(["get_connected_accounts"]),
+      expectedCards: expect.arrayContaining(["account_connections"]),
+      forbiddenTextPatterns: expect.arrayContaining(["\\bBank A\\b", "\\bBank B\\b"]),
+    });
+  });
+
   it("passes a tool-backed forecast answer with the short forecast caveat", async () => {
     const { evaluateAgentResponse } = await loadEvalHarness();
     const result = evaluateAgentResponse({
@@ -208,6 +237,54 @@ describe("Pip agent eval harness", () => {
     expect(result.failures).toContain("expected card not returned: spending_breakdown");
   });
 
+  it("passes expected pending action and per-case forbidden text checks", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedPendingActionType: "create_savings_goal",
+        forbiddenTextPatterns: ["I'm not sure", "hidden cushion"],
+      },
+      response: {
+        message: "What should we call this goal?",
+        responseMode: "clarify",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+        conversationState: {
+          pendingAction: {
+            type: "create_savings_goal",
+            name: "Trip",
+          },
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("fails missing pending action and per-case forbidden text", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedPendingActionType: "create_savings_goal",
+        forbiddenTextPatterns: ["I'm not sure", "hidden cushion"],
+      },
+      response: {
+        message: "I'm not sure. I can use your hidden cushion.",
+        responseMode: "clarify",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContain("expected pending action type create_savings_goal but got none.");
+    expect(result.failures.join("\n")).toContain("forbidden response text pattern found: I'm not sure");
+    expect(result.failures.join("\n")).toContain("forbidden response text pattern found: hidden cushion");
+  });
+
   it("fails repeated assistant messages, repeated chip sets, and adjacent tool loops", async () => {
     const { evaluateAgentResponse } = await loadEvalHarness();
     const repeatedChips = [
@@ -258,6 +335,12 @@ describe("Pip agent eval harness", () => {
             message: "hi",
             expectNoCards: true,
             expectedResponseMode: "chat_only",
+            conversationState: {
+              pendingAction: {
+                type: "create_savings_goal",
+                name: "Trip",
+              },
+            },
           },
         ],
         conversationPrefix: "test-eval",
@@ -302,6 +385,10 @@ describe("Pip agent eval harness", () => {
             shownCards: [],
             lastToolNames: [],
             promptChips: [],
+            pendingAction: {
+              type: "create_savings_goal",
+              name: "Trip",
+            },
           },
         },
       });
@@ -520,6 +607,7 @@ async function loadEvalHarness() {
   const module = await import(pathToFileURL(scriptPath).href);
 
   return module as {
+    agentEvalCases: Array<Record<string, unknown> & { id: string }>;
     evaluateAgentResponse: (input: {
       caseDef: Record<string, unknown>;
       response: Record<string, unknown>;

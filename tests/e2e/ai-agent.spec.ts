@@ -140,6 +140,61 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 });
 
+test("phone dogfood savings goal flow carries pending action into goal creation", async ({
+  page,
+}) => {
+  await routeAgentThroughMockModel(page);
+  await page.goto("/app");
+  await page.waitForLoadState("networkidle");
+
+  const input = page.getByLabel("Ask Pip");
+  await input.fill("Now I want to save for a trip to Bali.");
+  const [clarifyResponse] = await Promise.all([
+    waitForAgentResponse(page),
+    page.getByRole("button", { name: "Send" }).click(),
+  ]);
+  const clarifyJson = await clarifyResponse.json();
+
+  expect(clarifyJson).toMatchObject({
+    responseMode: "clarify",
+    usedTools: [],
+    pendingAction: {
+      type: "create_savings_goal",
+      name: "Trip to Bali",
+    },
+  });
+  await expect(page.getByRole("heading", { name: "Savings goal" })).toHaveCount(0);
+  await expect(page.getByText("I'm not sure")).toHaveCount(0);
+  await expect(page.getByText(/cushion/i)).toHaveCount(0);
+
+  await input.fill("$5,000");
+  const [goalResponse] = await Promise.all([
+    waitForAgentResponse(page),
+    page.getByRole("button", { name: "Send" }).click(),
+  ]);
+  const goalRequestBody = goalResponse.request().postDataJSON() as {
+    conversationState?: {
+      pendingAction?: unknown;
+    };
+  };
+  const goalJson = await goalResponse.json();
+
+  expect(goalRequestBody.conversationState?.pendingAction).toMatchObject({
+    type: "create_savings_goal",
+    name: "Trip to Bali",
+  });
+  expect(goalJson.audit.toolNames).toEqual(["create_savings_goal"]);
+  expect(goalJson.cards[0]).toMatchObject({
+    type: "savings_goal_plan",
+    name: "Trip to Bali",
+    targetAmountCents: 500000,
+  });
+  await expect(page.getByRole("heading", { name: "Savings goal" })).toBeVisible();
+  await expect(page.getByText("$5,000 left for Trip to Bali.")).toBeVisible();
+  await expect(page.getByText("Tracked only. Not held out of today's number.")).toBeVisible();
+  await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
+});
+
 test("mobile viewport keeps the one-number layout from overlapping or overflowing", async ({
   page,
 }) => {
@@ -666,11 +721,17 @@ function createMockAgentResponse(
     requestKind?: string;
     conversationState?: {
       lastToolNames?: string[];
+      pendingAction?: {
+        type?: string;
+        name?: string;
+      };
     };
   } = {},
 ) {
   const userMessage = body.message ?? "";
   const normalized = userMessage.toLowerCase();
+  const pendingAction = body.conversationState?.pendingAction;
+  const moneyCents = extractTestMoneyCents(userMessage);
 
   if (body.requestKind === "prompt_chips") {
     if (body.conversationState?.lastToolNames?.at(-1) === "get_pip_cash_drivers") {
@@ -794,6 +855,13 @@ function createMockAgentResponse(
     });
   }
 
+  if (pendingAction?.type === "create_savings_goal" && moneyCents !== null) {
+    return createTestSavingsGoalResponse(
+      getTestPendingSavingsGoalName(pendingAction) ?? "Savings goal",
+      moneyCents,
+    );
+  }
+
   if (normalized.includes("why") || normalized.includes("changed")) {
     return baseAgentResponse({
       message: "I found the main drivers.",
@@ -823,6 +891,59 @@ function createMockAgentResponse(
             },
           ],
           dataStates: [],
+        },
+      ],
+    });
+  }
+
+  if (isTestConnectedAccountsPrompt(normalized)) {
+    return baseAgentResponse({
+      message: "I found your connected accounts.",
+      usedTools: ["get_connected_accounts"],
+      responseMode: "show_card",
+      cards: [
+        {
+          type: "account_connections",
+          title: "Connected accounts",
+          institutions: [
+            {
+              institutionId: "northstar-bank",
+              institutionName: "Northstar Bank",
+              provider: "mock",
+              status: "connected",
+              lastSuccessfulSyncAt: "2026-06-18T12:00:00.000Z",
+              accounts: [
+                {
+                  accountId: "checking-1",
+                  name: "Everyday Checking",
+                  kind: "checking",
+                  lastFour: "1111",
+                  includedInPipCash: true,
+                  isProtectedSavings: false,
+                  active: true,
+                  roleLabel: "Included in Spendable Cash Today",
+                },
+                {
+                  accountId: "savings-1",
+                  name: "Travel Savings",
+                  kind: "savings",
+                  lastFour: "2222",
+                  includedInPipCash: false,
+                  isProtectedSavings: true,
+                  active: true,
+                  roleLabel: "Savings account",
+                },
+              ],
+              actions: [
+                {
+                  id: "refresh-northstar-bank",
+                  label: "Refresh",
+                  prompt: "Refresh my data",
+                  style: "secondary",
+                },
+              ],
+            },
+          ],
         },
       ],
     });
@@ -914,28 +1035,23 @@ function createMockAgentResponse(
     });
   }
 
-  if (/\bsave\b.{0,32}\b(for|toward|towards)\b|\bsavings? goals?\b|\btrip\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized)) {
-    const targetAmountCents = extractTestMoneyCents(userMessage) ?? 500000;
+  if (isTestSavingsGoalPrompt(normalized)) {
+    const name = inferTestSavingsGoalName(userMessage);
 
-    return baseAgentResponse({
-      message: "I set up the savings goal plan.",
-      usedTools: ["create_savings_goal"],
-      responseMode: "show_card",
-      cards: [
-        {
-          type: "savings_goal_plan",
-          title: "Savings goal",
-          goalId: "goal-trip",
-          name: "Trip",
-          targetAmountCents,
-          currentAmountCents: 0,
-          remainingCents: targetAmountCents,
-          monthlyContributionCents: 0,
-          includeInSpendableCash: false,
-          summary: `${formatTestMoney(targetAmountCents)} left for Trip. Tracked only for now.`,
+    if (moneyCents === null) {
+      return baseAgentResponse({
+        message: `What amount should I target for ${name}?`,
+        usedTools: [],
+        responseMode: "clarify",
+        cards: [],
+        pendingAction: {
+          type: "create_savings_goal",
+          name,
         },
-      ],
-    });
+      });
+    }
+
+    return createTestSavingsGoalResponse(name, moneyCents);
   }
 
   const amountMatch = userMessage.match(/\$(\d+)/);
@@ -981,6 +1097,7 @@ function baseAgentResponse(input: {
   cards: unknown[];
   clientAction?: unknown;
   promptChips?: unknown[];
+  pendingAction?: unknown;
 }) {
   return {
     message: input.message,
@@ -989,12 +1106,35 @@ function baseAgentResponse(input: {
     usedTools: input.usedTools,
     responseMode: input.responseMode,
     clientAction: input.clientAction,
+    pendingAction: input.pendingAction,
     audit: {
       toolNames: input.usedTools,
       usedModel: true,
       model: "test-model",
     },
   };
+}
+
+function createTestSavingsGoalResponse(name: string, targetAmountCents: number) {
+  return baseAgentResponse({
+    message: "I set up the savings goal plan.",
+    usedTools: ["create_savings_goal"],
+    responseMode: "show_card",
+    cards: [
+      {
+        type: "savings_goal_plan",
+        title: "Savings goal",
+        goalId: "goal-trip",
+        name,
+        targetAmountCents,
+        currentAmountCents: 0,
+        remainingCents: targetAmountCents,
+        monthlyContributionCents: 0,
+        includeInSpendableCash: false,
+        summary: `${formatTestMoney(targetAmountCents)} left for ${name}. Tracked only for now.`,
+      },
+    ],
+  });
 }
 
 function formatTestMoney(amountCents: number) {
@@ -1012,6 +1152,45 @@ function extractTestMoneyCents(message: string): number | null {
   }
 
   return Number(match[1].replaceAll(",", "")) * 100;
+}
+
+function isTestSavingsGoalPrompt(normalized: string) {
+  return /\bsave\b.{0,32}\b(for|toward|towards)\b|\bsavings? goals?\b|\btrip\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized);
+}
+
+function inferTestSavingsGoalName(message: string) {
+  const normalized = message.toLowerCase();
+
+  if (/\bbali\b/.test(normalized)) {
+    return "Trip to Bali";
+  }
+
+  if (/\bbig purchase\b/.test(normalized)) {
+    return "Big purchase";
+  }
+
+  if (/\btrip|vacation|travel\b/.test(normalized)) {
+    return "Trip";
+  }
+
+  return "Savings goal";
+}
+
+function getTestPendingSavingsGoalName(pendingAction: {
+  name?: string;
+}) {
+  return pendingAction.name ?? null;
+}
+
+function isTestConnectedAccountsPrompt(normalized: string) {
+  if (/\b(true|actual|real)\s+balances?\b/.test(normalized)) {
+    return false;
+  }
+
+  return (
+    /\b(show|list|manage|view|see)\b.{0,32}\b(bank accounts?|accounts?|connected accounts?|connections?|institutions?)\b/.test(normalized) ||
+    /\b(bank accounts?|connected accounts?|account connections?)\b/.test(normalized)
+  );
 }
 
 async function expectNoDocumentHorizontalOverflow(page: Page) {
