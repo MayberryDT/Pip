@@ -246,6 +246,7 @@ const routeSpecs: RouteSpec[] = [
       "why does this look incomplete",
       "is everything counted",
       "what data is missing from this number",
+      "what data might be missing",
     ],
   },
   {
@@ -266,6 +267,7 @@ const routeSpecs: RouteSpec[] = [
       "what data is counted",
       "what does this include",
       "when was this updated",
+      "is my data stale",
     ],
   },
   {
@@ -285,6 +287,7 @@ const routeSpecs: RouteSpec[] = [
       "where can I save this week",
       "how do I reduce expenses",
       "find waste in my spending",
+      "find a spending opportunity",
       "what should I stop buying",
       "what costs should I cut",
     ],
@@ -308,6 +311,7 @@ const routeSpecs: RouteSpec[] = [
       "give me the read",
       "what's your read",
       "should I lower my cushion",
+      "should I slow down this week",
     ],
   },
   {

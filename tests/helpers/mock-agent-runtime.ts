@@ -115,6 +115,10 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return toolResponse(input, "show_spending_opportunity", {});
   }
 
+  if (isDataQualityPrompt(normalized)) {
+    return toolResponse(input, "detect_missing_card", {});
+  }
+
   if (isSavingsGoalListPrompt(normalized)) {
     return savingsGoalSummaryResponse(input);
   }
@@ -533,6 +537,7 @@ function isSpendingPrompt(normalized: string): boolean {
 function isFinancialGuidancePrompt(normalized: string): boolean {
   return (
     /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|is my spending bad|am i broke|why am i broke|i'?m broke|in trouble|should i lower my monthly savings|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized) ||
+    /\bshould i\b.{0,24}\bslow down\b/.test(normalized) ||
     /\bwhy\b.{0,40}\b(can'?t|cannot|cant)\b.{0,40}\bspend\b/.test(normalized)
   );
 }
@@ -544,6 +549,7 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
 
   const hasOpportunityTerm =
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b/.test(normalized) ||
+    /\bspending opportunit(?:y|ies)\b/.test(normalized) ||
     /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
     /\bwhere can i save\b/.test(normalized);
 
@@ -553,8 +559,15 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
 
   return (
     /\b(what|where|which|find|show|spot|identify|help|how)\b/.test(normalized) ||
+    /\bspending opportunit(?:y|ies)\b/.test(normalized) ||
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what|costs?|expenses?|cash)\b/.test(normalized) ||
     /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized)
+  );
+}
+
+function isDataQualityPrompt(normalized: string): boolean {
+  return /\b(missing card|card missing|missing data|data missing|data (?:might|may|could) be missing|what data (?:might|may|could) be missing|connect(ed)? data|repair data|data quality|pending transactions?|pending items?)\b/.test(
+    normalized,
   );
 }
 
@@ -580,8 +593,12 @@ function isTrustReceiptPrompt(normalized: string): boolean {
   }
 
   return (
-    /\b(can i trust|trustworthy|how reliable|how accurate|accuracy|complete data|what is missing|what data is missing|what may be missing|what data is counted|what does this include|based on fresh data|up to date|current)\b/.test(normalized) &&
-    /\b(number|spendable cash|spendable cash today|data|accounts?|current|fresh|today|it|this)\b/.test(normalized)
+    (
+      /\b(can i trust|trustworthy|how reliable|how accurate|accuracy|complete data|what is missing|what data is missing|what may be missing|what data is counted|what does this include|based on fresh data|up to date|current)\b/.test(normalized) ||
+      /\b(data|number|spendable cash|spendable cash today)\b.{0,32}\b(stale|fresh|current|up to date)\b/.test(normalized) ||
+      /\b(stale|fresh|current|up to date)\b.{0,32}\b(data|number|spendable cash|spendable cash today)\b/.test(normalized)
+    ) &&
+    /\b(number|spendable cash|spendable cash today|data|accounts?|current|fresh|stale|today|it|this)\b/.test(normalized)
   );
 }
 

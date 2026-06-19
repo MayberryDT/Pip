@@ -31,6 +31,30 @@ describe("agent quality scorer", () => {
     expect(score.failures).toEqual([]);
   });
 
+  it("scores expected text against the full visible response surface", () => {
+    const score = scoreCaseQuality({
+      caseDef: {
+        id: "card-text",
+        quality: {
+          dimensions: ["directness"],
+          expectedTextPatterns: ["restaurant"],
+        },
+      },
+      result: {
+        ok: true,
+        responseMessage: "I found the main opportunity.",
+        responseSearchText: "I found the main opportunity. Restaurant spending is the biggest pressure.",
+        cardTypes: ["insight_card"],
+        usedTools: ["get_spending_opportunity"],
+        promptChips: [],
+        failures: [],
+        durationMs: 100,
+      },
+    });
+
+    expect(score.total).toBeGreaterThanOrEqual(90);
+  });
+
   it("treats guard failures as a hard zero", () => {
     const score = scoreCaseQuality({
       caseDef: {

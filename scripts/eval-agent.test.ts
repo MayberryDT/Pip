@@ -187,6 +187,26 @@ describe("Pip agent eval harness", () => {
     expect(result.failures.join("\n")).toContain("returned no cards");
   });
 
+  it("does not treat card-data wording in guidance as a UI card promise", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_financial_guidance_context"],
+        expectedCards: ["guidance_card"],
+        expectedResponseMode: "guidance",
+      },
+      response: {
+        message: "I’m seeing Spendable Cash Today around $104. It’s tight because data is missing some card details, and recurring bills are already held back.",
+        responseMode: "guidance",
+        usedTools: ["get_financial_guidance_context"],
+        cards: [{ type: "guidance_card" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
   it("fails required tool and card mismatches", async () => {
     const { evaluateAgentResponse } = await loadEvalHarness();
     const result = evaluateAgentResponse({
@@ -362,6 +382,70 @@ describe("Pip agent eval harness", () => {
       });
       expect(writtenReport.cases[0].message).toBe("[redacted]");
       expect(writtenReport.cases[0]).not.toHaveProperty("rawResponse");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("scores redacted quality reports using the unredacted visible answer", async () => {
+    const { runAgentEval } = await loadEvalHarness();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-eval-"));
+    const reportPath = join(tempDir, "quality-report.json");
+
+    try {
+      const report = await runAgentEval({
+        baseUrl: "http://localhost:3999",
+        reportPath,
+        suite: "quality-working",
+        cases: [
+          {
+            id: "guidance",
+            description: "quality case",
+            message: "Should I slow down this week?",
+            group: "guidance",
+            expectedTools: ["get_financial_guidance_context"],
+            expectedCards: ["guidance_card"],
+            expectedResponseMode: "guidance",
+            quality: {
+              dimensions: ["directness"],
+              expectedTextPatterns: ["pressure"],
+              maxWords: 45,
+            },
+          },
+        ],
+        conversationPrefix: "test-quality-eval",
+        log: () => undefined,
+        includeRawResponse: false,
+        redactReport: true,
+        fetchImpl: async () => ({
+          status: 200,
+          ok: true,
+          json: async () => ({
+            message: "My read: pressure is higher this week.",
+            responseMode: "guidance",
+            usedTools: ["get_financial_guidance_context"],
+            cards: [
+              {
+                type: "guidance_card",
+                title: "My read",
+                stance: "watch",
+                summary: "Pressure is higher this week.",
+                rows: [],
+              },
+            ],
+            promptChips: [],
+          }),
+        }),
+      });
+
+      expect(report.cases[0].message).toBe("[redacted]");
+      expect(report.cases[0].qualityScore.total).toBeGreaterThanOrEqual(90);
+      expect(report.quality.averageScore).toBeGreaterThanOrEqual(90);
+
+      const writtenReport = JSON.parse(readFileSync(reportPath, "utf8"));
+
+      expect(writtenReport.cases[0].message).toBe("[redacted]");
+      expect(writtenReport.cases[0].qualityScore.total).toBeGreaterThanOrEqual(90);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }

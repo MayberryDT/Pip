@@ -309,6 +309,12 @@ export async function runAIAgent(
   input: RunAiAgentInput,
   runtime?: AgentRuntime,
 ): Promise<AgentResponse> {
+  const deterministicNoToolResponse = createDeterministicNoToolResponse(input);
+
+  if (deterministicNoToolResponse) {
+    return deterministicNoToolResponse;
+  }
+
   if (runtime) {
     return runtime.run(input);
   }
@@ -535,9 +541,18 @@ function createDeterministicUnavailableActionResponse(input: RunAiAgentInput): A
 async function createDeterministicSavingsGoalResponse(input: RunAiAgentInput): Promise<AgentResponse | null> {
   const normalized = normalizePrompt(input.message);
   const pendingAction = input.conversationState?.pendingAction;
+  const forcedTool = getForcedAgentTool(input);
 
   if (pendingAction?.type === "create_savings_goal") {
     return createSavingsGoalDraftResponse(input, pendingAction);
+  }
+
+  if (forcedTool?.toolName === "update_savings_goal") {
+    return updateSavingsGoalDeterministically(input, forcedTool.args);
+  }
+
+  if (forcedTool?.toolName === "set_savings_goal_protection") {
+    return setSavingsGoalProtectionDeterministically(input, forcedTool.args);
   }
 
   if (isSavingsGoalContextProgressPrompt(normalized)) {
@@ -557,6 +572,76 @@ async function createDeterministicSavingsGoalResponse(input: RunAiAgentInput): P
   }
 
   return createSavingsGoalDraftResponse(input, undefined);
+}
+
+async function updateSavingsGoalDeterministically(
+  input: RunAiAgentInput,
+  args: ForcedAgentTool["args"],
+): Promise<AgentResponse | null> {
+  if (!input.actions?.updateSavingsGoal) {
+    return null;
+  }
+
+  const toolInput = updateSavingsGoalParameters.parse(args);
+  const result = await input.actions.updateSavingsGoal({
+    goalId: toolInput.goal_id,
+    name: toolInput.name,
+    targetAmountCents: toolInput.target_amount_cents,
+    targetDate: toolInput.target_date,
+    currentAmountCents: toolInput.current_amount_cents,
+    monthlyContributionCents: toolInput.monthly_contribution_cents,
+    includeInSpendableCash: toolInput.include_in_spendable_cash,
+    status: toolInput.status,
+  });
+  const cards = result.cards ?? [];
+
+  return agentResponseSchema.parse({
+    message: result.ok
+      ? getSavingsGoalUpdatedMessage(cards)
+      : result.message ?? "I could not update that savings goal yet.",
+    cards,
+    promptChips: createDeterministicTrustPromptChips(input),
+    usedTools: ["update_savings_goal"],
+    responseMode: cards.length > 0 ? "show_card" : "chat_only",
+    ...(result.clientAction ? { clientAction: result.clientAction } : {}),
+    audit: {
+      toolNames: ["update_savings_goal"],
+      usedModel: false,
+    },
+  });
+}
+
+async function setSavingsGoalProtectionDeterministically(
+  input: RunAiAgentInput,
+  args: ForcedAgentTool["args"],
+): Promise<AgentResponse | null> {
+  if (!input.actions?.setSavingsGoalProtection) {
+    return null;
+  }
+
+  const toolInput = savingsGoalProtectionParameters.parse(args);
+  const result = await input.actions.setSavingsGoalProtection({
+    goalId: toolInput.goal_id,
+    name: toolInput.name,
+    includeInSpendableCash: toolInput.include_in_spendable_cash,
+    monthlyContributionCents: toolInput.monthly_contribution_cents,
+  });
+  const cards = result.cards ?? [];
+
+  return agentResponseSchema.parse({
+    message: result.ok
+      ? getSavingsGoalUpdatedMessage(cards)
+      : result.message ?? "I could not update that savings goal yet.",
+    cards,
+    promptChips: createDeterministicTrustPromptChips(input),
+    usedTools: ["set_savings_goal_protection"],
+    responseMode: cards.length > 0 ? "show_card" : "chat_only",
+    ...(result.clientAction ? { clientAction: result.clientAction } : {}),
+    audit: {
+      toolNames: ["set_savings_goal_protection"],
+      usedModel: false,
+    },
+  });
 }
 
 async function createSavingsGoalDraftResponse(
@@ -780,6 +865,18 @@ function getSavingsGoalListMessage(cards: AgentCard[]): string {
   return `${goal.name}: ${formatMoney(goal.remainingCents)} left to track in Pip.`;
 }
 
+function getSavingsGoalUpdatedMessage(cards: AgentCard[]): string {
+  const planCard = cards.find((card): card is Extract<AgentCard, { type: "savings_goal_plan" }> =>
+    card.type === "savings_goal_plan"
+  );
+
+  if (!planCard) {
+    return "I updated the savings goal.";
+  }
+
+  return `${planCard.name}: ${formatMoney(planCard.remainingCents)} left to track in Pip.`;
+}
+
 function formatSavingsGoalNameForPrompt(name: string): string {
   return name.trim() || "that goal";
 }
@@ -907,6 +1004,10 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
 
   if (promptChipTool) {
     return promptChipTool;
+  }
+
+  if (isSimpleGreetingPrompt(input.message)) {
+    return undefined;
   }
 
   if (getIntentRouterMode() !== "legacy") {
@@ -3017,6 +3118,35 @@ function shouldRecoverBroadChatFinalOutput(
   return shouldRetryFinalOutput(error) || isNoToolChatOnlyPrompt(context.inputMessage);
 }
 
+function createDeterministicNoToolResponse(input: RunAiAgentInput): AgentResponse | null {
+  if (!isSimpleGreetingPrompt(input.message)) {
+    return null;
+  }
+
+  return agentResponseSchema.parse({
+    message: "Ask me about your number, what changed, or a purchase.",
+    cards: [],
+    promptChips: [
+      {
+        id: "ai-what-changed",
+        label: "What changed?",
+        prompt: "What changed?",
+      },
+      {
+        id: "ai-test-purchase",
+        label: "Test a purchase",
+        prompt: "Can I spend $50?",
+      },
+    ],
+    usedTools: [],
+    responseMode: "chat_only",
+    audit: {
+      toolNames: [],
+      usedModel: false,
+    },
+  });
+}
+
 function createBroadChatFallbackFinalOutput(input: RunAiAgentInput): AgentFinalOutput {
   const greeting = isSimpleGreetingPrompt(input.message);
   const generalSpendingAdvice = isGeneralSpendingAdvicePrompt(input.message);
@@ -4531,6 +4661,7 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
 
   const hasOpportunityTerm =
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b/.test(normalized) ||
+    /\bspending opportunit(?:y|ies)\b/.test(normalized) ||
     /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
     /\bwhere can i save\b/.test(normalized);
 
@@ -4540,6 +4671,7 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
 
   return (
     /\b(what|where|which|find|show|spot|identify|help|how)\b/.test(normalized) ||
+    /\bspending opportunit(?:y|ies)\b/.test(normalized) ||
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what|costs?|expenses?|cash)\b/.test(normalized) ||
     /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized)
   );
@@ -4639,7 +4771,7 @@ function isSavingsGoalProgressPrompt(normalized: string): boolean {
 }
 
 function isDataQualityPrompt(normalized: string): boolean {
-  return /\b(missing card|card missing|missing data|data missing|connect(ed)? data|repair data|stale data|data quality|pending transactions?|pending items?)\b/.test(
+  return /\b(missing card|card missing|missing data|data missing|data (?:might|may|could) be missing|what data (?:might|may|could) be missing|connect(ed)? data|repair data|stale data|data quality|pending transactions?|pending items?)\b/.test(
     normalized,
   );
 }
@@ -4650,8 +4782,12 @@ function isTrustReceiptPrompt(normalized: string): boolean {
   }
 
   return (
-    /\b(can i trust|trustworthy|how reliable|how accurate|accuracy|complete data|what is missing|what data is missing|what may be missing|what data is counted|what does this include|based on fresh data|up to date|current)\b/.test(normalized) &&
-    /\b(number|spendable cash|spendable cash today|data|accounts?|current|fresh|today|it|this)\b/.test(normalized)
+    (
+      /\b(can i trust|trustworthy|how reliable|how accurate|accuracy|complete data|what is missing|what data is missing|what may be missing|what data is counted|what does this include|based on fresh data|up to date|current)\b/.test(normalized) ||
+      /\b(data|number|spendable cash|spendable cash today)\b.{0,32}\b(stale|fresh|current|up to date)\b/.test(normalized) ||
+      /\b(stale|fresh|current|up to date)\b.{0,32}\b(data|number|spendable cash|spendable cash today)\b/.test(normalized)
+    ) &&
+    /\b(number|spendable cash|spendable cash today|data|accounts?|current|fresh|stale|today|it|this)\b/.test(normalized)
   );
 }
 
@@ -5100,6 +5236,7 @@ function isFinancialGuidancePrompt(normalized: string): boolean {
 
   return (
     /\b(what do you think|how am i doing|give me advice|any advice|what should i do|am i okay|is this bad|what would you do|help me fix this|how do i improve|am i spending too much|is my spending bad|am i broke|why am i broke|i'?m broke|in trouble|should i lower my monthly savings|should i lower my cushion|should i save more|should i stop spending|what'?s your read|my read)\b/.test(normalized) ||
+    /\bshould i\b.{0,24}\bslow down\b/.test(normalized) ||
     /\bwhy\b.{0,40}\b(can'?t|cannot|cant)\b.{0,40}\bspend\b/.test(normalized) ||
     /\b(can'?t|cannot|cant)\b.{0,40}\bspend\b.{0,40}\b(because|why|if|when)\b/.test(normalized)
   );

@@ -4,6 +4,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { analyzeChampionChallengerReport } from "./analyze-champion-challenger-report.mjs";
 import { runChampionChallenger } from "./champion-challenger-agent.mjs";
+import { runAgentEval } from "./eval-agent.mjs";
 import { AGENT_QUALITY_VARIANTS } from "../tests/fixtures/agent-quality/champion-challenger-cases.mjs";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
@@ -23,7 +24,9 @@ export async function runAgentImprovementLoop({
   ),
   margin = Number(process.env.PIP_CC_MARGIN || 3),
   maxLatencyRegression = Number(process.env.PIP_CC_MAX_LATENCY_REGRESSION || 20),
+  targetChampionScore = parseOptionalNumber(process.env.PIP_AGENT_TARGET_CHAMPION_SCORE),
   runChampionChallenger: runComparison = runChampionChallenger,
+  runEval = runAgentEval,
   log = console.log,
 } = {}) {
   const runDir = join(runRoot, runId);
@@ -40,6 +43,9 @@ export async function runAgentImprovementLoop({
   let variantCursor = 0;
   const iterations = [];
   const promotions = [];
+  const championAssessments = [];
+  let finalChampionScore;
+  const stopOnConsecutiveFailures = targetChampionScore === undefined;
 
   const config = {
     runId,
@@ -50,13 +56,56 @@ export async function runAgentImprovementLoop({
     maxConsecutiveFailures,
     margin,
     maxLatencyRegression,
+    targetChampionScore,
     workingSuite: WORKING_SUITE,
     holdoutSuite: HOLDOUT_SUITE,
   };
 
   writeJson(join(runDir, "config.json"), config);
 
-  while (consecutiveFailures < maxConsecutiveFailures) {
+  if (targetChampionScore !== undefined) {
+    const baselineReport = await runEval({
+      baseUrl,
+      suite: WORKING_SUITE,
+      variant: currentChampionVariant,
+      reportPath: join(runDir, `000-${currentChampionVariant}-champion-baseline.json`),
+      conversationPrefix: `improve-${runId}-champion-baseline`,
+      includeRawResponse: false,
+      redactReport: true,
+      log,
+    });
+    const baselineAssessment = createChampionAssessment({
+      iteration: 0,
+      variant: currentChampionVariant,
+      reportPath: join(runDir, `000-${currentChampionVariant}-champion-baseline.json`),
+      report: baselineReport,
+    });
+
+    finalChampionScore = baselineAssessment.score;
+    championAssessments.push(baselineAssessment);
+    writeJson(join(runDir, "000-champion-baseline-analysis.json"), baselineAssessment);
+
+    if (finalChampionScore >= targetChampionScore) {
+      const summary = buildSummary({
+        config,
+        iterations,
+        promotions,
+        championAssessments,
+        finalChampionVariant: currentChampionVariant,
+        finalChampionScore,
+        consecutiveFailures,
+        stopReason: "champion-score-target-reached",
+      });
+
+      writeJson(join(runDir, "summary.json"), summary);
+      log(`Stopped because champion scored ${finalChampionScore}, meeting target ${targetChampionScore}.`);
+      log(`Run summary: ${join(runDir, "summary.json")}`);
+
+      return summary;
+    }
+  }
+
+  while (!stopOnConsecutiveFailures || consecutiveFailures < maxConsecutiveFailures) {
     const selected = selectNextVariant({
       variants: selectedVariants,
       cursor: variantCursor,
@@ -86,6 +135,19 @@ export async function runAgentImprovementLoop({
 
     writeJson(join(runDir, `${iterationLabel}-${challengerVariant}-working-analysis.json`), workingAnalysis);
 
+    if (targetChampionScore !== undefined) {
+      const championAssessment = createChampionAssessment({
+        iteration: iterationNumber,
+        variant: championBefore,
+        reportPath: workingReportPath.replace(/\.json$/u, ".champion.json"),
+        report: workingReport?.champion?.report,
+        summary: workingReport?.champion?.summary,
+      });
+
+      finalChampionScore = championAssessment.score;
+      championAssessments.push(championAssessment);
+    }
+
     let holdoutReport;
     let holdoutAnalysis;
     let accepted = false;
@@ -112,6 +174,7 @@ export async function runAgentImprovementLoop({
 
     if (accepted) {
       currentChampionVariant = challengerVariant;
+      finalChampionScore = workingAnalysis.challengerScore;
       consecutiveFailures = 0;
       promotions.push({
         iteration: iterationNumber,
@@ -120,6 +183,49 @@ export async function runAgentImprovementLoop({
         workingScoreDelta: workingAnalysis.scoreDelta,
         holdoutScoreDelta: holdoutAnalysis?.scoreDelta ?? 0,
       });
+
+      if (targetChampionScore !== undefined && finalChampionScore >= targetChampionScore) {
+        iterations.push({
+          iteration: iterationNumber,
+          championVariant: championBefore,
+          challengerVariant,
+          accepted,
+          consecutiveFailures,
+          working: {
+            status: workingReport?.status,
+            decision: workingAnalysis.decision,
+            scoreDelta: workingAnalysis.scoreDelta,
+            blockers: workingAnalysis.blockers,
+            reportPath: workingReportPath,
+          },
+          holdout: holdoutAnalysis
+            ? {
+                status: holdoutReport?.status,
+                decision: holdoutAnalysis.decision,
+                scoreDelta: holdoutAnalysis.scoreDelta,
+                blockers: holdoutAnalysis.blockers,
+                reportPath: join(runDir, `${iterationLabel}-${challengerVariant}-holdout.json`),
+              }
+            : null,
+        });
+
+        const summary = buildSummary({
+          config,
+          iterations,
+          promotions,
+          championAssessments,
+          finalChampionVariant: currentChampionVariant,
+          finalChampionScore,
+          consecutiveFailures,
+          stopReason: "champion-score-target-reached",
+        });
+
+        writeJson(join(runDir, "summary.json"), summary);
+        log(`Stopped because champion scored ${finalChampionScore}, meeting target ${targetChampionScore}.`);
+        log(`Run summary: ${join(runDir, "summary.json")}`);
+
+        return summary;
+      }
     } else {
       consecutiveFailures += 1;
     }
@@ -152,19 +258,42 @@ export async function runAgentImprovementLoop({
       config,
       iterations,
       promotions,
+      championAssessments,
       finalChampionVariant: currentChampionVariant,
+      finalChampionScore,
       consecutiveFailures,
-      stopReason: consecutiveFailures >= maxConsecutiveFailures
+      stopReason: stopOnConsecutiveFailures && consecutiveFailures >= maxConsecutiveFailures
         ? "three-consecutive-challenger-failures"
         : "running",
     }));
+
+    if (targetChampionScore !== undefined && finalChampionScore >= targetChampionScore) {
+      const summary = buildSummary({
+        config,
+        iterations,
+        promotions,
+        championAssessments,
+        finalChampionVariant: currentChampionVariant,
+        finalChampionScore,
+        consecutiveFailures,
+        stopReason: "champion-score-target-reached",
+      });
+
+      writeJson(join(runDir, "summary.json"), summary);
+      log(`Stopped because champion scored ${finalChampionScore}, meeting target ${targetChampionScore}.`);
+      log(`Run summary: ${join(runDir, "summary.json")}`);
+
+      return summary;
+    }
   }
 
   const summary = buildSummary({
     config,
     iterations,
     promotions,
+    championAssessments,
     finalChampionVariant: currentChampionVariant,
+    finalChampionScore,
     consecutiveFailures,
     stopReason: "three-consecutive-challenger-failures",
   });
@@ -181,7 +310,9 @@ function buildSummary({
   config,
   iterations,
   promotions,
+  championAssessments,
   finalChampionVariant,
+  finalChampionScore,
   consecutiveFailures,
   stopReason,
 }) {
@@ -190,11 +321,58 @@ function buildSummary({
     generatedAt: new Date().toISOString(),
     stopReason,
     finalChampionVariant,
+    finalChampionScore,
     consecutiveFailures,
     iterationCount: iterations.length,
+    championAssessments,
     promotions,
     iterations,
   };
+}
+
+function createChampionAssessment({
+  iteration,
+  variant,
+  reportPath,
+  report,
+  summary,
+}) {
+  return {
+    iteration,
+    variant,
+    reportPath,
+    score: scoreFromReport(report, summary),
+    failureCount: Number(report?.failureCount ?? summary?.failureCount ?? 0),
+    qualityGuardFailureCount: Number(
+      report?.quality?.guardFailureCount ?? summary?.qualityGuardFailureCount ?? 0,
+    ),
+    weakDimensions: Array.isArray(report?.quality?.weakDimensions)
+      ? report.quality.weakDimensions.map(String).sort()
+      : [],
+  };
+}
+
+function scoreFromReport(report, summary) {
+  const qualityScore = Number(report?.quality?.averageScore);
+
+  if (Number.isFinite(qualityScore)) {
+    return Math.round(qualityScore * 100) / 100;
+  }
+
+  const summaryQualityScore = Number(summary?.qualityAverageScore ?? summary?.score);
+
+  if (Number.isFinite(summaryQualityScore)) {
+    return Math.round(summaryQualityScore * 100) / 100;
+  }
+
+  const caseCount = Number(report?.caseCount ?? report?.cases?.length ?? 0);
+  const failureCount = Number(report?.failureCount ?? 0);
+
+  if (!caseCount) {
+    return 0;
+  }
+
+  return Math.round(((caseCount - failureCount) / caseCount) * 10000) / 100;
 }
 
 function selectNextVariant({ variants, cursor, championVariant }) {
@@ -227,6 +405,16 @@ function parseVariants(value) {
   }
 
   return value.split(",").map((variant) => variant.trim()).filter(Boolean);
+}
+
+function parseOptionalNumber(value) {
+  if (value === undefined || value === null || value === "") {
+    return undefined;
+  }
+
+  const numberValue = Number(value);
+
+  return Number.isFinite(numberValue) ? numberValue : undefined;
 }
 
 function parseCliArgs(argv) {
@@ -276,6 +464,11 @@ function parseCliArgs(argv) {
       index += 1;
     } else if (arg.startsWith("--max-latency-regression=")) {
       options.maxLatencyRegression = Number(arg.slice("--max-latency-regression=".length));
+    } else if (arg === "--target-champion-score" && next) {
+      options.targetChampionScore = Number(next);
+      index += 1;
+    } else if (arg.startsWith("--target-champion-score=")) {
+      options.targetChampionScore = Number(arg.slice("--target-champion-score=".length));
     } else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -303,6 +496,7 @@ Options:
   --max-consecutive-failures NUM    Stop threshold, default ${DEFAULT_MAX_CONSECUTIVE_FAILURES}
   --margin NUM                      Required quality score improvement, default 3
   --max-latency-regression NUM      Allowed latency regression percent, default 20
+  --target-champion-score NUM       Stop when the active champion reaches this quality score
 `);
 }
 

@@ -25,18 +25,20 @@ afterEach(() => {
 
 describe("runAIAgent", () => {
   it("answers greetings conversationally without forcing a tool or card", async () => {
-    const response = await runAIAgent(
-      { message: "hi" },
-      createMockModelClient(),
-    );
+    for (const message of ["hi", "yo"]) {
+      const response = await runAIAgent(
+        { message },
+        createMockModelClient(),
+      );
 
-    expect(response.audit.usedModel).toBe(true);
-    expect(response.audit.model).toBe(PIP_AI_MODEL);
-    expect(response.usedTools).toEqual([]);
-    expect(response.audit.toolNames).toEqual([]);
-    expect(response.responseMode).toBe("chat_only");
-    expect(response.cards).toHaveLength(0);
-    expect(response.message.toLowerCase()).not.toContain("dashboard");
+      expect(response.audit.usedModel).toBe(false);
+      expect(response.usedTools).toEqual([]);
+      expect(response.audit.toolNames).toEqual([]);
+      expect(response.responseMode).toBe("chat_only");
+      expect(response.cards).toHaveLength(0);
+      expect(response.message.toLowerCase()).not.toContain("dashboard");
+      expect(response.message.toLowerCase()).toMatch(/spendable cash today|purchase|number|changed/);
+    }
   });
 
   it("forces model-labeled guidance greetings back to chat-only when no guidance surface exists", () => {
@@ -54,6 +56,7 @@ describe("runAIAgent", () => {
 
   it("treats simple greetings as no-tool chat-only prompts", () => {
     expect(__agentTestHooks.isNoToolChatOnlyPrompt("hi")).toBe(true);
+    expect(__agentTestHooks.getForcedAgentTool({ message: "yo" })).toBeUndefined();
   });
 
 
@@ -461,6 +464,23 @@ describe("runAIAgent", () => {
     expect(response.message.toLowerCase()).toContain("cutback opportunity");
   });
 
+  it("calls the spending opportunity tool for spending-opportunity prompts", async () => {
+    const response = await runAIAgent(
+      {
+        message: "Find a spending opportunity",
+        snapshot: getFakeSnapshot("cutback-dining"),
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_spending_opportunity"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "Cutback opportunity",
+    });
+  });
+
   it("uses an insight card for payday impact questions", async () => {
     const response = await runAIAgent(
       { message: "How does payday affect my money?" },
@@ -555,6 +575,7 @@ describe("runAIAgent", () => {
       "What should I do?",
       "Am I spending too much?",
       "Should I lower my cushion?",
+      "Should I slow down this week?",
     ]) {
       expect(
         __agentTestHooks.getForcedAgentTool({
@@ -599,6 +620,7 @@ describe("runAIAgent", () => {
       "How do I reduce expenses?",
       "How can I save money this week?",
       "Find waste in my spending",
+      "Find a spending opportunity",
       "What should I stop buying?",
       "What costs should I cut?",
     ]) {
@@ -631,6 +653,48 @@ describe("runAIAgent", () => {
         })?.toolName,
       ).not.toBe("get_spending_opportunity");
     }
+  });
+
+  it("routes missing-data prompts through the real forced-tool classifier", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "What data might be missing?",
+      }),
+    ).toMatchObject({
+      toolName: "get_data_quality",
+      requireCard: true,
+    });
+  });
+
+  it("answers stale-data prompts with the trust receipt card", async () => {
+    const response = await runAIAgent(
+      {
+        message: "Is my data stale?",
+        snapshot: getFakeSnapshot("default"),
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_trust_receipt"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "trust_receipt",
+      title: "Trust receipt",
+    });
+  });
+
+  it("answers missing-data prompts with a supported data-quality card", async () => {
+    const response = await runAIAgent(
+      {
+        message: "What data might be missing?",
+        snapshot: getFakeSnapshot("default"),
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_data_quality"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(["missing_card_nudge", "connect_account"]).toContain(response.cards[0]?.type);
   });
 
   it("routes savings goal prompts through the real forced-tool classifier", () => {
@@ -841,6 +905,71 @@ describe("runAIAgent", () => {
             targetDate: "2026-12-01",
           }),
         ],
+      }),
+    ]);
+  });
+
+  it("updates savings goal progress deterministically from saved-toward wording", async () => {
+    const actions = createSavingsGoalActions();
+
+    await runAIAgent({
+      message: "I want to save for a trip that costs $5,000",
+      onboardingState: {
+        status: "ready",
+        hasFinancialData: true,
+      },
+      actions,
+    });
+
+    const response = await runAIAgent({
+      message: "I saved $300 toward my trip goal",
+      onboardingState: {
+        status: "ready",
+        hasFinancialData: true,
+      },
+      actions,
+    });
+
+    expect(response.usedTools).toEqual(["update_savings_goal"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards).toEqual([
+      expect.objectContaining({
+        type: "savings_goal_plan",
+        name: "Trip",
+        currentAmountCents: 30000,
+        remainingCents: 470000,
+      }),
+    ]);
+  });
+
+  it("updates savings goal protection deterministically from spendable-cash wording", async () => {
+    const actions = createSavingsGoalActions();
+
+    await runAIAgent({
+      message: "I want to save for a trip that costs $5,000",
+      onboardingState: {
+        status: "ready",
+        hasFinancialData: true,
+      },
+      actions,
+    });
+
+    const response = await runAIAgent({
+      message: "Keep my trip goal out of Spendable Cash",
+      onboardingState: {
+        status: "ready",
+        hasFinancialData: true,
+      },
+      actions,
+    });
+
+    expect(response.usedTools).toEqual(["set_savings_goal_protection"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards).toEqual([
+      expect.objectContaining({
+        type: "savings_goal_plan",
+        name: "Trip",
+        includeInSpendableCash: true,
       }),
     ]);
   });
@@ -1951,6 +2080,67 @@ function createSavingsGoalActions(): PipAgentActions {
             activeGoalCount: savedGoal ? 1 : 0,
             protectedMonthlyContributionCents: 0,
             goals: savedGoal ? [savedGoal] : [],
+          },
+        ],
+      };
+    },
+    async setSavingsGoalProtection(input) {
+      if (!savedGoal) {
+        return {
+          ok: false,
+          status: "savings_goal_not_found",
+          message: "I do not see a saved savings goal yet.",
+        };
+      }
+
+      savedGoal = {
+        ...savedGoal,
+        includeInSpendableCash: input.includeInSpendableCash,
+        monthlyContributionCents: input.monthlyContributionCents ?? savedGoal.monthlyContributionCents,
+      };
+
+      return {
+        ok: true,
+        status: input.includeInSpendableCash
+          ? "savings_goal_protection_enabled"
+          : "savings_goal_protection_disabled",
+        cards: [
+          {
+            type: "savings_goal_plan" as const,
+            title: "Savings goal",
+            ...savedGoal,
+            summary: `$${Math.round(savedGoal.remainingCents / 100).toLocaleString()} left for ${savedGoal.name}. Tracked in Pip. No money is moved.`,
+          },
+        ],
+      };
+    },
+    async updateSavingsGoal(input) {
+      if (!savedGoal) {
+        return {
+          ok: false,
+          status: "savings_goal_not_found",
+          message: "I do not see a saved savings goal yet.",
+        };
+      }
+
+      savedGoal = {
+        ...savedGoal,
+        currentAmountCents: input.currentAmountCents ?? savedGoal.currentAmountCents,
+        remainingCents: savedGoal.targetAmountCents - (input.currentAmountCents ?? savedGoal.currentAmountCents),
+        targetAmountCents: input.targetAmountCents ?? savedGoal.targetAmountCents,
+        monthlyContributionCents: input.monthlyContributionCents ?? savedGoal.monthlyContributionCents,
+        includeInSpendableCash: input.includeInSpendableCash ?? savedGoal.includeInSpendableCash,
+      };
+
+      return {
+        ok: true,
+        status: "savings_goal_updated",
+        cards: [
+          {
+            type: "savings_goal_plan" as const,
+            title: "Savings goal",
+            ...savedGoal,
+            summary: `$${Math.round(savedGoal.remainingCents / 100).toLocaleString()} left for ${savedGoal.name}. Tracked in Pip. No money is moved.`,
           },
         ],
       };

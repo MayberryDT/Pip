@@ -72,7 +72,13 @@ describe("intent router", () => {
     ["where will I be in a few days", "spendable.forecast", "forecast_spendable_cash"],
     ["how did you calculate this", "math.breakdown", "get_pip_cash_math"],
     ["what can I cut back on", "spending.cutback_opportunity", "get_spending_opportunity"],
+    ["find a spending opportunity", "spending.cutback_opportunity", "get_spending_opportunity"],
     ["how am I doing", "guidance.financial_read", "get_financial_guidance_context"],
+    ["should I slow down this week", "guidance.financial_read", "get_financial_guidance_context"],
+    ["is my data stale", "trust.receipt", "get_trust_receipt"],
+    ["what data might be missing", "data.quality", "get_data_quality"],
+    ["can Pip move my money", "policy.trust", "get_trust_policy"],
+    ["does AI calculate my number", "policy.trust", "get_trust_policy"],
   ])("routes natural card request %s", (message, intentId, toolName) => {
     expect(route(message)).toMatchObject({
       kind: "route",

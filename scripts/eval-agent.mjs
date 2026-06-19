@@ -553,7 +553,7 @@ const genericCutbackAdviceChecks = [
 
 const showPromisePattern =
   /\b(?:show|showing|shown|list|listing|pull|view|card|cards|trend view|here is|here are|here's)\b/i;
-const cardWordExclusionPattern = /\b(?:credit cards?|debit cards?)\b/i;
+const cardWordExclusionPattern = /\b(?:credit cards?|debit cards?|cards? (?:details?|data|transactions?|charges?))\b/i;
 
 const promiseCapabilities = [
   {
@@ -854,6 +854,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
   const promptChips = getPromptChips(response);
   const pendingActionType = getPendingActionType(response);
   const responseMode = typeof response?.responseMode === "string" ? response.responseMode : "";
+  const responseSearchText = getResponseSearchText(response, message);
   const routingOnly = Boolean(caseDef.routingOnly);
 
   if (!httpOk) {
@@ -936,6 +937,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     ok: failures.length === 0,
     failures,
     message,
+    responseSearchText,
     responseMode,
     usedTools,
     cardTypes,
@@ -1018,6 +1020,7 @@ export async function runAgentEval({
   const casePool = cases ?? selectCasePool({ suite: normalizedSuite, routingOnly });
   const selectedCases = selectEvalCases(casePool, caseIds);
   const results = [];
+  const scoringResults = [];
 
   log(`Running ${selectedCases.length} Pip agent eval cases from ${normalizedSuite} against ${agentUrl}`);
 
@@ -1063,7 +1066,7 @@ export async function runAgentEval({
     });
     const reportEvaluation = redactReport ? redactEvaluationForReport(evaluation) : evaluation;
 
-    const result = {
+    const baseResult = {
       id: caseDef.id,
       description: caseDef.description,
       inputMessage: redactReport ? "[redacted]" : caseDef.message,
@@ -1073,12 +1076,23 @@ export async function runAgentEval({
       selectedPromptChipId: requestBody.selectedPromptChipId,
       httpStatus,
       durationMs: Date.now() - caseStart,
+    };
+    const scoringResult = {
+      ...baseResult,
+      inputMessage: caseDef.message,
+      ...evaluation,
+      responseMessage: evaluation.message,
+      ...(includeRawResponse ? { rawResponse: payload } : {}),
+    };
+    const result = {
+      ...baseResult,
       ...reportEvaluation,
       responseMessage: reportEvaluation.message,
       ...(includeRawResponse ? { rawResponse: payload } : {}),
     };
 
     results.push(result);
+    scoringResults.push(scoringResult);
     log(`${result.ok ? "PASS" : "FAIL"} ${caseDef.id}${result.ok ? "" : ` - ${result.failures.join("; ")}`}`);
   }
 
@@ -1099,13 +1113,33 @@ export async function runAgentEval({
     cases: results,
   };
   const finalReport = isQualitySuite(normalizedSuite)
-    ? attachQualityScores({ report, casePool: selectedCases })
+    ? mergeQualityScoresIntoReport({
+        report,
+        scoringReport: attachQualityScores({
+          report: {
+            ...report,
+            cases: scoringResults,
+          },
+          casePool: selectedCases,
+        }),
+      })
     : report;
 
   writeFileSync(reportPath, `${JSON.stringify(finalReport, null, 2)}\n`);
   log(`Wrote Pip agent eval report to ${reportPath}`);
 
   return finalReport;
+}
+
+function mergeQualityScoresIntoReport({ report, scoringReport }) {
+  return {
+    ...report,
+    quality: scoringReport.quality,
+    cases: report.cases.map((result, index) => ({
+      ...result,
+      qualityScore: scoringReport.cases[index]?.qualityScore,
+    })),
+  };
 }
 
 function normalizeSuiteName(suite, routingOnly) {
@@ -1167,6 +1201,7 @@ function redactEvaluationForReport(evaluation) {
   return {
     ...evaluation,
     message: evaluation.message ? "[redacted]" : "",
+    responseSearchText: evaluation.responseSearchText ? "[redacted]" : "",
     promptChips: evaluation.promptChips.map((chip) => ({
       id: chip.id,
       label: chip.label ? "[redacted]" : chip.label,

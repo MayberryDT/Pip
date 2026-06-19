@@ -450,12 +450,12 @@ function getDeterministicIntentId(normalized: string): string | null {
     return "recurring.activity";
   }
 
-  if (isDataQualityPrompt(normalized)) {
-    return "data.quality";
-  }
-
   if (isTrustReceiptPrompt(normalized)) {
     return "trust.receipt";
+  }
+
+  if (isDataQualityPrompt(normalized)) {
+    return "data.quality";
   }
 
   if (isSyncStatusPrompt(normalized)) {
@@ -550,7 +550,7 @@ function isDataQualityPrompt(normalized: string): boolean {
     return false;
   }
 
-  return /\b(data quality|missing (?:card|data|something)|pending (?:transactions?|items?)|incomplete|everything counted|data is missing)\b/.test(normalized);
+  return /\b(data quality|missing (?:card|data|something)|data (?:is|might be|may be|could be) missing|what data (?:might|may|could) be missing|pending (?:transactions?|items?)|incomplete|everything counted)\b/.test(normalized);
 }
 
 function isTrustReceiptPrompt(normalized: string): boolean {
@@ -558,7 +558,11 @@ function isTrustReceiptPrompt(normalized: string): boolean {
     return false;
   }
 
-  return /\b(trust receipt|can i trust|what data is counted|what does this include|when was this updated|number current|up to date)\b/.test(normalized);
+  return (
+    /\b(trust receipt|can i trust|what data is counted|what does this include|when was this updated|number current|up to date)\b/.test(normalized) ||
+    /\b(data|number|spendable cash|spendable cash today)\b.{0,32}\b(stale|fresh|current|up to date)\b/.test(normalized) ||
+    /\b(stale|fresh|current|up to date)\b.{0,32}\b(data|number|spendable cash|spendable cash today)\b/.test(normalized)
+  );
 }
 
 function isSyncStatusPrompt(normalized: string): boolean {

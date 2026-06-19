@@ -3,7 +3,7 @@ import { QUALITY_DIMENSIONS } from "../tests/fixtures/agent-quality/champion-cha
 export function scoreCaseQuality({ caseDef, result }) {
   const quality = caseDef?.quality || result?.quality || {};
   const failures = asArray(result?.failures).map(String);
-  const responseText = String(result?.responseMessage || result?.message || "");
+  const responseText = String(result?.responseSearchText || result?.responseMessage || result?.message || "");
   const dimensions = asArray(quality.dimensions);
   const dimensionScores = {};
   const guardFailed = Boolean(quality.guard && (failures.length > 0 || hasGuardTextFailure({ quality, responseText })));
