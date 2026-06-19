@@ -47,6 +47,34 @@ export const clientActionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
+export const pendingActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("create_savings_goal"),
+    name: z.string().trim().min(1).max(80),
+    targetAmountCents: z.number().int().positive().max(100_000_000).optional(),
+    targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    startingAmountCents: z.number().int().min(0).max(100_000_000).optional(),
+    currentAmountCents: z.number().int().min(0).max(100_000_000).optional(),
+    monthlyContributionCents: z.number().int().min(0).max(100_000_000).optional(),
+    includeInSpendableCash: z.boolean().optional(),
+    missing: z
+      .array(z.enum(["target_amount", "target_date", "monthly_contribution", "protection_choice", "confirmation"]))
+      .max(5)
+      .optional(),
+  }),
+  z.object({
+    type: z.literal("set_savings_goal_protection"),
+    goalId: z.string().min(1).max(120).optional(),
+    name: z.string().trim().min(1).max(80).optional(),
+    includeInSpendableCash: z.boolean(),
+    monthlyContributionCents: z.number().int().min(0).max(100_000_000).optional(),
+    missing: z
+      .array(z.enum(["goal", "monthly_contribution", "protection_choice", "confirmation"]))
+      .max(4)
+      .optional(),
+  }),
+]);
+
 const driverSchema = z.object({
   id: z.string(),
   label: z.string(),
@@ -420,6 +448,7 @@ export const agentResponseSchema = z.object({
   usedTools: z.array(z.string()).max(8),
   responseMode: responseModeSchema,
   clientAction: clientActionSchema.optional(),
+  pendingAction: pendingActionSchema.optional(),
   audit: z.object({
     toolNames: z.array(z.string()),
     usedModel: z.boolean(),

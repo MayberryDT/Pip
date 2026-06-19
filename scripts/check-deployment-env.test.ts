@@ -132,6 +132,94 @@ OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
       "PLAID_REDIRECT_URI does not share the NEXT_PUBLIC_SITE_URL origin.",
     );
   });
+
+  it("requires both savings-goal flags to be explicitly true when production savings goals are required", async () => {
+    const cwd = createTempProject(`
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SITE_URL=https://spendwithpip.com
+NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
+SUPABASE_SERVICE_ROLE_KEY=service-role-key
+PIP_OPERATOR_TOKEN=operator-token
+PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
+PLAID_CLIENT_ID=plaid-client-id
+PLAID_SECRET=plaid-secret
+PLAID_ENV=production
+OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
+PIP_SAVINGS_GOALS_ENABLED=true
+NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=No value set
+`);
+
+    const result = await runCheck(cwd, "--mode=beta", ["--require-savings-goals"]);
+    const output = result.stderr + result.stdout + result.warnings;
+
+    expect(result.status).toBe(1);
+    expect(output).toContain("Deployment env check failed for beta mode.");
+    expect(output).toContain("- NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=true");
+    expect(output).not.toContain("No value set");
+  });
+
+  it("passes required production savings goals only when both server and client flags are true", async () => {
+    const cwd = createTempProject(`
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SITE_URL=https://spendwithpip.com
+NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
+SUPABASE_SERVICE_ROLE_KEY=service-role-key
+PIP_OPERATOR_TOKEN=operator-token
+PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
+PLAID_CLIENT_ID=plaid-client-id
+PLAID_SECRET=plaid-secret
+PLAID_ENV=production
+OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
+PIP_SAVINGS_GOALS_ENABLED=true
+NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=true
+`);
+
+    const result = await runCheck(cwd, "--mode=beta", ["--require-savings-goals"]);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Deployment env check passed for beta mode.");
+  });
+
+  it("uses Netlify env list JSON as production truth when checking savings-goal flags", async () => {
+    const cwd = createTempProject(`
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SITE_URL=https://spendwithpip.com
+NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
+SUPABASE_SERVICE_ROLE_KEY=service-role-key
+PIP_OPERATOR_TOKEN=operator-token
+PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
+PLAID_CLIENT_ID=plaid-client-id
+PLAID_SECRET=plaid-secret
+PLAID_ENV=production
+OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
+PIP_SAVINGS_GOALS_ENABLED=true
+NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=true
+`);
+    const netlifyEnvPath = join(cwd, "netlify-env.json");
+    writeFileSync(
+      netlifyEnvPath,
+      JSON.stringify([
+        {
+          key: "PIP_SAVINGS_GOALS_ENABLED",
+          values: [{ context: "production", value: "true" }],
+        },
+        {
+          key: "NEXT_PUBLIC_SAVINGS_GOALS_ENABLED",
+          values: [{ context: "production", value: "No value set" }],
+        },
+      ]),
+    );
+
+    const result = await runCheck(cwd, "--mode=beta", [
+      "--require-savings-goals",
+      `--netlify-env-json=${netlifyEnvPath}`,
+    ]);
+    const output = result.stderr + result.stdout + result.warnings;
+
+    expect(result.status).toBe(1);
+    expect(output).toContain("- NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=true");
+    expect(output).not.toContain("No value set");
+  });
 });
 
 function createTempProject(envFile: string): string {
@@ -140,7 +228,7 @@ function createTempProject(envFile: string): string {
   return cwd;
 }
 
-async function runCheck(cwd: string, mode: "--mode=beta" | "--mode=fake") {
+async function runCheck(cwd: string, mode: "--mode=beta" | "--mode=fake", extraArgs: string[] = []) {
   const output = {
     stdout: [] as string[],
     stderr: [] as string[],
@@ -156,7 +244,7 @@ async function runCheck(cwd: string, mode: "--mode=beta" | "--mode=fake") {
     warn: (line: string) => void;
   }) => number;
   const status = runDeploymentEnvCheck({
-    argv: ["node", scriptPath, mode],
+    argv: ["node", scriptPath, mode, ...extraArgs],
     cwd,
     env: {},
     stdout: (line) => output.stdout.push(line),

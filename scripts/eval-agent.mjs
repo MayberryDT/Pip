@@ -334,6 +334,91 @@ export const agentEvalCases = [
     expectedResponseMode: "chat_only",
   },
   {
+    id: "phone-save-trip-bali",
+    description: "Phone dogfood savings goal should clarify missing details and keep a pending create-goal action.",
+    message: "Now I want to save for a trip to Bali.",
+    expectNoCards: true,
+    expectedResponseMode: "clarify",
+    expectedPendingActionType: "create_savings_goal",
+    forbiddenTextPatterns: ["I'm not sure", "\\bcushion\\b"],
+  },
+  {
+    id: "phone-save-big-purchase",
+    description: "Generic big-purchase savings goal should clarify rather than route as generic spendable snapshot help.",
+    message: "I want to save money for a big purchase",
+    expectNoCards: true,
+    expectedResponseMode: "clarify",
+    expectedPendingActionType: "create_savings_goal",
+    forbiddenTools: ["get_pip_cash_snapshot"],
+  },
+  {
+    id: "phone-why-monthly-savings",
+    description: "Old cushion wording should be answered with Monthly Savings language.",
+    message: "Why does Pip need a savings cushion?",
+    expectedTextPatterns: ["monthly savings"],
+    forbiddenTextPatterns: ["\\bcushion\\b"],
+  },
+  {
+    id: "phone-show-bank-accounts",
+    description: "Account list prompt should use connected-account data and avoid placeholder bank names.",
+    message: "Show my bank accounts",
+    expectedTools: ["get_connected_accounts"],
+    expectedCards: ["account_connections"],
+    forbiddenTextPatterns: ["\\bBank A\\b", "\\bBank B\\b"],
+  },
+  {
+    id: "phone-savings-japan-context",
+    description: "Verified phone savings transcript should keep the Japan draft through short follow-ups.",
+    turns: [
+      {
+        message: "I need to save for a trip to Japan",
+        expectNoCards: true,
+        expectedResponseMode: "clarify",
+        expectedPendingActionType: "create_savings_goal",
+        forbiddenTools: ["get_recurring_activity"],
+        forbiddenCards: ["recurring_activity"],
+        forbiddenTextPatterns: ["recurring", "repeat item", "bills coming up"],
+      },
+      {
+        message: "Yes",
+        expectNoCards: true,
+        expectedResponseMode: "clarify",
+        expectedPendingActionType: "create_savings_goal",
+        forbiddenTools: ["get_recurring_activity"],
+        forbiddenCards: ["recurring_activity"],
+        forbiddenTextPatterns: ["recurring", "repeat item", "bills coming up", "same answer still applies"],
+      },
+      {
+        message: "Set the savings goal",
+        expectNoCards: true,
+        expectedResponseMode: "clarify",
+        expectedPendingActionType: "create_savings_goal",
+        forbiddenTools: ["get_recurring_activity"],
+        forbiddenCards: ["recurring_activity"],
+        forbiddenTextPatterns: ["recurring", "repeat item", "bills coming up"],
+      },
+      {
+        message: "$3000 by December 1st",
+        expectedResponseMode: "show_card",
+        expectedTools: ["create_savings_goal"],
+        expectedCards: ["savings_goal_plan"],
+        forbiddenTools: ["get_recurring_activity"],
+        forbiddenCards: ["recurring_activity"],
+        forbiddenTextPatterns: ["I've got", "recurring", "repeat item", "bills coming up"],
+      },
+      {
+        message: "How much do I need to hit that goal?",
+        expectedResponseMode: "show_card",
+        expectedTools: ["list_savings_goals"],
+        expectedCards: ["savings_goals_summary"],
+        expectedTextPatterns: ["Japan"],
+        forbiddenTools: ["get_recurring_activity", "simulate_purchase"],
+        forbiddenCards: ["recurring_activity", "purchase_simulation"],
+        forbiddenTextPatterns: ["not sure", "specific purchase", "recurring"],
+      },
+    ],
+  },
+  {
     id: "how-it-works",
     description: "Product explanation should not say PIP Cash or point to screens.",
     message: "Tell me how Pip works",
@@ -566,6 +651,40 @@ function getPromptChips(response) {
   return asArray(response?.promptChips);
 }
 
+function getPendingActionType(response) {
+  const pendingAction = response?.conversationState?.pendingAction ?? response?.pendingAction;
+
+  return typeof pendingAction?.type === "string" ? pendingAction.type : "";
+}
+
+function getPendingAction(response) {
+  const pendingAction = response?.conversationState?.pendingAction ?? response?.pendingAction;
+
+  return pendingAction && typeof pendingAction === "object" ? pendingAction : null;
+}
+
+function collectStrings(value, output = []) {
+  if (typeof value === "string") {
+    output.push(value);
+    return output;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectStrings(item, output);
+    }
+    return output;
+  }
+
+  if (value && typeof value === "object") {
+    for (const item of Object.values(value)) {
+      collectStrings(item, output);
+    }
+  }
+
+  return output;
+}
+
 function getResponseSearchText(response, message) {
   const cardText = asArray(response?.cards).flatMap((card) => [
     card?.title,
@@ -584,7 +703,7 @@ function getResponseSearchText(response, message) {
     ]),
   ]);
 
-  return [message, ...cardText]
+  return [message, ...cardText, ...collectStrings(response?.cards), ...collectStrings(response?.promptChips)]
     .filter((value) => typeof value === "string")
     .join(" ");
 }
@@ -760,6 +879,39 @@ function validateExpectedResponseText({ caseDef, response, message, failures }) 
       }
     }
   }
+
+  for (const patternSource of asArray(caseDef.forbiddenTextPatterns)) {
+    const pattern = new RegExp(String(patternSource), "i");
+
+    if (pattern.test(responseText)) {
+      failures.push(`forbidden response text pattern found: ${patternSource}`);
+    }
+  }
+}
+
+function validateSavingsGoalPersistenceClaim({ response, message, usedTools, cardTypes, failures }) {
+  const responseText = getResponseSearchText(response, message);
+
+  if (!/\b(?:savings?\s+goal|goal)\b/i.test(responseText)) {
+    return;
+  }
+
+  const claimsCreatedGoal =
+    /\bi(?:'ve| have)?\s+(?:set(?:\s+up)?|created|saved)\b.{0,48}\b(?:savings?\s+goal|goal)\b/i.test(responseText) ||
+    /\b(?:savings?\s+goal|goal)\s+(?:is|has been|was)\s+(?:set(?:\s+up)?|created|saved)\b/i.test(responseText) ||
+    /\b(?:set(?:\s+up)?|created|saved)\s+(?:your\s+)?(?:[a-z]+\s+){0,4}savings?\s+goal\b/i.test(responseText);
+
+  if (!claimsCreatedGoal) {
+    return;
+  }
+
+  const persistedGoal =
+    usedTools.includes("create_savings_goal") &&
+    cardTypes.includes("savings_goal_plan");
+
+  if (!persistedGoal) {
+    failures.push("assistant claims a savings goal was created without create_savings_goal and a savings_goal_plan card.");
+  }
 }
 
 export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, httpOk = true, error = null }) {
@@ -768,6 +920,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
   const cardTypes = getCardTypes(response);
   const usedTools = getUsedTools(response);
   const promptChips = getPromptChips(response);
+  const pendingActionType = getPendingActionType(response);
   const responseMode = typeof response?.responseMode === "string" ? response.responseMode : "";
   const routingOnly = Boolean(caseDef.routingOnly);
 
@@ -796,6 +949,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     validatePromptChips({ promptChips, failures });
     validateConversationProgression({ caseDef, message, usedTools, promptChips, failures });
     validateExpectedResponseText({ caseDef, response, message, failures });
+    validateSavingsGoalPersistenceClaim({ response, message, usedTools, cardTypes, failures });
   }
 
   for (const toolName of asArray(caseDef.expectedTools)) {
@@ -836,6 +990,12 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     failures.push(`expected responseMode ${caseDef.expectedResponseMode} but got ${responseMode || "none"}.`);
   }
 
+  if (caseDef.expectedPendingActionType && pendingActionType !== caseDef.expectedPendingActionType) {
+    failures.push(
+      `expected pending action type ${caseDef.expectedPendingActionType} but got ${pendingActionType || "none"}.`,
+    );
+  }
+
   for (const cardType of cardTypes) {
     if (!ALL_CARD_TYPES.includes(cardType)) {
       failures.push(`unknown card type returned: ${cardType}`);
@@ -849,6 +1009,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     responseMode,
     usedTools,
     cardTypes,
+    pendingActionType,
     promptChips: promptChips.map((chip) => ({
       id: chip?.id,
       label: chip?.label,
@@ -873,6 +1034,7 @@ function buildRequestBody(caseDef, conversationId) {
         })),
       lastToolNames: providedState.lastToolNames ?? caseDef.recentToolNames ?? [],
       promptChips: providedState.promptChips ?? caseDef.previousPromptChips ?? [],
+      ...(providedState.pendingAction ? { pendingAction: providedState.pendingAction } : {}),
     },
     conversationId,
   };
@@ -929,54 +1091,28 @@ export async function runAgentEval({
   log(`Running ${selectedCases.length} Pip agent eval cases from ${normalizedSuite} against ${agentUrl}`);
 
   for (const caseDef of selectedCases) {
-    const caseStart = Date.now();
     const conversationId = `${conversationPrefix}-${caseDef.id}`;
-    const requestBody = buildRequestBody(caseDef, conversationId);
-
-    let payload = null;
-    let httpStatus = 0;
-    let httpOk = false;
-    let networkError = null;
-
-    try {
-      const response = await fetchWithTimeout(
-        fetchImpl,
-        agentUrl,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...headers },
-          body: JSON.stringify(requestBody),
-        },
-        timeoutMs,
-      );
-      httpStatus = response.status;
-      httpOk = response.ok;
-      payload = await readJson(response);
-    } catch (error) {
-      networkError = error instanceof Error ? error.message : String(error);
-    }
-
-    const evaluation = evaluateAgentResponse({
-      caseDef,
-      response: payload,
-      httpStatus,
-      httpOk,
-      error: networkError,
-    });
-    const reportEvaluation = redactReport ? redactEvaluationForReport(evaluation) : evaluation;
-
-    const result = {
-      id: caseDef.id,
-      description: caseDef.description,
-      inputMessage: redactReport ? "[redacted]" : caseDef.message,
-      scenario: requestBody.scenario,
-      selectedPromptChipId: requestBody.selectedPromptChipId,
-      httpStatus,
-      durationMs: Date.now() - caseStart,
-      ...reportEvaluation,
-      responseMessage: reportEvaluation.message,
-      ...(includeRawResponse ? { rawResponse: payload } : {}),
-    };
+    const result = isTranscriptCase(caseDef)
+      ? await runTranscriptEvalCase({
+          caseDef,
+          conversationId,
+          agentUrl,
+          fetchImpl,
+          headers,
+          timeoutMs,
+          includeRawResponse,
+          redactReport,
+        })
+      : await runSingleEvalCase({
+          caseDef,
+          conversationId,
+          agentUrl,
+          fetchImpl,
+          headers,
+          timeoutMs,
+          includeRawResponse,
+          redactReport,
+        });
 
     results.push(result);
     log(`${result.ok ? "PASS" : "FAIL"} ${caseDef.id}${result.ok ? "" : ` - ${result.failures.join("; ")}`}`);
@@ -1002,6 +1138,206 @@ export async function runAgentEval({
   log(`Wrote Pip agent eval report to ${reportPath}`);
 
   return report;
+}
+
+async function runSingleEvalCase({
+  caseDef,
+  conversationId,
+  agentUrl,
+  fetchImpl,
+  headers,
+  timeoutMs,
+  includeRawResponse,
+  redactReport,
+}) {
+  const turn = await runEvalTurn({
+    caseDef,
+    conversationId,
+    agentUrl,
+    fetchImpl,
+    headers,
+    timeoutMs,
+  });
+  const reportEvaluation = redactReport ? redactEvaluationForReport(turn.evaluation) : turn.evaluation;
+
+  return {
+    id: caseDef.id,
+    description: caseDef.description,
+    inputMessage: redactReport ? "[redacted]" : caseDef.message,
+    scenario: turn.requestBody.scenario,
+    selectedPromptChipId: turn.requestBody.selectedPromptChipId,
+    httpStatus: turn.httpStatus,
+    durationMs: turn.durationMs,
+    ...reportEvaluation,
+    responseMessage: reportEvaluation.message,
+    ...(includeRawResponse ? { rawResponse: turn.payload } : {}),
+  };
+}
+
+async function runTranscriptEvalCase({
+  caseDef,
+  conversationId,
+  agentUrl,
+  fetchImpl,
+  headers,
+  timeoutMs,
+  includeRawResponse,
+  redactReport,
+}) {
+  const caseStart = Date.now();
+  const turns = [];
+  const history = [...asArray(caseDef.history)];
+  let pendingAction = caseDef.conversationState?.pendingAction ?? null;
+  let shownCards = asArray(caseDef.conversationState?.shownCards);
+  let lastToolNames = asArray(caseDef.conversationState?.lastToolNames);
+  let promptChips = asArray(caseDef.conversationState?.promptChips);
+
+  for (let index = 0; index < caseDef.turns.length; index += 1) {
+    const turnDef = normalizeTranscriptTurn(caseDef, caseDef.turns[index], index, {
+      history,
+      pendingAction,
+      shownCards,
+      lastToolNames,
+      promptChips,
+    });
+    const turn = await runEvalTurn({
+      caseDef: turnDef,
+      conversationId,
+      agentUrl,
+      fetchImpl,
+      headers,
+      timeoutMs,
+    });
+    const reportEvaluation = redactReport ? redactEvaluationForReport(turn.evaluation) : turn.evaluation;
+    const turnResult = {
+      turn: index + 1,
+      inputMessage: redactReport ? "[redacted]" : turnDef.message,
+      httpStatus: turn.httpStatus,
+      durationMs: turn.durationMs,
+      ...reportEvaluation,
+      responseMessage: reportEvaluation.message,
+      ...(includeRawResponse ? { rawResponse: turn.payload } : {}),
+    };
+
+    turns.push(turnResult);
+
+    pendingAction = getPendingAction(turn.payload);
+    shownCards = [
+      ...shownCards,
+      ...asArray(turn.payload?.cards)
+        .map((card) => (typeof card?.type === "string" ? { type: card.type } : null))
+        .filter(Boolean),
+    ];
+    lastToolNames = getUsedTools(turn.payload);
+    promptChips = getPromptChips(turn.payload);
+    history.push({ role: "user", content: turnDef.message });
+
+    const responseMessage = getResponseMessage(turn.payload);
+    if (responseMessage.trim()) {
+      history.push({ role: "assistant", content: responseMessage });
+    }
+  }
+
+  const failures = turns.flatMap((turn) =>
+    turn.failures.map((failure) => `turn ${turn.turn}: ${failure}`),
+  );
+  const lastTurn = turns.at(-1);
+
+  return {
+    id: caseDef.id,
+    description: caseDef.description,
+    inputMessage: redactReport
+      ? "[redacted transcript]"
+      : turns.map((turn) => turn.inputMessage).join(" -> "),
+    scenario: caseDef.scenario ?? "default",
+    selectedPromptChipId: undefined,
+    httpStatus: lastTurn?.httpStatus ?? 0,
+    durationMs: Date.now() - caseStart,
+    ok: failures.length === 0,
+    failures,
+    message: lastTurn?.message ?? "",
+    responseMode: lastTurn?.responseMode ?? "",
+    usedTools: uniq(turns.flatMap((turn) => asArray(turn.usedTools))),
+    cardTypes: uniq(turns.flatMap((turn) => asArray(turn.cardTypes))),
+    pendingActionType: lastTurn?.pendingActionType ?? "",
+    promptChips: lastTurn?.promptChips ?? [],
+    responseMessage: lastTurn?.responseMessage ?? "",
+    turns,
+  };
+}
+
+async function runEvalTurn({ caseDef, conversationId, agentUrl, fetchImpl, headers, timeoutMs }) {
+  const caseStart = Date.now();
+  const requestBody = buildRequestBody(caseDef, conversationId);
+
+  let payload = null;
+  let httpStatus = 0;
+  let httpOk = false;
+  let networkError = null;
+
+  try {
+    const response = await fetchWithTimeout(
+      fetchImpl,
+      agentUrl,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...headers },
+        body: JSON.stringify(requestBody),
+      },
+      timeoutMs,
+    );
+    httpStatus = response.status;
+    httpOk = response.ok;
+    payload = await readJson(response);
+  } catch (error) {
+    networkError = error instanceof Error ? error.message : String(error);
+  }
+
+  return {
+    requestBody,
+    payload,
+    httpStatus,
+    httpOk,
+    durationMs: Date.now() - caseStart,
+    evaluation: evaluateAgentResponse({
+      caseDef,
+      response: payload,
+      httpStatus,
+      httpOk,
+      error: networkError,
+    }),
+  };
+}
+
+function isTranscriptCase(caseDef) {
+  return Array.isArray(caseDef?.turns) && caseDef.turns.length > 0;
+}
+
+function normalizeTranscriptTurn(
+  caseDef,
+  turn,
+  index,
+  { history, pendingAction, shownCards, lastToolNames, promptChips },
+) {
+  const turnMessage = turn.message ?? turn.user;
+
+  return {
+    ...caseDef,
+    ...turn,
+    turns: undefined,
+    id: `${caseDef.id}-turn-${index + 1}`,
+    description: `${caseDef.description} (turn ${index + 1})`,
+    message: turnMessage,
+    history,
+    conversationState: {
+      ...(caseDef.conversationState ?? {}),
+      ...(turn.conversationState ?? {}),
+      shownCards,
+      lastToolNames,
+      promptChips,
+      ...(pendingAction ? { pendingAction } : {}),
+    },
+  };
 }
 
 function normalizeSuiteName(suite, routingOnly) {

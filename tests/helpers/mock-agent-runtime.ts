@@ -25,6 +25,7 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
   const result = calculatePipCash(snapshot);
   const normalized = input.message.trim().toLowerCase();
   const amountCents = extractDollarAmount(input.message);
+  const pendingAction = getPendingAction(input.conversationState);
 
   if (input.requestKind === "prompt_chips") {
     return baseResponse(input, {
@@ -115,18 +116,6 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return toolResponse(input, "show_spending_opportunity", {});
   }
 
-  if (isSavingsGoalListPrompt(normalized)) {
-    return savingsGoalSummaryResponse(input);
-  }
-
-  if (isSavingsGoalPrompt(normalized)) {
-    return savingsGoalPlanResponse(input, amountCents ?? 500000);
-  }
-
-  if (isTrustReceiptPrompt(normalized)) {
-    return toolResponse(input, "show_trust_receipt", {});
-  }
-
   if (isTrustPolicyPrompt(normalized)) {
     return baseResponse(input, {
       message: composeTrustPolicyAnswer(input.message, {
@@ -134,6 +123,48 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
       }).message,
       usedTools: ["get_trust_policy"],
     });
+  }
+
+  if (isSavingsGoalListPrompt(normalized)) {
+    return savingsGoalSummaryResponse(input);
+  }
+
+  if (pendingAction?.type === "create_savings_goal" && amountCents === null) {
+    const name = getPendingSavingsGoalName(pendingAction) ?? "Savings goal";
+
+    if (isSavingsGoalAmountQuestion(normalized) && pendingAction.targetAmountCents) {
+      return savingsGoalDraftResponse(input, name, pendingAction.targetAmountCents, pendingAction.targetDate);
+    }
+
+    return savingsGoalClarifyResponse(input, name, pendingAction);
+  }
+
+  if (pendingAction?.type === "create_savings_goal" && amountCents !== null) {
+    const name = getPendingSavingsGoalName(pendingAction) ?? "Savings goal";
+
+    if (hasSavingsGoalTargetDate(normalized)) {
+      return savingsGoalPlanResponse(input, amountCents, name, "2026-12-01");
+    }
+
+    return savingsGoalPlanResponse(input, amountCents, name);
+  }
+
+  if (isSavingsGoalProgressPrompt(normalized)) {
+    return savingsGoalSummaryResponse(input);
+  }
+
+  if (isSavingsGoalPrompt(normalized)) {
+    const goalName = inferSavingsGoalName(input.message);
+
+    if (amountCents === null) {
+      return savingsGoalClarifyResponse(input, goalName);
+    }
+
+    return savingsGoalPlanResponse(input, amountCents, goalName);
+  }
+
+  if (isTrustReceiptPrompt(normalized)) {
+    return toolResponse(input, "show_trust_receipt", {});
   }
 
   if (isSpendingPrompt(normalized)) {
@@ -158,6 +189,10 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
 
   if (isShortPurchaseFollowUp(normalized, input.history) && amountCents !== null) {
     return toolResponse(input, "simulate_purchase", { amount_cents: amountCents });
+  }
+
+  if (isConnectedAccountsPrompt(normalized)) {
+    return accountConnectionsResponse(input);
   }
 
   if (/\bbalances?\b|actual balance|true balance/.test(normalized)) {
@@ -258,18 +293,63 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
   });
 }
 
-function savingsGoalPlanResponse(input: RunAiAgentInput, targetAmountCents: number): AgentResponse {
+function savingsGoalClarifyResponse(
+  input: RunAiAgentInput,
+  name: string,
+  pendingAction: ReturnType<typeof getPendingAction> = null,
+): AgentResponse {
+  return {
+    ...baseResponse(input, {
+      message: `What amount should I target for ${name}?`,
+      responseMode: "clarify",
+    }),
+    pendingAction: {
+      type: "create_savings_goal",
+      name,
+      ...(pendingAction?.targetAmountCents ? { targetAmountCents: pendingAction.targetAmountCents } : {}),
+      ...(pendingAction?.targetDate ? { targetDate: pendingAction.targetDate } : {}),
+    },
+  } as AgentResponse;
+}
+
+function savingsGoalDraftResponse(
+  input: RunAiAgentInput,
+  name: string,
+  targetAmountCents: number,
+  targetDate = "2026-12-01",
+): AgentResponse {
+  return {
+    ...baseResponse(input, {
+      message: `To hit ${formatMoney(targetAmountCents)} for ${name} by December 1, save about $540/month.`,
+      responseMode: "clarify",
+    }),
+    pendingAction: {
+      type: "create_savings_goal",
+      name,
+      targetAmountCents,
+      targetDate,
+    },
+  } as AgentResponse;
+}
+
+function savingsGoalPlanResponse(
+  input: RunAiAgentInput,
+  targetAmountCents: number,
+  name = "Trip",
+  targetDate?: string,
+): AgentResponse {
   const card: AgentResponse["cards"][number] = {
     type: "savings_goal_plan",
     title: "Savings goal",
     goalId: "goal-trip",
-    name: "Trip",
+    name,
     targetAmountCents,
     currentAmountCents: 0,
     remainingCents: targetAmountCents,
+    targetDate,
     monthlyContributionCents: 0,
     includeInSpendableCash: false,
-    summary: `${formatMoney(targetAmountCents)} left for Trip. Tracked only for now.`,
+    summary: `${formatMoney(targetAmountCents)} left for ${name}. Tracked only for now.`,
   };
 
   return baseResponse(input, {
@@ -280,20 +360,74 @@ function savingsGoalPlanResponse(input: RunAiAgentInput, targetAmountCents: numb
   });
 }
 
+function accountConnectionsResponse(input: RunAiAgentInput): AgentResponse {
+  const card: AgentResponse["cards"][number] = {
+    type: "account_connections",
+    title: "Connected accounts",
+    institutions: [
+      {
+        institutionId: "northstar-bank",
+        institutionName: "Northstar Bank",
+        provider: "mock",
+        status: "connected",
+        lastSuccessfulSyncAt: "2026-06-18T12:00:00.000Z",
+        accounts: [
+          {
+            accountId: "checking-1",
+            name: "Everyday Checking",
+            kind: "checking",
+            lastFour: "1111",
+            includedInPipCash: true,
+            isProtectedSavings: false,
+            active: true,
+            roleLabel: "Included in Spendable Cash Today",
+          },
+          {
+            accountId: "savings-1",
+            name: "Travel Savings",
+            kind: "savings",
+            lastFour: "2222",
+            includedInPipCash: false,
+            isProtectedSavings: true,
+            active: true,
+            roleLabel: "Savings account",
+          },
+        ],
+        actions: [
+          {
+            id: "refresh-northstar-bank",
+            label: "Refresh",
+            prompt: "Refresh my data",
+            style: "secondary",
+          },
+        ],
+      },
+    ],
+  };
+
+  return baseResponse(input, {
+    message: "I found your connected accounts.",
+    cards: [card],
+    usedTools: ["get_connected_accounts"],
+    responseMode: "show_card",
+  });
+}
+
 function savingsGoalSummaryResponse(input: RunAiAgentInput): AgentResponse {
   const card: AgentResponse["cards"][number] = {
     type: "savings_goals_summary",
     title: "Savings goals",
-    summary: "1 active savings goal tracked.",
+    summary: "$3,000 left for Japan trip.",
     activeGoalCount: 1,
     protectedMonthlyContributionCents: 0,
     goals: [
       {
-        goalId: "goal-trip",
-        name: "Trip",
-        targetAmountCents: 500000,
+        goalId: "goal-japan",
+        name: "Japan trip",
+        targetAmountCents: 300000,
         currentAmountCents: 0,
-        remainingCents: 500000,
+        remainingCents: 300000,
+        targetDate: "2026-12-01",
         monthlyContributionCents: 0,
         includeInSpendableCash: false,
       },
@@ -301,7 +435,7 @@ function savingsGoalSummaryResponse(input: RunAiAgentInput): AgentResponse {
   };
 
   return baseResponse(input, {
-    message: "I pulled your savings goals.",
+    message: "I pulled your savings goals. Japan trip needs about $540/month.",
     cards: [card],
     usedTools: ["list_savings_goals"],
     responseMode: "show_card",
@@ -542,6 +676,10 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
     return false;
   }
 
+  if (isSavingsGoalPrompt(normalized)) {
+    return false;
+  }
+
   const hasOpportunityTerm =
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b/.test(normalized) ||
     /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
@@ -567,6 +705,31 @@ function isSavingsGoalPrompt(normalized: string): boolean {
   return /\bsavings? goals?\b/.test(normalized) ||
     /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
     /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized);
+}
+
+function isSavingsGoalAmountQuestion(normalized: string): boolean {
+  return /\b(how much|hit that goal|that goal|monthly|month)\b/.test(normalized);
+}
+
+function isSavingsGoalProgressPrompt(normalized: string): boolean {
+  return /\b(hit|reach|fund|finish|complete)\b.{0,32}\b(that|the|this|my)?\s*goals?\b/.test(normalized) ||
+    /\bhow much\b.{0,48}\b(that|the|this|my)?\s*goals?\b/.test(normalized) ||
+    /\bsavings? goals?\b.{0,32}\b(progress|left|remaining|needed|need|monthly|per month|on track)\b/.test(normalized);
+}
+
+function hasSavingsGoalTargetDate(normalized: string): boolean {
+  return /\b(december|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|20\d{2})\b/.test(normalized);
+}
+
+function isConnectedAccountsPrompt(normalized: string): boolean {
+  if (/\b(true|actual|real)\s+balances?\b/.test(normalized)) {
+    return false;
+  }
+
+  return (
+    /\b(show|list|manage|view|see)\b.{0,32}\b(bank accounts?|accounts?|connected accounts?|connections?|institutions?)\b/.test(normalized) ||
+    /\b(bank accounts?|connected accounts?|account connections?)\b/.test(normalized)
+  );
 }
 
 function isSavingsGoalListPrompt(normalized: string): boolean {
@@ -663,6 +826,67 @@ function extractDollarAmount(message: string): number | null {
   candidates.sort((left, right) => right.score - left.score || right.index - left.index);
 
   return candidates[0]?.amountCents ?? null;
+}
+
+function getPendingAction(conversationState: RunAiAgentInput["conversationState"]) {
+  const candidate = (conversationState as { pendingAction?: unknown } | undefined)?.pendingAction;
+
+  if (!candidate || typeof candidate !== "object" || !("type" in candidate)) {
+    return null;
+  }
+
+  return candidate as {
+    type?: string;
+    name?: string;
+    targetAmountCents?: number;
+    targetDate?: string;
+  };
+}
+
+function getPendingSavingsGoalName(pendingAction: ReturnType<typeof getPendingAction>): string | null {
+  if (!pendingAction) {
+    return null;
+  }
+
+  return pendingAction.name ?? null;
+}
+
+function inferSavingsGoalName(message: string): string {
+  const normalized = message.toLowerCase();
+
+  if (/\bjapan\b/.test(normalized)) {
+    return "Japan trip";
+  }
+
+  if (/\bbali\b/.test(normalized)) {
+    return "Trip to Bali";
+  }
+
+  if (/\bbig purchase\b/.test(normalized)) {
+    return "Big purchase";
+  }
+
+  if (/\btrip|vacation|travel\b/.test(normalized)) {
+    return "Trip";
+  }
+
+  if (/\bcar\b/.test(normalized)) {
+    return "Car";
+  }
+
+  if (/\bhouse|home\b/.test(normalized)) {
+    return "Home";
+  }
+
+  if (/\bwedding\b/.test(normalized)) {
+    return "Wedding";
+  }
+
+  if (/\bemergency fund\b/.test(normalized)) {
+    return "Emergency fund";
+  }
+
+  return "Savings goal";
 }
 
 function scorePurchaseAmountCandidate(message: string, index: number): number {

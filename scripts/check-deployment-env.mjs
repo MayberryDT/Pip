@@ -24,6 +24,11 @@ export function runDeploymentEnvCheck({
 
   loadEnvFile(".env", cwd, effectiveEnv);
   loadEnvFile(".env.local", cwd, effectiveEnv);
+  const netlifyEnvJsonPath = getArgValue(argv, "--netlify-env-json");
+
+  if (netlifyEnvJsonPath && !loadNetlifyEnvJson(netlifyEnvJsonPath, cwd, effectiveEnv, stderr)) {
+    return 1;
+  }
 
   const missing = requiredByMode[mode].filter((name) => !hasValue(effectiveEnv[name]));
   const warnings = [];
@@ -58,6 +63,16 @@ export function runDeploymentEnvCheck({
 
     if (plaidRedirectUri && siteOrigin && new URL(plaidRedirectUri).origin !== siteOrigin) {
       warnings.push("PLAID_REDIRECT_URI does not share the NEXT_PUBLIC_SITE_URL origin.");
+    }
+
+    if (requiresSavingsGoals(argv)) {
+      if (!isEnabledFlag(effectiveEnv.PIP_SAVINGS_GOALS_ENABLED)) {
+        addUnique(missing, "PIP_SAVINGS_GOALS_ENABLED=true");
+      }
+
+      if (!isEnabledFlag(effectiveEnv.NEXT_PUBLIC_SAVINGS_GOALS_ENABLED)) {
+        addUnique(missing, "NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=true");
+      }
     }
   }
 
@@ -158,7 +173,114 @@ function stripQuotes(value) {
 }
 
 function hasValue(value) {
-  return Boolean(value && value.trim());
+  const trimmed = String(value ?? "").trim();
+
+  return Boolean(trimmed) && !isNoValueSentinel(trimmed);
+}
+
+function isEnabledFlag(value) {
+  return String(value ?? "").trim().toLowerCase() === "true";
+}
+
+function requiresSavingsGoals(argv) {
+  return argv.includes("--require-savings-goals");
+}
+
+function getArgValue(argv, name) {
+  const inline = argv.find((arg) => arg.startsWith(`${name}=`));
+
+  if (inline) {
+    return inline.slice(name.length + 1);
+  }
+
+  const index = argv.indexOf(name);
+
+  return index >= 0 ? argv[index + 1] : "";
+}
+
+function loadNetlifyEnvJson(filePath, cwd, env, stderr) {
+  const path = resolve(cwd, filePath);
+
+  if (!existsSync(path)) {
+    stderr(`Netlify env JSON not found: ${filePath}`);
+    return false;
+  }
+
+  let parsed;
+
+  try {
+    parsed = JSON.parse(readFileSync(path, "utf8"));
+  } catch {
+    stderr(`Could not parse Netlify env JSON: ${filePath}`);
+    return false;
+  }
+
+  for (const [key, value] of Object.entries(flattenNetlifyEnvJson(parsed))) {
+    env[key] = value;
+  }
+
+  return true;
+}
+
+function flattenNetlifyEnvJson(value) {
+  const output = {};
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
+
+      const key = typeof entry.key === "string" ? entry.key : entry.name;
+      const envValue = pickNetlifyEnvValue(entry.values ?? entry.value ?? entry);
+
+      if (typeof key === "string" && typeof envValue === "string") {
+        output[key] = envValue;
+      }
+    }
+
+    return output;
+  }
+
+  if (value && typeof value === "object") {
+    for (const [key, rawValue] of Object.entries(value)) {
+      const envValue = pickNetlifyEnvValue(rawValue);
+
+      if (typeof envValue === "string") {
+        output[key] = envValue;
+      }
+    }
+  }
+
+  return output;
+}
+
+function pickNetlifyEnvValue(value) {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    const productionValue = value.find((entry) =>
+      entry && typeof entry === "object" && entry.context === "production",
+    );
+
+    return pickNetlifyEnvValue(productionValue ?? value[0]);
+  }
+
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  if (typeof value.value === "string") {
+    return value.value;
+  }
+
+  return pickNetlifyEnvValue(value.production ?? value.contexts?.production ?? value.values);
+}
+
+function isNoValueSentinel(value) {
+  return /^no value set\b/i.test(value);
 }
 
 function addUnique(values, value) {

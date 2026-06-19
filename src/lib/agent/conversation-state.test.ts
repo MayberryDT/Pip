@@ -25,6 +25,9 @@ describe("conversation state", () => {
     expect(inferConversationJob("You can't show my bank account balance?")).toBe("true_balances");
     expect(inferConversationJob("What did I buy lately?")).toBe("recent_transactions");
     expect(inferConversationJob("Where is my money going by category?")).toBe("spending_breakdown");
+    expect(inferConversationJob("Save for Bali")).toBe("savings_goal");
+    expect(inferConversationJob("Show my savings goals")).toBe("savings_goal");
+    expect(inferConversationJob("Car")).toBe("savings_goal");
   });
 
   it("uses short history to classify purchase amount follow-ups", () => {
@@ -40,6 +43,74 @@ describe("conversation state", () => {
         },
       ]),
     ).toBe("purchase_test");
+  });
+
+  it("classifies direct savings-goal setup language as savings goal context", () => {
+    expect(inferConversationJob("I need to save for a trip to Japan")).toBe("savings_goal");
+    expect(inferConversationJob("Set the savings goal")).toBe("savings_goal");
+  });
+
+  it("does not classify general save-money cutback prompts as savings goals", () => {
+    expect(inferConversationJob("what can I do to save more money for me")).toBe("explain_number");
+    expect(inferConversationJob("where can I save this week for me")).toBe("explain_number");
+  });
+
+  it("keeps ambiguous goal follow-ups in savings-goal context when recent history is savings-goal flavored", () => {
+    expect(
+      inferConversationJob("How much do I need to hit that goal?", [
+        {
+          role: "user",
+          content: "I need to save for a trip to Japan",
+        },
+        {
+          role: "assistant",
+          content: "I can help set up a savings goal for the Japan trip once I know the target amount.",
+        },
+      ]),
+    ).toBe("savings_goal");
+  });
+
+  it("only treats short affirmatives as savings-goal context after a savings-goal prompt", () => {
+    expect(inferConversationJob("yes")).toBe("duplicate_follow_up");
+    expect(
+      inferConversationJob("yes", [
+        {
+          role: "user",
+          content: "Can I spend $50?",
+        },
+        {
+          role: "assistant",
+          content: "That would put you $7 over today. Want to test another amount?",
+        },
+      ]),
+    ).toBe("duplicate_follow_up");
+    expect(
+      inferConversationJob("Yes", [
+        {
+          role: "user",
+          content: "Set up a savings goal for Japan",
+        },
+        {
+          role: "assistant",
+          content: "I can set up that savings goal. Do you want me to use Japan as the goal name?",
+        },
+      ]),
+    ).toBe("savings_goal");
+  });
+
+  it("does not turn yes after a savings-goal prompt into recurring activity", () => {
+    expect(
+      inferConversationJob("Yes", [
+        {
+          role: "user",
+          content: "Set the savings goal",
+        },
+        {
+          role: "assistant",
+          content: "I can create that savings goal and keep its monthly contribution out of Spendable Cash. Yes to continue?",
+        },
+      ]),
+    ).toBe("savings_goal");
   });
 
   it("summarizes repeated tool and card risk after a response", () => {
@@ -156,6 +227,24 @@ describe("conversation state", () => {
     });
 
     expect(summary.recentJobs).toEqual(["purchase_test", "forecast", "recent_transactions"]);
+  });
+
+  it("summarizes savings-goal cards and tools as savings-goal jobs", () => {
+    const summary = summarizeConversationState({
+      message: "yes",
+      shownCards: [
+        {
+          type: "savings_goal_plan",
+          title: "Savings goal",
+        },
+      ],
+      lastToolNames: ["create_savings_goal"],
+      responseToolNames: ["set_savings_goal_protection"],
+    });
+
+    expect(summary.currentJob).toBe("savings_goal");
+    expect(summary.lastAnsweredJob).toBe("savings_goal");
+    expect(summary.recentJobs).toEqual(["savings_goal"]);
   });
 
   it("detects exact and high-overlap assistant repetition", () => {

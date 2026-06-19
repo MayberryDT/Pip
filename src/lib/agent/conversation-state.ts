@@ -21,6 +21,7 @@ export type ConversationJob =
   | "true_balances"
   | "data_quality"
   | "financial_guidance"
+  | "savings_goal"
   | "definition"
   | "setup"
   | "broad_chat"
@@ -81,6 +82,8 @@ const cardJobByType: Partial<Record<AgentCard["type"], ConversationJob>> = {
   trust_receipt: "data_quality",
   missing_card_nudge: "data_quality",
   connect_account: "data_quality",
+  savings_goal_plan: "savings_goal",
+  savings_goals_summary: "savings_goal",
 };
 
 const toolJobByName: Record<string, ConversationJob> = {
@@ -114,6 +117,10 @@ const toolJobByName: Record<string, ConversationJob> = {
   set_account_protected_savings: "setup",
   request_remove_institution_confirmation: "setup",
   remove_institution: "setup",
+  create_savings_goal: "savings_goal",
+  list_savings_goals: "savings_goal",
+  update_savings_goal: "savings_goal",
+  set_savings_goal_protection: "savings_goal",
   refresh_financial_data: "setup",
   request_delete_data_confirmation: "setup",
   delete_user_data: "setup",
@@ -204,6 +211,10 @@ export function inferConversationJob(
     return "home";
   }
 
+  if (isSavingsGoalPrompt(normalized) || isSavingsGoalFollowUpPrompt(normalized, history)) {
+    return "savings_goal";
+  }
+
   const catalogJob = resolveIntentConversationJob(message, history);
 
   if (catalogJob) {
@@ -244,6 +255,10 @@ export function inferConversationJob(
 
   if (isPurchasePrompt(normalized, history)) {
     return "purchase_test";
+  }
+
+  if (isSavingsGoalPrompt(normalized)) {
+    return "savings_goal";
   }
 
   if (isFinancialGuidancePrompt(normalized)) {
@@ -382,6 +397,74 @@ function isPurchasePrompt(normalized: string, history: ConversationHistoryItem[]
   return (history ?? [])
     .slice(-4)
     .some((item) => item.role === "user" && /\b(spend|buy|purchase|order|afford|pay|cost)\b/.test(normalizeText(item.content)));
+}
+
+function isSavingsGoalPrompt(normalized: string): boolean {
+  if (isGeneralSaveMoneyPrompt(normalized)) {
+    return false;
+  }
+
+  return /\bsavings? goals?\b/.test(normalized) ||
+    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
+    /\b(for|toward|towards)\b.{0,32}\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b/.test(normalized) ||
+    /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized) ||
+    /^(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)$/.test(normalized);
+}
+
+function isGeneralSaveMoneyPrompt(normalized: string): boolean {
+  return /\bsave\b.{0,24}\b(more\s+)?money\b/.test(normalized) ||
+    /\bsave\b.{0,16}\b(this week|today|cash)\b/.test(normalized) ||
+    /\bwhere can i save\b/.test(normalized);
+}
+
+function isSavingsGoalFollowUpPrompt(
+  normalized: string,
+  history: ConversationHistoryItem[] | undefined,
+): boolean {
+  if (!hasRecentSavingsGoalContext(history)) {
+    return false;
+  }
+
+  if (isSavingsGoalReferencePrompt(normalized)) {
+    return true;
+  }
+
+  return isShortAffirmativeFollowUp(normalized) && hasRecentSavingsGoalSetupPrompt(history);
+}
+
+function hasRecentSavingsGoalContext(history: ConversationHistoryItem[] | undefined): boolean {
+  return (history ?? [])
+    .slice(-6)
+    .some((item) => {
+      const normalized = normalizeText(item.content);
+
+      return isSavingsGoalPrompt(normalized) || hasSavingsGoalPhrase(normalized);
+    });
+}
+
+function hasRecentSavingsGoalSetupPrompt(history: ConversationHistoryItem[] | undefined): boolean {
+  return (history ?? [])
+    .slice(-4)
+    .some((item) => item.role === "assistant" && isSavingsGoalSetupPrompt(normalizeText(item.content)));
+}
+
+function hasSavingsGoalPhrase(normalized: string): boolean {
+  return /\bsavings? goals?\b/.test(normalized);
+}
+
+function isSavingsGoalSetupPrompt(normalized: string): boolean {
+  return hasSavingsGoalPhrase(normalized) &&
+    /\b(create|set|setup|set up|continue|confirm|use|name|target|amount|monthly contribution|monthly amount|protect|keep)\b/.test(normalized);
+}
+
+function isSavingsGoalReferencePrompt(normalized: string): boolean {
+  return /\b(that|the|this|my)\s+goals?\b/.test(normalized) ||
+    /\b(hit|reach|fund|finish|complete)\b.{0,32}\b(that|the|this|my)?\s*goals?\b/.test(normalized) ||
+    /\bhow much\b.{0,48}\b(that|the|this|my)?\s*goals?\b/.test(normalized);
+}
+
+function isShortAffirmativeFollowUp(normalized: string): boolean {
+  return /^(yes|yeah|yep|ok|okay|sure|do that|yes do that|please do|that)$/.test(normalized);
 }
 
 function isFinancialGuidancePrompt(normalized: string): boolean {

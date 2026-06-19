@@ -213,7 +213,7 @@ describe("POST /api/sync/app-open", () => {
 });
 
 describe("getAppOpenSyncDecision", () => {
-  it("skips fresh data inside the app-open cooldown", () => {
+  it("runs on app open even when connected data synced earlier today", () => {
     expect(
       getAppOpenSyncDecision({
         syncStatus: createSyncStatus({
@@ -238,13 +238,44 @@ describe("getAppOpenSyncDecision", () => {
         hasPendingSyncJob: false,
         now: new Date("2026-06-16T12:05:00.000Z"),
       }),
-    ).toMatchObject({
-      status: "skipped_recent",
-      retryAfterSeconds: 300,
+    ).toEqual({
+      status: "run",
+      provider: "plaid",
     });
   });
 
-  it("runs when the last successful sync is outside the app-open cooldown", () => {
+  it("skips a duplicate app-open sync inside the short duplicate guard", () => {
+    expect(
+      getAppOpenSyncDecision({
+        syncStatus: createSyncStatus({
+          institutions: [
+            createInstitution({
+              lastSuccessfulSyncAt: "2026-06-16T12:00:00.000Z",
+              staleAfter: "2026-06-17T12:00:00.000Z",
+              isStale: false,
+            }),
+          ],
+          latestSyncRun: {
+            provider: "plaid",
+            status: "succeeded",
+            startedAt: "2026-06-16T12:00:30.000Z",
+            completedAt: "2026-06-16T12:00:32.000Z",
+            accountCount: 2,
+            transactionCount: 10,
+            balanceCount: 2,
+            errorMessage: null,
+          },
+        }),
+        hasPendingSyncJob: false,
+        now: new Date("2026-06-16T12:01:00.000Z"),
+      }),
+    ).toMatchObject({
+      status: "skipped_recent",
+      retryAfterSeconds: 30,
+    });
+  });
+
+  it("runs when the last app-open sync started outside the short duplicate guard", () => {
     expect(
       getAppOpenSyncDecision({
         syncStatus: createSyncStatus({
@@ -267,7 +298,7 @@ describe("getAppOpenSyncDecision", () => {
           },
         }),
         hasPendingSyncJob: false,
-        now: new Date("2026-06-16T12:11:00.000Z"),
+        now: new Date("2026-06-16T12:01:01.000Z"),
       }),
     ).toEqual({
       status: "run",

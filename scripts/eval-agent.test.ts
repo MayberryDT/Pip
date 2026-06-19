@@ -25,6 +25,73 @@ describe("Pip agent eval harness", () => {
     expect(packageJson.scripts["dogfood:router:live"]).toBe("vite-node scripts/dogfood-agent-router.mjs");
   });
 
+  it("includes phone dogfood savings and account transcript cases", async () => {
+    const { agentEvalCases } = await loadEvalHarness();
+    const casesById = new Map(agentEvalCases.map((caseDef) => [caseDef.id, caseDef]));
+
+    expect(casesById.get("phone-save-trip-bali")).toMatchObject({
+      message: "Now I want to save for a trip to Bali.",
+      expectedResponseMode: "clarify",
+      expectedPendingActionType: "create_savings_goal",
+      forbiddenTextPatterns: expect.arrayContaining(["I'm not sure", "\\bcushion\\b"]),
+    });
+    expect(casesById.get("phone-save-big-purchase")).toMatchObject({
+      message: "I want to save money for a big purchase",
+      expectedResponseMode: "clarify",
+      expectedPendingActionType: "create_savings_goal",
+      forbiddenTools: expect.arrayContaining(["get_pip_cash_snapshot"]),
+    });
+    expect(casesById.get("phone-why-monthly-savings")).toMatchObject({
+      message: "Why does Pip need a savings cushion?",
+      expectedTextPatterns: expect.arrayContaining(["monthly savings"]),
+      forbiddenTextPatterns: expect.arrayContaining(["\\bcushion\\b"]),
+    });
+    expect(casesById.get("phone-show-bank-accounts")).toMatchObject({
+      message: "Show my bank accounts",
+      expectedTools: expect.arrayContaining(["get_connected_accounts"]),
+      expectedCards: expect.arrayContaining(["account_connections"]),
+      forbiddenTextPatterns: expect.arrayContaining(["\\bBank A\\b", "\\bBank B\\b"]),
+    });
+  });
+
+  it("includes the verified Japan savings context transcript eval case", async () => {
+    const { agentEvalCases } = await loadEvalHarness();
+    const casesById = new Map(agentEvalCases.map((caseDef) => [caseDef.id, caseDef]));
+
+    expect(casesById.get("phone-savings-japan-context")).toMatchObject({
+      id: "phone-savings-japan-context",
+      turns: [
+        {
+          message: "I need to save for a trip to Japan",
+          expectedPendingActionType: "create_savings_goal",
+          forbiddenTools: expect.arrayContaining(["get_recurring_activity"]),
+        },
+        {
+          message: "Yes",
+          expectedPendingActionType: "create_savings_goal",
+          forbiddenTools: expect.arrayContaining(["get_recurring_activity"]),
+        },
+        {
+          message: "Set the savings goal",
+          expectedPendingActionType: "create_savings_goal",
+          forbiddenTools: expect.arrayContaining(["get_recurring_activity"]),
+        },
+        {
+          message: "$3000 by December 1st",
+          expectedTools: expect.arrayContaining(["create_savings_goal"]),
+          expectedCards: expect.arrayContaining(["savings_goal_plan"]),
+          forbiddenTools: expect.arrayContaining(["get_recurring_activity"]),
+        },
+        {
+          message: "How much do I need to hit that goal?",
+          expectedTools: expect.arrayContaining(["list_savings_goals"]),
+          expectedCards: expect.arrayContaining(["savings_goals_summary"]),
+          expectedTextPatterns: expect.arrayContaining(["Japan"]),
+        },
+      ],
+    });
+  });
+
   it("passes a tool-backed forecast answer with the short forecast caveat", async () => {
     const { evaluateAgentResponse } = await loadEvalHarness();
     const result = evaluateAgentResponse({
@@ -169,6 +236,23 @@ describe("Pip agent eval harness", () => {
     expect(result.failures.join("\n")).toContain("follow-up question");
   });
 
+  it("fails savings-goal creation claims unless create_savings_goal returned a goal card", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {},
+      response: {
+        message: "I set up your Japan savings goal.",
+        responseMode: "chat_only",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures.join("\n")).toContain("claims a savings goal was created without create_savings_goal");
+  });
+
   it("fails a fake show promise when no matching card is returned", async () => {
     const { evaluateAgentResponse } = await loadEvalHarness();
     const result = evaluateAgentResponse({
@@ -206,6 +290,54 @@ describe("Pip agent eval harness", () => {
     expect(result.ok).toBe(false);
     expect(result.failures).toContain("expected tool not used: get_spending_breakdown");
     expect(result.failures).toContain("expected card not returned: spending_breakdown");
+  });
+
+  it("passes expected pending action and per-case forbidden text checks", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedPendingActionType: "create_savings_goal",
+        forbiddenTextPatterns: ["I'm not sure", "hidden cushion"],
+      },
+      response: {
+        message: "What should we call this goal?",
+        responseMode: "clarify",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+        conversationState: {
+          pendingAction: {
+            type: "create_savings_goal",
+            name: "Trip",
+          },
+        },
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("fails missing pending action and per-case forbidden text", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedPendingActionType: "create_savings_goal",
+        forbiddenTextPatterns: ["I'm not sure", "hidden cushion"],
+      },
+      response: {
+        message: "I'm not sure. I can use your hidden cushion.",
+        responseMode: "clarify",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures).toContain("expected pending action type create_savings_goal but got none.");
+    expect(result.failures.join("\n")).toContain("forbidden response text pattern found: I'm not sure");
+    expect(result.failures.join("\n")).toContain("forbidden response text pattern found: hidden cushion");
   });
 
   it("fails repeated assistant messages, repeated chip sets, and adjacent tool loops", async () => {
@@ -258,6 +390,12 @@ describe("Pip agent eval harness", () => {
             message: "hi",
             expectNoCards: true,
             expectedResponseMode: "chat_only",
+            conversationState: {
+              pendingAction: {
+                type: "create_savings_goal",
+                name: "Trip",
+              },
+            },
           },
         ],
         conversationPrefix: "test-eval",
@@ -302,6 +440,10 @@ describe("Pip agent eval harness", () => {
             shownCards: [],
             lastToolNames: [],
             promptChips: [],
+            pendingAction: {
+              type: "create_savings_goal",
+              name: "Trip",
+            },
           },
         },
       });
@@ -456,6 +598,175 @@ describe("Pip agent eval harness", () => {
     }
   });
 
+  it("runs transcript cases through fetch while carrying pending savings context", async () => {
+    const { runAgentEval } = await loadEvalHarness();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-eval-"));
+    const reportPath = join(tempDir, "report.json");
+    const requests: Array<{
+      message?: string;
+      history?: Array<{ role: string; content: string }>;
+      conversationState?: {
+        pendingAction?: {
+          type?: string;
+          name?: string;
+          targetAmountCents?: number;
+          targetDate?: string;
+        };
+      };
+    }> = [];
+
+    try {
+      const report = await runAgentEval({
+        baseUrl: "http://localhost:3999",
+        reportPath,
+        cases: [
+          {
+            id: "phone-savings-japan-context",
+            description: "test transcript",
+            turns: [
+              {
+                message: "I need to save for a trip to Japan",
+                expectedPendingActionType: "create_savings_goal",
+              },
+              {
+                message: "Yes",
+                expectedPendingActionType: "create_savings_goal",
+                forbiddenTools: ["get_recurring_activity"],
+              },
+              {
+                message: "Set the savings goal",
+                expectedPendingActionType: "create_savings_goal",
+              },
+              {
+                message: "$3000 by December 1st",
+                expectedTools: ["create_savings_goal"],
+                expectedCards: ["savings_goal_plan"],
+                forbiddenTools: ["get_recurring_activity"],
+              },
+              {
+                message: "How much do I need to hit that goal?",
+                expectedTools: ["list_savings_goals"],
+                expectedCards: ["savings_goals_summary"],
+                expectedTextPatterns: ["Japan"],
+              },
+            ],
+          },
+        ],
+        conversationPrefix: "test-eval",
+        log: () => undefined,
+        fetchImpl: async (_url: string, options: { body?: string }) => {
+          const body = JSON.parse(options.body ?? "{}") as typeof requests[number];
+          requests.push(body);
+
+          if (body.message === "I need to save for a trip to Japan") {
+            return jsonResponse({
+              message: "How much do you want to save for Japan?",
+              responseMode: "clarify",
+              usedTools: [],
+              cards: [],
+              promptChips: [],
+              pendingAction: {
+                type: "create_savings_goal",
+                name: "Japan trip",
+              },
+            });
+          }
+
+          if (body.message !== "How much do I need to hit that goal?") {
+            expect(body.conversationState?.pendingAction).toMatchObject({
+              type: "create_savings_goal",
+              name: "Japan trip",
+            });
+          }
+
+          if (body.message === "$3000 by December 1st") {
+            return jsonResponse({
+              message: "I set up the savings goal plan.",
+              responseMode: "show_card",
+              usedTools: ["create_savings_goal"],
+              cards: [
+                {
+                  type: "savings_goal_plan",
+                  title: "Savings goal",
+                  goalId: "goal-japan",
+                  name: "Japan trip",
+                  targetAmountCents: 300000,
+                  currentAmountCents: 0,
+                  remainingCents: 300000,
+                  targetDate: "2026-12-01",
+                  monthlyContributionCents: 0,
+                  includeInSpendableCash: false,
+                  summary: "$3,000 left for Japan trip.",
+                },
+              ],
+              promptChips: [],
+            });
+          }
+
+          if (body.message === "How much do I need to hit that goal?") {
+            expect(body.history).toEqual(expect.arrayContaining([
+              { role: "user", content: "$3000 by December 1st" },
+              { role: "assistant", content: "I set up the savings goal plan." },
+            ]));
+
+            return jsonResponse({
+              message: "I pulled your savings goals. Japan trip needs about $540/month.",
+              responseMode: "show_card",
+              usedTools: ["list_savings_goals"],
+              cards: [
+                {
+                  type: "savings_goals_summary",
+                  title: "Savings goals",
+                  summary: "$3,000 left for Japan trip.",
+                  activeGoalCount: 1,
+                  protectedMonthlyContributionCents: 0,
+                  goals: [
+                    {
+                      goalId: "goal-japan",
+                      name: "Japan trip",
+                      targetAmountCents: 300000,
+                      currentAmountCents: 0,
+                      remainingCents: 300000,
+                      targetDate: "2026-12-01",
+                      monthlyContributionCents: 0,
+                      includeInSpendableCash: false,
+                    },
+                  ],
+                },
+              ],
+              promptChips: [],
+            });
+          }
+
+          return jsonResponse({
+            message: "How much should I target for Japan trip?",
+            responseMode: "clarify",
+            usedTools: [],
+            cards: [],
+            promptChips: [],
+            pendingAction: body.conversationState?.pendingAction,
+          });
+        },
+      });
+
+      expect(report.status).toBe("passed");
+      expect(report.failureCount).toBe(0);
+      expect(requests.map((request) => request.message)).toEqual([
+        "I need to save for a trip to Japan",
+        "Yes",
+        "Set the savings goal",
+        "$3000 by December 1st",
+        "How much do I need to hit that goal?",
+      ]);
+      expect(requests[1].history).toEqual([
+        { role: "user", content: "I need to save for a trip to Japan" },
+        { role: "assistant", content: "How much do you want to save for Japan?" },
+      ]);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("can run the dedicated major-capability scenario suite", async () => {
     const { majorCapabilityEvalCases, runAgentEval } = await loadEvalHarness();
     const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-eval-"));
@@ -516,10 +827,19 @@ describe("Pip agent eval harness", () => {
   });
 });
 
+function jsonResponse(payload: Record<string, unknown>) {
+  return {
+    status: 200,
+    ok: true,
+    json: async () => payload,
+  };
+}
+
 async function loadEvalHarness() {
   const module = await import(pathToFileURL(scriptPath).href);
 
   return module as {
+    agentEvalCases: Array<Record<string, unknown> & { id: string }>;
     evaluateAgentResponse: (input: {
       caseDef: Record<string, unknown>;
       response: Record<string, unknown>;
