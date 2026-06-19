@@ -40,6 +40,7 @@ import {
   type PipAgentActionResult,
 } from "@/lib/agent/ai-agent";
 import { resolvePipAgentQualityVariant } from "@/lib/agent/quality-variants";
+import { pendingActionSchema } from "@/lib/agent/response-schema";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import {
   getDisplayedSpendableCashTodayCents,
@@ -56,6 +57,7 @@ import {
 } from "@/lib/savings-goals/cards";
 import { isSavingsGoalsEnabled } from "@/lib/savings-goals/feature-flags";
 import type { SavingsGoalUpdate } from "@/lib/savings-goals/types";
+import type { SavingsGoal, SavingsGoalInput } from "@/lib/savings-goals/types";
 import type { FakeDataScenario } from "@/lib/fake-data";
 import type {
   ConnectSession,
@@ -129,6 +131,7 @@ const requestSchema = z.object({
         )
         .max(24)
         .optional(),
+      pendingAction: pendingActionSchema.optional(),
     })
     .optional(),
 });
@@ -147,6 +150,8 @@ type RouteAgentContext = {
   syncStatus: SyncStatus | null;
   actions?: PipAgentActions;
 };
+
+const localDevSavingsGoals: SavingsGoal[] = [];
 
 export async function POST(request: Request) {
   const body = await request.json().catch(() => null);
@@ -280,6 +285,7 @@ async function createRouteAgentContext(input: {
         },
         snapshot,
         syncStatus: null,
+        actions: createLocalDevAgentActions(snapshot),
       };
     } catch (error) {
       if (error instanceof AuthenticationRequiredError) {
@@ -423,6 +429,186 @@ async function loadSyncStatus(
   } catch {
     return null;
   }
+}
+
+function createLocalDevAgentActions(snapshot: FinancialSnapshot): PipAgentActions {
+  return {
+    async getConnectedAccounts() {
+      return {
+        ok: true,
+        status: "account_connections_loaded",
+        cards: [buildAccountConnectionsCard(createLocalDevConnectedAccounts(snapshot))],
+      };
+    },
+    async createSavingsGoal(goalInput) {
+      const validationError = validateSavingsGoalInput(goalInput);
+
+      if (validationError) {
+        return {
+          ok: false,
+          status: "invalid_savings_goal",
+          message: validationError,
+        };
+      }
+
+      const goal = createLocalDevSavingsGoal(goalInput);
+      const existingIndex = localDevSavingsGoals.findIndex((item) => item.id === goal.id);
+
+      if (existingIndex >= 0) {
+        localDevSavingsGoals[existingIndex] = goal;
+      } else {
+        localDevSavingsGoals.push(goal);
+      }
+
+      return {
+        ok: true,
+        status: "savings_goal_created",
+        cards: [buildSavingsGoalPlanCard(toSavingsGoalPlanResponse(goal))],
+      };
+    },
+    async listSavingsGoals() {
+      return {
+        ok: true,
+        status: "savings_goals_loaded",
+        cards: [buildSavingsGoalsSummaryCard(localDevSavingsGoals.map(toSavingsGoalPlanResponse))],
+      };
+    },
+    async updateSavingsGoal(goalInput) {
+      const target = goalInput.goalId
+        ? localDevSavingsGoals.find((goal) => goal.id === goalInput.goalId)
+        : localDevSavingsGoals.find((goal) => goal.name.toLowerCase() === goalInput.name?.toLowerCase()) ??
+          (localDevSavingsGoals.length === 1 ? localDevSavingsGoals[0] : undefined);
+
+      if (!target) {
+        return {
+          ok: false,
+          status: "savings_goal_not_found",
+          message: "I do not see a saved savings goal yet.",
+        };
+      }
+
+      const updated: SavingsGoal = {
+        ...target,
+        targetAmountCents: goalInput.targetAmountCents ?? target.targetAmountCents,
+        targetDate: goalInput.targetDate === null ? undefined : goalInput.targetDate ?? target.targetDate,
+        currentAmountCents: goalInput.currentAmountCents ?? target.currentAmountCents,
+        monthlyContributionCents: goalInput.monthlyContributionCents ?? target.monthlyContributionCents,
+        includeInSpendableCash: goalInput.includeInSpendableCash ?? target.includeInSpendableCash,
+        status: goalInput.status ?? target.status,
+        updatedAt: new Date().toISOString(),
+      };
+      const validationError = validateSavingsGoalInput(updated, target);
+
+      if (validationError) {
+        return {
+          ok: false,
+          status: "invalid_savings_goal",
+          message: validationError,
+        };
+      }
+
+      localDevSavingsGoals.splice(localDevSavingsGoals.indexOf(target), 1, updated);
+
+      return {
+        ok: true,
+        status: "savings_goal_updated",
+        cards: [buildSavingsGoalPlanCard(toSavingsGoalPlanResponse(updated))],
+      };
+    },
+    async setSavingsGoalProtection(goalInput) {
+      const target = goalInput.goalId
+        ? localDevSavingsGoals.find((goal) => goal.id === goalInput.goalId)
+        : localDevSavingsGoals.find((goal) => goal.name.toLowerCase() === goalInput.name?.toLowerCase()) ??
+          (localDevSavingsGoals.length === 1 ? localDevSavingsGoals[0] : undefined);
+
+      if (!target) {
+        return {
+          ok: false,
+          status: "savings_goal_not_found",
+          message: "I do not see a saved savings goal yet.",
+        };
+      }
+
+      const updated: SavingsGoal = {
+        ...target,
+        includeInSpendableCash: goalInput.includeInSpendableCash,
+        monthlyContributionCents: goalInput.monthlyContributionCents ?? target.monthlyContributionCents,
+        updatedAt: new Date().toISOString(),
+      };
+
+      localDevSavingsGoals.splice(localDevSavingsGoals.indexOf(target), 1, updated);
+
+      return {
+        ok: true,
+        status: "savings_goal_updated",
+        cards: [buildSavingsGoalPlanCard(toSavingsGoalPlanResponse(updated))],
+      };
+    },
+  };
+}
+
+function createLocalDevConnectedAccounts(snapshot: FinancialSnapshot): ConnectedAccountsResult {
+  const accountsByInstitutionName = new Map<string, FinancialSnapshot["accounts"]>();
+
+  for (const account of snapshot.accounts) {
+    const accounts = accountsByInstitutionName.get(account.institutionName) ?? [];
+    accounts.push(account);
+    accountsByInstitutionName.set(account.institutionName, accounts);
+  }
+
+  return {
+    institutions: [...accountsByInstitutionName.entries()].map(([institutionName, accounts], index) => ({
+      institutionId: `local-dev-${index + 1}`,
+      institutionName,
+      provider: "mock",
+      status: "mocked",
+      lastSuccessfulSyncAt: null,
+      needsRepair: false,
+      accounts: accounts.map((account) => ({
+        accountId: account.id,
+        name: account.name,
+        kind: account.kind,
+        ...(account.lastFour ? { lastFour: account.lastFour } : {}),
+        includedInPipCash: account.includedInPipCash ?? !account.isProtectedSavings,
+        isProtectedSavings: Boolean(account.isProtectedSavings),
+        active: account.active ?? true,
+        roleLabel: getLocalDevAccountRoleLabel(account),
+      })),
+    })),
+  };
+}
+
+function getLocalDevAccountRoleLabel(account: FinancialSnapshot["accounts"][number]): string {
+  if (account.isProtectedSavings) {
+    return "Monthly Savings";
+  }
+
+  if (account.kind === "credit_card") {
+    return "Credit card";
+  }
+
+  return "Spendable Cash";
+}
+
+function createLocalDevSavingsGoal(input: SavingsGoalInput): SavingsGoal {
+  const now = new Date().toISOString();
+  const normalizedName = input.name.trim() || "Savings goal";
+  const stableId = `local-dev-${normalizedName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "goal"}`;
+
+  return {
+    id: stableId,
+    userId: "local-dev",
+    name: normalizedName,
+    targetAmountCents: input.targetAmountCents,
+    ...(input.targetDate ? { targetDate: input.targetDate } : {}),
+    startingAmountCents: input.startingAmountCents ?? 0,
+    currentAmountCents: input.currentAmountCents ?? input.startingAmountCents ?? 0,
+    monthlyContributionCents: input.monthlyContributionCents ?? 0,
+    includeInSpendableCash: input.includeInSpendableCash ?? false,
+    status: "active",
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
 function createAgentActions(input: {

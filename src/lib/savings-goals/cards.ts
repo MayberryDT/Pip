@@ -9,7 +9,7 @@ export function buildSavingsGoalPlanCard(plan: SavingsGoalPlan): AgentCard {
 
   return {
     type: "savings_goal_plan",
-    title: "Savings goal",
+    title: "Savings Goals",
     goalId: plan.goal.id,
     name: plan.goal.name,
     targetAmountCents: plan.goal.targetAmountCents,
@@ -34,10 +34,10 @@ export function buildSavingsGoalsSummaryCard(plans: SavingsGoalPlan[]): AgentCar
 
   return {
     type: "savings_goals_summary",
-    title: "Savings goals",
+    title: "Savings Goals",
     summary: activePlans.length > 0
-      ? `${activePlans.length} active savings goal${activePlans.length === 1 ? "" : "s"} tracked.`
-      : "No active savings goals yet.",
+      ? `${activePlans.length} active savings goal${activePlans.length === 1 ? "" : "s"} tracked in Pip. Pip does not move money.`
+      : "No active savings goals yet. Pip does not move money.",
     activeGoalCount: activePlans.length,
     protectedMonthlyContributionCents,
     goals: activePlans.slice(0, 5).map((plan) => ({
@@ -61,12 +61,12 @@ function buildSavingsGoalPlanSummary(
   const base = `${formatMoney(plan.remainingCents)} left for ${plan.goal.name}.`;
 
   if (plan.goal.includeInSpendableCash && monthlyContributionCents > 0) {
-    return `${base} ${formatMoney(monthlyContributionCents)}/month is kept out of Spendable Cash Today.`;
+    return `${base} ${formatMoney(monthlyContributionCents)}/month in Monthly Savings is kept out of Spendable Cash Today. Tracked in Pip only. Pip does not move money.`;
   }
 
   if (monthlyContributionCents > 0) {
-    return `${base} ${formatMoney(monthlyContributionCents)}/month would keep it on pace.`;
+    return `${base} ${formatMoney(monthlyContributionCents)}/month in Monthly Savings would keep it on pace. Tracked in Pip only. Pip does not move money.`;
   }
 
-  return `${base} Tracked only for now.`;
+  return `${base} Tracked in Pip only. Pip does not move money.`;
 }

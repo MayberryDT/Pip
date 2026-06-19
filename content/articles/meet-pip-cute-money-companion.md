@@ -51,7 +51,7 @@ Money tools often feel heavy. Even when they are useful, they can make a simple 
 
 Pip is intentionally softer. The character gives the daily check a different emotional shape. Instead of making money feel like a report card, Pip tries to make the first interaction feel small, friendly, and repeatable.
 
-That does not mean Pip treats money like a game. Cute does not mean careless. The companion is there because the habit is easier when the product feels approachable. The money signal still needs to be grounded in account data, savings cushion, spending behavior, and clear boundaries.
+That does not mean Pip treats money like a game. Cute does not mean careless. The companion is there because the habit is easier when the product feels approachable. The money signal still needs to be grounded in account data, Monthly Savings, Savings Goals, spending behavior, and clear boundaries.
 
 :::callout title="The product idea"
 Pip gets people interested. Spendable Cash Today keeps people using the app.

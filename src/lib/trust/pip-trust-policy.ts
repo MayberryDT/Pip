@@ -140,7 +140,7 @@ export function composeTrustPolicyAnswer(
   }
 
   if (/\b(price|pricing|cost|subscription|weekly|monthly|refund|trial|cancel)\b/.test(normalized)) {
-    if (options.platform === "android_webview") {
+    if (options.platform === "android_webview" || /\bandroid\b/.test(normalized)) {
       return {
         category: "pricing",
         message: "Purchases and subscriptions are not available in this Android build.",

@@ -25,7 +25,6 @@ import { type FakeDataScenario, getFakeSnapshot, isFakeDataScenario } from "@/li
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import {
   getDisplayedSpendableCashTodayCents,
-  getSpendableCashTodaySubtitle,
   getSpendableCashTodayState,
 } from "@/lib/pip-cash/spendable-cash-today";
 import {
@@ -945,7 +944,7 @@ export function PipHome({
                 ) : null}
                 {showSavingsGoalMetricNote ? (
                   <p className="pip-metric-receipt" data-testid="pip-savings-goal-note">
-                    Savings goals: {formatMoney(protectedSavingsGoalMonthlyCents)}/month kept out.
+                    Savings Goals: {formatMoney(protectedSavingsGoalMonthlyCents)}/month tracked in Pip and kept out. Pip does not move money.
                   </p>
                 ) : null}
               </>
@@ -1461,8 +1460,17 @@ function DefaultAssistantIntro({
   connectionNotice?: "plaid-connected";
   result: PipCashResult | null;
 }) {
-  const isNegative = Boolean(result && result.pipCashTodayCents < 0);
-  const overAmount = result ? formatMoney(Math.abs(Math.min(result.pipCashTodayCents, 0))) : "";
+  if (result) {
+    return (
+      <div
+        className="assistant-ready-intro-panel is-quiet min-h-0 flex-1 overflow-y-auto pb-1"
+        data-testid="agent-thread"
+        aria-label="Pip chat"
+      >
+        {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -1472,13 +1480,7 @@ function DefaultAssistantIntro({
       {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
       <PipIntroScene
         priority
-        title={
-          result
-            ? getSpendableCashTodaySubtitle(result)
-            : isNegative
-              ? `I see you’re ${overAmount} over today. Ask why to see what caused it.`
-              : "Hi, I’m Pip. I’ll show what’s actually spendable today."
-        }
+        title="Hi, I’m Pip. I’ll show what’s actually spendable today."
       />
     </div>
   );
@@ -2108,11 +2110,17 @@ function getConversationState(
     ...thread.flatMap((item) => item.response?.promptChips ?? []),
     ...visibleChips,
   ].slice(-24);
+  const latestResponse = [...thread]
+    .reverse()
+    .find((item) => item.response)
+    ?.response;
+  const pendingAction = latestResponse?.pendingAction;
 
   return {
     shownCards,
     lastToolNames,
     promptChips,
+    ...(pendingAction ? { pendingAction } : {}),
   };
 }
 
@@ -2249,6 +2257,7 @@ export const __pipHomeTestHooks = {
   getAgentErrorText,
   getAppOpenRefreshProvider,
   getClientActionErrorText,
+  getConversationState,
   getNextVisiblePromptChips,
   getReadyDataAction,
   getSafeAgentFailureMessage,

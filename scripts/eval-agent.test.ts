@@ -208,6 +208,38 @@ describe("Pip agent eval harness", () => {
     expect(result.failures).toContain("expected card not returned: spending_breakdown");
   });
 
+  it("fails false savings-goal creation claims without the create tool and card", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        forbidFalseSavingsCreate: true,
+      },
+      response: {
+        message: "I set up your Japan savings goal.",
+        responseMode: "chat_only",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+      },
+    });
+    const allowed = evaluateAgentResponse({
+      caseDef: {
+        forbidFalseSavingsCreate: true,
+      },
+      response: {
+        message: "I set up your Japan savings goal.",
+        responseMode: "show_card",
+        usedTools: ["create_savings_goal"],
+        cards: [{ type: "savings_goal_plan" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures.join("\n")).toContain("claimed savings goal creation without create_savings_goal");
+    expect(allowed.ok).toBe(true);
+  });
+
   it("fails repeated assistant messages, repeated chip sets, and adjacent tool loops", async () => {
     const { evaluateAgentResponse } = await loadEvalHarness();
     const repeatedChips = [
@@ -256,6 +288,14 @@ describe("Pip agent eval harness", () => {
             id: "greeting",
             description: "test case",
             message: "hi",
+            headers: { "user-agent": "Mozilla/5.0 PipAndroid/1 VersionCode/13" },
+            conversationState: {
+              pendingAction: {
+                type: "create_savings_goal",
+                name: "Japan trip",
+                missing: ["target_amount"],
+              },
+            },
             expectNoCards: true,
             expectedResponseMode: "chat_only",
           },
@@ -293,12 +333,18 @@ describe("Pip agent eval harness", () => {
         url: "http://localhost:3999/api/agent",
         headers: {
           Cookie: "sb-test-auth=secret",
+          "user-agent": "Mozilla/5.0 PipAndroid/1 VersionCode/13",
         },
         body: {
           message: "hi",
           scenario: "default",
           conversationId: "test-eval-greeting",
           conversationState: {
+            pendingAction: {
+              type: "create_savings_goal",
+              name: "Japan trip",
+              missing: ["target_amount"],
+            },
             shownCards: [],
             lastToolNames: [],
             promptChips: [],
@@ -502,7 +548,7 @@ describe("Pip agent eval harness", () => {
         caseCount: 12,
         failureCount: 0,
         qualityBar: {
-          requiredPassRate: "12/12",
+          requiredPassRate: "all selected cases",
           rerunPolicy: "fix root cause, rerun affected scenarios, then rerun complete suite",
         },
       });

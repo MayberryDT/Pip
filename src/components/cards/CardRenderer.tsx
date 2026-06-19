@@ -343,14 +343,14 @@ export function CardRenderer({
             <FormulaRow label="Tracked" value={card.currentAmountCents} />
             <FormulaRow label="Remaining" value={card.remainingCents} strong />
             <FormulaRow
-              label="Monthly plan"
+              label="Monthly Savings"
               value={card.monthlyContributionCents || card.recommendedMonthlyContributionCents || 0}
             />
           </div>
           <p className="pip-wrap-anywhere mt-3 text-xs leading-5 text-ink/[0.56]">
             {card.includeInSpendableCash
-              ? "This monthly contribution is kept out of Spendable Cash Today."
-              : "Tracked only. Not held out of today's number."}
+              ? "Tracked in Pip only. This Monthly Savings amount is kept out of Spendable Cash Today. Pip does not move money."
+              : "Tracked in Pip only. Not held out of today's number. Pip does not move money."}
           </p>
         </CardShell>
       );
@@ -372,8 +372,8 @@ export function CardRenderer({
                   {formatMoney(goal.currentAmountCents)} of {formatMoney(goal.targetAmountCents)} tracked.
                   {" "}
                   {goal.includeInSpendableCash
-                    ? `${formatMoney(goal.monthlyContributionCents)}/month kept out.`
-                    : "Tracked only."}
+                    ? `${formatMoney(goal.monthlyContributionCents)}/month in Monthly Savings kept out. Pip does not move money.`
+                    : "Monthly Savings tracked in Pip only. Pip does not move money."}
                 </p>
               </div>
             ))}

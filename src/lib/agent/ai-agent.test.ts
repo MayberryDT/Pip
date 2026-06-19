@@ -9,9 +9,11 @@ import {
   getOpenAIClientConfig,
   getOpenAIApiKeyForSdk,
   runAIAgent,
+  type PipAgentActions,
   toAgentErrorPayload,
   __agentTestHooks,
 } from "@/lib/agent/ai-agent";
+import type { AgentCard } from "@/lib/agent/card-types";
 import { createMockModelClient } from "../../../tests/helpers/mock-agent-runtime";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { buildFinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
@@ -678,6 +680,26 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("starts a savings goal draft for a big purchase without turning it into cutback advice", async () => {
+    const response = await runAIAgent({
+      message: "I want to save money for a big purchase",
+      onboardingState: {
+        status: "ready",
+        hasFinancialData: true,
+      },
+      actions: createSavingsGoalActions(),
+    });
+
+    expect(response.usedTools).toEqual([]);
+    expect(response.responseMode).toBe("clarify");
+    expect(response.pendingAction).toMatchObject({
+      type: "create_savings_goal",
+      name: "Big purchase",
+      missing: ["target_amount"],
+    });
+    expect(response.message).toContain("How much");
+  });
+
   it("keeps savings goal setup deterministic when no savings action is available", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("OPENAI_BASE_URL", "");
@@ -695,6 +717,132 @@ describe("runAIAgent", () => {
     expect(response.responseMode).toBe("chat_only");
     expect(response.cards).toEqual([]);
     expect(response.message.toLowerCase()).toContain("sign in");
+  });
+
+  it("keeps the Japan savings goal setup deterministic through creation and progress", async () => {
+    const actions = createSavingsGoalActions();
+    let pendingAction;
+
+    const first = await runAIAgent(
+      {
+        message: "I need to save for a trip to Japan",
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        actions,
+      },
+    );
+
+    expect(first.usedTools).toEqual([]);
+    expect(first.responseMode).toBe("clarify");
+    expect(first.pendingAction).toMatchObject({
+      type: "create_savings_goal",
+      name: expect.stringMatching(/japan/i),
+      missing: ["target_amount"],
+    });
+    pendingAction = first.pendingAction;
+
+    const second = await runAIAgent(
+      {
+        message: "Yes",
+        conversationState: { pendingAction },
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        actions,
+      },
+    );
+
+    expect(second.usedTools).toEqual([]);
+    expect(second.responseMode).toBe("clarify");
+    expect(second.pendingAction).toMatchObject({
+      type: "create_savings_goal",
+      name: expect.stringMatching(/japan/i),
+      missing: ["target_amount"],
+    });
+    pendingAction = second.pendingAction;
+
+    const third = await runAIAgent(
+      {
+        message: "Set the savings goal",
+        conversationState: { pendingAction },
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        actions,
+      },
+    );
+
+    expect(third.usedTools).toEqual([]);
+    expect(third.responseMode).toBe("clarify");
+    expect(third.pendingAction).toMatchObject({
+      type: "create_savings_goal",
+      name: expect.stringMatching(/japan/i),
+      missing: ["target_amount"],
+    });
+    pendingAction = third.pendingAction;
+
+    const fourth = await runAIAgent(
+      {
+        message: "$3000 by December 1st",
+        conversationState: { pendingAction },
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        actions,
+      },
+    );
+
+    expect(fourth.usedTools).toEqual(["create_savings_goal"]);
+    expect(fourth.responseMode).toBe("show_card");
+    expect(fourth.pendingAction).toBeUndefined();
+    expect(fourth.cards).toEqual([
+      expect.objectContaining({
+        type: "savings_goal_plan",
+        name: expect.stringMatching(/japan/i),
+        targetAmountCents: 300000,
+        targetDate: "2026-12-01",
+      }),
+    ]);
+    expect(fourth.message).not.toMatch(/\b(can|could|would) set\b/i);
+
+    const fifth = await runAIAgent(
+      {
+        message: "How much do I need to hit that goal?",
+        conversationState: {
+          shownCards: fourth.cards.map((card) => ({
+            type: card.type,
+            title: card.title,
+          })),
+          lastToolNames: fourth.usedTools,
+        },
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        actions,
+      },
+    );
+
+    expect(fifth.usedTools).toEqual(["list_savings_goals"]);
+    expect(fifth.responseMode).toBe("show_card");
+    expect(fifth.cards).toEqual([
+      expect.objectContaining({
+        type: "savings_goals_summary",
+        goals: [
+          expect.objectContaining({
+            name: expect.stringMatching(/japan/i),
+            targetAmountCents: 300000,
+            remainingCents: 300000,
+            targetDate: "2026-12-01",
+          }),
+        ],
+      }),
+    ]);
   });
 
   it("routes currentness prompts to the trust receipt", () => {
@@ -731,6 +879,7 @@ describe("runAIAgent", () => {
       ["what is my current account balance", "get_true_balances"],
       ["you can't show my bank account balance?", "get_true_balances"],
       ["how much do I have in checking", "get_true_balances"],
+      ["show my bank accounts", "get_connected_accounts"],
       ["what did I buy lately", "get_recent_transactions"],
       ["what charges hit this week", "get_recent_transactions"],
       ["where is my money going by category", "get_spending_breakdown"],
@@ -749,6 +898,30 @@ describe("runAIAgent", () => {
         requireCard: true,
       });
     }
+  });
+
+  it("shows connected accounts deterministically without model configuration", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
+
+    const response = await runAIAgent({
+      message: "Show my bank accounts",
+      actions: {
+        getConnectedAccounts: async () => ({
+          ok: true,
+          status: "connected_accounts",
+          cards: [accountConnectionsCard()],
+        }),
+      } satisfies Partial<PipAgentActions>,
+    });
+
+    expect(response.audit.usedModel).toBe(false);
+    expect(response.usedTools).toEqual(["get_connected_accounts"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "account_connections",
+      title: "Connected accounts",
+    });
   });
 
   it("routes delete-data requests to confirmation before policy fallback", () => {
@@ -816,6 +989,14 @@ describe("runAIAgent", () => {
       },
       createMockModelClient(),
     );
+
+    expect(response.usedTools).toEqual(["get_trust_policy"]);
+    expect(response.message).toBe("Purchases and subscriptions are not available in this Android build.");
+    expect(response.message).not.toMatch(/\$2\.99|\$7\.99|pricing/i);
+  });
+
+  it("answers Android cost prompts even when the user asks from web", async () => {
+    const response = await runAIAgent({ message: "What does Android cost?" });
 
     expect(response.usedTools).toEqual(["get_trust_policy"]);
     expect(response.message).toBe("Purchases and subscriptions are not available in this Android build.");
@@ -1682,6 +1863,97 @@ function createNormalReadyResult() {
       confidence: "high" as const,
       warnings: [],
       dataStates: [],
+    },
+  };
+}
+
+function accountConnectionsCard(): AgentCard {
+  return {
+    type: "account_connections",
+    title: "Connected accounts",
+    institutions: [
+      {
+        institutionId: "mock-bank",
+        institutionName: "Mock Bank",
+        provider: "mock",
+        status: "mocked",
+        lastSuccessfulSyncAt: "2026-06-19T12:00:00.000Z",
+        accounts: [
+          {
+            accountId: "checking-1",
+            name: "Checking",
+            kind: "checking",
+            lastFour: "1234",
+            includedInPipCash: true,
+            isProtectedSavings: false,
+            active: true,
+            roleLabel: "Spendable Cash",
+          },
+        ],
+        actions: [],
+      },
+    ],
+  };
+}
+
+function createSavingsGoalActions(): PipAgentActions {
+  let savedGoal:
+    | {
+        goalId: string;
+        name: string;
+        targetAmountCents: number;
+        currentAmountCents: number;
+        remainingCents: number;
+        targetDate?: string;
+        monthlyContributionCents: number;
+        includeInSpendableCash: boolean;
+        onTrack?: boolean;
+      }
+    | undefined;
+
+  return {
+    async createSavingsGoal(input) {
+      savedGoal = {
+        goalId: "goal-japan",
+        name: input.name,
+        targetAmountCents: input.targetAmountCents,
+        currentAmountCents: input.currentAmountCents ?? 0,
+        remainingCents: input.targetAmountCents - (input.currentAmountCents ?? 0),
+        targetDate: input.targetDate,
+        monthlyContributionCents: input.monthlyContributionCents ?? 0,
+        includeInSpendableCash: input.includeInSpendableCash ?? false,
+      };
+
+      return {
+        ok: true,
+        status: "savings_goal_created",
+        cards: [
+          {
+            type: "savings_goal_plan" as const,
+            title: "Savings goal",
+            ...savedGoal,
+            summary: `$${Math.round(savedGoal.remainingCents / 100).toLocaleString()} left for ${savedGoal.name}. Tracked in Pip. No money is moved.`,
+          },
+        ],
+      };
+    },
+    async listSavingsGoals() {
+      return {
+        ok: true,
+        status: "savings_goals_loaded",
+        cards: [
+          {
+            type: "savings_goals_summary" as const,
+            title: "Savings goals",
+            summary: savedGoal
+              ? `${savedGoal.name}: $${Math.round(savedGoal.remainingCents / 100).toLocaleString()} remaining.`
+              : "No savings goals yet.",
+            activeGoalCount: savedGoal ? 1 : 0,
+            protectedMonthlyContributionCents: 0,
+            goals: savedGoal ? [savedGoal] : [],
+          },
+        ],
+      };
     },
   };
 }

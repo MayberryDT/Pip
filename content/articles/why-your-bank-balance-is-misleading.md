@@ -15,7 +15,7 @@ seo:
   description: "Your bank balance is not the same as what you can use today. Pip turns it into Spendable Cash Today."
 faq:
   - question: "Why can a bank balance be misleading?"
-    answer: "It shows money that exists now, but it does not subtract bills, savings cushion, recent card purchases, and spending pressure in one daily signal."
+    answer: "It shows money that exists now, but it does not subtract bills, Monthly Savings, recent card purchases, and spending pressure in one daily signal."
   - question: "Is my bank balance wrong?"
     answer: "No. The balance is real. It is just incomplete when you use it as permission to spend."
   - question: "What should I check before spending?"
@@ -51,7 +51,7 @@ Even when every transaction is technically visible somewhere, the user still has
 :::money-example title="Why $900 might not mean $900"
 Checking balance: $900
 Rent soon: -$500
-Savings cushion: -$100
+Monthly Savings: -$100
 Recent card spending: -$180
 Room left: $120
 :::
@@ -95,7 +95,7 @@ When you want more detail, you can ask. Why did the number change? What lowered 
 
 Before everyday spending, check [Spendable Cash Today](/blog/what-is-spendable-cash-today). Then use your bank balance as supporting information when you need it, not as the first permission signal.
 
-If the number seems lower than expected, ask Pip why. The answer might be a bill, recent spending, a protected savings cushion, or a missing account. If the number is zero, that is still information. It means today's room is tight based on what Pip can see.
+If the number seems lower than expected, ask Pip why. The answer might be a bill, recent spending, Monthly Savings, a Savings Goal contribution, or a missing account. If the number is zero, that is still information. It means today's room is tight based on what Pip can see.
 
 The point is not to make every purchase feel heavy. The point is to make the default less misleading.
 

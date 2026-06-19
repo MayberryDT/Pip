@@ -26,7 +26,7 @@ related:
 ---
 ## Quick answer
 
-Spendable Cash Today is Pip's daily number for what is actually okay to use today after bills, savings cushion, and recent spending pressure are considered. It is a decision-support number, not a guarantee, not a full budget, and not the same as your bank balance.
+Spendable Cash Today is Pip's daily number for what is actually okay to use today after bills, Monthly Savings, Savings Goals, and recent spending pressure are considered. It is a decision-support number, not a guarantee, not a full budget, and not the same as your bank balance.
 
 The point is to answer a daily question: "What room do I have before I spend?" Pip makes that number the default because most everyday spending decisions happen quickly. You should not need a spreadsheet before lunch, a cart, or a night out.
 
@@ -44,7 +44,7 @@ That distinction matters. A bank balance answers "How much exists here right now
 
 ## What it considers
 
-Pip is built around account data and a protected savings cushion. The product direction is to hold back bills, savings, recent spending pressure, and other visible constraints before showing the daily number. The exact calculation can evolve as Pip learns from real usage, but the public promise should stay simple: one calm number before you spend.
+Pip is built around account data, Monthly Savings, and Savings Goals. The product direction is to hold back bills, savings, recent spending pressure, and other visible constraints before showing the daily number. The exact calculation can evolve as Pip learns from real usage, but the public promise should stay simple: one calm number before you spend.
 
 :::callout title="The useful default"
 Spendable Cash Today exists because the most visible number is not always the most useful number.
@@ -76,7 +76,7 @@ When you want context, you can ask Pip. Why did today's number change? What lowe
 
 ## Why it can be zero
 
-A zero number does not mean Pip is broken. It can mean today's room is tight based on the account data and cushion Pip can see. That may happen after recent spending, before bills, when savings needs protection, or when the month is carrying more pressure than the balance suggests.
+A zero number does not mean Pip is broken. It can mean today's room is tight based on the account data, Monthly Savings, and Savings Goals Pip can see. That may happen after recent spending, before bills, when savings needs protection, or when the month is carrying more pressure than the balance suggests.
 
 The tone matters here. Pip should not panic, shame, or turn the number into a lecture. A zero is a signal. It tells you that spending from the bank balance may be especially misleading today.
 

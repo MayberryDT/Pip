@@ -5,7 +5,7 @@ import type { SyncStatusResponse } from "@/components/data-controls-helpers";
 import type { PromptChip } from "@/lib/agent/card-types";
 
 describe("PipHome", () => {
-  it("keeps the Pip home surface to one number, assistant intro, and the agent input", () => {
+  it("keeps the Pip home surface to one number, compact context, and the agent input", () => {
     const markup = renderToStaticMarkup(<PipHome />);
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
@@ -16,7 +16,9 @@ describe("PipHome", () => {
     expect(visibleText).toContain("Pip");
     expect(visibleText).toContain("Spendable Cash Today");
     expect(visibleText).toContain("$104");
-    expect(visibleText).toContain("I’m missing a card, so I may adjust this after you connect it.");
+    expect(visibleText).toContain("Current money window ends");
+    expect(visibleText).toContain("2 known limits");
+    expect(visibleText).not.toContain("I’m missing a card, so I may adjust this after you connect it.");
     expect(markup).not.toContain("pip-metric-subtitle");
     expect(markup).not.toContain("This may change if you connect the missing card.");
     expect(markup).toContain("Ask Pip anything...");
@@ -29,7 +31,8 @@ describe("PipHome", () => {
     expect(markup).not.toContain("Why this number?");
     expect(markup).not.toContain("Can I spend $50?");
     expect(markup).not.toContain("What changed?");
-    expect(markup).toContain('aria-label="Pip"');
+    expect(markup).toContain('class="sr-only">Pip</span>');
+    expect(markup).toContain('aria-label="Pip chat"');
     expect(visibleText).not.toMatch(/\b(balance|dashboard|budget)\b/i);
     expect(markup).not.toMatch(/<nav\b|<table\b|<canvas\b|\brole="(menu|tab|tablist)"/i);
   });
@@ -315,6 +318,102 @@ describe("PipHome", () => {
         hasPendingSyncJob: true,
       }),
     ).toBeNull();
+  });
+
+  it("carries the latest pending savings goal action in conversation state", () => {
+    const conversationState = __pipHomeTestHooks.getConversationState(
+      [
+        {
+          id: "turn-1",
+          userText: "I need to save for Japan",
+          response: {
+            message: "How much do you want to save for Japan?",
+            cards: [],
+            promptChips: [],
+            usedTools: [],
+            responseMode: "clarify",
+            pendingAction: {
+              type: "create_savings_goal",
+              name: "Japan trip",
+              missing: ["target_amount"],
+            },
+            audit: {
+              toolNames: [],
+              usedModel: false,
+            },
+          },
+        },
+      ],
+      [],
+      [],
+    );
+
+    expect(conversationState).toMatchObject({
+      pendingAction: {
+        type: "create_savings_goal",
+        name: "Japan trip",
+        missing: ["target_amount"],
+      },
+    });
+  });
+
+  it("clears an old pending savings goal action after a later response has none", () => {
+    const conversationState = __pipHomeTestHooks.getConversationState(
+      [
+        {
+          id: "turn-1",
+          userText: "I need to save for Japan",
+          response: {
+            message: "How much do you want to save for Japan?",
+            cards: [],
+            promptChips: [],
+            usedTools: [],
+            responseMode: "clarify",
+            pendingAction: {
+              type: "create_savings_goal",
+              name: "Japan trip",
+              missing: ["target_amount"],
+            },
+            audit: {
+              toolNames: [],
+              usedModel: false,
+            },
+          },
+        },
+        {
+          id: "turn-2",
+          userText: "$3000 by December 1st",
+          response: {
+            message: "I saved the Japan trip savings goal.",
+            cards: [
+              {
+                type: "savings_goal_plan",
+                title: "Savings Goals",
+                goalId: "goal-1",
+                name: "Japan trip",
+                targetAmountCents: 300000,
+                currentAmountCents: 0,
+                remainingCents: 300000,
+                monthlyContributionCents: 50000,
+                includeInSpendableCash: false,
+                summary: "$3,000 left. Tracked in Pip only. Pip does not move money.",
+              },
+            ],
+            promptChips: [],
+            usedTools: ["create_savings_goal"],
+            responseMode: "show_card",
+            audit: {
+              toolNames: ["create_savings_goal"],
+              usedModel: false,
+            },
+          },
+        },
+      ],
+      [],
+      [],
+    );
+
+    expect(conversationState).not.toHaveProperty("pendingAction");
   });
 
   it("maps agent failures to short PIP-safe visible messages", () => {

@@ -4,8 +4,10 @@ import { z } from "zod";
 import type {
   AgentCard,
   AgentClientAction,
+  AgentPendingAction,
   AgentResponse,
   PromptChip,
+  SavingsGoalPendingField,
 } from "@/lib/agent/card-types";
 import {
   type GuidanceCardDraft,
@@ -89,6 +91,13 @@ export type AgentConversationState = {
   }>;
   lastToolNames?: string[];
   promptChips?: PromptChip[];
+  pendingAction?: AgentPendingAction;
+};
+
+type NormalizedAgentConversationState = Required<
+  Omit<AgentConversationState, "pendingAction">
+> & {
+  pendingAction?: AgentPendingAction;
 };
 
 export type PipAgentOnboardingState = {
@@ -186,7 +195,7 @@ type PipAgentContext = {
   qualityVariant: PipAgentQualityVariantId;
   onboardingState: PipAgentOnboardingState;
   actions?: PipAgentActions;
-  conversationState: Required<AgentConversationState>;
+  conversationState: NormalizedAgentConversationState;
   forcedTool?: ForcedAgentTool;
   repair?: AgentResponseRepair;
   usedTools: string[];
@@ -308,6 +317,18 @@ export async function runAIAgent(
 
   if (deterministicTrustResponse) {
     return deterministicTrustResponse;
+  }
+
+  const deterministicSavingsGoalResponse = await createDeterministicSavingsGoalResponse(input);
+
+  if (deterministicSavingsGoalResponse) {
+    return deterministicSavingsGoalResponse;
+  }
+
+  const deterministicConnectedAccountsResponse = await createDeterministicConnectedAccountsResponse(input);
+
+  if (deterministicConnectedAccountsResponse) {
+    return deterministicConnectedAccountsResponse;
   }
 
   const deterministicUnavailableActionResponse = createDeterministicUnavailableActionResponse(input);
@@ -438,6 +459,45 @@ function createDeterministicTrustResponse(input: RunAiAgentInput): AgentResponse
   return null;
 }
 
+async function createDeterministicConnectedAccountsResponse(input: RunAiAgentInput): Promise<AgentResponse | null> {
+  const forcedTool = getForcedAgentTool(input);
+
+  if (forcedTool?.toolName !== "get_connected_accounts") {
+    return null;
+  }
+
+  const context = createPipContext(input);
+  recordTool(context, "get_connected_accounts");
+
+  const unavailable = getAccountManagementUnavailableResult(context);
+  const actionResult = unavailable
+    ? unavailable
+    : input.actions?.getConnectedAccounts
+      ? await input.actions.getConnectedAccounts()
+      : {
+          ok: false,
+          status: "account_management_unavailable",
+          message: "Account management is not available in this environment.",
+        };
+  const result = applyActionResult(context, actionResult);
+  const hasCards = context.availableCards.length > 0;
+
+  return buildAgentResponse(
+    {
+      message: result.ok
+        ? "I found your connected accounts."
+        : result.message ?? "Account management is not available in this environment.",
+      support: null,
+      responseMode: hasCards ? "show_card" : "chat_only",
+    },
+    context,
+    input,
+    {
+      usedModel: false,
+    },
+  );
+}
+
 function createDeterministicUnavailableActionResponse(input: RunAiAgentInput): AgentResponse | null {
   const forcedTool = getForcedAgentTool(input);
 
@@ -470,6 +530,335 @@ function createDeterministicUnavailableActionResponse(input: RunAiAgentInput): A
       usedModel: false,
     },
   });
+}
+
+async function createDeterministicSavingsGoalResponse(input: RunAiAgentInput): Promise<AgentResponse | null> {
+  const normalized = normalizePrompt(input.message);
+  const pendingAction = input.conversationState?.pendingAction;
+
+  if (pendingAction?.type === "create_savings_goal") {
+    return createSavingsGoalDraftResponse(input, pendingAction);
+  }
+
+  if (isSavingsGoalContextProgressPrompt(normalized)) {
+    return listSavingsGoalsDeterministically(input);
+  }
+
+  if (!isSavingsGoalPrompt(normalized)) {
+    return null;
+  }
+
+  if (isSavingsGoalListPrompt(normalized)) {
+    return listSavingsGoalsDeterministically(input);
+  }
+
+  if (!isSavingsGoalCreatePrompt(normalized)) {
+    return null;
+  }
+
+  return createSavingsGoalDraftResponse(input, undefined);
+}
+
+async function createSavingsGoalDraftResponse(
+  input: RunAiAgentInput,
+  pendingAction: Extract<AgentPendingAction, { type: "create_savings_goal" }> | undefined,
+): Promise<AgentResponse> {
+  const draft = mergeSavingsGoalDraft(input.message, pendingAction);
+  const missing = getMissingSavingsGoalFields(draft);
+  const onboardingState = input.onboardingState ?? {
+    status: "ready" as const,
+    hasFinancialData: false,
+  };
+
+  if (missing.includes("target_amount")) {
+    return agentResponseSchema.parse({
+      message: `How much do you want to save for ${formatSavingsGoalNameForPrompt(draft.name)}?`,
+      cards: [],
+      promptChips: createDeterministicTrustPromptChips(input),
+      usedTools: [],
+      responseMode: "clarify",
+      pendingAction: {
+        ...draft,
+        missing,
+      },
+      audit: {
+        toolNames: [],
+        usedModel: false,
+      },
+    });
+  }
+
+  if (onboardingState.status === "guest" && !input.actions?.createSavingsGoal) {
+    return agentResponseSchema.parse({
+      message: "I can help set that up after you sign in.",
+      cards: [],
+      promptChips: getOnboardingPromptChips(onboardingState),
+      usedTools: ["create_savings_goal"],
+      responseMode: "chat_only",
+      pendingAction: {
+        ...draft,
+        missing: [],
+      },
+      audit: {
+        toolNames: ["create_savings_goal"],
+        usedModel: false,
+      },
+    });
+  }
+
+  if (!input.actions?.createSavingsGoal) {
+    return agentResponseSchema.parse({
+      message: "Savings goals are not available yet. I kept the goal details here so we can try again.",
+      cards: [],
+      promptChips: getOnboardingPromptChips(onboardingState),
+      usedTools: ["create_savings_goal"],
+      responseMode: "chat_only",
+      pendingAction: {
+        ...draft,
+        missing: [],
+      },
+      audit: {
+        toolNames: ["create_savings_goal"],
+        usedModel: false,
+      },
+    });
+  }
+
+  const targetAmountCents = draft.targetAmountCents;
+
+  if (!targetAmountCents) {
+    return agentResponseSchema.parse({
+      message: `How much do you want to save for ${formatSavingsGoalNameForPrompt(draft.name)}?`,
+      cards: [],
+      promptChips: createDeterministicTrustPromptChips(input),
+      usedTools: [],
+      responseMode: "clarify",
+      pendingAction: {
+        ...draft,
+        missing: ["target_amount"],
+      },
+      audit: {
+        toolNames: [],
+        usedModel: false,
+      },
+    });
+  }
+
+  const result = await input.actions.createSavingsGoal({
+    name: draft.name,
+    targetAmountCents,
+    targetDate: draft.targetDate,
+    startingAmountCents: draft.startingAmountCents,
+    currentAmountCents: draft.currentAmountCents,
+    monthlyContributionCents: draft.monthlyContributionCents,
+    includeInSpendableCash: draft.includeInSpendableCash,
+  });
+
+  if (!result.ok) {
+    return agentResponseSchema.parse({
+      message: result.message ?? "I could not save that goal yet. I kept the details so we can try again.",
+      cards: result.cards ?? [],
+      promptChips: getOnboardingPromptChips(onboardingState),
+      usedTools: ["create_savings_goal"],
+      responseMode: result.cards?.length ? "show_card" : "chat_only",
+      pendingAction: {
+        ...draft,
+        missing: [],
+      },
+      audit: {
+        toolNames: ["create_savings_goal"],
+        usedModel: false,
+      },
+    });
+  }
+
+  const cards = result.cards ?? [];
+
+  return agentResponseSchema.parse({
+    message: getSavingsGoalCreatedMessage(cards, draft),
+    cards,
+    promptChips: getOnboardingPromptChips(onboardingState),
+    usedTools: ["create_savings_goal"],
+    responseMode: cards.length > 0 ? "show_card" : "chat_only",
+    ...(result.clientAction ? { clientAction: result.clientAction } : {}),
+    audit: {
+      toolNames: ["create_savings_goal"],
+      usedModel: false,
+    },
+  });
+}
+
+async function listSavingsGoalsDeterministically(input: RunAiAgentInput): Promise<AgentResponse | null> {
+  if (!input.actions?.listSavingsGoals) {
+    return null;
+  }
+
+  const result = await input.actions.listSavingsGoals();
+  const cards = result.cards ?? [];
+
+  return agentResponseSchema.parse({
+    message: result.ok
+      ? getSavingsGoalListMessage(cards)
+      : result.message ?? "I do not see a saved savings goal yet. Tell me what you want to save for and the target amount.",
+    cards,
+    promptChips: createDeterministicTrustPromptChips(input),
+    usedTools: ["list_savings_goals"],
+    responseMode: cards.length > 0 ? "show_card" : "chat_only",
+    ...(result.clientAction ? { clientAction: result.clientAction } : {}),
+    audit: {
+      toolNames: ["list_savings_goals"],
+      usedModel: false,
+    },
+  });
+}
+
+function mergeSavingsGoalDraft(
+  message: string,
+  pendingAction: Extract<AgentPendingAction, { type: "create_savings_goal" }> | undefined,
+): Extract<AgentPendingAction, { type: "create_savings_goal" }> {
+  const normalized = normalizePrompt(message);
+  const targetAmountCents = extractSavingsGoalAmountCents(message) ?? pendingAction?.targetAmountCents;
+  const monthlyContributionCents = extractMonthlyContributionCents(message) ?? pendingAction?.monthlyContributionCents;
+  const targetDate = parseSavingsGoalTargetDate(message, getAgentAsOfDate()) ?? pendingAction?.targetDate;
+  const inferredName = inferSavingsGoalName(message, normalized);
+  const name = pendingAction?.name && pendingAction.name !== "Savings goal"
+    ? pendingAction.name
+    : inferredName;
+
+  return {
+    type: "create_savings_goal",
+    name,
+    ...(targetAmountCents === undefined || targetAmountCents === null ? {} : { targetAmountCents }),
+    ...(targetDate ? { targetDate } : {}),
+    ...(pendingAction?.startingAmountCents === undefined ? {} : { startingAmountCents: pendingAction.startingAmountCents }),
+    ...(pendingAction?.currentAmountCents === undefined ? {} : { currentAmountCents: pendingAction.currentAmountCents }),
+    ...(monthlyContributionCents === undefined || monthlyContributionCents === null ? {} : { monthlyContributionCents }),
+    ...(pendingAction?.includeInSpendableCash === undefined ? {} : { includeInSpendableCash: pendingAction.includeInSpendableCash }),
+  };
+}
+
+function getMissingSavingsGoalFields(
+  draft: Extract<AgentPendingAction, { type: "create_savings_goal" }>,
+): SavingsGoalPendingField[] {
+  return draft.targetAmountCents ? [] : ["target_amount"];
+}
+
+function getSavingsGoalCreatedMessage(
+  cards: AgentCard[],
+  draft: Extract<AgentPendingAction, { type: "create_savings_goal" }>,
+): string {
+  const planCard = cards.find((card): card is Extract<AgentCard, { type: "savings_goal_plan" }> =>
+    card.type === "savings_goal_plan"
+  );
+
+  if (!planCard) {
+    return `I saved ${formatMoney(draft.targetAmountCents ?? 0)} for ${formatSavingsGoalNameForPrompt(draft.name)}.`;
+  }
+
+  return `I saved the ${planCard.name} savings goal. ${formatMoney(planCard.remainingCents)} left to track in Pip.`;
+}
+
+function getSavingsGoalListMessage(cards: AgentCard[]): string {
+  const summaryCard = cards.find((card): card is Extract<AgentCard, { type: "savings_goals_summary" }> =>
+    card.type === "savings_goals_summary"
+  );
+
+  if (!summaryCard) {
+    return "I pulled your savings goals.";
+  }
+
+  if (summaryCard.activeGoalCount === 0) {
+    return "I do not see a saved savings goal yet. Tell me what you want to save for and the target amount.";
+  }
+
+  const goal = summaryCard.goals[0];
+
+  if (!goal) {
+    return "I pulled your savings goals.";
+  }
+
+  return `${goal.name}: ${formatMoney(goal.remainingCents)} left to track in Pip.`;
+}
+
+function formatSavingsGoalNameForPrompt(name: string): string {
+  return name.trim() || "that goal";
+}
+
+function parseSavingsGoalTargetDate(message: string, asOfDate: string): string | null {
+  const monthPattern =
+    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
+  const monthMatch = monthPattern.exec(message);
+
+  if (monthMatch) {
+    return buildFutureDate(Number(monthNameToMonthNumber(monthMatch[1])), Number(monthMatch[2]), asOfDate);
+  }
+
+  const numericMatch = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(message);
+
+  if (numericMatch) {
+    const month = Number(numericMatch[1]);
+    const day = Number(numericMatch[2]);
+    const year = numericMatch[3] ? normalizeYear(Number(numericMatch[3])) : undefined;
+
+    return buildFutureDate(month, day, asOfDate, year);
+  }
+
+  return null;
+}
+
+function monthNameToMonthNumber(value: string): number {
+  const normalized = value.toLowerCase();
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const index = months.findIndex((month) => normalized.startsWith(month));
+
+  return index + 1;
+}
+
+function normalizeYear(year: number): number {
+  return year < 100 ? 2000 + year : year;
+}
+
+function buildFutureDate(month: number, day: number, asOfDate: string, explicitYear?: number): string | null {
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+
+  const asOf = parseDateParts(asOfDate);
+  let year = explicitYear ?? asOf.year;
+  const candidate = new Date(Date.UTC(year, month - 1, day));
+
+  if (
+    candidate.getUTCFullYear() !== year ||
+    candidate.getUTCMonth() !== month - 1 ||
+    candidate.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  if (!explicitYear && candidate.getTime() < Date.UTC(asOf.year, asOf.month - 1, asOf.day)) {
+    year += 1;
+  }
+
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function parseDateParts(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+
+  return { year, month, day };
+}
+
+function getAgentAsOfDate(): string {
+  return process.env.PIP_APP_DATE || "2026-06-19";
+}
+
+function isSavingsGoalContextProgressPrompt(normalized: string): boolean {
+  if (/\b(save|saving|set up|start|create|add|track)\b/.test(normalized)) {
+    return false;
+  }
+
+  return /\b(how much|what|show|update|progress|on track|left|remaining|need)\b/.test(normalized) &&
+    /\b(that goal|the goal|my goal|goal|savings goal|japan|trip|vacation|big purchase)\b/.test(normalized);
 }
 
 function isSavingsGoalToolName(toolName: DeterministicAgentToolName): boolean {
@@ -2366,7 +2755,7 @@ function applyActionResult(
   };
 }
 
-function getAccountManagementUnavailableResult(context: PipAgentContext): Record<string, unknown> | null {
+function getAccountManagementUnavailableResult(context: PipAgentContext): PipAgentActionResult | null {
   if (context.onboardingState.status === "guest") {
     return {
       ok: false,
@@ -4277,6 +4666,7 @@ function isTrustPolicyPrompt(normalized: string): boolean {
     /\b(move (?:my |our |your )?money|transfer (?:my |our |your )?money|withdraw|make payments?|pay bills?|send money|take money|debit my account)\b/.test(normalized) ||
     /\b(security|privacy|sell my data|sell data|advertising|subprocessors?|data retention|retention|delete my data|delete data)\b/.test(normalized) ||
     /\b(how much|what|price|pricing|cost)\b.{0,24}\bpip\b|\bpip\b.{0,24}\b(price|pricing|cost)\b/.test(normalized) ||
+    /\bandroid\b.{0,32}\b(cost|price|pricing|subscription|checkout)\b|\b(cost|price|pricing|subscription|checkout)\b.{0,32}\bandroid\b/.test(normalized) ||
     /\b(financial advice|advisor|guarantee|guaranteed|legal entity|who operates|refund|trial|cancel subscription|subscription (?:billing|price|pricing|refund|trial|cancel|cancellation))\b/.test(normalized)
   );
 }
@@ -4527,6 +4917,7 @@ function isConnectedAccountsPrompt(normalized: string): boolean {
   }
 
   return (
+    /\b(show|list|what|which)\b.{0,40}\b(my\s+)?(bank\s+)?accounts?\b/.test(normalized) ||
     /\b(show|list|what|which)\b.{0,40}\b(connected|linked|selected)\s+(accounts?|banks?|cards?|institutions?)\b/.test(normalized) ||
     /\b(what|which)\b.{0,40}\baccounts?\b.{0,24}\b(connected|linked|selected|used)\b/.test(normalized) ||
     /\bwhat is pip using\b/.test(normalized) ||

@@ -15,7 +15,7 @@ const QUALITY_WORKING_SUITE = "quality-working";
 const QUALITY_HOLDOUT_SUITE = "quality-holdout";
 const EVALUATION_METHOD = "pass/fail per scenario with shared response-contract checks";
 const QUALITY_BAR = {
-  requiredPassRate: "12/12",
+  requiredPassRate: "all selected cases",
   rerunPolicy: "fix root cause, rerun affected scenarios, then rerun complete suite",
 };
 
@@ -230,6 +230,55 @@ export const agentEvalCases = [
     expectNoCards: true,
     forbiddenTools: ["simulate_purchase"],
     forbiddenCards: ["purchase_simulation"],
+  },
+  {
+    id: "phone-save-big-purchase",
+    description: "Big-purchase savings intent should start a savings goal draft, not spending cutback advice.",
+    message: "I want to save money for a big purchase",
+    expectedPendingActionType: "create_savings_goal",
+    expectedResponseMode: "clarify",
+    expectNoCards: true,
+    forbiddenTools: ["get_spending_opportunity"],
+    forbiddenCards: ["insight_card"],
+  },
+  {
+    id: "phone-show-bank-accounts",
+    description: "Bank-account wording should show account connections, not balances or setup fallback.",
+    message: "Show my bank accounts",
+    expectedTools: ["get_connected_accounts"],
+    expectedCards: ["account_connections"],
+    forbiddenTools: ["get_true_balances"],
+    forbiddenCards: ["true_balances"],
+  },
+  {
+    id: "phone-savings-japan-context",
+    description: "Amount/date follow-up with a pending Japan savings goal should create the goal.",
+    message: "It costs $3,000 by December 1st",
+    history: [
+      { role: "user", content: "I want to save for Japan" },
+      { role: "assistant", content: "How much do you want to save for Japan?" },
+    ],
+    conversationState: {
+      pendingAction: {
+        type: "create_savings_goal",
+        name: "Japan trip",
+        missing: ["target_amount"],
+      },
+    },
+    expectedTools: ["create_savings_goal"],
+    expectedCards: ["savings_goal_plan"],
+    expectedResponseMode: "show_card",
+    forbidFalseSavingsCreate: true,
+  },
+  {
+    id: "phone-android-cost",
+    description: "Android cost wording should return Android build pricing/support copy.",
+    message: "What does Android cost?",
+    headers: { "user-agent": "Mozilla/5.0 PipAndroid/1 VersionCode/13" },
+    expectedTools: ["get_trust_policy"],
+    expectedTextPatterns: ["Purchases and subscriptions are not available in this Android build"],
+    forbiddenTextPatterns: ["\\$2\\.99|\\$7\\.99|pricing"],
+    expectNoCards: true,
   },
   {
     id: "negative-spendable",
@@ -573,6 +622,10 @@ function getPromptChips(response) {
   return asArray(response?.promptChips);
 }
 
+function getPendingActionType(response) {
+  return typeof response?.pendingAction?.type === "string" ? response.pendingAction.type : "";
+}
+
 function getResponseSearchText(response, message) {
   const cardText = asArray(response?.cards).flatMap((card) => [
     card?.title,
@@ -752,6 +805,14 @@ function validateExpectedResponseText({ caseDef, response, message, failures }) 
     }
   }
 
+  for (const patternSource of asArray(caseDef.forbiddenTextPatterns)) {
+    const pattern = new RegExp(String(patternSource), "i");
+
+    if (pattern.test(responseText)) {
+      failures.push(`forbidden response text pattern found: ${patternSource}`);
+    }
+  }
+
   for (const patternSource of asArray(caseDef.expectedCardTitlePatterns)) {
     const pattern = new RegExp(String(patternSource), "i");
 
@@ -769,12 +830,29 @@ function validateExpectedResponseText({ caseDef, response, message, failures }) 
   }
 }
 
+function validateSavingsGoalCreationClaims({ caseDef, message, usedTools, cardTypes, failures }) {
+  if (!caseDef.forbidFalseSavingsCreate) {
+    return;
+  }
+
+  const createClaimPattern =
+    /\b(created|saved|set up|set|started|added|tracking|tracked)\b.{0,80}\b(savings? goal|goal|japan|trip|vacation|big purchase)\b/i;
+
+  if (
+    createClaimPattern.test(message) &&
+    (!usedTools.includes("create_savings_goal") || !cardTypes.includes("savings_goal_plan"))
+  ) {
+    failures.push("claimed savings goal creation without create_savings_goal and savings_goal_plan.");
+  }
+}
+
 export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, httpOk = true, error = null }) {
   const failures = [];
   const message = getResponseMessage(response);
   const cardTypes = getCardTypes(response);
   const usedTools = getUsedTools(response);
   const promptChips = getPromptChips(response);
+  const pendingActionType = getPendingActionType(response);
   const responseMode = typeof response?.responseMode === "string" ? response.responseMode : "";
   const routingOnly = Boolean(caseDef.routingOnly);
 
@@ -804,6 +882,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     validateConversationProgression({ caseDef, message, usedTools, promptChips, failures });
     validateExpectedResponseText({ caseDef, response, message, failures });
   }
+  validateSavingsGoalCreationClaims({ caseDef, message, usedTools, cardTypes, failures });
 
   for (const toolName of asArray(caseDef.expectedTools)) {
     if (!usedTools.includes(toolName)) {
@@ -843,6 +922,10 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     failures.push(`expected responseMode ${caseDef.expectedResponseMode} but got ${responseMode || "none"}.`);
   }
 
+  if (caseDef.expectedPendingActionType && pendingActionType !== caseDef.expectedPendingActionType) {
+    failures.push(`expected pendingAction ${caseDef.expectedPendingActionType} but got ${pendingActionType || "none"}.`);
+  }
+
   for (const cardType of cardTypes) {
     if (!ALL_CARD_TYPES.includes(cardType)) {
       failures.push(`unknown card type returned: ${cardType}`);
@@ -856,6 +939,7 @@ export function evaluateAgentResponse({ caseDef, response, httpStatus = 200, htt
     responseMode,
     usedTools,
     cardTypes,
+    pendingActionType,
     promptChips: promptChips.map((chip) => ({
       id: chip?.id,
       label: chip?.label,
@@ -873,6 +957,7 @@ function buildRequestBody(caseDef, conversationId) {
     selectedPromptChipId: caseDef.selectedPromptChipId,
     history: caseDef.history ?? [],
     conversationState: {
+      ...providedState,
       shownCards:
         providedState.shownCards ??
         (caseDef.recentCardTypes ?? []).map((type) => ({
@@ -955,6 +1040,7 @@ export async function runAgentEval({
           headers: {
             "Content-Type": "application/json",
             ...headers,
+            ...(caseDef.headers ?? {}),
             ...(variant ? { "x-pip-agent-variant": variant } : {}),
           },
           body: JSON.stringify(requestBody),

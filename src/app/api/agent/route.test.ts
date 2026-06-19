@@ -251,6 +251,11 @@ describe("POST /api/agent", () => {
             },
           ],
           lastToolNames: ["get_pip_cash_drivers"],
+          pendingAction: {
+            type: "create_savings_goal",
+            name: "Japan trip",
+            missing: ["target_amount"],
+          },
         },
       }),
     );
@@ -276,6 +281,11 @@ describe("POST /api/agent", () => {
             },
           ],
           lastToolNames: ["get_pip_cash_drivers"],
+          pendingAction: {
+            type: "create_savings_goal",
+            name: "Japan trip",
+            missing: ["target_amount"],
+          },
         },
       }),
     );
