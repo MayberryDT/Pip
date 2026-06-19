@@ -6,6 +6,7 @@ const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   getFinancialDataProvider: vi.fn(),
   getCurrentFinancialSnapshot: vi.fn(),
+  loadLatestAgentPendingAction: vi.fn(),
   loadRecentAgentChatHistory: vi.fn(),
   recordAgentChatTurnSafely: vi.fn(),
   recordProductEventSafely: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock("@/lib/data/product-events", async (importOriginal) => {
 });
 
 vi.mock("@/lib/data/agent-chat-turns", () => ({
+  loadLatestAgentPendingAction: routeMocks.loadLatestAgentPendingAction,
   loadRecentAgentChatHistory: routeMocks.loadRecentAgentChatHistory,
   recordAgentChatTurnSafely: routeMocks.recordAgentChatTurnSafely,
 }));
@@ -68,6 +70,7 @@ import {
 
 afterEach(() => {
   vi.clearAllMocks();
+  routeMocks.loadLatestAgentPendingAction.mockReset();
   routeMocks.loadRecentAgentChatHistory.mockReset();
   vi.unstubAllEnvs();
 });
@@ -402,6 +405,129 @@ describe("POST /api/agent", () => {
         features: {
           savingsGoals: true,
         },
+      }),
+    );
+  });
+
+  it("keeps the client-provided pending action when a saved pending action also exists", async () => {
+    enableSupabaseEnv();
+    vi.stubEnv("PIP_SAVINGS_GOALS_ENABLED", "true");
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.loadLatestAgentPendingAction.mockResolvedValue({
+      type: "set_savings_goal_protection",
+      name: "Emergency fund",
+      includeInSpendableCash: true,
+    });
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
+      usedTools: ["create_savings_goal"],
+      responseMode: "show_card",
+    }));
+    const clientPendingAction = {
+      type: "create_savings_goal" as const,
+      name: "Bali",
+      targetAmountCents: 500000,
+    };
+
+    const response = await POST(
+      jsonRequest({
+        message: "yes",
+        conversationId: "phone-conversation",
+        conversationState: {
+          pendingAction: clientPendingAction,
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.loadLatestAgentPendingAction).not.toHaveBeenCalled();
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationState: {
+          pendingAction: clientPendingAction,
+        },
+      }),
+    );
+  });
+
+  it("hydrates a saved pending action when the client has none", async () => {
+    enableSupabaseEnv();
+    vi.stubEnv("PIP_SAVINGS_GOALS_ENABLED", "true");
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.loadLatestAgentPendingAction.mockResolvedValue({
+      type: "create_savings_goal",
+      name: "Bali",
+      targetAmountCents: 500000,
+    });
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
+      usedTools: ["create_savings_goal"],
+      responseMode: "show_card",
+    }));
+
+    const response = await POST(
+      jsonRequest({
+        message: "yes",
+        conversationId: "phone-conversation",
+        conversationState: {
+          shownCards: [
+            {
+              type: "savings_goal_plan",
+              title: "Bali",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.loadLatestAgentPendingAction).toHaveBeenCalledWith(supabase, {
+      userId: "user-1",
+      conversationId: "phone-conversation",
+    });
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationState: {
+          shownCards: [
+            {
+              type: "savings_goal_plan",
+              title: "Bali",
+            },
+          ],
+          pendingAction: {
+            type: "create_savings_goal",
+            name: "Bali",
+            targetAmountCents: 500000,
+          },
+        },
+      }),
+    );
+  });
+
+  it("does not hydrate a pending action without user-backed Supabase context", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.loadLatestAgentPendingAction.mockResolvedValue({
+      type: "create_savings_goal",
+      name: "Bali",
+      targetAmountCents: 500000,
+    });
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse());
+
+    const response = await POST(
+      jsonRequest({
+        message: "yes",
+        conversationId: "phone-conversation",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.loadLatestAgentPendingAction).not.toHaveBeenCalled();
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationState: undefined,
       }),
     );
   });

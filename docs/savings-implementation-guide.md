@@ -1,6 +1,6 @@
 # Pip Savings Implementation Guide
 
-Last updated: June 18, 2026
+Last updated: June 19, 2026
 
 This guide replaces the current user-facing "cushion" framing with Monthly Savings and adds a staged Savings Goals MVP. It is optimized for local implementation in this repo with low migration risk, clear product truth, and verifiable behavior.
 
@@ -138,7 +138,30 @@ Production dogfood override:
 ```env
 PIP_SAVINGS_GOALS_ENABLED=true
 NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=true
+PIP_MONTHLY_SAVINGS_LABEL=Monthly Savings
 ```
+
+Production Savings Goals are enabled only when both flags are explicitly `true`:
+
+- `PIP_SAVINGS_GOALS_ENABLED=true` enables server routes, agent actions, and runtime checks.
+- `NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=true` enables the client bundle and visible app surfaces.
+
+Set the production values in Netlify with both build and runtime scope where needed:
+
+```bash
+netlify env:set PIP_SAVINGS_GOALS_ENABLED true --context production --scope builds functions runtime
+netlify env:set NEXT_PUBLIC_SAVINGS_GOALS_ENABLED true --context production --scope builds
+netlify env:set PIP_MONTHLY_SAVINGS_LABEL "Monthly Savings" --context production --scope builds functions runtime
+```
+
+Verify with `netlify env:list --json`, not `netlify env:get` alone. `env:get` can print text such as `No value set`; that output is not proof that a production value exists.
+
+```bash
+netlify env:list --json > /tmp/spendwithpip-netlify-env.json
+node scripts/check-deployment-env.mjs --mode=beta --require-savings-goals --netlify-env-json=/tmp/spendwithpip-netlify-env.json
+```
+
+The check must report both feature flags as missing unless each value is exactly `true`.
 
 Full-enabled behavior:
 

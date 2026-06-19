@@ -1,6 +1,7 @@
 import { appendFile, readFile } from "node:fs/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { AgentResponse } from "@/lib/agent/card-types";
+import type { AgentPendingAction, AgentResponse } from "@/lib/agent/card-types";
+import { pendingActionSchema } from "@/lib/agent/response-schema";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 type AgentChatTurnRow = Database["public"]["Tables"]["agent_chat_turns"]["Row"];
@@ -154,6 +155,50 @@ export async function loadRecentAgentChatHistory(
   return messages.slice(-8);
 }
 
+export async function loadLatestAgentPendingAction(
+  supabase: SupabaseClient<Database>,
+  input: {
+    userId: string;
+    conversationId: string;
+  },
+): Promise<AgentPendingAction | undefined> {
+  const { data, error } = await supabase
+    .from("agent_chat_turns")
+    .select("request_metadata, created_at")
+    .eq("user_id", input.userId)
+    .eq("conversation_id", input.conversationId)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    throw error;
+  }
+
+  for (const turn of data ?? []) {
+    const metadata = turn.request_metadata;
+
+    if (!isJsonObject(metadata)) {
+      continue;
+    }
+
+    if (!Object.prototype.hasOwnProperty.call(metadata, "responsePendingAction")) {
+      continue;
+    }
+
+    if (metadata.responsePendingAction === null) {
+      return undefined;
+    }
+
+    const parsed = pendingActionSchema.safeParse(metadata.responsePendingAction);
+
+    if (parsed.success) {
+      return parsed.data;
+    }
+  }
+
+  return undefined;
+}
+
 export async function loadLocalOperatorAgentChats(
   input: {
     limit?: number;
@@ -233,6 +278,14 @@ function buildRequestMetadata(input: AgentChatTurnInput): Json {
     metadata.guidanceValidationOutcome = guidance.validationOutcome;
     metadata.guidanceStance = guidance.stance ?? null;
     metadata.guidanceEvidenceIds = guidance.evidenceIds ?? [];
+  }
+
+  const pendingAction = pendingActionSchema.safeParse(input.response?.pendingAction);
+
+  if (pendingAction.success) {
+    metadata.responsePendingAction = pendingAction.data as unknown as Json;
+  } else if (input.response) {
+    metadata.responsePendingAction = null;
   }
 
   return metadata;

@@ -19,6 +19,7 @@ import { fakeSnapshot, getFakeSnapshot } from "@/lib/fake-data";
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 describe("runAIAgent", () => {
@@ -745,6 +746,62 @@ describe("runAIAgent", () => {
     expect(createSavingsGoal).not.toHaveBeenCalled();
   });
 
+  it("starts a Japan trip savings goal draft with typed missing fields", async () => {
+    const createSavingsGoal = vi.fn();
+
+    const response = await runAIAgent({
+      message: "I need to save for a trip to Japan",
+      features: {
+        savingsGoals: true,
+      },
+      actions: {
+        createSavingsGoal,
+      },
+    });
+
+    expect(createSavingsGoal).not.toHaveBeenCalled();
+    expect(response.usedTools).toEqual([]);
+    expect(response.responseMode).toBe("clarify");
+    expect(response.pendingAction).toMatchObject({
+      type: "create_savings_goal",
+      name: "Japan trip",
+      missing: ["target_amount"],
+    });
+    expect(response.message).toContain("Japan trip");
+    expect(response.message.toLowerCase()).not.toContain("cushion");
+  });
+
+  it("keeps explicit savings-goal follow-ups on the pending draft instead of other tools", async () => {
+    const createSavingsGoal = vi.fn();
+
+    const response = await runAIAgent({
+      message: "Set the savings goal",
+      features: {
+        savingsGoals: true,
+      },
+      conversationState: {
+        pendingAction: {
+          type: "create_savings_goal",
+          name: "Japan trip",
+          missing: ["target_amount"],
+        },
+      },
+      actions: {
+        createSavingsGoal,
+      },
+    });
+
+    expect(createSavingsGoal).not.toHaveBeenCalled();
+    expect(response.usedTools).toEqual([]);
+    expect(response.responseMode).toBe("clarify");
+    expect(response.pendingAction).toMatchObject({
+      type: "create_savings_goal",
+      name: "Japan trip",
+      missing: ["target_amount"],
+    });
+    expect(response.message).toContain("Japan trip");
+  });
+
   it("creates savings goals from amount-bearing natural prompts when actions are available", async () => {
     const createSavingsGoal = vi.fn().mockResolvedValue({
       ok: true,
@@ -924,6 +981,128 @@ describe("runAIAgent", () => {
     );
     expect(response.usedTools).toEqual(["create_savings_goal"]);
     expect(response.pendingAction).toBeUndefined();
+  });
+
+  it("uses an amount and date reply to complete a pending Japan savings goal", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-19T18:00:00.000Z"));
+
+    const createSavingsGoal = vi.fn().mockResolvedValue({
+      ok: true,
+      status: "savings_goal_created",
+      cards: [
+        {
+          type: "savings_goal_plan",
+          title: "Savings goal",
+          goalId: "goal-japan",
+          name: "Japan trip",
+          targetAmountCents: 300000,
+          currentAmountCents: 0,
+          remainingCents: 300000,
+          targetDate: "2026-12-01",
+          recommendedMonthlyContributionCents: 50000,
+          monthlyContributionCents: 0,
+          includeInSpendableCash: false,
+          summary: "$3,000 left for Japan trip.",
+        },
+      ],
+    });
+
+    const response = await runAIAgent({
+      message: "$3000 by December 1st",
+      features: {
+        savingsGoals: true,
+      },
+      conversationState: {
+        pendingAction: {
+          type: "create_savings_goal",
+          name: "Japan trip",
+          missing: ["target_amount"],
+        },
+      },
+      actions: {
+        createSavingsGoal,
+      },
+    });
+
+    expect(createSavingsGoal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Japan trip",
+        targetAmountCents: 300000,
+        targetDate: "2026-12-01",
+      }),
+    );
+    expect(response.usedTools).toEqual(["create_savings_goal"]);
+    expect(response.cards[0]).toMatchObject({
+      type: "savings_goal_plan",
+      name: "Japan trip",
+      targetDate: "2026-12-01",
+    });
+    expect(response.pendingAction).toBeUndefined();
+    expect(response.message.toLowerCase()).not.toContain("i've got");
+  });
+
+  it("uses saved savings-goal context for goal progress follow-ups without the model", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
+    const listSavingsGoals = vi.fn().mockResolvedValue({
+      ok: true,
+      status: "savings_goals_listed",
+      cards: [
+        {
+          type: "savings_goals_summary",
+          title: "Savings goals",
+          summary: "$3,000 left for Japan trip.",
+          activeGoalCount: 1,
+          protectedMonthlyContributionCents: 0,
+          goals: [
+            {
+              goalId: "goal-japan",
+              name: "Japan trip",
+              targetAmountCents: 300000,
+              currentAmountCents: 0,
+              remainingCents: 300000,
+              targetDate: "2026-12-01",
+              monthlyContributionCents: 0,
+              includeInSpendableCash: false,
+            },
+          ],
+        },
+      ],
+    });
+
+    const response = await runAIAgent({
+      message: "How much do I need to hit that goal?",
+      features: {
+        savingsGoals: true,
+      },
+      history: [
+        {
+          role: "user",
+          content: "$3000 by December 1st",
+        },
+        {
+          role: "assistant",
+          content: "I set up the savings goal plan for Japan trip.",
+        },
+      ],
+      actions: {
+        listSavingsGoals,
+      },
+    });
+
+    expect(listSavingsGoals).toHaveBeenCalledOnce();
+    expect(response.audit.usedModel).toBe(false);
+    expect(response.usedTools).toEqual(["list_savings_goals"]);
+    expect(response.cards[0]).toMatchObject({
+      type: "savings_goals_summary",
+      goals: [
+        expect.objectContaining({
+          name: "Japan trip",
+          remainingCents: 300000,
+        }),
+      ],
+    });
   });
 
   it("executes pending savings goal protection confirmations", async () => {

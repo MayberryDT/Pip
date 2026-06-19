@@ -572,7 +572,9 @@ function isSyncStatusPrompt(normalized: string): boolean {
 }
 
 function isTrustPolicyPrompt(normalized: string): boolean {
-  return /\b(move my money|transfer my money|sell my data|train on my data|training data|who can see my data|plaid|financial advice|ai calculate|pay my bill|can pip pay|passwords?|tokens?)\b/.test(normalized);
+  return /\b(move my money|transfer my money|sell my data|train on my data|training data|who can see my data|plaid|financial advice|ai calculate|pay my bill|can pip pay|passwords?|tokens?)\b/.test(normalized) ||
+    /\b(how much|price|pricing|cost)\b.{0,24}\bpip\b/.test(normalized) ||
+    /\bpip\b.{0,24}\b(price|pricing|cost)\b/.test(normalized);
 }
 
 function isSpendableDefinitionPrompt(normalized: string): boolean {
@@ -853,7 +855,9 @@ function getClarificationLabel(intentId: string): string {
 }
 
 function isPolicyQuestion(normalized: string): boolean {
-  return /\b(can pip move|move my money|financial advice|plaid|privacy|sell my data|ai calculate|training data)\b/.test(normalized);
+  return /\b(can pip move|move my money|financial advice|plaid|privacy|sell my data|ai calculate|training data)\b/.test(normalized) ||
+    /\b(how much|price|pricing|cost)\b.{0,24}\bpip\b/.test(normalized) ||
+    /\bpip\b.{0,24}\b(price|pricing|cost)\b/.test(normalized);
 }
 
 function stripUndefinedValues(input: Record<string, unknown>): Record<string, unknown> {

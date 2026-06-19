@@ -46,6 +46,13 @@ export type AgentClientAction =
       type: "none";
     };
 
+export type SavingsGoalPendingField =
+  | "target_amount"
+  | "target_date"
+  | "monthly_contribution"
+  | "protection_choice"
+  | "confirmation";
+
 export type AgentPendingAction =
   | {
       type: "create_savings_goal";
@@ -56,7 +63,7 @@ export type AgentPendingAction =
       currentAmountCents?: number;
       monthlyContributionCents?: number;
       includeInSpendableCash?: boolean;
-      missing?: Array<"target_amount">;
+      missing?: SavingsGoalPendingField[];
     }
   | {
       type: "set_savings_goal_protection";
@@ -64,7 +71,7 @@ export type AgentPendingAction =
       name?: string;
       includeInSpendableCash: boolean;
       monthlyContributionCents?: number;
-      missing?: Array<"goal">;
+      missing?: Array<"goal" | "monthly_contribution" | "protection_choice" | "confirmation">;
     };
 
 export type AgentCard =

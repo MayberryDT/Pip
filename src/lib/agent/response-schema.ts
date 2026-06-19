@@ -57,7 +57,10 @@ export const pendingActionSchema = z.discriminatedUnion("type", [
     currentAmountCents: z.number().int().min(0).max(100_000_000).optional(),
     monthlyContributionCents: z.number().int().min(0).max(100_000_000).optional(),
     includeInSpendableCash: z.boolean().optional(),
-    missing: z.array(z.literal("target_amount")).max(1).optional(),
+    missing: z
+      .array(z.enum(["target_amount", "target_date", "monthly_contribution", "protection_choice", "confirmation"]))
+      .max(5)
+      .optional(),
   }),
   z.object({
     type: z.literal("set_savings_goal_protection"),
@@ -65,7 +68,10 @@ export const pendingActionSchema = z.discriminatedUnion("type", [
     name: z.string().trim().min(1).max(80).optional(),
     includeInSpendableCash: z.boolean(),
     monthlyContributionCents: z.number().int().min(0).max(100_000_000).optional(),
-    missing: z.array(z.literal("goal")).max(1).optional(),
+    missing: z
+      .array(z.enum(["goal", "monthly_contribution", "protection_choice", "confirmation"]))
+      .max(4)
+      .optional(),
   }),
 ]);
 

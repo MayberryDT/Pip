@@ -8,7 +8,11 @@ import {
   getCurrentFinancialSnapshot,
   NoFinancialDataError,
 } from "@/lib/data/current-snapshot";
-import { loadRecentAgentChatHistory, recordAgentChatTurnSafely } from "@/lib/data/agent-chat-turns";
+import {
+  loadLatestAgentPendingAction,
+  loadRecentAgentChatHistory,
+  recordAgentChatTurnSafely,
+} from "@/lib/data/agent-chat-turns";
 import {
   type ConnectedAccountsResult,
   deleteCurrentUserFinancialData,
@@ -169,7 +173,10 @@ export async function POST(request: Request) {
     routeContext = await createRouteAgentContext({
       scenario: parsed.data.scenario,
     });
-    const historyPreparation = await prepareAgentHistory(parsed.data, routeContext, conversationId);
+    const [historyPreparation, conversationState] = await Promise.all([
+      prepareAgentHistory(parsed.data, routeContext, conversationId),
+      prepareAgentConversationState(parsed.data, routeContext, conversationId),
+    ]);
     const response = await runAIAgent(
       {
         message: parsed.data.message,
@@ -177,7 +184,7 @@ export async function POST(request: Request) {
         requestKind: parsed.data.requestKind,
         platform: getClientPipPlatform(request.headers.get("user-agent")),
         history: historyPreparation.history,
-        conversationState: parsed.data.conversationState,
+        conversationState,
         syncStatus: routeContext.syncStatus,
         onboardingState: routeContext.onboardingState,
         selectedPromptChipId: parsed.data.selectedPromptChipId,
@@ -274,6 +281,38 @@ async function prepareAgentHistory(
   ];
 
   return { history: merged.slice(-8) };
+}
+
+async function prepareAgentConversationState(
+  input: AgentRouteRequest,
+  routeContext: RouteAgentContext,
+  conversationId: string,
+): Promise<AgentRouteRequest["conversationState"]> {
+  if (
+    input.requestKind === "prompt_chips" ||
+    input.conversationState?.pendingAction ||
+    !routeContext.eventContext
+  ) {
+    return input.conversationState;
+  }
+
+  try {
+    const pendingAction = await loadLatestAgentPendingAction(routeContext.eventContext.supabase, {
+      userId: routeContext.eventContext.userId,
+      conversationId,
+    });
+
+    if (!pendingAction) {
+      return input.conversationState;
+    }
+
+    return {
+      ...(input.conversationState ?? {}),
+      pendingAction,
+    };
+  } catch {
+    return input.conversationState;
+  }
 }
 
 function getHistoryItemKey(item: { role: "user" | "assistant"; content: string }): string {

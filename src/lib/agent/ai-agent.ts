@@ -37,6 +37,7 @@ import {
   type PromptChipPlan,
 } from "@/lib/agent/prompt-chip-planner";
 import { buildFinancialGuidanceToolResult, runAgentTool } from "@/lib/agent/tool-runner";
+import { getCurrentAppDate } from "@/lib/date/app-date";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import { fakeSnapshot } from "@/lib/fake-data";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
@@ -542,15 +543,20 @@ async function createDeterministicSavingsGoalResponse(
   }
 
   const normalized = normalizePrompt(input.message);
+  const savingsGoalStatusFollowUp = isSavingsGoalStatusFollowUp(normalized, input.history);
 
-  if (!isSavingsGoalPrompt(normalized)) {
+  if (!isSavingsGoalPrompt(normalized) && !savingsGoalStatusFollowUp) {
     return null;
   }
 
-  const forcedTool = getSavingsGoalForcedTool(input.message, normalized, true);
+  const forcedTool = getSavingsGoalForcedTool(input.message, normalized, true, input.history);
 
   if (forcedTool?.toolName === "create_savings_goal" && input.actions?.createSavingsGoal) {
     return executeCreateSavingsGoal(input, forcedTool.args);
+  }
+
+  if (forcedTool?.toolName === "list_savings_goals" && input.actions?.listSavingsGoals) {
+    return executeListSavingsGoals(input);
   }
 
   if (
@@ -601,6 +607,7 @@ async function createPendingSavingsActionResponse(
   if (pendingAction.type === "create_savings_goal") {
     const targetAmountCents =
       pendingAction.targetAmountCents ?? extractSavingsGoalAmountCents(input.message);
+    const targetDate = pendingAction.targetDate ?? extractSavingsGoalTargetDate(input.message);
 
     if (!targetAmountCents) {
       if (isAffirmativeFollowUp(normalized) || pendingAction.missing?.includes("target_amount")) {
@@ -618,6 +625,7 @@ async function createPendingSavingsActionResponse(
       return executeCreateSavingsGoal(input, {
         ...pendingAction,
         target_amount_cents: targetAmountCents,
+        target_date: targetDate,
       });
     }
   }
@@ -728,6 +736,22 @@ async function executeSetSavingsGoalProtection(
   });
 }
 
+async function executeListSavingsGoals(input: RunAiAgentInput): Promise<AgentResponse | null> {
+  if (!input.actions?.listSavingsGoals) {
+    return null;
+  }
+
+  const result = await input.actions.listSavingsGoals();
+
+  return createActionBackedAgentResponse({
+    toolName: "list_savings_goals",
+    fallbackMessage: result.ok
+      ? "I pulled your savings goals."
+      : result.message ?? "I could not pull your savings goals yet.",
+    result,
+  });
+}
+
 function createActionBackedAgentResponse(input: {
   toolName: DeterministicAgentToolName;
   fallbackMessage: string;
@@ -795,6 +819,16 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     return promptChipTool;
   }
 
+  const normalized = normalizePrompt(input.message);
+
+  if (isPricingPolicyPrompt(normalized)) {
+    return {
+      toolName: "get_trust_policy",
+      args: {},
+      requireCard: false,
+    };
+  }
+
   if (getIntentRouterMode() !== "legacy") {
     const decision = resolveIntentRoute({
       message: input.message,
@@ -855,6 +889,7 @@ function getLegacyForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | und
     message,
     normalized,
     areSavingsGoalsEnabledForInput(input),
+    input.history,
   );
 
   if (savingsGoalTool) {
@@ -4469,20 +4504,24 @@ function getSavingsGoalForcedTool(
   message: string,
   normalized: string,
   savingsGoalsEnabled: boolean,
+  history?: AgentHistoryItem[],
 ): ForcedAgentTool | undefined {
   if (!savingsGoalsEnabled) {
     return undefined;
   }
 
-  if (!isSavingsGoalPrompt(normalized)) {
+  const goalStatusFollowUp = isSavingsGoalStatusFollowUp(normalized, history);
+
+  if (!isSavingsGoalPrompt(normalized) && !goalStatusFollowUp) {
     return undefined;
   }
 
   const targetAmountCents = extractSavingsGoalAmountCents(message);
+  const targetDate = extractSavingsGoalTargetDate(message);
   const monthlyContributionCents = extractMonthlyContributionCents(message);
   const name = inferSavingsGoalName(message, normalized);
 
-  if (isSavingsGoalListPrompt(normalized)) {
+  if (isSavingsGoalListPrompt(normalized) || goalStatusFollowUp) {
     return {
       toolName: "list_savings_goals",
       args: {},
@@ -4519,6 +4558,7 @@ function getSavingsGoalForcedTool(
       args: {
         name,
         target_amount_cents: targetAmountCents,
+        ...(targetDate === undefined ? {} : { target_date: targetDate }),
         ...(monthlyContributionCents === null ? {} : { monthly_contribution_cents: monthlyContributionCents }),
         include_in_spendable_cash:
           monthlyContributionCents !== null &&
@@ -4532,11 +4572,21 @@ function getSavingsGoalForcedTool(
 }
 
 function isSavingsGoalPrompt(normalized: string): boolean {
+  if (isGeneralSaveMoneyPrompt(normalized)) {
+    return false;
+  }
+
   return /\bsavings? goals?\b/.test(normalized) ||
     /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
     /\b(for|toward|towards)\b.{0,32}\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b/.test(normalized) ||
     /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized) ||
     /^(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)$/.test(normalized);
+}
+
+function isGeneralSaveMoneyPrompt(normalized: string): boolean {
+  return /\bsave\b.{0,24}\b(more\s+)?money\b/.test(normalized) ||
+    /\bsave\b.{0,16}\b(this week|today|cash)\b/.test(normalized) ||
+    /\bwhere can i save\b/.test(normalized);
 }
 
 function isSavingsGoalCreatePrompt(normalized: string): boolean {
@@ -4548,6 +4598,29 @@ function isSavingsGoalCreatePrompt(normalized: string): boolean {
 function isSavingsGoalListPrompt(normalized: string): boolean {
   return /\b(show|list|what|which|update|progress|how are)\b.{0,32}\bsavings? goals?\b/.test(normalized) ||
     /^savings? goals?$/.test(normalized);
+}
+
+function isSavingsGoalStatusFollowUp(
+  normalized: string,
+  history: AgentHistoryItem[] | undefined,
+): boolean {
+  if (!hasRecentSavingsGoalContext(history)) {
+    return false;
+  }
+
+  return /\bhow much\b.{0,48}\b(hit|reach|finish|complete|fund|save)\b.{0,24}\b(that|the|this|my)?\s*goals?\b/.test(normalized) ||
+    /\bwhat\b.{0,32}\b(left|remaining|needed|need)\b.{0,32}\b(that|the|this|my)?\s*goals?\b/.test(normalized) ||
+    /\b(that|the|this|my)\s+goals?\b.{0,48}\b(progress|left|remaining|needed|need|monthly|per month|on track)\b/.test(normalized);
+}
+
+function hasRecentSavingsGoalContext(history: AgentHistoryItem[] | undefined): boolean {
+  return (history ?? [])
+    .slice(-6)
+    .some((item) => {
+      const normalized = normalizePrompt(item.content);
+
+      return isSavingsGoalPrompt(normalized) || /\bsavings? goals?\b/.test(normalized);
+    });
 }
 
 function isSavingsGoalProtectionPrompt(normalized: string): boolean {
@@ -4587,9 +4660,14 @@ function isTrustPolicyPrompt(normalized: string): boolean {
     /\b(ai provider|ai model|openai|chatgpt|llm|train on|training data|model training|does ai|ai calculate|ai see|ai use)\b/.test(normalized) ||
     /\b(move (?:my |our |your )?money|transfer (?:my |our |your )?money|withdraw|make payments?|pay bills?|send money|take money|debit my account)\b/.test(normalized) ||
     /\b(security|privacy|sell my data|sell data|advertising|subprocessors?|data retention|retention|delete my data|delete data)\b/.test(normalized) ||
-    /\b(how much|what|price|pricing|cost)\b.{0,24}\bpip\b|\bpip\b.{0,24}\b(price|pricing|cost)\b/.test(normalized) ||
+    isPricingPolicyPrompt(normalized) ||
     /\b(financial advice|advisor|guarantee|guaranteed|legal entity|who operates|refund|trial|cancel subscription|subscription (?:billing|price|pricing|refund|trial|cancel|cancellation))\b/.test(normalized)
   );
+}
+
+function isPricingPolicyPrompt(normalized: string): boolean {
+  return /\b(how much|price|pricing|cost)\b.{0,24}\bpip\b/.test(normalized) ||
+    /\bpip\b.{0,24}\b(price|pricing|cost)\b/.test(normalized);
 }
 
 function isSyncStatusPrompt(normalized: string): boolean {
@@ -5135,6 +5213,89 @@ function extractMonthlyContributionCents(message: string): number | null {
   return null;
 }
 
+const monthNumberByName: Record<string, number> = {
+  jan: 1,
+  january: 1,
+  feb: 2,
+  february: 2,
+  mar: 3,
+  march: 3,
+  apr: 4,
+  april: 4,
+  may: 5,
+  jun: 6,
+  june: 6,
+  jul: 7,
+  july: 7,
+  aug: 8,
+  august: 8,
+  sep: 9,
+  sept: 9,
+  september: 9,
+  oct: 10,
+  october: 10,
+  nov: 11,
+  november: 11,
+  dec: 12,
+  december: 12,
+};
+
+function extractSavingsGoalTargetDate(message: string): string | undefined {
+  const monthNameMatch =
+    /\b(?:by|before|on|target(?: date)?(?: is)?|deadline(?: is)?)?\s*(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t|tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,\s*(\d{4}))?\b/i.exec(message);
+
+  if (monthNameMatch) {
+    return formatFutureSavingsGoalDate({
+      month: monthNumberByName[monthNameMatch[1].toLowerCase()],
+      day: Number(monthNameMatch[2]),
+      explicitYear: monthNameMatch[3] ? Number(monthNameMatch[3]) : undefined,
+    });
+  }
+
+  const slashDateMatch = /\b(?:by|before|on)?\s*(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(message);
+
+  if (slashDateMatch) {
+    const rawYear = slashDateMatch[3] ? Number(slashDateMatch[3]) : undefined;
+
+    return formatFutureSavingsGoalDate({
+      month: Number(slashDateMatch[1]),
+      day: Number(slashDateMatch[2]),
+      explicitYear: rawYear === undefined ? undefined : rawYear < 100 ? 2000 + rawYear : rawYear,
+    });
+  }
+
+  return undefined;
+}
+
+function formatFutureSavingsGoalDate(input: {
+  month: number;
+  day: number;
+  explicitYear?: number;
+}): string | undefined {
+  if (!isValidMonthDay(input.month, input.day)) {
+    return undefined;
+  }
+
+  const [currentYear, currentMonth, currentDay] = getCurrentAppDate().split("-").map(Number);
+  const year = input.explicitYear ?? (
+    input.month < currentMonth || (input.month === currentMonth && input.day < currentDay)
+      ? currentYear + 1
+      : currentYear
+  );
+
+  return `${year}-${String(input.month).padStart(2, "0")}-${String(input.day).padStart(2, "0")}`;
+}
+
+function isValidMonthDay(month: number, day: number): boolean {
+  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1) {
+    return false;
+  }
+
+  const maxDaysByMonth = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+
+  return day <= maxDaysByMonth[month - 1];
+}
+
 function extractMoneyAmountCandidates(message: string, maxCents: number) {
   const amountPattern =
     /(?:\$|usd\s*)\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)|(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)/gi;
@@ -5231,11 +5392,29 @@ function cleanSavingsGoalName(value: string): string {
     .replace(/\$\s*\d[\d,]*(?:\.\d{1,2})?/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  const trimmed = cleaned || "Savings goal";
+  const trimmed = normalizeSavingsGoalName(cleaned || "Savings goal");
 
   return trimmed
     .slice(0, 80)
     .replace(/^./, (char) => char.toUpperCase());
+}
+
+function normalizeSavingsGoalName(value: string): string {
+  const tripToMatch = /^trip to (.+)$/i.exec(value.trim());
+
+  if (tripToMatch?.[1]) {
+    return `${titleCaseSavingsGoalName(tripToMatch[1])} trip`;
+  }
+
+  return value;
+}
+
+function titleCaseSavingsGoalName(value: string): string {
+  return value
+    .trim()
+    .split(/\s+/)
+    .map((word) => word.replace(/^./, (char) => char.toUpperCase()))
+    .join(" ");
 }
 
 function scorePurchaseAmountCandidate(message: string, index: number): number {
