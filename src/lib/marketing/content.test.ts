@@ -17,13 +17,27 @@ describe("marketing content loader", () => {
   it("publishes the product article batch and excludes drafts", () => {
     const articles = getPublishedArticles();
 
-    expect(articles).toHaveLength(3);
+    expect(articles).toHaveLength(4);
     expect(articles.map((article) => article.slug)).toContain("meet-pip-cute-money-companion");
+    expect(articles.map((article) => article.slug)).toContain("how-much-can-i-spend-today");
     expect(articles.map((article) => article.slug)).not.toContain("why-pip-is-paid");
     expect(articles.map((article) => article.slug)).not.toContain(
       "how-to-stop-overspending-without-tracking-every-purchase",
     );
-    expect(articles.map((article) => article.slug)).not.toContain("how-much-can-i-spend-today");
+  });
+
+  it("maps priority answer queries to published answer pages", () => {
+    const publishedSlugs = new Set(getPublishedArticles().map((article) => article.slug));
+    const priorityQueryTargets = [
+      "what-is-spendable-cash-today",
+      "why-your-bank-balance-is-misleading",
+      "how-much-can-i-spend-today",
+      "meet-pip-cute-money-companion",
+    ];
+
+    for (const slug of priorityQueryTargets) {
+      expect(publishedSlugs.has(slug), slug).toBe(true);
+    }
   });
 
   it("selects a featured article and related articles from published content only", () => {
@@ -70,6 +84,7 @@ Body`),
       expect(article.bodyWordCount).toBeGreaterThanOrEqual(pillarArticleSlugs.has(article.slug) ? 900 : 700);
       expect(article.hasInlineCta).toBe(true);
       expect(article.headings.some((heading) => heading.level === 2 && heading.text !== "Quick answer")).toBe(true);
+      expect(article.headings.some((heading) => heading.level === 2 && heading.text === "Source notes")).toBe(true);
       expect(containsStaleLaunchLanguage(article.body), article.slug).toBe(false);
     }
   });

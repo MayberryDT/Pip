@@ -21,6 +21,7 @@
     "proof:in-app-browser": "node scripts/write-in-app-browser-proof.mjs",
     "deploy:netlify": "node scripts/safe-netlify-deploy.mjs",
     "eval:agent": "node scripts/eval-agent.mjs",
+    "eval:agent:major": "node scripts/eval-agent.mjs --suite major-capabilities",
     "eval:agent:routing": "node scripts/eval-agent.mjs --routing-only",
     "dogfood:router": "vitest run src/lib/agent/intent-router-dogfood.test.ts",
     "dogfood:router:live": "vite-node scripts/dogfood-agent-router.mjs",

@@ -94,6 +94,6 @@ That is why the public website needs to treat Pip as both charming and serious. 
 Get Pip and try the daily-number habit before the next spending decision.
 :::
 
-## Where to start
+## Source notes
 
 If you want the product definition, read [What is Spendable Cash Today?](/blog/what-is-spendable-cash-today). If you want the problem Pip is replacing, read [Why your bank balance is misleading](/blog/why-your-bank-balance-is-misleading). If you want the trust boundary before connecting accounts, read [Pip security details](/security).

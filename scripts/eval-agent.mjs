@@ -5,6 +5,12 @@ import { writeFileSync } from "node:fs";
 const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
 const DEFAULT_REPORT_PATH = "/tmp/pip-agent-eval-report.json";
 const DEFAULT_TIMEOUT_MS = 45_000;
+const MAJOR_CAPABILITY_SUITE = "major-capabilities";
+const EVALUATION_METHOD = "pass/fail per scenario with shared response-contract checks";
+const QUALITY_BAR = {
+  requiredPassRate: "12/12",
+  rerunPolicy: "fix root cause, rerun affected scenarios, then rerun complete suite",
+};
 
 const ALL_CARD_TYPES = [
   "pip_cash_explanation",
@@ -353,6 +359,110 @@ export const agentEvalCases = [
     message: "Should I open a balance transfer card?",
     expectNoCards: true,
     forbiddenCards: ["guidance_card", "purchase_simulation"],
+  },
+];
+
+export const majorCapabilityEvalCases = [
+  {
+    id: "major-guest-start",
+    capability: "Guest start and chat tone",
+    description: "A first-time user greeting should stay conversational without inventing a card.",
+    message: "hi",
+    expectNoCards: true,
+    expectedResponseMode: "chat_only",
+  },
+  {
+    id: "major-spendable-explanation",
+    capability: "Spendable Cash explanation",
+    description: "A why-this-number prompt should use deterministic drivers and show the explanation card.",
+    message: "Why this number?",
+    expectedTools: ["get_pip_cash_drivers"],
+    expectedCards: ["pip_cash_explanation"],
+  },
+  {
+    id: "major-spendable-math",
+    capability: "Calculation transparency",
+    description: "A math prompt should use deterministic math and show the calculation card.",
+    message: "Show the math",
+    expectedTools: ["get_pip_cash_math"],
+    expectedCards: ["math_breakdown"],
+  },
+  {
+    id: "major-recent-transactions",
+    capability: "Recent transaction read",
+    description: "A natural purchase-history prompt should show recent transactions.",
+    message: "What did I buy lately?",
+    expectedTools: ["get_recent_transactions"],
+    expectedCards: ["recent_transactions"],
+  },
+  {
+    id: "major-spending-breakdown",
+    capability: "Spending breakdown",
+    description: "A category prompt should show grouped spending facts.",
+    message: "Where is my money going by category?",
+    expectedTools: ["get_spending_breakdown"],
+    expectedCards: ["spending_breakdown"],
+  },
+  {
+    id: "major-recurring-activity",
+    capability: "Recurring bills and subscriptions",
+    description: "A subscription prompt should show recurring activity.",
+    message: "Do I have any subscriptions coming up?",
+    expectedTools: ["get_recurring_activity"],
+    expectedCards: ["recurring_activity"],
+  },
+  {
+    id: "major-forecast",
+    capability: "Spendable Cash forecast",
+    description: "Trend language should show the forecast card instead of making a card-less promise.",
+    message: "Show 7 day trend",
+    expectedTools: ["forecast_spendable_cash"],
+    expectedCards: ["spendable_cash_forecast"],
+  },
+  {
+    id: "major-purchase-test",
+    capability: "Purchase simulation",
+    description: "A specific spend question should simulate the purchase.",
+    message: "Can I spend $50?",
+    expectedTools: ["simulate_purchase", "get_financial_guidance_context"],
+    expectedCards: ["purchase_simulation"],
+  },
+  {
+    id: "major-cutback-opportunity",
+    capability: "Actionable guidance",
+    description: "A cutback prompt should use grounded spending opportunity logic.",
+    message: "Where am I overspending?",
+    scenario: "cutback-dining",
+    expectedTools: ["get_spending_opportunity"],
+    expectedCards: ["insight_card"],
+    forbiddenCards: ["guidance_card", "spending_breakdown", "recurring_activity", "purchase_simulation"],
+    forbidGenericCutbackAdvice: true,
+  },
+  {
+    id: "major-true-balances",
+    capability: "Actual balances",
+    description: "Bank-balance wording should show balances, not account-management setup.",
+    message: "Show my bank balance",
+    expectedTools: ["get_true_balances"],
+    expectedCards: ["true_balances"],
+    forbiddenTools: ["get_connected_accounts"],
+  },
+  {
+    id: "major-savings-goal-routing",
+    capability: "Savings goal setup",
+    description: "A concrete savings-goal request should route to savings-goal creation.",
+    message: "I want to save for a trip that costs $5,000",
+    expectedTools: ["create_savings_goal"],
+    routingOnly: true,
+  },
+  {
+    id: "major-delete-data-safety",
+    capability: "Privacy and destructive action safety",
+    description: "A delete-data request should ask for confirmation instead of deleting immediately.",
+    message: "Delete my data",
+    expectedTools: ["request_delete_data_confirmation"],
+    forbiddenTools: ["delete_user_data"],
+    routingOnly: true,
   },
 ];
 
@@ -794,6 +904,7 @@ export async function runAgentEval({
   baseUrl = process.env.PIP_AGENT_EVAL_BASE_URL || DEFAULT_BASE_URL,
   reportPath = process.env.PIP_AGENT_EVAL_REPORT || DEFAULT_REPORT_PATH,
   routingOnly = process.env.PIP_AGENT_EVAL_ROUTING_ONLY === "1",
+  suite = process.env.PIP_AGENT_EVAL_SUITE,
   cases,
   caseIds = process.env.PIP_AGENT_EVAL_CASE_IDS,
   fetchImpl = globalThis.fetch,
@@ -810,11 +921,12 @@ export async function runAgentEval({
 
   const startedAt = new Date().toISOString();
   const agentUrl = new URL("/api/agent", baseUrl).toString();
-  const casePool = cases ?? (routingOnly ? agentRoutingEvalCases : agentEvalCases);
+  const normalizedSuite = normalizeSuiteName(suite, routingOnly);
+  const casePool = cases ?? selectCasePool({ suite: normalizedSuite, routingOnly });
   const selectedCases = selectEvalCases(casePool, caseIds);
   const results = [];
 
-  log(`Running ${selectedCases.length} Pip agent eval cases${routingOnly ? " (routing only)" : ""} against ${agentUrl}`);
+  log(`Running ${selectedCases.length} Pip agent eval cases from ${normalizedSuite} against ${agentUrl}`);
 
   for (const caseDef of selectedCases) {
     const caseStart = Date.now();
@@ -856,12 +968,13 @@ export async function runAgentEval({
     const result = {
       id: caseDef.id,
       description: caseDef.description,
-      message: caseDef.message,
+      inputMessage: redactReport ? "[redacted]" : caseDef.message,
       scenario: requestBody.scenario,
       selectedPromptChipId: requestBody.selectedPromptChipId,
       httpStatus,
       durationMs: Date.now() - caseStart,
       ...reportEvaluation,
+      responseMessage: reportEvaluation.message,
       ...(includeRawResponse ? { rawResponse: payload } : {}),
     };
 
@@ -876,6 +989,9 @@ export async function runAgentEval({
     startedAt,
     baseUrl,
     agentUrl,
+    suite: normalizedSuite,
+    evaluationMethod: EVALUATION_METHOD,
+    qualityBar: QUALITY_BAR,
     caseCount: results.length,
     failureCount,
     routingOnly,
@@ -886,6 +1002,26 @@ export async function runAgentEval({
   log(`Wrote Pip agent eval report to ${reportPath}`);
 
   return report;
+}
+
+function normalizeSuiteName(suite, routingOnly) {
+  if (suite === MAJOR_CAPABILITY_SUITE) {
+    return MAJOR_CAPABILITY_SUITE;
+  }
+
+  if (suite && suite !== "default" && suite !== "routing") {
+    throw new Error(`Unknown eval suite: ${suite}`);
+  }
+
+  return routingOnly ? "routing" : "default";
+}
+
+function selectCasePool({ suite, routingOnly }) {
+  if (suite === MAJOR_CAPABILITY_SUITE) {
+    return majorCapabilityEvalCases;
+  }
+
+  return routingOnly ? agentRoutingEvalCases : agentEvalCases;
 }
 
 function selectEvalCases(cases, caseIds) {
@@ -920,9 +1056,7 @@ function redactEvaluationForReport(evaluation) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  runAgentEval({
-    routingOnly: process.argv.slice(2).includes("--routing-only") || process.env.PIP_AGENT_EVAL_ROUTING_ONLY === "1",
-  })
+  runAgentEval(parseCliArgs(process.argv.slice(2)))
     .then((report) => {
       process.exitCode = report.failureCount === 0 ? 0 : 1;
     })
@@ -930,4 +1064,49 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       console.error(error);
       process.exitCode = 1;
     });
+}
+
+function parseCliArgs(argv) {
+  const options = {
+    routingOnly: process.env.PIP_AGENT_EVAL_ROUTING_ONLY === "1",
+    suite: process.env.PIP_AGENT_EVAL_SUITE,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+    const next = argv[index + 1];
+
+    if (arg === "--routing-only") {
+      options.routingOnly = true;
+    } else if (arg === "--major-capabilities") {
+      options.suite = MAJOR_CAPABILITY_SUITE;
+    } else if (arg === "--suite" && next) {
+      options.suite = next;
+      index += 1;
+    } else if (arg.startsWith("--suite=")) {
+      options.suite = arg.slice("--suite=".length);
+    } else if (arg === "--help" || arg === "-h") {
+      printHelp();
+      process.exit(0);
+    } else {
+      throw new Error(`Unknown eval-agent option: ${arg}`);
+    }
+  }
+
+  return options;
+}
+
+function printHelp() {
+  console.log(`Pip agent eval harness
+
+Usage:
+  npm run eval:agent
+  npm run eval:agent -- --routing-only
+  npm run eval:agent:major
+
+Options:
+  --routing-only              Use the smaller routing-only pool
+  --suite major-capabilities  Run the 12-scenario major-capability suite
+  --major-capabilities        Alias for --suite major-capabilities
+`);
 }

@@ -29,6 +29,13 @@ Canonical public pages:
 - https://spendwithpip.com/privacy
 - https://spendwithpip.com/terms
 - https://spendwithpip.com/support
+- https://spendwithpip.com/delete-account
+
+Canonical answer pages:
+- https://spendwithpip.com/blog/what-is-spendable-cash-today
+- https://spendwithpip.com/blog/how-much-can-i-spend-today
+- https://spendwithpip.com/blog/why-your-bank-balance-is-misleading
+- https://spendwithpip.com/blog/meet-pip-cute-money-companion
 
 Important boundaries:
 - Pip is not a bank replacement.

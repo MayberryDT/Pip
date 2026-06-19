@@ -229,6 +229,7 @@ describe("marketing website pages", () => {
     expect(urls).toContain("https://spendwithpip.com/pricing");
     expect(urls).toContain("https://spendwithpip.com/delete-account");
     expect(urls).toContain("https://spendwithpip.com/blog/what-is-spendable-cash-today");
+    expect(urls).toContain("https://spendwithpip.com/blog/how-much-can-i-spend-today");
     expect(urls).not.toContain("https://spendwithpip.com/app");
     expect(urls).not.toContain("https://spendwithpip.com/blog/daily-spending-allowance-vs-budget");
   });
@@ -268,6 +269,8 @@ describe("marketing website pages", () => {
     expect(llms).toContain("$2.99/week");
     expect(llms).toContain("https://spendwithpip.com/how-the-number-works");
     expect(llms).toContain("https://spendwithpip.com/security");
+    expect(llms).toContain("https://spendwithpip.com/delete-account");
+    expect(llms).toContain("https://spendwithpip.com/blog/how-much-can-i-spend-today");
     expect(llms).toContain("Pip does not move money");
     expect(llms).toContain("AI explains and answers");
     expect(llms).not.toMatch(stalePublicMarketingPattern);

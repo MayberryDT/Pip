@@ -304,6 +304,12 @@ export async function runAIAgent(
     return deterministicTrustResponse;
   }
 
+  const deterministicUnavailableActionResponse = createDeterministicUnavailableActionResponse(input);
+
+  if (deterministicUnavailableActionResponse) {
+    return deterministicUnavailableActionResponse;
+  }
+
   if (!shouldUseModel()) {
     throw new AgentUnavailableError({
       code: "missing-openai-config",
@@ -424,6 +430,64 @@ function createDeterministicTrustResponse(input: RunAiAgentInput): AgentResponse
   }
 
   return null;
+}
+
+function createDeterministicUnavailableActionResponse(input: RunAiAgentInput): AgentResponse | null {
+  const forcedTool = getForcedAgentTool(input);
+
+  if (!forcedTool || !isSavingsGoalToolName(forcedTool.toolName)) {
+    return null;
+  }
+
+  if (hasSavingsGoalAction(input, forcedTool.toolName)) {
+    return null;
+  }
+
+  const onboardingState = input.onboardingState ?? {
+    status: "ready" as const,
+    hasFinancialData: false,
+  };
+  const message = onboardingState.status === "guest"
+    ? "I can help set that up after you sign in."
+    : onboardingState.status === "needs-consent"
+      ? "Finish setup first, then I can help with savings goals."
+      : "Savings goals are not available yet.";
+
+  return agentResponseSchema.parse({
+    message,
+    cards: [],
+    promptChips: getOnboardingPromptChips(onboardingState),
+    usedTools: [forcedTool.toolName],
+    responseMode: "chat_only",
+    audit: {
+      toolNames: [forcedTool.toolName],
+      usedModel: false,
+    },
+  });
+}
+
+function isSavingsGoalToolName(toolName: DeterministicAgentToolName): boolean {
+  return [
+    "create_savings_goal",
+    "list_savings_goals",
+    "update_savings_goal",
+    "set_savings_goal_protection",
+  ].includes(toolName);
+}
+
+function hasSavingsGoalAction(input: RunAiAgentInput, toolName: DeterministicAgentToolName): boolean {
+  switch (toolName) {
+    case "create_savings_goal":
+      return Boolean(input.actions?.createSavingsGoal);
+    case "list_savings_goals":
+      return Boolean(input.actions?.listSavingsGoals);
+    case "update_savings_goal":
+      return Boolean(input.actions?.updateSavingsGoal);
+    case "set_savings_goal_protection":
+      return Boolean(input.actions?.setSavingsGoalProtection);
+    default:
+      return false;
+  }
 }
 
 function createDeterministicTrustPromptChips(input: RunAiAgentInput): PromptChip[] {

@@ -92,6 +92,6 @@ This is intentionally smaller than a budget ritual. It should fit into the few s
 Get Pip and try Spendable Cash Today as your daily spending signal.
 :::
 
-## How to learn more
+## Source notes
 
 Read [Why your bank balance is misleading](/blog/why-your-bank-balance-is-misleading) if you want the problem behind the number. Read [Meet Pip](/blog/meet-pip-cute-money-companion) if you want to understand why the product wraps the signal in a softer companion. Read [Pip security details](/security) if you want the read-only data boundary.

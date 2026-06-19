@@ -13,6 +13,7 @@ describe("Pip agent eval harness", () => {
     };
 
     expect(packageJson.scripts["eval:agent"]).toBe("node scripts/eval-agent.mjs");
+    expect(packageJson.scripts["eval:agent:major"]).toBe("node scripts/eval-agent.mjs --suite major-capabilities");
   });
 
   it("keeps the router dogfood commands available as package scripts", () => {
@@ -454,6 +455,65 @@ describe("Pip agent eval harness", () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("can run the dedicated major-capability scenario suite", async () => {
+    const { majorCapabilityEvalCases, runAgentEval } = await loadEvalHarness();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-eval-"));
+    const reportPath = join(tempDir, "report.json");
+    const messages: string[] = [];
+
+    try {
+      const report = await runAgentEval({
+        baseUrl: "http://localhost:3999",
+        reportPath,
+        suite: "major-capabilities",
+        conversationPrefix: "test-eval",
+        log: () => undefined,
+        fetchImpl: async (_url: string, options: { body?: string }) => {
+          const body = JSON.parse(options.body ?? "{}") as { message: string };
+          messages.push(body.message);
+          const caseDef = majorCapabilityEvalCases.find((candidate) => candidate.message === body.message);
+          const cardTypes = caseDef?.expectedCards ?? (caseDef?.expectedAnyCards?.slice(0, 1) ?? []);
+
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              message: "I checked that for this scenario.",
+              responseMode: caseDef?.expectedResponseMode ?? (cardTypes.length > 0 ? "show_card" : "chat_only"),
+              usedTools: caseDef?.expectedTools ?? [],
+              cards: cardTypes.map((type) => ({ type, title: type })),
+              promptChips: [],
+            }),
+          };
+        },
+      });
+
+      expect(majorCapabilityEvalCases).toHaveLength(12);
+      expect(report.status).toBe("passed");
+      expect(report.failureCount).toBe(0);
+      expect(report.suite).toBe("major-capabilities");
+      expect(report.evaluationMethod).toBe("pass/fail per scenario with shared response-contract checks");
+      expect(messages).toEqual(majorCapabilityEvalCases.map((caseDef) => caseDef.message));
+
+      const writtenReport = JSON.parse(readFileSync(reportPath, "utf8"));
+      expect(writtenReport).toMatchObject({
+        suite: "major-capabilities",
+        caseCount: 12,
+        failureCount: 0,
+        qualityBar: {
+          requiredPassRate: "12/12",
+          rerunPolicy: "fix root cause, rerun affected scenarios, then rerun complete suite",
+        },
+      });
+      expect(writtenReport.cases[0]).toMatchObject({
+        inputMessage: majorCapabilityEvalCases[0].message,
+        responseMessage: "I checked that for this scenario.",
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
 
 async function loadEvalHarness() {
@@ -478,7 +538,16 @@ async function loadEvalHarness() {
       status: "passed" | "failed";
       failureCount: number;
       routingOnly?: boolean;
+      suite?: string;
+      evaluationMethod?: string;
       cases: Array<{ failures: string[] }>;
+    }>;
+    majorCapabilityEvalCases: Array<{
+      message: string;
+      expectedTools?: string[];
+      expectedCards?: string[];
+      expectedAnyCards?: string[];
+      expectedResponseMode?: string;
     }>;
   };
 }

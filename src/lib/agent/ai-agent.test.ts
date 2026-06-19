@@ -665,6 +665,25 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("keeps savings goal setup deterministic when no savings action is available", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
+
+    const response = await runAIAgent({
+      message: "I want to save for a trip that costs $5,000",
+      onboardingState: {
+        status: "guest",
+        hasFinancialData: false,
+      },
+    });
+
+    expect(response.usedTools).toEqual(["create_savings_goal"]);
+    expect(response.audit.usedModel).toBe(false);
+    expect(response.responseMode).toBe("chat_only");
+    expect(response.cards).toEqual([]);
+    expect(response.message.toLowerCase()).toContain("sign in");
+  });
+
   it("routes currentness prompts to the trust receipt", () => {
     for (const message of [
       "Is this number current?",
