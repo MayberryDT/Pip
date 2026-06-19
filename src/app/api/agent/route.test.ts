@@ -768,6 +768,24 @@ describe("POST /api/agent", () => {
     );
   });
 
+  it("passes selected quality variants into the agent", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse());
+
+    const response = await POST(jsonRequest(
+      { message: "hi" },
+      { "x-pip-agent-variant": "direct-answer" },
+    ));
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        qualityVariant: "direct-answer",
+      }),
+    );
+  });
+
   it("rejects oversized history before calling the model", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
 

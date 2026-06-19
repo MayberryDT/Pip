@@ -37,6 +37,19 @@ describe("runAIAgent", () => {
     expect(response.message.toLowerCase()).not.toContain("dashboard");
   });
 
+  it("forces model-labeled guidance greetings back to chat-only when no guidance surface exists", () => {
+    expect(
+      __agentTestHooks.selectFinalResponseMode({
+        requestKind: "chat",
+        parsedResponseMode: "guidance",
+        message: "hi",
+        cards: [],
+        usedTools: [],
+        forcedToolRequiresCard: false,
+      }),
+    ).toBe("chat_only");
+  });
+
   it("treats simple greetings as no-tool chat-only prompts", () => {
     expect(__agentTestHooks.isNoToolChatOnlyPrompt("hi")).toBe(true);
   });

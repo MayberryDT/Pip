@@ -39,6 +39,7 @@ import {
   type PipAgentOnboardingState,
   type PipAgentActionResult,
 } from "@/lib/agent/ai-agent";
+import { resolvePipAgentQualityVariant } from "@/lib/agent/quality-variants";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import {
   getDisplayedSpendableCashTodayCents,
@@ -178,6 +179,9 @@ export async function POST(request: Request) {
         syncStatus: routeContext.syncStatus,
         onboardingState: routeContext.onboardingState,
         selectedPromptChipId: parsed.data.selectedPromptChipId,
+        qualityVariant: resolvePipAgentQualityVariant(
+          request.headers.get("x-pip-agent-variant") || process.env.PIP_AGENT_VARIANT,
+        ),
         actions: routeContext.actions,
       },
     );

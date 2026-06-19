@@ -514,6 +514,87 @@ describe("Pip agent eval harness", () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it("can run the dedicated quality working suite and preserve quality metadata", async () => {
+    const { runAgentEval } = await loadEvalHarness();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-quality-"));
+    const reportPath = join(tempDir, "report.json");
+
+    try {
+      const report = await runAgentEval({
+        baseUrl: "http://localhost:3999",
+        reportPath,
+        suite: "quality-working",
+        caseIds: "quality-tone-1",
+        conversationPrefix: "quality-test",
+        includeRawResponse: false,
+        log: () => undefined,
+        fetchImpl: async () => ({
+          status: 200,
+          ok: true,
+          json: async () => ({
+            message: "Ask what changed or test a purchase.",
+            responseMode: "chat_only",
+            usedTools: [],
+            cards: [],
+            promptChips: [{ id: "ai-why", label: "What changed?", prompt: "What changed?" }],
+          }),
+        }),
+      });
+
+      expect(report.suite).toBe("quality-working");
+      expect(report.quality).toMatchObject({
+        averageScore: expect.any(Number),
+      });
+      expect(report.cases[0]).toMatchObject({
+        id: "quality-tone-1",
+        group: "tone",
+        quality: {
+          dimensions: ["directness", "brevity", "continuation"],
+        },
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("sends selected agent quality variants as request headers", async () => {
+    const { runAgentEval } = await loadEvalHarness();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-agent-quality-"));
+    const reportPath = join(tempDir, "report.json");
+    const headers: Array<Record<string, string>> = [];
+
+    try {
+      await runAgentEval({
+        baseUrl: "http://localhost:3999",
+        reportPath,
+        suite: "quality-working",
+        caseIds: "quality-tone-1",
+        variant: "direct-answer",
+        conversationPrefix: "quality-test",
+        log: () => undefined,
+        fetchImpl: async (_url: string, options: { headers?: Record<string, string> }) => {
+          headers.push(options.headers ?? {});
+
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              message: "Ask what changed.",
+              responseMode: "chat_only",
+              usedTools: [],
+              cards: [],
+              promptChips: [],
+            }),
+          };
+        },
+      });
+
+      expect(headers[0]["x-pip-agent-variant"]).toBe("direct-answer");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });
 
 async function loadEvalHarness() {

@@ -50,6 +50,10 @@ import type { SavingsGoalInput, SavingsGoalUpdate } from "@/lib/savings-goals/ty
 import { formatMoney, formatMoneyWithCents } from "@/lib/money";
 import type { PipPlatform } from "@/lib/platform/android-shell";
 import type { PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
+import {
+  getPipAgentQualityVariantInstructions,
+  type PipAgentQualityVariantId,
+} from "@/lib/agent/quality-variants";
 import { composeTrustPolicyAnswer, pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 import type { FinancialSnapshot } from "@/lib/types";
 
@@ -161,6 +165,7 @@ export type RunAiAgentInput = {
   platform?: PipPlatform;
   onboardingState?: PipAgentOnboardingState;
   selectedPromptChipId?: string;
+  qualityVariant?: PipAgentQualityVariantId;
   actions?: PipAgentActions;
 };
 
@@ -178,6 +183,7 @@ type PipAgentContext = {
   snapshot?: FinancialSnapshot;
   syncStatus?: SyncStatus | null;
   platform: PipPlatform;
+  qualityVariant: PipAgentQualityVariantId;
   onboardingState: PipAgentOnboardingState;
   actions?: PipAgentActions;
   conversationState: Required<AgentConversationState>;
@@ -2071,6 +2077,9 @@ function createPipInstructions(runContext: {
         "For chip prompts, write a direct user request. Do not start with Let's discuss unless there is no matching Pip card.",
       ].join("\n")
     : "";
+  const qualityVariantInstruction = getPipAgentQualityVariantInstructions(
+    runContext.context.qualityVariant,
+  );
 
   return [
     "You are Pip, a calm financial assistant for the Pip app.",
@@ -2175,6 +2184,7 @@ function createPipInstructions(runContext: {
     "Use protected setup chip ids only when the chip clearly starts that exact setup step: get-signed-up, connect-data, use-default-savings, set-250-savings.",
     "For normal suggested questions, use ids that start with ai-.",
     "Return only structured output matching the schema, including promptChips.",
+    qualityVariantInstruction,
     promptChipRefreshInstruction,
     repairInstruction,
     `forced_tool_name: ${runContext.context.forcedTool?.toolName ?? "none"}`,
@@ -2262,6 +2272,7 @@ function createPipContext(
     snapshot,
     syncStatus: input.syncStatus ?? null,
     platform: input.platform ?? "web",
+    qualityVariant: input.qualityVariant ?? "champion",
     onboardingState: {
       ...onboardingState,
       hasFinancialData: Boolean(snapshot),
@@ -2438,28 +2449,14 @@ function buildAgentResponse(
     usedTools,
   });
   const promptChips = promptChipPlan.chips;
-  const hasGuidanceResponse =
-    parsed.responseMode === "guidance" ||
-    cards.some((card) => card.type === "guidance_card") ||
-    usedTools.includes("get_financial_guidance_context");
-  const hasNoToolChatOnlyPrompt =
-    cards.length === 0 &&
-    usedTools.length === 0 &&
-    isNoToolChatOnlyPrompt(input.message);
-  const responseMode =
-    input.requestKind === "prompt_chips"
-      ? "chat_only"
-      : hasGuidanceResponse
-        ? "guidance"
-        : hasNoToolChatOnlyPrompt
-          ? "chat_only"
-        : cards.length === 0 && parsed.responseMode === "show_card"
-          ? usedTools.length > 0
-            ? "update_context"
-            : "chat_only"
-          : cards.length > 0 && context.forcedTool?.requireCard
-            ? "show_card"
-            : parsed.responseMode;
+  const responseMode = selectFinalResponseMode({
+    requestKind: input.requestKind,
+    parsedResponseMode: parsed.responseMode,
+    message: input.message,
+    cards,
+    usedTools,
+    forcedToolRequiresCard: Boolean(context.forcedTool?.requireCard),
+  });
 
   if (input.requestKind === "prompt_chips" && promptChips.length < 3) {
     throw new AgentUnavailableError({
@@ -2517,6 +2514,49 @@ function buildAgentResponse(
       },
     },
   });
+}
+
+function selectFinalResponseMode(input: {
+  requestKind?: RunAiAgentInput["requestKind"];
+  parsedResponseMode: AgentResponse["responseMode"];
+  message: string;
+  cards: AgentCard[];
+  usedTools: string[];
+  forcedToolRequiresCard: boolean;
+}): AgentResponse["responseMode"] {
+  const hasGuidanceSurface =
+    input.cards.some((card) => card.type === "guidance_card") ||
+    input.usedTools.includes("get_financial_guidance_context");
+
+  if (input.requestKind === "prompt_chips") {
+    return "chat_only";
+  }
+
+  if (
+    input.cards.length === 0 &&
+    input.usedTools.length === 0 &&
+    isNoToolChatOnlyPrompt(input.message)
+  ) {
+    return "chat_only";
+  }
+
+  if (hasGuidanceSurface) {
+    return "guidance";
+  }
+
+  if (input.parsedResponseMode === "guidance") {
+    return input.cards.length > 0 ? "show_card" : "chat_only";
+  }
+
+  if (input.cards.length === 0 && input.parsedResponseMode === "show_card") {
+    return input.usedTools.length > 0 ? "update_context" : "chat_only";
+  }
+
+  if (input.cards.length > 0 && input.forcedToolRequiresCard) {
+    return "show_card";
+  }
+
+  return input.parsedResponseMode;
 }
 
 function parseAgentFinalOutput(
@@ -5118,5 +5158,6 @@ export const __agentTestHooks = {
   normalizeAgentFinalOutput,
   repairUnsupportedCardPromises,
   selectGuidanceCard,
+  selectFinalResponseMode,
   selectPromptChips,
 };

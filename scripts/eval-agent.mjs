@@ -1,11 +1,18 @@
 #!/usr/bin/env node
 
 import { writeFileSync } from "node:fs";
+import { attachQualityScores } from "./agent-quality-scorer.mjs";
+import {
+  qualityHoldoutCases,
+  qualityWorkingCases,
+} from "../tests/fixtures/agent-quality/champion-challenger-cases.mjs";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
 const DEFAULT_REPORT_PATH = "/tmp/pip-agent-eval-report.json";
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MAJOR_CAPABILITY_SUITE = "major-capabilities";
+const QUALITY_WORKING_SUITE = "quality-working";
+const QUALITY_HOLDOUT_SUITE = "quality-holdout";
 const EVALUATION_METHOD = "pass/fail per scenario with shared response-contract checks";
 const QUALITY_BAR = {
   requiredPassRate: "12/12",
@@ -909,6 +916,7 @@ export async function runAgentEval({
   caseIds = process.env.PIP_AGENT_EVAL_CASE_IDS,
   fetchImpl = globalThis.fetch,
   headers = {},
+  variant = process.env.PIP_AGENT_EVAL_VARIANT,
   includeRawResponse = process.env.PIP_AGENT_EVAL_INCLUDE_RAW !== "0",
   redactReport = false,
   timeoutMs = Number(process.env.PIP_AGENT_EVAL_TIMEOUT_MS || DEFAULT_TIMEOUT_MS),
@@ -944,7 +952,11 @@ export async function runAgentEval({
         agentUrl,
         {
           method: "POST",
-          headers: { "Content-Type": "application/json", ...headers },
+          headers: {
+            "Content-Type": "application/json",
+            ...headers,
+            ...(variant ? { "x-pip-agent-variant": variant } : {}),
+          },
           body: JSON.stringify(requestBody),
         },
         timeoutMs,
@@ -969,6 +981,8 @@ export async function runAgentEval({
       id: caseDef.id,
       description: caseDef.description,
       inputMessage: redactReport ? "[redacted]" : caseDef.message,
+      group: caseDef.group,
+      quality: caseDef.quality,
       scenario: requestBody.scenario,
       selectedPromptChipId: requestBody.selectedPromptChipId,
       httpStatus,
@@ -992,16 +1006,20 @@ export async function runAgentEval({
     suite: normalizedSuite,
     evaluationMethod: EVALUATION_METHOD,
     qualityBar: QUALITY_BAR,
+    variant: variant || "champion",
     caseCount: results.length,
     failureCount,
     routingOnly,
     cases: results,
   };
+  const finalReport = isQualitySuite(normalizedSuite)
+    ? attachQualityScores({ report, casePool: selectedCases })
+    : report;
 
-  writeFileSync(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+  writeFileSync(reportPath, `${JSON.stringify(finalReport, null, 2)}\n`);
   log(`Wrote Pip agent eval report to ${reportPath}`);
 
-  return report;
+  return finalReport;
 }
 
 function normalizeSuiteName(suite, routingOnly) {
@@ -1009,7 +1027,11 @@ function normalizeSuiteName(suite, routingOnly) {
     return MAJOR_CAPABILITY_SUITE;
   }
 
-  if (suite && suite !== "default" && suite !== "routing") {
+  if (suite === QUALITY_WORKING_SUITE || suite === QUALITY_HOLDOUT_SUITE) {
+    return suite;
+  }
+
+  if (suite && suite !== "default" && suite !== "routing" && !isQualitySuite(suite)) {
     throw new Error(`Unknown eval suite: ${suite}`);
   }
 
@@ -1021,7 +1043,19 @@ function selectCasePool({ suite, routingOnly }) {
     return majorCapabilityEvalCases;
   }
 
+  if (suite === QUALITY_WORKING_SUITE) {
+    return qualityWorkingCases;
+  }
+
+  if (suite === QUALITY_HOLDOUT_SUITE) {
+    return qualityHoldoutCases;
+  }
+
   return routingOnly ? agentRoutingEvalCases : agentEvalCases;
+}
+
+function isQualitySuite(suite) {
+  return suite === QUALITY_WORKING_SUITE || suite === QUALITY_HOLDOUT_SUITE;
 }
 
 function selectEvalCases(cases, caseIds) {
@@ -1070,6 +1104,7 @@ function parseCliArgs(argv) {
   const options = {
     routingOnly: process.env.PIP_AGENT_EVAL_ROUTING_ONLY === "1",
     suite: process.env.PIP_AGENT_EVAL_SUITE,
+    variant: process.env.PIP_AGENT_EVAL_VARIANT,
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -1085,6 +1120,11 @@ function parseCliArgs(argv) {
       index += 1;
     } else if (arg.startsWith("--suite=")) {
       options.suite = arg.slice("--suite=".length);
+    } else if (arg === "--variant" && next) {
+      options.variant = next;
+      index += 1;
+    } else if (arg.startsWith("--variant=")) {
+      options.variant = arg.slice("--variant=".length);
     } else if (arg === "--help" || arg === "-h") {
       printHelp();
       process.exit(0);
@@ -1103,10 +1143,14 @@ Usage:
   npm run eval:agent
   npm run eval:agent -- --routing-only
   npm run eval:agent:major
+  npm run eval:agent -- --suite quality-working --variant direct-answer
 
 Options:
   --routing-only              Use the smaller routing-only pool
   --suite major-capabilities  Run the 12-scenario major-capability suite
+  --suite quality-working     Run the quality working-set suite
+  --suite quality-holdout     Run the quality holdout suite
   --major-capabilities        Alias for --suite major-capabilities
+  --variant ID                Send x-pip-agent-variant for challenger evaluation
 `);
 }
