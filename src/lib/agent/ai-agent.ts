@@ -25,9 +25,7 @@ import {
 } from "@/lib/agent/response-schema";
 import {
   getOnboardingPromptChips,
-  getReadyPromptChipExamples,
   getSuggestedPrompts,
-  isRetiredDefaultPromptChip,
 } from "@/lib/agent/suggested-prompts";
 import {
   composeAgentVisibleAnswer,
@@ -39,9 +37,9 @@ import {
   resolveIntentRoute,
 } from "@/lib/agent/intent-router";
 import {
-  planPromptChips,
-  type PromptChipPlan,
-} from "@/lib/agent/prompt-chip-planner";
+  getAvailablePromptChips,
+  selectPromptChips,
+} from "@/lib/agent/prompt-chip-selection";
 import { buildFinancialGuidanceToolResult, runAgentTool } from "@/lib/agent/tool-runner";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import { fakeSnapshot } from "@/lib/fake-data";
@@ -308,6 +306,12 @@ export async function runAIAgent(
     return deterministicNoToolResponse;
   }
 
+  const deterministicPromptChipRefreshResponse = createDeterministicPromptChipRefreshResponse(input);
+
+  if (deterministicPromptChipRefreshResponse) {
+    return deterministicPromptChipRefreshResponse;
+  }
+
   if (runtime) {
     return runtime.run(input);
   }
@@ -399,6 +403,61 @@ export async function runAIAgent(
   throw lastError ?? new AgentUnavailableError({
     code: "openai-request-failed",
     message: "AI request failed.",
+  });
+}
+
+function createDeterministicPromptChipRefreshResponse(input: RunAiAgentInput): AgentResponse | null {
+  if (input.requestKind !== "prompt_chips") {
+    return null;
+  }
+
+  const context = createPipContext(input);
+  const result = context.snapshot ? calculatePipCash(context.snapshot) : null;
+  const promptChipPlan = selectPromptChips(
+    {
+      message: "Ready.",
+      promptChips: [],
+    },
+    context,
+    result,
+    {
+      input,
+      cards: [],
+      usedTools: [],
+      isSupportedCardPrompt,
+    },
+  );
+
+  if (promptChipPlan.chips.length < 3) {
+    throw new AgentUnavailableError({
+      code: "prompt-chip-refresh-unavailable",
+      message: "Prompt chip refresh did not produce enough chips.",
+      status: 502,
+      detail: "Prompt chip refresh must include three prompt chips.",
+    });
+  }
+
+  return agentResponseSchema.parse({
+    message: "Ready.",
+    cards: [],
+    promptChips: promptChipPlan.chips,
+    usedTools: [],
+    responseMode: "chat_only",
+    audit: {
+      toolNames: [],
+      usedModel: false,
+      quality: {
+        conversationJob: promptChipPlan.conversationJob,
+        answerPatternId: "prompt-chip-refresh",
+        chipFamilyIds: promptChipPlan.familyIds,
+        repeatedJob: promptChipPlan.repeatedJob,
+        repeatedTool: promptChipPlan.repeatedTool,
+        repeatedCard: promptChipPlan.repeatedCard,
+        repeatedMessage: false,
+        repetitionAdjusted: false,
+        chipFallbackReason: promptChipPlan.fallbackReason,
+      },
+    },
   });
 }
 
@@ -2930,6 +2989,7 @@ function buildAgentResponse(
     input,
     cards,
     usedTools,
+    isSupportedCardPrompt,
   });
   const promptChips = promptChipPlan.chips;
   const responseMode = selectFinalResponseMode({
@@ -3666,203 +3726,6 @@ function buildGuidanceAudit(
   };
 }
 
-function selectPromptChips(
-  parsed: AgentFinalOutput,
-  context: PipAgentContext,
-  result: ReturnType<typeof calculatePipCash> | null,
-  options: {
-    input: RunAiAgentInput;
-    cards: AgentCard[];
-    usedTools: string[];
-  },
-) : PromptChipPlan {
-  const generated = sanitizeGeneratedPromptChips(parsed.promptChips, context);
-  const fallback = result ? [] : getOnboardingPromptChips(context.onboardingState);
-
-  if (!result) {
-    return {
-      chips: mergeGeneratedPromptChips(generated, fallback),
-      conversationJob: "setup",
-      familyIds: [],
-      repeatedJob: false,
-      repeatedTool: false,
-      repeatedCard: false,
-      fallbackReason: generated.length > 0 ? "generated-supplement" : "none",
-    };
-  }
-
-  return planPromptChips({
-    result,
-    message: options.input.message,
-    history: options.input.history,
-    shownCards: context.conversationState.shownCards,
-    lastToolNames: context.conversationState.lastToolNames,
-    promptChips: context.conversationState.promptChips,
-    responseCards: options.cards,
-    responseToolNames: options.usedTools,
-    selectedPromptChipId: options.input.selectedPromptChipId,
-    syncStatus: context.syncStatus,
-    assistantMessage: [parsed.message, parsed.support].filter(Boolean).join(" "),
-    onboardingState: context.onboardingState,
-    generatedChips: generated,
-  });
-}
-
-function mergeGeneratedPromptChips(
-  generated: PromptChip[],
-  fallback: PromptChip[],
-): PromptChip[] {
-  const merged: PromptChip[] = [];
-  const seenPrompts = new Set<string>();
-
-  [...generated, ...fallback].forEach((chip) => {
-    const key = normalizePrompt(chip.prompt);
-
-    if (seenPrompts.has(key)) {
-      return;
-    }
-
-    seenPrompts.add(key);
-    merged.push(chip);
-  });
-
-  return merged.slice(0, 3);
-}
-
-function sanitizeGeneratedPromptChips(
-  chips: PromptChip[],
-  context: PipAgentContext,
-): PromptChip[] {
-  const seenIds = new Set<string>();
-  const seenPrompts = new Set<string>();
-  const recentTexts = new Set(
-    context.conversationState.promptChips.flatMap((chip) => [
-      normalizePrompt(chip.label),
-      normalizePrompt(chip.prompt),
-    ]),
-  );
-  const sanitized: PromptChip[] = [];
-  const recentFallback: PromptChip[] = [];
-
-  chips.forEach((chip, index) => {
-    const next = sanitizeGeneratedPromptChip(chip, context, index);
-
-    if (!next) {
-      return;
-    }
-
-    const promptKey = normalizePrompt(next.prompt);
-    const labelKey = normalizePrompt(next.label);
-    let id = next.id;
-
-    if (seenPrompts.has(promptKey)) {
-      return;
-    }
-
-    if (seenIds.has(id)) {
-      id = withPromptChipIdSuffix(id, index);
-    }
-
-    seenIds.add(id);
-    seenPrompts.add(promptKey);
-    const sanitizedChip = {
-      ...next,
-      id,
-    };
-
-    if (recentTexts.has(promptKey) || recentTexts.has(labelKey)) {
-      if (context.requestKind === "prompt_chips") {
-        recentFallback.push(sanitizedChip);
-      }
-
-      return;
-    }
-
-    sanitized.push(sanitizedChip);
-  });
-
-  if (context.requestKind === "prompt_chips") {
-    return [...sanitized, ...recentFallback].slice(0, 3);
-  }
-
-  return sanitized.slice(0, 3);
-}
-
-function sanitizeGeneratedPromptChip(
-  chip: PromptChip,
-  context: PipAgentContext,
-  index: number,
-): PromptChip | null {
-  const label = cleanPromptChipText(chip.label, 56);
-  const prompt = cleanPromptChipText(chip.prompt, 160);
-
-  if (!label || !prompt) {
-    return null;
-  }
-
-  if (isRetiredDefaultPromptChip({ label, prompt })) {
-    return null;
-  }
-
-  if (containsDisallowedFinalLanguage(`${label} ${prompt}`)) {
-    return null;
-  }
-
-  const capabilitySafeChip = sanitizePromptChipCapability({ label, prompt }, context);
-
-  if (!capabilitySafeChip) {
-    return null;
-  }
-
-  if (/^discuss\b/i.test(capabilitySafeChip.label)) {
-    return null;
-  }
-
-  const requestedId = normalizePromptChipId(chip.id);
-  const privilegedId = getPermittedPrivilegedPromptChipId(
-    requestedId,
-    context,
-    `${capabilitySafeChip.label} ${capabilitySafeChip.prompt}`,
-  );
-  const id = privilegedId ?? createGeneratedPromptChipId(
-    requestedId,
-    capabilitySafeChip.label,
-    capabilitySafeChip.prompt,
-    index,
-  );
-
-  return {
-    id,
-    label: capabilitySafeChip.label,
-    prompt: capabilitySafeChip.prompt,
-  };
-}
-
-function sanitizePromptChipCapability(
-  chip: Pick<PromptChip, "label" | "prompt">,
-  context: PipAgentContext,
-): Pick<PromptChip, "label" | "prompt"> | null {
-  const text = normalizePrompt(`${chip.label} ${chip.prompt}`);
-
-  if (!hasPromptChipDisplayVerb(text)) {
-    return chip;
-  }
-
-  if (!context.snapshot) {
-    return null;
-  }
-
-  if (isSupportedCardPrompt(text)) {
-    return chip;
-  }
-
-  return downgradePromptChipToDiscussion(chip);
-}
-
-function hasPromptChipDisplayVerb(normalized: string): boolean {
-  return /\b(show|see|list|pull|view|forecast|breakdown|trend view)\b/.test(normalized);
-}
-
 function isSupportedCardPrompt(normalized: string): boolean {
   if (isCatalogSupportedCardPrompt(normalized)) {
     return true;
@@ -3884,112 +3747,6 @@ function isSupportedCardPrompt(normalized: string): boolean {
     isDataQualityPrompt(normalized) ||
     (isSpecificSpendSimulationPrompt(normalized) && extractExplicitPurchaseAmountCents(normalized) !== null)
   );
-}
-
-function downgradePromptChipToDiscussion(
-  chip: Pick<PromptChip, "label" | "prompt">,
-): Pick<PromptChip, "label" | "prompt"> {
-  const subject = chip.label
-    .replace(/^(show|see|list|pull|view|forecast|break down|breakdown)\s+/i, "")
-    .replace(/\b(cards?|view)\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const discussionSubject = /^compare$/i.test(subject) ? "credit card options" : subject;
-  const label = cleanPromptChipText(`Discuss ${discussionSubject || "this"}`, 36);
-  const promptBase = chip.prompt
-    .replace(/^(i want to|i'd like to|can you|could you|please)\s+/i, "")
-    .replace(/^(show|see|list|pull|view|forecast|break down|breakdown)\s+(me\s+)?/i, "Let's discuss ")
-    .replace(/\bcard options\b/gi, "credit card options")
-    .replace(/\bcard use\b/gi, "credit card use")
-    .replace(/\bcard usage\b/gi, "credit card usage")
-    .replace(/\bcards\b/gi, "credit cards");
-  const prompt = cleanPromptChipText(promptBase, 160);
-
-  return {
-    label,
-    prompt: /^let'?s discuss/i.test(prompt) ? prompt : `Let's discuss ${prompt}`,
-  };
-}
-
-function getPermittedPrivilegedPromptChipId(
-  id: string,
-  context: PipAgentContext,
-  visibleText: string,
-): string | null {
-  const normalized = visibleText.toLowerCase();
-
-  if (id === "get-signed-up") {
-    return context.onboardingState.status === "guest" &&
-      /\b(sign|signed|google|start|continue)\b/.test(normalized)
-      ? id
-      : null;
-  }
-
-  if (id === "connect-data") {
-    return !context.snapshot &&
-      context.onboardingState.status !== "needs-consent" &&
-      /\b(connect|data|account|plaid)\b/.test(normalized)
-      ? id
-      : null;
-  }
-
-  if (id === "use-default-savings") {
-    return context.onboardingState.status === "needs-consent" &&
-      /\b(200|default|continue|ok|yes)\b/.test(normalized)
-      ? id
-      : null;
-  }
-
-  if (id === "set-250-savings") {
-    return context.onboardingState.status === "needs-consent" && /\b250\b/.test(normalized)
-      ? id
-      : null;
-  }
-
-  return null;
-}
-
-function cleanPromptChipText(text: string, maxLength: number): string {
-  return text.replace(/\s+/g, " ").trim().slice(0, maxLength).trim();
-}
-
-function normalizePromptChipId(id: string): string {
-  return id
-    .toLowerCase()
-    .replace(/[^a-z0-9._:-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
-
-function createGeneratedPromptChipId(
-  requestedId: string,
-  label: string,
-  prompt: string,
-  index: number,
-): string {
-  if (requestedId.startsWith("ai-")) {
-    return requestedId;
-  }
-
-  const slug = normalizePromptChipId(`${label}-${prompt}`).replace(/^ai-/, "").slice(0, 60);
-
-  return `ai-${slug || `suggestion-${index + 1}`}`.slice(0, 80);
-}
-
-function withPromptChipIdSuffix(id: string, index: number): string {
-  const suffix = `-${index + 1}`;
-  return `${id.slice(0, 80 - suffix.length)}${suffix}`;
-}
-
-function getAvailablePromptChips(input: {
-  snapshot?: FinancialSnapshot;
-  onboardingState: PipAgentOnboardingState;
-}): PromptChip[] {
-  if (input.snapshot) {
-    return getReadyPromptChipExamples();
-  }
-
-  return getOnboardingPromptChips(input.onboardingState);
 }
 
 function toAgentUnavailableError(error: unknown): AgentUnavailableError {
@@ -5121,5 +4878,13 @@ export const __agentTestHooks = {
   selectGuidanceCard,
   selectFinalResponseMode,
   selectVisibleModelOutput,
-  selectPromptChips,
+  selectPromptChips: (
+    parsed: Parameters<typeof selectPromptChips>[0],
+    context: Parameters<typeof selectPromptChips>[1],
+    result: Parameters<typeof selectPromptChips>[2],
+    options: Omit<Parameters<typeof selectPromptChips>[3], "isSupportedCardPrompt">,
+  ) => selectPromptChips(parsed, context, result, {
+    ...options,
+    isSupportedCardPrompt,
+  }),
 };

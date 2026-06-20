@@ -1545,6 +1545,25 @@ describe("runAIAgent", () => {
     expect(plan.chips[1]?.prompt).toBe("What can I cut back on from my recent spending?");
   });
 
+  it("returns deterministic silent prompt-chip refresh responses", async () => {
+    const response = await runAIAgent({
+      message: "Create prompt chips for the current Pip screen.",
+      requestKind: "prompt_chips",
+      snapshot: fakeSnapshot,
+      conversationState: {
+        shownCards: [],
+        lastToolNames: [],
+        promptChips: [],
+      },
+    });
+
+    expect(response.responseMode).toBe("chat_only");
+    expect(response.cards).toEqual([]);
+    expect(response.usedTools).toEqual([]);
+    expect(response.promptChips).toHaveLength(3);
+    expect(response.audit.usedModel).toBe(false);
+  });
+
   it("keeps prompt-chip refreshes populated when every generated chip repeats recent history", () => {
     const recentPromptChips = [
       {
