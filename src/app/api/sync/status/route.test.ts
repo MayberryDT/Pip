@@ -96,6 +96,30 @@ describe("GET /api/sync/status", () => {
     });
     expect(routeMocks.loadSyncStatusForUser).toHaveBeenCalledWith(supabase, "user-1");
   });
+
+  it("logs unexpected status failures without exposing secret-shaped values", async () => {
+    enableSupabaseEnv();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new Error("status failed access_token=provider-secret sk-test-secret");
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.loadSyncStatusForUser.mockRejectedValue(error);
+
+    try {
+      const response = await GET();
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: "Sync status request failed.",
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        "[sync/status] status failed",
+        "status failed access_token=[redacted] [redacted]",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 function enableSupabaseEnv() {

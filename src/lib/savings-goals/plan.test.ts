@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSavingsGoalPlan,
+  getActiveSavingsGoalMonthlyCents,
   getProtectedSavingsGoalMonthlyCents,
+  resolveSavingsGoalMonthlyContribution,
 } from "@/lib/savings-goals/plan";
 import type { SavingsGoal } from "@/lib/savings-goals/types";
 
@@ -58,18 +60,56 @@ describe("savings goal plan", () => {
     expect(plan.warning).toContain("does not have a monthly contribution");
   });
 
-  it("sums only active protected monthly goal contributions", () => {
+  it("sums every active monthly goal contribution", () => {
     expect(
-      getProtectedSavingsGoalMonthlyCents([
-        goal({ monthlyContributionCents: 10000, includeInSpendableCash: true }),
-        goal({ monthlyContributionCents: 20000, includeInSpendableCash: false }),
+      getActiveSavingsGoalMonthlyCents(
+        [
+          goal({ monthlyContributionCents: 10000, includeInSpendableCash: true }),
+          goal({ monthlyContributionCents: 20000, includeInSpendableCash: false }),
+          goal({
+            monthlyContributionCents: 30000,
+            includeInSpendableCash: true,
+            status: "paused",
+          }),
+        ],
+        "2026-06-18",
+      ),
+    ).toBe(30000);
+  });
+
+  it("keeps the protected helper as an all-active compatibility wrapper", () => {
+    expect(
+      getProtectedSavingsGoalMonthlyCents(
+        [
+          goal({ monthlyContributionCents: 10000, includeInSpendableCash: true }),
+          goal({ monthlyContributionCents: 20000, includeInSpendableCash: false }),
+          goal({
+            monthlyContributionCents: 30000,
+            includeInSpendableCash: true,
+            status: "paused",
+          }),
+        ],
+        "2026-06-18",
+      ),
+    ).toBe(30000);
+  });
+
+  it("derives an active goal contribution from its target date when monthly amount is missing", () => {
+    expect(
+      resolveSavingsGoalMonthlyContribution(
         goal({
-          monthlyContributionCents: 30000,
-          includeInSpendableCash: true,
-          status: "paused",
+          targetAmountCents: 500000,
+          currentAmountCents: 100000,
+          monthlyContributionCents: 0,
+          targetDate: "2027-06-18",
         }),
-      ]),
-    ).toBe(10000);
+        "2026-06-18",
+      ),
+    ).toMatchObject({
+      monthlyContributionCents: 33334,
+      source: "target_date",
+      needsPlan: false,
+    });
   });
 });
 

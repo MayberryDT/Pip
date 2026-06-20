@@ -2,10 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
+  recordProductEventSafely: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: routeMocks.createSupabaseServerClient,
+}));
+
+vi.mock("@/lib/data/product-events", () => ({
+  recordProductEventSafely: routeMocks.recordProductEventSafely,
 }));
 
 import { POST } from "@/app/api/auth/consent/route";
@@ -62,6 +67,14 @@ describe("POST /api/auth/consent", () => {
     });
     expect(typeof upsertPayload.privacy_consent_at).toBe("string");
     expect(upsertPayload.protected_savings_monthly_cents).toBe(20000);
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "settings_updated",
+      {
+        protectedSavingsMonthlyCents: 20000,
+      },
+    );
   });
 
   it("records the protected-savings amount chosen during onboarding", async () => {
@@ -76,6 +89,14 @@ describe("POST /api/auth/consent", () => {
       user_id: "user-1",
       protected_savings_monthly_cents: 35000,
     });
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "settings_updated",
+      {
+        protectedSavingsMonthlyCents: 35000,
+      },
+    );
   });
 
   it("requires authentication before validating onboarding protected-savings amounts", async () => {
@@ -105,6 +126,32 @@ describe("POST /api/auth/consent", () => {
     });
     expect(supabase.from).not.toHaveBeenCalled();
   });
+
+  it("does not record a settings event when consent storage fails", async () => {
+    enableSupabaseEnv();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new Error("insert failed access_token=provider-secret sk-test-secret");
+    const supabase = createSupabaseClient({ id: "user-1" }, {
+      message: error.message,
+    });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    try {
+      const response = await POST(jsonRequest({ protectedSavingsMonthlyCents: 35000 }));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: "Consent request failed.",
+      });
+      expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "[consent] consent save failed",
+        "insert failed access_token=[redacted] [redacted]",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 function enableSupabaseEnv() {
@@ -113,7 +160,10 @@ function enableSupabaseEnv() {
   vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "anon-key");
 }
 
-function createSupabaseClient(user: { id: string } | null) {
+function createSupabaseClient(
+  user: { id: string } | null,
+  upsertError: { message: string } | null = null,
+) {
   const supabase = {
     upsertPayload: undefined as undefined | Record<string, unknown>,
     auth: {
@@ -128,7 +178,7 @@ function createSupabaseClient(user: { id: string } | null) {
       upsert: vi.fn((payload: Record<string, unknown>) => {
         supabase.upsertPayload = payload;
         return Promise.resolve({
-          error: null,
+          error: upsertError,
         });
       }),
     })),

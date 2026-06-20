@@ -62,6 +62,8 @@ export type Database = {
         | "unknown";
       financial_provider: "mock" | "teller" | "plaid";
       connection_status: "connected" | "mocked" | "stale" | "failed" | "revoked";
+      recurring_obligation_rule_source: "user_confirmed" | "user_correction" | "auto_detected";
+      recurring_obligation_rule_status: "active" | "ignored";
       sync_status: "started" | "succeeded" | "failed" | "partial";
       plaid_webhook_verification_status: "verified" | "bypassed_dev" | "failed";
       plaid_webhook_processing_status: "received" | "ignored" | "enqueued" | "failed";
@@ -282,6 +284,48 @@ export type Database = {
           monthly_contribution_cents?: number;
           include_in_spendable_cash?: boolean;
           status?: Database["public"]["Enums"]["savings_goal_status"];
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      recurring_obligation_rules: {
+        Row: {
+          id: string;
+          user_id: string;
+          merchant_key: string;
+          label: string;
+          expected_amount_cents: number;
+          expected_day: number | null;
+          cadence: "monthly";
+          source: Database["public"]["Enums"]["recurring_obligation_rule_source"];
+          status: Database["public"]["Enums"]["recurring_obligation_rule_status"];
+          last_confirmed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          merchant_key: string;
+          label: string;
+          expected_amount_cents: number;
+          expected_day?: number | null;
+          cadence?: "monthly";
+          source: Database["public"]["Enums"]["recurring_obligation_rule_source"];
+          status?: Database["public"]["Enums"]["recurring_obligation_rule_status"];
+          last_confirmed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          merchant_key?: string;
+          label?: string;
+          expected_amount_cents?: number;
+          expected_day?: number | null;
+          cadence?: "monthly";
+          source?: Database["public"]["Enums"]["recurring_obligation_rule_source"];
+          status?: Database["public"]["Enums"]["recurring_obligation_rule_status"];
+          last_confirmed_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -868,4 +912,5 @@ export type UserSettingsRow = Database["public"]["Tables"]["user_settings"]["Row
 export type AccountRow = Database["public"]["Tables"]["accounts"]["Row"];
 export type AccountPreferenceRow = Database["public"]["Tables"]["account_preferences"]["Row"];
 export type SavingsGoalRow = Database["public"]["Tables"]["savings_goals"]["Row"];
+export type RecurringObligationRuleRow = Database["public"]["Tables"]["recurring_obligation_rules"]["Row"];
 export type TransactionRow = Database["public"]["Tables"]["transactions"]["Row"];

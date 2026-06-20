@@ -760,6 +760,9 @@ describe("Pip agent eval harness", () => {
               usedTools: caseDef?.expectedTools ?? [],
               cards: cardTypes.map((type) => ({ type, title: type })),
               promptChips: [],
+              ...(caseDef?.expectedPendingActionType
+                ? { pendingAction: { type: caseDef.expectedPendingActionType } }
+                : {}),
             }),
           };
         },

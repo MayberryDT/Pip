@@ -57,7 +57,7 @@ export async function createSavingsGoalForUser(
       starting_amount_cents: input.startingAmountCents ?? 0,
       current_amount_cents: input.currentAmountCents ?? input.startingAmountCents ?? 0,
       monthly_contribution_cents: input.monthlyContributionCents ?? 0,
-      include_in_spendable_cash: input.includeInSpendableCash ?? false,
+      include_in_spendable_cash: input.includeInSpendableCash ?? true,
     })
     .select("*")
     .single();

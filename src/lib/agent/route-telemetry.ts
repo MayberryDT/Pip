@@ -62,7 +62,11 @@ export function createChatTurnRequestMetadata(
 export async function recordAgentEvents(
   context: AgentRouteEventContext | null,
   input: {
+    conversationId: string;
     message: string;
+    requestKind?: "chat" | "prompt_chips";
+    scenario?: string;
+    selectedPromptChipId?: string;
     historyLength: number;
     response: AgentResponse;
     pipCashTodayCents: number | null;
@@ -86,7 +90,11 @@ export async function recordAgentEvents(
         usedTools: input.response.usedTools.join(","),
         responseMode: input.response.responseMode,
         clientAction: input.response.clientAction?.type ?? "none",
+        conversationId: input.conversationId,
         messageLength: input.message.length,
+        requestKind: input.requestKind ?? "chat",
+        scenario: input.scenario ?? null,
+        selectedPromptChipId: input.selectedPromptChipId ?? null,
         historyLength: input.historyLength,
         isFollowUp: input.historyLength > 0,
         pipCashTodayCents: input.pipCashTodayCents,

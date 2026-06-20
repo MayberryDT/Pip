@@ -10,8 +10,6 @@ export type DeterministicAgentToolName =
   | "start_new_account_connection"
   | "repair_account_connection"
   | "start_account_selection_update"
-  | "set_account_inclusion"
-  | "set_account_protected_savings"
   | "create_savings_goal"
   | "list_savings_goals"
   | "update_savings_goal"
@@ -28,6 +26,7 @@ export type DeterministicAgentToolName =
   | "get_pattern_assumptions"
   | "get_recent_spending_pressure"
   | "get_spending_opportunity"
+  | "correct_recurring_obligation"
   | "get_spending_breakdown"
   | "get_recurring_activity"
   | "forecast_spendable_cash"
@@ -55,8 +54,6 @@ export type IntentSlot =
   | "horizon_days"
   | "institution_name"
   | "account_name"
-  | "include_in_pip_cash"
-  | "is_protected_savings"
   | "confirmation_text";
 
 export type IntentCatalogEntry = {
@@ -639,52 +636,6 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
     negativeExamples: ["show actual account balances", "show connected accounts"],
     lexicalBoosts: ["change selected", "selected accounts", "accounts count", "forgot to select", "from today's number"],
     lexicalHardNegatives: ["balance", "balances", "show connected"],
-    followUpParents: ["account.connected_accounts"],
-    followUpChildren: [],
-  },
-  {
-    id: "account.inclusion",
-    family: "account_action",
-    surface: "account_action",
-    risk: "write_action",
-    priority: 90,
-    toolName: "set_account_inclusion",
-    cardTypes: [],
-    responseMode: "update_context",
-    requiresSnapshot: false,
-    requiresConfirmation: false,
-    destructive: false,
-    supportedInPromptChips: false,
-    conversationJob: "setup",
-    description: "Include or exclude an account from Spendable Cash Today.",
-    positiveExamples: ["exclude my business checking", "ignore that account", "use my checking account again", "include this card"],
-    negativeExamples: ["show account balances", "show connected accounts"],
-    lexicalBoosts: ["exclude", "ignore", "stop using", "include", "start using", "use this account"],
-    lexicalHardNegatives: ["balance", "balances", "show connected"],
-    requiredSlots: ["account_name"],
-    followUpParents: ["account.connected_accounts"],
-    followUpChildren: [],
-  },
-  {
-    id: "account.protected_savings",
-    family: "account_action",
-    surface: "account_action",
-    risk: "write_action",
-    priority: 90,
-    toolName: "set_account_protected_savings",
-    cardTypes: [],
-    responseMode: "update_context",
-    requiresSnapshot: false,
-    requiresConfirmation: false,
-    destructive: false,
-    supportedInPromptChips: false,
-    conversationJob: "setup",
-    description: "Mark or unmark an account as protected savings.",
-    positiveExamples: ["make savings protected savings", "mark this account as protected savings", "stop treating savings as protected", "do not treat this as protected"],
-    negativeExamples: ["set my monthly savings cushion", "show my savings balance"],
-    lexicalBoosts: ["protected savings", "mark", "make", "stop treating", "do not treat"],
-    lexicalHardNegatives: ["monthly savings", "savings cushion", "balance"],
-    requiredSlots: ["account_name"],
     followUpParents: ["account.connected_accounts"],
     followUpChildren: [],
   },

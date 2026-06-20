@@ -60,7 +60,7 @@ describe("POST /api/ai-reports", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const supabase = createSupabaseClient({ id: "user-1" });
     supabase.insert.mockResolvedValue({
-      error: new Error("relation ai_response_reports does not exist"),
+      error: new Error("relation ai_response_reports does not exist: access_token=provider-secret"),
     });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
@@ -73,7 +73,11 @@ describe("POST /api/ai-reports", () => {
     });
     expect(consoleError).toHaveBeenCalledWith(
       "[ai-reports] report save failed",
-      expect.any(Error),
+      expect.stringContaining("relation ai_response_reports does not exist"),
+    );
+    expect(consoleError).toHaveBeenCalledWith(
+      "[ai-reports] report save failed",
+      expect.not.stringContaining("provider-secret"),
     );
   });
 

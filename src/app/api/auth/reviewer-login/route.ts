@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isPlayReviewerEmail } from "@/lib/play/reviewer";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -42,7 +43,7 @@ export async function POST(request: Request) {
       return NextResponse.json(reviewerAccessUnavailableBody(), { status: 503 });
     }
 
-    console.error("[reviewer-login] sign-in failed", error);
+    console.error("[reviewer-login] sign-in failed", getSafeErrorMessage(error, "Reviewer sign-in failed."));
     return NextResponse.json(toErrorBody(), { status: 500 });
   }
 }

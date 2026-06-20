@@ -12,7 +12,27 @@ describe("safe error messages", () => {
     );
   });
 
+  it("redacts authorization headers without leaving bearer tokens behind", () => {
+    expect(sanitizeSensitiveText("Authorization: Bearer abc123")).toBe(
+      "Authorization=[redacted]",
+    );
+    expect(sanitizeSensitiveText("authorization=Basic abc123")).toBe(
+      "authorization=[redacted]",
+    );
+  });
+
   it("falls back for non-error values", () => {
     expect(getSafeErrorMessage(null, "Request failed.")).toBe("Request failed.");
+  });
+
+  it("sanitizes message-shaped errors from data clients", () => {
+    expect(
+      getSafeErrorMessage(
+        {
+          message: "Insert failed with access_token=provider-secret sk-test-secret",
+        },
+        "Request failed.",
+      ),
+    ).toBe("Insert failed with access_token=[redacted] [redacted]");
   });
 });

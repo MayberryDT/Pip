@@ -60,6 +60,31 @@ describe("POST /api/delete-data", () => {
     });
     expect(routeMocks.deleteCurrentUserFinancialData).toHaveBeenCalledWith(supabase);
   });
+
+  it("logs deletion failures without exposing secret-shaped values", async () => {
+    enableSupabaseEnv();
+    const error = new Error("delete failed with access_token=provider-secret sk-test-secret");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.deleteCurrentUserFinancialData.mockRejectedValue(error);
+
+    try {
+      const response = await POST();
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: "Delete-data request failed.",
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        "[delete-data] deletion failed",
+        "delete failed with access_token=[redacted] [redacted]",
+      );
+      expect(consoleError.mock.calls[0]?.[1]).not.toBe(error);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 function enableSupabaseEnv() {

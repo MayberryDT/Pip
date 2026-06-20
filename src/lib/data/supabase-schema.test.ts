@@ -26,6 +26,7 @@ describe("Supabase financial-data schema", () => {
       "accounts",
       "account_preferences",
       "savings_goals",
+      "recurring_obligation_rules",
       "transactions",
       "pip_cash_snapshots",
       "sync_runs",
@@ -45,6 +46,7 @@ describe("Supabase financial-data schema", () => {
       accounts: ["select", "insert", "update", "delete"],
       account_preferences: ["select", "insert", "update", "delete"],
       savings_goals: ["select", "insert", "update", "delete"],
+      recurring_obligation_rules: ["select", "insert", "update", "delete"],
       transactions: ["select", "insert", "update", "delete"],
       pip_cash_snapshots: ["select", "insert", "update", "delete"],
       sync_runs: ["select", "insert", "update", "delete"],
@@ -93,6 +95,7 @@ describe("Supabase financial-data schema", () => {
     expect(migration).toContain("create or replace function public.delete_current_user_financial_data()");
     expect(allMigrations).toContain("grant execute on function public.delete_current_user_financial_data() to authenticated;");
     expect(allMigrations).toContain("delete from public.product_events where user_id = current_user_id;");
+    expect(allMigrations).toContain("delete from public.recurring_obligation_rules where user_id = current_user_id;");
     expect(allMigrations).toContain("delete from public.savings_goals where user_id = current_user_id;");
     expect(allMigrations).toContain("delete from public.sync_runs where user_id = current_user_id;");
     expect(allMigrations).toContain("delete from public.account_preferences where user_id = current_user_id;");

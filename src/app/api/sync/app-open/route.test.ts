@@ -9,6 +9,7 @@ const routeMocks = vi.hoisted(() => ({
   loadPendingPipSyncJobsForUser: vi.fn(),
   loadSyncStatusForUser: vi.fn(),
   loadManualRefreshOnlyForUser: vi.fn(),
+  recordProductEventSafely: vi.fn(),
   runProviderSync: vi.fn(),
 }));
 
@@ -26,6 +27,10 @@ vi.mock("@/lib/data/sync-status", () => ({
 
 vi.mock("@/lib/data/user-settings", () => ({
   loadManualRefreshOnlyForUser: routeMocks.loadManualRefreshOnlyForUser,
+}));
+
+vi.mock("@/lib/data/product-events", () => ({
+  recordProductEventSafely: routeMocks.recordProductEventSafely,
 }));
 
 vi.mock("@/lib/data/manual-sync", () => ({
@@ -66,6 +71,7 @@ describe("POST /api/sync/app-open", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       status: "skipped_manual_only",
+      reason: "manual_refresh_only",
       message: "Automatic refresh is disabled for this account.",
     });
     expect(routeMocks.loadManualRefreshOnlyForUser).toHaveBeenCalledWith(supabase, "reviewer-1");
@@ -98,6 +104,24 @@ describe("POST /api/sync/app-open", () => {
       transactionCount: 40,
       balanceCount: 2,
       pipCashTodayCents: 8300,
+      previousSpendableCashTodayCents: 9100,
+      currentSpendableCashTodayCents: 8300,
+      spendableDeltaCents: -800,
+      sameDayNewSpendCents: 525,
+      sameDayNewTransactions: [
+        {
+          date: "2026-06-16",
+          label: "Coffee Shop",
+          amountCents: -525,
+          pending: false,
+          treatment: "daily_spend",
+        },
+      ],
+      createdReactionSummary: {
+        reactionType: "small_drop",
+        intensity: 1,
+        summary: "Recent spending lowered today's room.",
+      },
       failedInstitutionCount: 0,
       failures: [],
     });
@@ -111,6 +135,24 @@ describe("POST /api/sync/app-open", () => {
       result: {
         syncRunId: "sync-1",
         pipCashTodayCents: 8300,
+        previousSpendableCashTodayCents: 9100,
+        currentSpendableCashTodayCents: 8300,
+        spendableDeltaCents: -800,
+        sameDayNewSpendCents: 525,
+        sameDayNewTransactions: [
+          {
+            date: "2026-06-16",
+            label: "Coffee Shop",
+            amountCents: -525,
+            pending: false,
+            treatment: "daily_spend",
+          },
+        ],
+        createdReactionSummary: {
+          reactionType: "small_drop",
+          intensity: 1,
+          summary: "Recent spending lowered today's room.",
+        },
       },
     });
     expect(routeMocks.runProviderSync).toHaveBeenCalledWith(supabase, {
@@ -132,7 +174,18 @@ describe("POST /api/sync/app-open", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       status: "skipped_pending",
+      reason: "sync_in_flight",
     });
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-1",
+      "app_open_sync_decision",
+      expect.objectContaining({
+        status: "skipped_pending",
+        reason: "sync_in_flight",
+        hasPendingSyncJob: true,
+      }),
+    );
     expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
   });
 
@@ -157,10 +210,24 @@ describe("POST /api/sync/app-open", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       status: "needs_repair",
+      reason: "provider_needs_repair",
       provider: "plaid",
       institutionId: "institution-1",
       errorCode: "provider-token-decrypt-failed",
     });
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      expect.anything(),
+      "user-1",
+      "app_open_sync_decision",
+      expect.objectContaining({
+        status: "needs_repair",
+        reason: "provider_needs_repair",
+        provider: "plaid",
+        institutionId: "institution-1",
+        errorCode: "provider-token-decrypt-failed",
+        hasPendingSyncJob: false,
+      }),
+    );
     expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
   });
 
@@ -205,15 +272,40 @@ describe("POST /api/sync/app-open", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
       status: "needs_repair",
+      reason: "provider_needs_repair",
       provider: "plaid",
       institutionId: "institution-1",
       errorCode: "item-login-required",
     });
   });
+
+  it("logs unexpected app-open failures without exposing secret-shaped values", async () => {
+    enableSupabaseEnv();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new Error("app-open failed access_token=provider-secret sk-test-secret");
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
+    routeMocks.loadSyncStatusForUser.mockRejectedValue(error);
+
+    try {
+      const response = await POST();
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        status: "failed",
+        error: "App-open sync failed.",
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        "[sync/app-open] sync failed",
+        "app-open failed access_token=[redacted] [redacted]",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 describe("getAppOpenSyncDecision", () => {
-  it("skips fresh data inside the app-open cooldown", () => {
+  it("runs fresh data outside the short duplicate guard", () => {
     expect(
       getAppOpenSyncDecision({
         syncStatus: createSyncStatus({
@@ -238,9 +330,10 @@ describe("getAppOpenSyncDecision", () => {
         hasPendingSyncJob: false,
         now: new Date("2026-06-16T12:05:00.000Z"),
       }),
-    ).toMatchObject({
-      status: "skipped_recent",
-      retryAfterSeconds: 300,
+    ).toEqual({
+      status: "run",
+      provider: "plaid",
+      reason: "app_open_check",
     });
   });
 
@@ -272,6 +365,7 @@ describe("getAppOpenSyncDecision", () => {
     ).toEqual({
       status: "run",
       provider: "plaid",
+      reason: "app_open_check",
     });
   });
 });

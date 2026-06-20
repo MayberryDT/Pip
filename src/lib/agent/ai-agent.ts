@@ -19,7 +19,6 @@ import {
 } from "@/lib/agent/agent-errors";
 import {
   agentFinalOutputSchema,
-  agentMessageMaxChars,
   agentResponseSchema,
 } from "@/lib/agent/response-schema";
 import {
@@ -59,7 +58,6 @@ import {
   createSavingsGoalParameters,
   getSavingsGoalForcedTool,
   isSavingsGoalPrompt,
-  savingsGoalProtectionParameters,
   updateSavingsGoalParameters,
 } from "@/lib/agent/savings-goal-flow";
 import type { PipPlatform } from "@/lib/platform/android-shell";
@@ -79,6 +77,7 @@ import {
 } from "@/lib/agent/openai-config";
 import {
   containsDisallowedFinalLanguage,
+  getVisibleResponseSurfaceLimits,
   getUnsupportedCardPromise,
   guardVisibleFinalMessage,
   repairUnsupportedCardPromises,
@@ -179,6 +178,12 @@ export type PipAgentActions = {
     includeInSpendableCash: boolean;
     monthlyContributionCents?: number;
   }) => Promise<PipAgentActionResult>;
+  correctRecurringObligation?: (input: {
+    merchantName: string;
+    treatment: "bill" | "not_bill";
+    expectedAmountCents?: number;
+    expectedDay?: number;
+  }) => Promise<PipAgentActionResult>;
   requestRemoveInstitutionConfirmation?: (input: {
     institutionId?: string;
     institutionName?: string;
@@ -254,16 +259,6 @@ const institutionTargetParameters = z.object({
   institution_id: z.string().min(1).max(120).optional(),
   institution_name: z.string().min(1).max(160).optional(),
 });
-const accountInclusionParameters = z.object({
-  account_id: z.string().min(1).max(120).optional(),
-  account_name: z.string().min(1).max(160).optional(),
-  include_in_pip_cash: z.boolean(),
-});
-const protectedSavingsAccountParameters = z.object({
-  account_id: z.string().min(1).max(120).optional(),
-  account_name: z.string().min(1).max(160).optional(),
-  is_protected_savings: z.boolean(),
-});
 const removeInstitutionParameters = institutionTargetParameters.extend({
   confirmation_text: z.string().min(1).max(160),
 });
@@ -279,6 +274,13 @@ const forecastParameters = z.object({
 const insightCardParameters = z.object({
   topic: z.enum(["payday_impact", "spendable_factors"]),
 });
+const recurringObligationCorrectionParameters = z.object({
+  merchant_name: z.string().min(1).max(120),
+  treatment: z.enum(["bill", "not_bill"]),
+  expected_amount_cents: z.number().int().positive().max(1_000_000).optional(),
+  expected_day: z.number().int().min(1).max(31).optional(),
+});
+const bridgeVisibleLimits = getVisibleResponseSurfaceLimits("bridge");
 
 export async function runAIAgent(
   input: RunAiAgentInput,
@@ -306,10 +308,18 @@ export async function runAIAgent(
     return deterministicTrustResponse;
   }
 
-  const deterministicSavingsGoalResponse = await createDeterministicSavingsGoalResponse(input);
+  const deterministicSavingsGoalResponse = isRetiredSavingsGoalProtectionPrompt(input)
+    ? null
+    : await createDeterministicSavingsGoalResponse(input);
 
   if (deterministicSavingsGoalResponse) {
     return deterministicSavingsGoalResponse;
+  }
+
+  const deterministicBillCorrectionResponse = await createDeterministicBillCorrectionResponse(input);
+
+  if (deterministicBillCorrectionResponse) {
+    return deterministicBillCorrectionResponse;
   }
 
   const deterministicConnectedAccountsResponse = await createDeterministicConnectedAccountsResponse(input);
@@ -318,7 +328,9 @@ export async function runAIAgent(
     return deterministicConnectedAccountsResponse;
   }
 
-  const deterministicUnavailableActionResponse = createDeterministicUnavailableActionResponse(input);
+  const deterministicUnavailableActionResponse = isRetiredSavingsGoalProtectionPrompt(input)
+    ? null
+    : createDeterministicUnavailableActionResponse(input);
 
   if (deterministicUnavailableActionResponse) {
     return deterministicUnavailableActionResponse;
@@ -540,6 +552,51 @@ async function createDeterministicConnectedAccountsResponse(input: RunAiAgentInp
   );
 }
 
+async function createDeterministicBillCorrectionResponse(
+  input: RunAiAgentInput,
+): Promise<AgentResponse | null> {
+  const forcedTool = getForcedAgentTool(input);
+
+  if (forcedTool?.toolName !== "correct_recurring_obligation") {
+    return null;
+  }
+
+  const context = createPipContext(input);
+  const toolInput = recurringObligationCorrectionParameters.parse(forcedTool.args);
+  recordTool(context, "correct_recurring_obligation");
+  const actionResult = input.actions?.correctRecurringObligation
+    ? await input.actions.correctRecurringObligation({
+        merchantName: toolInput.merchant_name,
+        treatment: toolInput.treatment,
+        expectedAmountCents: toolInput.expected_amount_cents,
+        expectedDay: toolInput.expected_day,
+      })
+    : {
+        ok: false,
+        status: "bill_correction_unavailable",
+        message: "Bill corrections are not available yet.",
+      };
+  const result = applyActionResult(context, actionResult);
+  const billCopy = toolInput.treatment === "bill"
+    ? `I’ll treat ${toolInput.merchant_name} as a monthly bill now.`
+    : `I’ll stop treating ${toolInput.merchant_name} as a monthly bill.`;
+
+  return buildAgentResponse(
+    {
+      message: result.ok
+        ? `${billCopy} I’ll refresh today’s number with that correction.`
+        : result.message ?? "I could not save that bill correction yet.",
+      support: null,
+      responseMode: "chat_only",
+    },
+    context,
+    input,
+    {
+      usedModel: false,
+    },
+  );
+}
+
 function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined {
   const promptChipTool = getForcedPromptChipTool(
     input.selectedPromptChipId,
@@ -566,6 +623,10 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     });
 
     if (decision.kind === "route") {
+      if (isRetiredToolName(decision.toolName)) {
+        return undefined;
+      }
+
       return {
         toolName: decision.toolName,
         args: decision.args,
@@ -575,6 +636,16 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
   }
 
   return getLegacyForcedAgentTool(input);
+}
+
+function isRetiredSavingsGoalProtectionPrompt(input: RunAiAgentInput): boolean {
+  const forcedTool = getSavingsGoalForcedTool(input.message.trim(), normalizePrompt(input.message.trim()));
+
+  return forcedTool?.toolName === "set_savings_goal_protection";
+}
+
+function isRetiredToolName(toolName: DeterministicAgentToolName): boolean {
+  return toolName === "set_savings_goal_protection";
 }
 
 function getLegacyForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined {
@@ -613,7 +684,7 @@ function getLegacyForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | und
 
   const savingsGoalTool = getSavingsGoalForcedTool(message, normalized);
 
-  if (savingsGoalTool) {
+  if (savingsGoalTool && !isRetiredToolName(savingsGoalTool.toolName)) {
     return savingsGoalTool;
   }
 
@@ -631,6 +702,12 @@ function getLegacyForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | und
       args: {},
       requireCard: false,
     };
+  }
+
+  const recurringCorrectionTool = getRecurringObligationCorrectionTool(message, normalized);
+
+  if (recurringCorrectionTool) {
+    return recurringCorrectionTool;
   }
 
   if (isGeneralSpendingQuestion(normalized) && isSpendingPrompt(normalized)) {
@@ -1168,70 +1245,6 @@ function createPipTools() {
         }));
       },
     }),
-    tool<typeof accountInclusionParameters, PipAgentContext>({
-      name: "set_account_inclusion",
-      description:
-        "Include or exclude one account from Spendable Cash Today without disconnecting the provider. Use when the user says ignore, stop using, use again, include, or exclude a specific account.",
-      parameters: accountInclusionParameters,
-      strict: true,
-      async execute(input, runContext) {
-        const context = getToolContext(runContext);
-        const toolInput = getToolInput(context, "set_account_inclusion", input, accountInclusionParameters);
-        recordTool(context, "set_account_inclusion");
-
-        const unavailable = getAccountManagementUnavailableResult(context);
-
-        if (unavailable) {
-          return unavailable;
-        }
-
-        if (!context.actions?.setAccountInclusion) {
-          return {
-            ok: false,
-            status: "account_management_unavailable",
-            message: "Account preferences are not available in this environment.",
-          };
-        }
-
-        return applyActionResult(context, await context.actions.setAccountInclusion({
-          accountId: toolInput.account_id,
-          accountName: toolInput.account_name,
-          includeInPipCash: toolInput.include_in_pip_cash,
-        }));
-      },
-    }),
-    tool<typeof protectedSavingsAccountParameters, PipAgentContext>({
-      name: "set_account_protected_savings",
-      description:
-        "Set or unset protected-savings treatment for one account. Use when the user asks to make an account protected savings or to stop treating a savings account as protected.",
-      parameters: protectedSavingsAccountParameters,
-      strict: true,
-      async execute(input, runContext) {
-        const context = getToolContext(runContext);
-        const toolInput = getToolInput(context, "set_account_protected_savings", input, protectedSavingsAccountParameters);
-        recordTool(context, "set_account_protected_savings");
-
-        const unavailable = getAccountManagementUnavailableResult(context);
-
-        if (unavailable) {
-          return unavailable;
-        }
-
-        if (!context.actions?.setAccountProtectedSavings) {
-          return {
-            ok: false,
-            status: "account_management_unavailable",
-            message: "Account preferences are not available in this environment.",
-          };
-        }
-
-        return applyActionResult(context, await context.actions.setAccountProtectedSavings({
-          accountId: toolInput.account_id,
-          accountName: toolInput.account_name,
-          isProtectedSavings: toolInput.is_protected_savings,
-        }));
-      },
-    }),
     tool<typeof createSavingsGoalParameters, PipAgentContext>({
       name: "create_savings_goal",
       description:
@@ -1311,33 +1324,6 @@ function createPipTools() {
           monthlyContributionCents: toolInput.monthly_contribution_cents,
           includeInSpendableCash: toolInput.include_in_spendable_cash,
           status: toolInput.status,
-        }));
-      },
-    }),
-    tool<typeof savingsGoalProtectionParameters, PipAgentContext>({
-      name: "set_savings_goal_protection",
-      description:
-        "Choose whether a savings goal's monthly contribution is kept out of Spendable Cash Today.",
-      parameters: savingsGoalProtectionParameters,
-      strict: true,
-      async execute(input, runContext) {
-        const context = getToolContext(runContext);
-        const toolInput = getToolInput(context, "set_savings_goal_protection", input, savingsGoalProtectionParameters);
-        recordTool(context, "set_savings_goal_protection");
-
-        if (!context.actions?.setSavingsGoalProtection) {
-          return {
-            ok: false,
-            status: "savings_goals_unavailable",
-            message: "Savings goals are not available in this environment.",
-          };
-        }
-
-        return applyActionResult(context, await context.actions.setSavingsGoalProtection({
-          goalId: toolInput.goal_id,
-          name: toolInput.name,
-          includeInSpendableCash: toolInput.include_in_spendable_cash,
-          monthlyContributionCents: toolInput.monthly_contribution_cents,
         }));
       },
     }),
@@ -1596,6 +1582,38 @@ function createPipTools() {
           rowCount: card?.type === "insight_card" ? card.rows.length : 0,
           suggestedPrompts: response.promptChips,
         };
+      },
+    }),
+    tool<typeof recurringObligationCorrectionParameters, PipAgentContext>({
+      name: "correct_recurring_obligation",
+      description:
+        "Persist a user's correction about whether a merchant should be treated as a monthly bill. Use when they say a merchant is a bill, is not a bill, or give the usual monthly amount for a bill.",
+      parameters: recurringObligationCorrectionParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(
+          context,
+          "correct_recurring_obligation",
+          input,
+          recurringObligationCorrectionParameters,
+        );
+        recordTool(context, "correct_recurring_obligation");
+
+        if (!context.actions?.correctRecurringObligation) {
+          return {
+            ok: false,
+            status: "bill_correction_unavailable",
+            message: "Bill corrections are not available yet.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.correctRecurringObligation({
+          merchantName: toolInput.merchant_name,
+          treatment: toolInput.treatment,
+          expectedAmountCents: toolInput.expected_amount_cents,
+          expectedDay: toolInput.expected_day,
+        }));
       },
     }),
     tool<typeof emptyToolParameters, PipAgentContext>({
@@ -2117,7 +2135,7 @@ function createPipInstructions(runContext: {
   );
 
   return [
-    "You are Pip, a calm financial assistant for the Pip app.",
+    "You are Pip, a warm daily money companion for the Pip app.",
     "You speak as Pip in first person. Say I, me, and my when you describe what you do.",
     "Never describe yourself in third person in visible replies. Do not say Pip does, Pip can, Pip will, Pip helps, or Pip shows.",
     "For financial answers, prefer first-person verbs like I found, I see, I counted, or I can.",
@@ -2128,7 +2146,7 @@ function createPipInstructions(runContext: {
     "Use get_financial_guidance_context before giving a read based on the user's actual finances, unless a judgmental purchase simulation already returned guidanceContext in the same turn.",
     "For a grounded read, use evidence IDs from guidanceContext. Do not invent facts, categories, merchants, balances, bills, or dollar amounts.",
     "You may be direct about spending pace, whether things look stable or tight, whether a purchase adds pressure, whether monthly savings look reasonable for now, whether bills or everyday spending are the bigger pressure, whether cash reality is limiting the number, whether data quality limits the read, and general high-interest debt priority.",
-    "You may gently disagree with the user when evidence conflicts with their assumption. Use phrases like my read, I'd treat this as, the conservative move, this adds pressure, this looks stable, this looks tight, I would be careful with that, or I would not treat that as open room.",
+    "Use soft, evidence-based pushback when the numbers conflict with the user's assumption. Use phrases like my read, I'd treat this as, the conservative move, this adds pressure, this looks stable, this looks tight, I would be careful with that, or I would not treat that as open room.",
     "Do not call this financial advice. Do not use canned responses, moralize, shame, or over-explain.",
     "Do not give securities advice, crypto advice, tax advice, legal advice, bankruptcy advice, specific credit-card recommendations, specific loan recommendations, specific lender recommendations, insurance product recommendations, or instructions to skip required bills.",
     "Use Spendable Cash Today for the top daily metric. Do not say PIP legacy cash wording in visible replies.",
@@ -2140,15 +2158,15 @@ function createPipInstructions(runContext: {
     "The Spendable Cash Today number is calculated by Pip's product logic. AI explains and answers; AI does not own the money calculation.",
     "Pip uses Plaid for read-only account connection. Pip cannot move money, withdraw funds, transfer funds, make payments, or store bank usernames and passwords.",
     "Use tools for setup and account actions. Do not pretend an action happened unless the matching tool returned ok.",
-    "You can help users manage connected accounts through tools. Use account tools when the user asks what accounts are connected, wants to add a bank/card, repair a connection, change selected accounts, exclude or include an account, mark protected savings, or remove an institution.",
+    "You can help users manage connected accounts through tools. Use account tools when the user asks what accounts are connected, wants to add a bank/card, repair a connection, change selected accounts, or remove an institution.",
+    "All active connected accounts count toward Spendable Cash Today. Do not offer account-level include, ignore, or savings-label controls.",
     "Account management stays chat-owned. Do not mention settings pages, dashboards, menus, tabs, or separate account screens.",
     "Use get_connected_accounts when the user asks what is connected, when an account/institution target is unclear, or when more than one target could match.",
     "Use start_new_account_connection for adding a new bank or card. Use repair_account_connection for reconnecting one stale or broken institution. Use start_account_selection_update for changing which accounts Pip can see at an existing institution.",
-    "Use set_account_inclusion when the user wants to ignore, exclude, include, or use an account again without disconnecting its institution.",
-    "Use set_account_protected_savings when the user wants to mark or unmark a specific account as protected savings.",
     "Use savings goal tools when the user wants to save for a trip, big purchase, emergency fund, or named goal.",
     "Use create_savings_goal when the user gives a target amount for a new goal. Use list_savings_goals when they ask what goals are tracked or want an update.",
-    "Use update_savings_goal when the user changes progress, target amount, target date, monthly contribution, or status. Use set_savings_goal_protection when they want a goal's monthly plan kept out of Spendable Cash Today.",
+    "Use update_savings_goal when the user changes progress, target amount, target date, monthly contribution, or status.",
+    "Every active savings goal affects Spendable Cash Today. Do not offer a separate protection toggle for savings goals.",
     "Savings goals are tracking and planning only. Pip does not move money, open a savings account, or transfer funds for a goal.",
     "For institution removal, call request_remove_institution_confirmation first. Only call remove_institution when the latest user message matches the exact confirmation text.",
     "For greetings, do not mention forecasts, cards, views, breakdowns, transactions, or app features. Just invite one simple next question.",
@@ -2174,6 +2192,7 @@ function createPipInstructions(runContext: {
     "If the user asks how they are doing, what you think, what they should do, whether spending is too high, whether to lower monthly savings, whether they are broke, or asks for your read, call get_financial_guidance_context.",
     "If the user asks for a trend, forecast, projection, or next-days view, call forecast_spendable_cash.",
     "If the user asks about recurring bills, subscriptions, monthly charges, or likely upcoming repeats, call get_recurring_activity.",
+    "If the user corrects whether a merchant is a monthly bill, subscription, recurring item, or not a bill, call correct_recurring_obligation. If the merchant name is missing, ask one short clarifying question.",
     "If the user asks for a complete, item, category, merchant, income, spending, refund, or card-payment breakdown, call get_spending_breakdown.",
     "Only ask for an amount when the user is clearly asking you to simulate or test a specific purchase but did not provide the amount.",
     "For general spend questions without an amount, call get_pip_cash_snapshot. Explain what the number signals, but do not give a max spend limit.",
@@ -2205,7 +2224,7 @@ function createPipInstructions(runContext: {
     "Do not use stock template phrasing like 'Here is...' as the whole reply. Respond to the user's exact wording and current conversation.",
     "Write at a fifth-grade reading level.",
     "Keep visible replies to one short sentence when possible, two short sentences max.",
-    "The visible message must be 45 words or fewer and 260 characters or fewer.",
+    `For this bridge response, the visible message must be ${bridgeVisibleLimits.maxWords} words or fewer and ${bridgeVisibleLimits.maxChars} characters or fewer.`,
     "Use message for the direct lead sentence. Use support only when one short extra sentence adds useful context.",
     "Use common words. Avoid formal phrases like deterministic, rolling-window pattern, liquidity, optimal, analyze, or sufficient.",
     "Never use k shorthand for money. Say $210, not $0.21k.",
@@ -2262,7 +2281,7 @@ function createAgentInput(
             financial_context_for_prompt_chips: createPromptChipFinancialContext(context.snapshot),
             prompt_chip_examples: context.availablePromptChips,
             response_style:
-              `Answer at a fifth-grade reading level. Use 45 words or fewer and ${agentMessageMaxChars} characters or fewer.`,
+              `Answer at a fifth-grade reading level. Use bridge limits: ${bridgeVisibleLimits.maxWords} words or fewer and ${bridgeVisibleLimits.maxChars} characters or fewer.`,
             repair: context.repair ?? null,
           }),
         },
@@ -2518,10 +2537,12 @@ function buildAgentResponse(
     cards,
     usedTools,
     selectedPromptChipId: input.selectedPromptChipId,
-    maxChars: agentMessageMaxChars,
-    maxWords: 45,
+    maxChars: bridgeVisibleLimits.maxChars,
+    maxWords: bridgeVisibleLimits.maxWords,
   });
-  const guardedMessage = guardVisibleFinalMessage(visibleAnswer.message, cards);
+  const guardedMessage = guardVisibleFinalMessage(visibleAnswer.message, cards, {
+    surface: "bridge",
+  });
 
   return agentResponseSchema.parse({
     message: guardedMessage,
@@ -3511,6 +3532,105 @@ function isExplicitForecastPrompt(normalized: string): boolean {
   );
 }
 
+function getRecurringObligationCorrectionTool(
+  message: string,
+  normalized: string,
+): ForcedAgentTool | undefined {
+  const treatment = getRecurringObligationCorrectionTreatment(normalized);
+
+  if (!treatment) {
+    return undefined;
+  }
+
+  const merchantName = extractRecurringObligationMerchantName(message, normalized, treatment);
+
+  if (!merchantName) {
+    return undefined;
+  }
+
+  const expectedAmountCents = extractExplicitPurchaseAmountCents(message) ?? undefined;
+
+  return {
+    toolName: "correct_recurring_obligation",
+    args: {
+      merchant_name: merchantName,
+      treatment,
+      ...(expectedAmountCents ? { expected_amount_cents: expectedAmountCents } : {}),
+    },
+    requireCard: false,
+  };
+}
+
+function getRecurringObligationCorrectionTreatment(
+  normalized: string,
+): "bill" | "not_bill" | null {
+  if (
+    /\b(not|isn'?t|is not|wasn'?t|was not|don'?t|do not|stop)\b.{0,24}\b(bill|recurring|monthly charge|subscription)\b/.test(normalized) ||
+    /\b(mark|treat|count)\b.{0,20}\b(not|as not)\b.{0,16}\b(bill|recurring|monthly charge|subscription)\b/.test(normalized)
+  ) {
+    return "not_bill";
+  }
+
+  if (
+    /\b(treat|mark|count|set)\b.{0,28}\b(as )?(a )?(monthly )?(bill|recurring|subscription|monthly charge)\b/.test(normalized) ||
+    /\b(is|was|should be)\b.{0,12}\b(a )?(monthly )?(bill|recurring|subscription|monthly charge)\b/.test(normalized) ||
+    /\bbill is usually\b/.test(normalized)
+  ) {
+    return "bill";
+  }
+
+  return null;
+}
+
+function extractRecurringObligationMerchantName(
+  message: string,
+  normalized: string,
+  treatment: "bill" | "not_bill",
+): string | null {
+  const patterns = treatment === "bill"
+    ? [
+        /\btreat\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bmark\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bcount\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bset\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\b(.+?)\s+(?:is|was|should be)\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bmy\s+(.+?)\s+bill\s+is\s+usually\b/i,
+      ]
+    : [
+        /\b(.+?)\s+(?:isn'?t|is not|wasn'?t|was not)\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bdon'?t\s+(?:treat|mark|count)\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bdo not\s+(?:treat|mark|count)\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bstop\s+(?:treating|marking|counting)\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+      ];
+
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    const merchantName = cleanRecurringObligationMerchantName(match?.[1]);
+
+    if (merchantName) {
+      return merchantName;
+    }
+  }
+
+  return null;
+}
+
+function cleanRecurringObligationMerchantName(value: string | undefined): string | null {
+  const cleaned = value
+    ?.replace(/\b(my|the|a|an|that|this)\b/gi, " ")
+    .replace(/\b(for|to)\s+\$?\d[\d,.]*\b/gi, " ")
+    .replace(/\$\s*\d[\d,.]*/g, " ")
+    .replace(/\b\d+(?:\.\d{1,2})?\s*(?:dollars?|bucks?)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned || cleaned.length < 2) {
+    return null;
+  }
+
+  return cleaned.slice(0, 120);
+}
+
 function isExplicitRecurringPrompt(normalized: string): boolean {
   return (
     /\b(recurring|repeating|repeat|subscription|subscriptions|bills? (are )?coming up|monthly charges?|upcoming bills?)\b/.test(normalized) ||
@@ -3653,32 +3773,6 @@ function getAccountManagementForcedTool(
     };
   }
 
-  const inclusionIntent = getAccountInclusionIntent(normalized);
-
-  if (inclusionIntent) {
-    return {
-      toolName: "set_account_inclusion",
-      args: {
-        account_name: inclusionIntent.accountName,
-        include_in_pip_cash: inclusionIntent.include,
-      },
-      requireCard: false,
-    };
-  }
-
-  const protectedSavingsIntent = getProtectedSavingsAccountIntent(normalized);
-
-  if (protectedSavingsIntent) {
-    return {
-      toolName: "set_account_protected_savings",
-      args: {
-        account_name: protectedSavingsIntent.accountName,
-        is_protected_savings: protectedSavingsIntent.protected,
-      },
-      requireCard: false,
-    };
-  }
-
   if (isRemoveInstitutionRequest(normalized)) {
     return {
       toolName: "request_remove_institution_confirmation",
@@ -3747,50 +3841,6 @@ function isAccountSelectionPrompt(normalized: string): boolean {
     /\b(add|select|remove)\b.{0,30}\b(account|card|checking|savings)\b.{0,20}\bfrom\b/.test(normalized) ||
     /\bforgot to select\b/.test(normalized)
   );
-}
-
-function getAccountInclusionIntent(normalized: string): { include: boolean; accountName?: string } | null {
-  const excludeMatch = /^(ignore|exclude|hide|stop using|don'?t use|do not use)\s+(.+)$/.exec(normalized);
-
-  if (excludeMatch) {
-    return {
-      include: false,
-      accountName: cleanupAccountTarget(excludeMatch[2]),
-    };
-  }
-
-  const includeMatch = /^(use|include|start using)\s+(.+?)(?: again)?$/.exec(normalized);
-
-  if (includeMatch && /\b(account|checking|savings|card|that|this|business|shared)\b/.test(includeMatch[2])) {
-    return {
-      include: true,
-      accountName: cleanupAccountTarget(includeMatch[2]),
-    };
-  }
-
-  return null;
-}
-
-function getProtectedSavingsAccountIntent(normalized: string): { protected: boolean; accountName?: string } | null {
-  const unsetMatch = /^(don'?t|do not|stop)\s+treat(?:ing)?\s+(.+?)\s+as protected/.exec(normalized);
-
-  if (unsetMatch) {
-    return {
-      protected: false,
-      accountName: cleanupAccountTarget(unsetMatch[2]),
-    };
-  }
-
-  const setMatch = /^(make|mark|set)\s+(.+?)\s+(?:as |my )?protected savings/.exec(normalized);
-
-  if (setMatch) {
-    return {
-      protected: true,
-      accountName: cleanupAccountTarget(setMatch[2]),
-    };
-  }
-
-  return null;
 }
 
 function isRemoveInstitutionRequest(normalized: string): boolean {

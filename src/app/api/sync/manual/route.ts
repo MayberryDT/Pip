@@ -11,6 +11,7 @@ import { loadManualRefreshOnlyForUser } from "@/lib/data/user-settings";
 import type { FinancialProviderName } from "@/lib/providers/FinancialDataProvider";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { ProviderUnavailableError } from "@/lib/providers/provider-registry";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -101,6 +102,10 @@ export async function POST(request: Request) {
       );
     }
 
+    if (!(error instanceof SupabaseConfigError)) {
+      console.error("[sync/manual] sync failed", getSafeErrorMessage(error, "Manual sync failed."));
+    }
+
     return NextResponse.json(toErrorBody(error), { status: 500 });
   }
 }
@@ -154,12 +159,6 @@ async function runNonManualSync(
 
 function toErrorBody(error: unknown) {
   if (error instanceof SupabaseConfigError) {
-    return {
-      error: error.message,
-    };
-  }
-
-  if (error instanceof Error) {
     return {
       error: error.message,
     };

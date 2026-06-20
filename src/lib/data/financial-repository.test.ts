@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getCurrentAppDate,
+  loadFinancialSnapshotForUser,
   loadCachedPipCashResultForUser,
   markPipCashSnapshotsStaleForUser,
   mapAccountRow,
@@ -14,6 +15,7 @@ import type { Database } from "@/lib/supabase/database.types";
 import type {
   AccountPreferenceRow,
   AccountRow,
+  RecurringObligationRuleRow,
   TransactionRow,
   UserSettingsRow,
 } from "@/lib/supabase/database.types";
@@ -221,6 +223,30 @@ describe("financial repository row mapping", () => {
       ["stale", false],
     ]);
   });
+
+  it("loads recurring obligation rules into production financial snapshots", async () => {
+    const calls: unknown[][] = [];
+    const supabase = createFinancialSnapshotClient({
+      calls,
+      settings: settingsRow(),
+      accounts: [accountRow()],
+      transactions: [transactionRow()],
+      recurringObligationRules: [recurringRuleRow()],
+    });
+
+    await expect(loadFinancialSnapshotForUser(supabase, "user-1")).resolves.toMatchObject({
+      recurringObligationRules: [
+        {
+          merchantKey: "city-power",
+          label: "City Power",
+          expectedAmountCents: 8400,
+          status: "active",
+        },
+      ],
+    });
+    expect(calls).toContainEqual(["from", "recurring_obligation_rules"]);
+    expect(calls).toContainEqual(["eq", "user_id", "user-1"]);
+  });
 });
 
 function createPipCashSnapshotsClient(input: {
@@ -266,4 +292,145 @@ function createPipCashSnapshotsClient(input: {
       return query;
     },
   } as unknown as SupabaseClient<Database>;
+}
+
+function createFinancialSnapshotClient(input: {
+  calls: unknown[][];
+  settings: UserSettingsRow | null;
+  accounts: AccountRow[];
+  accountPreferences?: AccountPreferenceRow[];
+  transactions: TransactionRow[];
+  recurringObligationRules: RecurringObligationRuleRow[];
+}): SupabaseClient<Database> {
+  return {
+    from(tableName: string) {
+      input.calls.push(["from", tableName]);
+
+      const query = {
+        select(columns?: string) {
+          input.calls.push(["select", columns ?? "*"]);
+          return query;
+        },
+        eq(column: string, value: unknown) {
+          input.calls.push(["eq", column, value]);
+          return query;
+        },
+        order(column: string, options: Record<string, unknown>) {
+          input.calls.push(["order", column, options]);
+          return query;
+        },
+        maybeSingle() {
+          return Promise.resolve({
+            data: input.settings,
+            error: null,
+          });
+        },
+        then(resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) {
+          return Promise.resolve(resolve({ data: rowsForTable(tableName, input), error: null })).catch(reject);
+        },
+      };
+
+      return query;
+    },
+  } as unknown as SupabaseClient<Database>;
+}
+
+function rowsForTable(
+  tableName: string,
+  input: {
+    accounts: AccountRow[];
+    accountPreferences?: AccountPreferenceRow[];
+    transactions: TransactionRow[];
+    recurringObligationRules: RecurringObligationRuleRow[];
+  },
+) {
+  if (tableName === "accounts") {
+    return input.accounts;
+  }
+  if (tableName === "account_preferences") {
+    return input.accountPreferences ?? [];
+  }
+  if (tableName === "transactions") {
+    return input.transactions;
+  }
+  if (tableName === "missing_card_preferences") {
+    return [];
+  }
+  if (tableName === "recurring_obligation_rules") {
+    return input.recurringObligationRules;
+  }
+  if (tableName === "savings_goals") {
+    return [];
+  }
+
+  return [];
+}
+
+function settingsRow(): UserSettingsRow {
+  return {
+    user_id: "user-1",
+    protected_savings_monthly_cents: 0,
+    manual_refresh_only: false,
+    invite_accepted_at: null,
+    privacy_consent_at: "2026-06-01T00:00:00.000Z",
+    created_at: "2026-06-01T00:00:00.000Z",
+    updated_at: "2026-06-01T00:00:00.000Z",
+  };
+}
+
+function accountRow(): AccountRow {
+  return {
+    id: "account-1",
+    user_id: "user-1",
+    institution_id: "institution-1",
+    provider_account_id: "provider-account-1",
+    name: "Everyday Checking",
+    institution_name: "Northstar Bank",
+    kind: "checking",
+    balance_cents: 120000,
+    available_balance_cents: 120000,
+    last_four: "1042",
+    is_protected_savings: false,
+    active: true,
+    raw_provider_data: {},
+    created_at: "2026-06-01T00:00:00.000Z",
+    updated_at: "2026-06-01T00:00:00.000Z",
+  };
+}
+
+function transactionRow(): TransactionRow {
+  return {
+    id: "transaction-1",
+    user_id: "user-1",
+    account_id: "account-1",
+    provider_transaction_id: "provider-transaction-1",
+    date: "2026-06-20",
+    description: "City Power",
+    merchant_name: "City Power",
+    amount_cents: -8400,
+    category: "utilities",
+    kind: "purchase",
+    pending: false,
+    metadata: {},
+    raw_provider_data: {},
+    created_at: "2026-06-20T00:00:00.000Z",
+    updated_at: "2026-06-20T00:00:00.000Z",
+  };
+}
+
+function recurringRuleRow(): RecurringObligationRuleRow {
+  return {
+    id: "rule-1",
+    user_id: "user-1",
+    merchant_key: "city-power",
+    label: "City Power",
+    expected_amount_cents: 8400,
+    expected_day: 20,
+    cadence: "monthly",
+    source: "user_confirmed",
+    status: "active",
+    last_confirmed_at: "2026-06-20T00:00:00.000Z",
+    created_at: "2026-06-20T00:00:00.000Z",
+    updated_at: "2026-06-20T00:00:00.000Z",
+  };
 }

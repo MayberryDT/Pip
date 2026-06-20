@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import { getAppOpenSyncDecision } from "@/lib/data/app-open-sync";
+import { getAppOpenSyncDecision, type AppOpenSyncDecision } from "@/lib/data/app-open-sync";
+import { recordProductEventSafely } from "@/lib/data/product-events";
 import { loadPendingPipSyncJobsForUser } from "@/lib/data/sync-jobs";
 import { loadSyncStatusForUser } from "@/lib/data/sync-status";
 import { runProviderSync } from "@/lib/data/manual-sync";
 import { loadManualRefreshOnlyForUser } from "@/lib/data/user-settings";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { ProviderUnavailableError } from "@/lib/providers/provider-registry";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -31,6 +33,7 @@ export async function POST() {
     if (isManualRefreshOnly) {
       return NextResponse.json({
         status: "skipped_manual_only",
+        reason: "manual_refresh_only",
         message: "Automatic refresh is disabled for this account.",
       });
     }
@@ -48,6 +51,13 @@ export async function POST() {
     });
 
     if (decision.status !== "run") {
+      await recordProductEventSafely(supabase, user.id, "app_open_sync_decision", {
+        ...toAppOpenDecisionEventProperties(decision),
+        hasPendingSyncJob: pendingJobs.some(
+          (job) => job.status === "pending" || job.status === "running",
+        ),
+      });
+
       return NextResponse.json(decision);
     }
 
@@ -68,6 +78,7 @@ export async function POST() {
       if (error instanceof ProviderSyncError && error.repairRequired) {
         return NextResponse.json({
           status: "needs_repair",
+          reason: "provider_needs_repair",
           provider: error.provider,
           institutionId: error.institutionId ?? null,
           institutionName: error.institutionName ?? null,
@@ -89,6 +100,10 @@ export async function POST() {
       );
     }
 
+    if (!(error instanceof SupabaseConfigError)) {
+      console.error("[sync/app-open] sync failed", getSafeErrorMessage(error, "App-open sync failed."));
+    }
+
     return NextResponse.json(toErrorBody(error), { status: 500 });
   }
 }
@@ -101,15 +116,20 @@ function toErrorBody(error: unknown) {
     };
   }
 
-  if (error instanceof Error) {
-    return {
-      status: "failed",
-      error: error.message,
-    };
-  }
-
   return {
     status: "failed",
     error: "App-open sync failed.",
+  };
+}
+
+function toAppOpenDecisionEventProperties(decision: Exclude<AppOpenSyncDecision, { status: "run" }>) {
+  return {
+    status: decision.status,
+    reason: decision.reason,
+    ...("provider" in decision ? { provider: decision.provider } : {}),
+    ...("institutionId" in decision ? { institutionId: decision.institutionId } : {}),
+    ...("errorCode" in decision ? { errorCode: decision.errorCode } : {}),
+    ...("retryAfterSeconds" in decision ? { retryAfterSeconds: decision.retryAfterSeconds } : {}),
+    ...("lastSuccessfulSyncAt" in decision ? { lastSuccessfulSyncAt: decision.lastSuccessfulSyncAt } : {}),
   };
 }

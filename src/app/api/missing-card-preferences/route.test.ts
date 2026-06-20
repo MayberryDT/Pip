@@ -137,6 +137,33 @@ describe("POST /api/missing-card-preferences", () => {
       },
     );
   });
+
+  it("logs suppression failures without exposing secret-shaped values", async () => {
+    enableSupabaseEnv();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const supabase = createSupabaseClient({ id: "user-1" }, null, {
+      insertError: {
+        message: "insert failed access_token=provider-secret sk-test-secret",
+      },
+    });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    try {
+      const response = await POST(jsonRequest({ issuerName: "Amex" }));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: "Missing-card preference request failed.",
+      });
+      expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "[missing-card-preferences] suppression failed",
+        "insert failed access_token=[redacted] [redacted]",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 function enableSupabaseEnv() {
@@ -148,9 +175,12 @@ function enableSupabaseEnv() {
 function createSupabaseClient(
   user: { id: string } | null,
   existingPreference: { id: string } | null = null,
+  input: {
+    insertError?: { message: string };
+  } = {},
 ) {
   const insert = vi.fn().mockResolvedValue({
-    error: null,
+    error: input.insertError ?? null,
   });
 
   return {

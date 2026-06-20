@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getClientPipPlatform } from "@/lib/platform/android-shell";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
       return NextResponse.json(body, { status: 503 });
     }
 
-    console.error("[ai-reports] report save failed", error);
+    console.error("[ai-reports] report save failed", getSafeErrorMessage(error, "Report save failed."));
     return NextResponse.json(body, { status: 500 });
   }
 }

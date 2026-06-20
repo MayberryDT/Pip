@@ -1,0 +1,15 @@
+{
+  "name": "pip-check-first",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes hyperframes@0.6.115 preview",
+    "check": "npx --yes hyperframes@0.6.115 lint && npx --yes hyperframes@0.6.115 validate && npx --yes hyperframes@0.6.115 inspect",
+    "render": "npx --yes hyperframes@0.6.115 render",
+    "publish": "npx --yes hyperframes@0.6.115 publish"
+  },
+  "devDependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@ffprobe-installer/ffprobe": "^2.1.2"
+  }
+}

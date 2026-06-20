@@ -42,6 +42,7 @@ export type PromptChipSelectionOutput = {
 export type PromptChipSelectionOptions = {
   input: {
     message: string;
+    requestKind?: "chat" | "prompt_chips";
     history?: Array<{
       role: "user" | "assistant";
       content: string;

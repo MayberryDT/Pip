@@ -83,7 +83,7 @@ describe("calculatePipCash", () => {
     expect(result.pipCashTodayCents).toBe(0);
   });
 
-  it("ignores transactions from inactive or excluded accounts in Spendable Cash Today", () => {
+  it("counts every active connected account in Spendable Cash Today", () => {
     const snapshot: FinancialSnapshot = {
       settings: {
         asOfDate: "2026-06-20",
@@ -149,12 +149,12 @@ describe("calculatePipCash", () => {
     const result = calculatePipCash(snapshot);
 
     expect(result.incomeTotalCents).toBe(100000);
-    expect(result.spendingTotalCents).toBe(0);
+    expect(result.spendingTotalCents).toBe(50000);
     expect(result.trueBalances).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           accountId: "business-card",
-          includedInPipCash: false,
+          includedInPipCash: true,
         }),
         expect.objectContaining({
           accountId: "old-checking",

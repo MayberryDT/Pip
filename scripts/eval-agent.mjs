@@ -270,7 +270,7 @@ export const agentEvalCases = [
   },
   {
     id: "phone-savings-japan-context",
-    description: "Amount/date follow-up with a pending Japan savings goal should create the goal.",
+    description: "Amount/date follow-up with a pending Japan savings goal should preview and ask for confirmation before saving.",
     message: "It costs $3,000 by December 1st",
     history: [
       { role: "user", content: "I want to save for Japan" },
@@ -283,9 +283,11 @@ export const agentEvalCases = [
         missing: ["target_amount"],
       },
     },
-    expectedTools: ["create_savings_goal"],
-    expectedCards: ["savings_goal_plan"],
-    expectedResponseMode: "show_card",
+    expectedPendingActionType: "create_savings_goal",
+    expectedResponseMode: "clarify",
+    expectNoCards: true,
+    forbiddenTools: ["create_savings_goal"],
+    forbiddenCards: ["savings_goal_plan"],
     forbidFalseSavingsCreate: true,
   },
   {

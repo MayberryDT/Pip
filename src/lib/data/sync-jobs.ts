@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { PendingSyncJobSummary } from "@/lib/data/freshness";
 import { runProviderSync, type PipSyncReason, type ProviderSyncResult } from "@/lib/data/manual-sync";
-import { recordProductEvent } from "@/lib/data/product-events";
+import { recordProductEventSafely } from "@/lib/data/product-events";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import type { Database } from "@/lib/supabase/database.types";
@@ -102,7 +102,7 @@ export async function enqueuePipSyncJob(
     throw error;
   }
 
-  await recordProductEvent(supabase, input.userId, "pip_sync_job_created", {
+  await recordProductEventSafely(supabase, input.userId, "pip_sync_job_created", {
     provider: input.provider,
     reason: input.reason,
     institutionId: input.institutionId,

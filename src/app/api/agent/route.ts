@@ -12,6 +12,7 @@ import {
   type ConnectedAccountsResult,
   deleteCurrentUserFinancialData,
   loadConnectedAccountsForUser,
+  loadFinancialSnapshotForUser,
   loadInstitutionForUser,
   markPipCashSnapshotsStaleForUser,
   removeInstitutionForUser,
@@ -25,6 +26,11 @@ import {
   loadSavingsGoalForUser,
   updateSavingsGoalForUser,
 } from "@/lib/data/savings-goals-repository";
+import {
+  ignoreRecurringObligationForUser,
+  normalizeMerchantKey,
+  upsertRecurringObligationRuleForUser,
+} from "@/lib/data/recurring-obligation-rules";
 import { runManualSync, ManualSyncRateLimitError } from "@/lib/data/manual-sync";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { loadSyncStatusForUser, type SyncStatus } from "@/lib/data/sync-status";
@@ -202,7 +208,11 @@ export async function POST(request: Request) {
 
       await Promise.all([
         recordAgentEvents(routeContext.eventContext, {
+          conversationId,
           message: parsed.data.message,
+          requestKind: parsed.data.requestKind ?? "chat",
+          scenario: parsed.data.scenario,
+          selectedPromptChipId: parsed.data.selectedPromptChipId,
           historyLength: parsed.data.history?.length ?? 0,
           response,
           pipCashTodayCents: routeResult
@@ -496,6 +506,18 @@ function createLocalDevAgentActions(snapshot: FinancialSnapshot): PipAgentAction
         ok: true,
         status: "savings_goal_updated",
         cards: [buildSavingsGoalPlanCard(toSavingsGoalPlanResponse(updated))],
+      };
+    },
+    async correctRecurringObligation({ merchantName, treatment }) {
+      return {
+        ok: true,
+        status: treatment === "bill" ? "recurring_obligation_confirmed" : "recurring_obligation_ignored",
+        message: treatment === "bill"
+          ? `I’ll treat ${merchantName} as a monthly bill.`
+          : `I’ll stop treating ${merchantName} as a monthly bill.`,
+        clientAction: {
+          type: "reload",
+        },
       };
     },
     async setSavingsGoalProtection(goalInput) {
@@ -977,6 +999,64 @@ function createAgentActions(input: {
           : {}),
       };
     },
+    async correctRecurringObligation({ merchantName, treatment, expectedAmountCents, expectedDay }) {
+      const { supabase, userId } = input.eventContext;
+
+      if (treatment === "not_bill") {
+        await ignoreRecurringObligationForUser(supabase, userId, merchantName);
+        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await recordProductEventSafely(supabase, userId, "recurring_obligation_corrected", {
+          merchantName,
+          treatment,
+        });
+
+        return {
+          ok: true,
+          status: "recurring_obligation_ignored",
+          message: `I’ll stop treating ${merchantName} as a monthly bill.`,
+          clientAction: {
+            type: "reload",
+          },
+        };
+      }
+
+      const inferred = await inferRecurringObligationFromSnapshot(supabase, userId, {
+        merchantName,
+        expectedAmountCents,
+        expectedDay,
+      });
+
+      if (!inferred.expectedAmountCents) {
+        return {
+          ok: false,
+          status: "recurring_obligation_amount_required",
+          message: `Tell me the usual monthly amount for ${merchantName}.`,
+        };
+      }
+
+      await upsertRecurringObligationRuleForUser(supabase, userId, {
+        merchantKey: normalizeMerchantKey(merchantName),
+        label: merchantName,
+        expectedAmountCents: inferred.expectedAmountCents,
+        expectedDay: inferred.expectedDay,
+      });
+      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await recordProductEventSafely(supabase, userId, "recurring_obligation_corrected", {
+        merchantName,
+        treatment,
+        expectedAmountCents: inferred.expectedAmountCents,
+        expectedDay: inferred.expectedDay,
+      });
+
+      return {
+        ok: true,
+        status: "recurring_obligation_confirmed",
+        message: `I’ll treat ${merchantName} as a monthly bill.`,
+        clientAction: {
+          type: "reload",
+        },
+      };
+    },
     async requestRemoveInstitutionConfirmation({ institutionId, institutionName }) {
       const { supabase, userId } = input.eventContext;
       const resolved = await resolveInstitutionTarget(supabase, {
@@ -1306,6 +1386,41 @@ function getRefreshProvider(syncStatus: SyncStatus | null): FinancialProviderNam
   }
 
   return null;
+}
+
+async function inferRecurringObligationFromSnapshot(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: {
+    merchantName: string;
+    expectedAmountCents?: number;
+    expectedDay?: number;
+  },
+): Promise<{
+  expectedAmountCents?: number;
+  expectedDay?: number;
+}> {
+  if (input.expectedAmountCents && input.expectedDay) {
+    return {
+      expectedAmountCents: input.expectedAmountCents,
+      expectedDay: input.expectedDay,
+    };
+  }
+
+  const snapshot = await loadFinancialSnapshotForUser(supabase, userId);
+  const merchantKey = normalizeMerchantKey(input.merchantName);
+  const match = snapshot?.transactions
+    .filter((transaction) => transaction.amountCents < 0)
+    .filter((transaction) =>
+      normalizeMerchantKey(transaction.merchantName ?? transaction.description) === merchantKey,
+    )
+    .sort((left, right) => right.date.localeCompare(left.date))
+    .at(0);
+
+  return {
+    expectedAmountCents: input.expectedAmountCents ?? (match ? Math.abs(match.amountCents) : undefined),
+    expectedDay: input.expectedDay ?? (match ? Number(match.date.slice(8, 10)) : undefined),
+  };
 }
 
 function getProviderErrorCode(error: unknown): string | null {

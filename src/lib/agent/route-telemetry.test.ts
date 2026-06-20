@@ -54,7 +54,7 @@ describe("agent route telemetry", () => {
         syncStatus: {
           latestSyncRun: {
             provider: "plaid",
-            status: "success",
+            status: "succeeded",
             startedAt: "2026-06-20T00:00:00.000Z",
             completedAt: "2026-06-20T00:00:01.000Z",
             accountCount: 1,
@@ -100,7 +100,7 @@ describe("agent route telemetry", () => {
       hasSnapshot: true,
       syncInstitutionCount: 1,
       syncHasStaleInstitution: false,
-      latestSyncStatus: "success",
+      latestSyncStatus: "succeeded",
       responseQuality: createQualityAudit(),
     });
   });
@@ -148,7 +148,11 @@ describe("agent route telemetry", () => {
         userId: "user-1",
       },
       {
+        conversationId: "conversation-1",
         message: "What pattern are you using?",
+        requestKind: "chat",
+        selectedPromptChipId: "ai-pattern",
+        scenario: "healthy",
         historyLength: 1,
         response,
         pipCashTodayCents: null,
@@ -165,7 +169,11 @@ describe("agent route telemetry", () => {
         usedTools: "get_pattern_assumptions",
         responseMode: "show_card",
         clientAction: "none",
+        conversationId: "conversation-1",
         messageLength: "What pattern are you using?".length,
+        requestKind: "chat",
+        selectedPromptChipId: "ai-pattern",
+        scenario: "healthy",
         historyLength: 1,
         isFollowUp: true,
         pipCashTodayCents: null,

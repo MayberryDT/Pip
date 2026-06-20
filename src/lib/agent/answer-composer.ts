@@ -233,12 +233,14 @@ function composeCardBackedAnswer(
         answerPatternId: "spending-breakdown",
       };
     case "recurring_activity":
-      return {
-        message: card.items.length > 0
-          ? "I found likely repeat items."
-          : "I do not see a clear repeat item yet.",
-        answerPatternId: "recurring-activity",
-      };
+      if (card.items.length === 0) {
+        return {
+          message: "I checked likely repeats and don’t see upcoming subscriptions.",
+          answerPatternId: "recurring-activity-empty",
+        };
+      }
+
+      return null;
     case "spendable_cash_forecast":
       return {
         message: `I mapped the next ${card.horizonDays} days. Forecast only; not guaranteed.`,
@@ -260,17 +262,9 @@ function composeCardBackedAnswer(
         answerPatternId: "trust-receipt",
       };
     case "savings_goal_plan":
-      return {
-        message: "I set up the savings goal plan.",
-        answerPatternId: "savings-goal-plan",
-      };
+      return null;
     case "savings_goals_summary":
-      return {
-        message: card.activeGoalCount > 0
-          ? "I pulled your savings goals."
-          : "You do not have active savings goals yet.",
-        answerPatternId: "savings-goals-summary",
-      };
+      return null;
     case "insight_card":
       if (isCutbackInsightCard(card)) {
         return {

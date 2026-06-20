@@ -1,13 +1,39 @@
 import type { AgentCard } from "@/lib/agent/card-types";
 import { AgentUnavailableError } from "@/lib/agent/agent-errors";
 
-export function guardVisibleFinalMessage(message: string, cards: AgentCard[] = []): string {
-  if (countWords(message) > 45) {
+export type VisibleResponseSurface = "bridge" | "companion" | "openingBubble" | "correction";
+
+export type VisibleResponseLimits = {
+  maxWords: number;
+  maxChars: number;
+};
+
+export const visibleResponseSurfaceLimits: Record<VisibleResponseSurface, VisibleResponseLimits> = {
+  bridge: { maxWords: 45, maxChars: 260 },
+  companion: { maxWords: 85, maxChars: 520 },
+  openingBubble: { maxWords: 38, maxChars: 220 },
+  correction: { maxWords: 70, maxChars: 420 },
+};
+
+export function getVisibleResponseSurfaceLimits(
+  surface: VisibleResponseSurface = "bridge",
+): VisibleResponseLimits {
+  return visibleResponseSurfaceLimits[surface];
+}
+
+export function guardVisibleFinalMessage(
+  message: string,
+  cards: AgentCard[] = [],
+  options: { surface?: VisibleResponseSurface } = {},
+): string {
+  const limits = getVisibleResponseSurfaceLimits(options.surface);
+
+  if (!fitsVisibleLimits(message, limits)) {
     throw new AgentUnavailableError({
       code: "model-returned-too-long-final-message",
       message: "AI returned a response that was too long for Pip.",
       status: 502,
-      detail: "Visible replies must be 45 words or fewer.",
+      detail: `Visible ${options.surface ?? "bridge"} replies must be ${limits.maxWords} words and ${limits.maxChars} characters or fewer.`,
     });
   }
 
@@ -18,7 +44,7 @@ export function guardVisibleFinalMessage(message: string, cards: AgentCard[] = [
 
     if (
       repairedMessage &&
-      countWords(repairedMessage) <= 45 &&
+      fitsVisibleLimits(repairedMessage, limits) &&
       !getDisallowedFinalLanguageDetail(repairedMessage) &&
       !getUnsupportedCardPromise(repairedMessage, cards)
     ) {
@@ -40,7 +66,7 @@ export function guardVisibleFinalMessage(message: string, cards: AgentCard[] = [
 
     if (
       repairedMessage &&
-      countWords(repairedMessage) <= 45 &&
+      fitsVisibleLimits(repairedMessage, limits) &&
       !getDisallowedFinalLanguageDetail(repairedMessage) &&
       !getUnsupportedCardPromise(repairedMessage, cards)
     ) {
@@ -60,7 +86,7 @@ export function guardVisibleFinalMessage(message: string, cards: AgentCard[] = [
 
     if (
       repairedMessage &&
-      countWords(repairedMessage) <= 45 &&
+      fitsVisibleLimits(repairedMessage, limits) &&
       !getDisallowedFinalLanguageDetail(repairedMessage) &&
       !getUnsupportedCardPromise(repairedMessage, cards)
     ) {
@@ -456,4 +482,8 @@ function hasDisallowedGuaranteeLanguage(normalized: string): boolean {
 
 function countWords(message: string): number {
   return message.trim().split(/\s+/).filter(Boolean).length;
+}
+
+function fitsVisibleLimits(message: string, limits: VisibleResponseLimits): boolean {
+  return message.length <= limits.maxChars && countWords(message) <= limits.maxWords;
 }

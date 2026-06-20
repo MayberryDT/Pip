@@ -317,6 +317,9 @@ describe("POST /api/agent", () => {
     const response = await POST(
       jsonRequest({
         message: "Can I spend $50?",
+        conversationId: "conversation-1",
+        scenario: "healthy",
+        selectedPromptChipId: "ai-spend",
         history: [
           {
             role: "user",
@@ -339,6 +342,10 @@ describe("POST /api/agent", () => {
         cardTypes: "purchase_simulation",
         usedTools: "simulate_purchase",
         responseMode: "show_card",
+        conversationId: "conversation-1",
+        requestKind: "chat",
+        selectedPromptChipId: "ai-spend",
+        scenario: "healthy",
         historyLength: 2,
         isFollowUp: true,
       }),
@@ -414,6 +421,75 @@ describe("POST /api/agent", () => {
         guidanceValidationOutcome: "shown",
         guidanceStance: "watch",
         guidanceEvidenceIds: "recent-spending-hot",
+      }),
+    );
+  });
+
+  it("persists recurring bill corrections from agent actions and reloads the number", async () => {
+    enableSupabaseEnv();
+    const tableCalls: unknown[][] = [];
+    const supabase = createSupabaseClient({ id: "user-1" }, undefined, {
+      tableCalls,
+    });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
+    routeMocks.runAIAgent.mockImplementation(async (input) => {
+      const result = await input.actions?.correctRecurringObligation?.({
+        merchantName: "City Power",
+        treatment: "bill",
+        expectedAmountCents: 8400,
+        expectedDay: 3,
+      });
+
+      return createAgentResponse({
+        message: result?.message,
+        usedTools: ["correct_recurring_obligation"],
+        responseMode: "chat_only",
+        clientAction: result?.clientAction,
+      });
+    });
+
+    const response = await POST(jsonRequest({ message: "Treat City Power as a monthly bill" }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      clientAction: {
+        type: "reload",
+      },
+      usedTools: ["correct_recurring_obligation"],
+    });
+    expect(tableCalls).toContainEqual([
+      "upsert",
+      "recurring_obligation_rules",
+      expect.objectContaining({
+        user_id: "user-1",
+        merchant_key: "city-power",
+        label: "City Power",
+        expected_amount_cents: 8400,
+        expected_day: 3,
+        source: "user_confirmed",
+        status: "active",
+      }),
+      { onConflict: "user_id,merchant_key" },
+    ]);
+    expect(tableCalls).toContainEqual([
+      "update",
+      "pip_cash_snapshots",
+      {
+        stale: true,
+      },
+    ]);
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "recurring_obligation_corrected",
+      expect.objectContaining({
+        merchantName: "City Power",
+        treatment: "bill",
+        expectedAmountCents: 8400,
+        expectedDay: 3,
       }),
     );
   });
@@ -838,6 +914,7 @@ function createSupabaseClient(
   options: {
     connectedInstitutions?: Array<Record<string, unknown>>;
     syncRuns?: Array<Record<string, unknown>>;
+    tableCalls?: unknown[][];
   } = {},
 ) {
   return {
@@ -850,6 +927,8 @@ function createSupabaseClient(
       }),
     },
     from: vi.fn((tableName: string) => {
+      options.tableCalls?.push(["from", tableName]);
+
       if (tableName === "user_settings") {
         return {
           select: vi.fn().mockReturnThis(),
@@ -862,6 +941,53 @@ function createSupabaseClient(
             error: null,
           }),
         };
+      }
+
+      if (tableName === "recurring_obligation_rules") {
+        return {
+          upsert: vi.fn((payload, optionsArg) => {
+            options.tableCalls?.push(["upsert", tableName, payload, optionsArg]);
+
+            return {
+              select: vi.fn().mockReturnThis(),
+              single: vi.fn().mockResolvedValue({
+                data: {
+                  id: "rule-1",
+                  user_id: payload.user_id,
+                  merchant_key: payload.merchant_key,
+                  label: payload.label,
+                  expected_amount_cents: payload.expected_amount_cents,
+                  expected_day: payload.expected_day,
+                  cadence: payload.cadence,
+                  source: payload.source,
+                  status: payload.status,
+                  last_confirmed_at: payload.last_confirmed_at ?? null,
+                  created_at: "2026-06-20T00:00:00.000Z",
+                  updated_at: payload.updated_at,
+                },
+                error: null,
+              }),
+            };
+          }),
+        };
+      }
+
+      if (tableName === "pip_cash_snapshots") {
+        const query = {
+          error: null,
+          update: vi.fn((payload) => {
+            options.tableCalls?.push(["update", tableName, payload]);
+
+            return query;
+          }),
+          eq: vi.fn((column, value) => {
+            options.tableCalls?.push(["eq", tableName, column, value]);
+
+            return query;
+          }),
+        };
+
+        return query;
       }
 
       if (tableName === "connected_institutions") {

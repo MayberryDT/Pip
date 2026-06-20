@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { getAgentProductEventNames, recordProductEventSafely } from "@/lib/data/product-events";
+import {
+  getAgentProductEventNames,
+  recordProductEvent,
+  recordProductEventSafely,
+} from "@/lib/data/product-events";
 import type { AgentResponse } from "@/lib/agent/card-types";
 
 describe("agent product event derivation", () => {
@@ -203,6 +207,82 @@ describe("agent product event derivation", () => {
     } finally {
       warn.mockRestore();
     }
+  });
+
+  it("logs sanitized product-event failures from message-shaped data errors", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const error = {
+      message: "Insert failed with public_token=public-secret Authorization: Bearer abc123",
+    };
+    const supabase = {
+      from() {
+        return {
+          insert() {
+            return Promise.resolve({
+              error,
+            });
+          },
+        };
+      },
+    } as unknown as Parameters<typeof recordProductEventSafely>[0];
+
+    try {
+      await recordProductEventSafely(supabase, "user-1", "pip_cash_viewed", {});
+
+      expect(warn).toHaveBeenCalledWith(
+        "Product event logging failed.",
+        "Insert failed with public_token=[redacted] Authorization=[redacted]",
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("redacts secret-shaped strings before storing event properties", async () => {
+    const inserts: unknown[] = [];
+    const supabase = {
+      from(tableName: string) {
+        expect(tableName).toBe("product_events");
+
+        return {
+          insert(row: unknown) {
+            inserts.push(row);
+
+            return Promise.resolve({
+              error: null,
+            });
+          },
+        };
+      },
+    } as unknown as Parameters<typeof recordProductEvent>[0];
+
+    await recordProductEvent(supabase, "user-1", "plaid_link_failed", {
+      errorMessage: "Plaid failed access_token=provider-secret sk-test-secret",
+      nested: {
+        authorization: "Bearer abc123",
+      },
+      events: [
+        {
+          public_token: "public-token",
+        },
+      ],
+    });
+
+    expect(inserts[0]).toEqual({
+      user_id: "user-1",
+      event_name: "plaid_link_failed",
+      properties: {
+        errorMessage: "Plaid failed access_token=[redacted] [redacted]",
+        nested: {
+          authorization: "[redacted]",
+        },
+        events: [
+          {
+            public_token: "[redacted]",
+          },
+        ],
+      },
+    });
   });
 });
 

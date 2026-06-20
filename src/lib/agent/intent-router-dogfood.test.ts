@@ -26,6 +26,22 @@ describe("intent router dogfood corpus", () => {
     expect(agentRouterDogfoodCases.length).toBeGreaterThanOrEqual(DOGFOOD_MIN_CASE_COUNT);
   });
 
+  it("does not expect retired account inclusion or savings protection routes", () => {
+    const retiredIntentIds = new Set(["account.inclusion", "account.protected_savings"]);
+    const retiredToolNames = new Set([
+      "set_account_inclusion",
+      "set_account_protected_savings",
+      "set_savings_goal_protection",
+    ]);
+
+    expect(
+      agentRouterDogfoodCases.filter((caseDef) => retiredIntentIds.has(caseDef.expectedIntentId ?? "")),
+    ).toEqual([]);
+    expect(
+      agentRouterDogfoodCases.filter((caseDef) => retiredToolNames.has(caseDef.expectedToolName ?? "")),
+    ).toEqual([]);
+  });
+
   it("covers every catalog routeable intent", () => {
     const coveredIntentIds = new Set(
       agentRouterDogfoodCases

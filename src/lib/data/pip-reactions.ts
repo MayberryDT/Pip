@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { recordProductEvent } from "@/lib/data/product-events";
+import { recordProductEventSafely } from "@/lib/data/product-events";
 import type { PipReactionDecision, RecentPipReaction } from "@/lib/pip/reactions";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -106,7 +106,7 @@ export async function createPipReactionEventForUser(
 
   const reaction = mapReactionRow(data);
 
-  await recordProductEvent(supabase, input.userId, "pip_reaction_created", {
+  await recordProductEventSafely(supabase, input.userId, "pip_reaction_created", {
     reactionType: reaction.reactionType,
     trigger: reaction.trigger,
     previousState: reaction.previousState,
@@ -149,7 +149,7 @@ export async function markPipReactionSeenForUser(
 
   const reaction = mapReactionRow(data);
 
-  await recordProductEvent(supabase, input.userId, "pip_reaction_seen", {
+  await recordProductEventSafely(supabase, input.userId, "pip_reaction_seen", {
     reactionId: reaction.id,
     reactionType: reaction.reactionType,
     intensity: reaction.intensity,

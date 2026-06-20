@@ -207,6 +207,21 @@ async function createSavingsGoalDraftResponse(
     status: "ready" as const,
     hasFinancialData: false,
   };
+  const hasPendingDraft = Boolean(pendingAction);
+
+  if (hasPendingDraft && isSavingsGoalCancelPrompt(input.message)) {
+    return agentResponseSchema.parse({
+      message: "No problem. I will leave that savings goal uncreated.",
+      cards: [],
+      promptChips: createDeterministicTrustPromptChips(input),
+      usedTools: [],
+      responseMode: "chat_only",
+      audit: {
+        toolNames: [],
+        usedModel: false,
+      },
+    });
+  }
 
   if (missing.includes("target_amount")) {
     return agentResponseSchema.parse({
@@ -225,6 +240,8 @@ async function createSavingsGoalDraftResponse(
       },
     });
   }
+
+  const hasCompletePendingDraft = hasPendingDraft && missing.length === 0;
 
   if (onboardingState.status === "guest" && !input.actions?.createSavingsGoal) {
     return agentResponseSchema.parse({
@@ -257,6 +274,24 @@ async function createSavingsGoalDraftResponse(
       },
       audit: {
         toolNames: ["create_savings_goal"],
+        usedModel: false,
+      },
+    });
+  }
+
+  if (hasCompletePendingDraft && !isSavingsGoalConfirmationPrompt(input.message)) {
+    return agentResponseSchema.parse({
+      message: `I can create ${formatSavingsGoalNameForPrompt(draft.name)} for ${formatMoney(draft.targetAmountCents ?? 0)}. Create it now?`,
+      cards: [],
+      promptChips: createDeterministicTrustPromptChips(input),
+      usedTools: [],
+      responseMode: "clarify",
+      pendingAction: {
+        ...draft,
+        missing: [],
+      },
+      audit: {
+        toolNames: [],
         usedModel: false,
       },
     });
@@ -355,7 +390,11 @@ function mergeSavingsGoalDraft(
   pendingAction: Extract<AgentPendingAction, { type: "create_savings_goal" }> | undefined,
 ): Extract<AgentPendingAction, { type: "create_savings_goal" }> {
   const normalized = normalizePrompt(message);
-  const targetAmountCents = extractSavingsGoalAmountCents(message) ?? pendingAction?.targetAmountCents;
+  const pendingTargetAmountCents = pendingAction?.targetAmountCents;
+  const updatedTargetAmountCents =
+    extractSavingsGoalAmountCents(message) ??
+    (pendingAction ? extractBareSavingsGoalAmountCents(message) : null);
+  const targetAmountCents = updatedTargetAmountCents ?? pendingTargetAmountCents;
   const monthlyContributionCents = extractMonthlyContributionCents(message) ?? pendingAction?.monthlyContributionCents;
   const targetDate = parseSavingsGoalTargetDate(message, getAgentAsOfDate()) ?? pendingAction?.targetDate;
   const inferredName = inferSavingsGoalName(message, normalized);
@@ -436,11 +475,13 @@ function formatSavingsGoalNameForPrompt(name: string): string {
 
 function parseSavingsGoalTargetDate(message: string, asOfDate: string): string | null {
   const monthPattern =
-    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
+    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?\b/i;
   const monthMatch = monthPattern.exec(message);
 
   if (monthMatch) {
-    return buildFutureDate(Number(monthNameToMonthNumber(monthMatch[1])), Number(monthMatch[2]), asOfDate);
+    const year = monthMatch[3] ? Number(monthMatch[3]) : undefined;
+
+    return buildFutureDate(Number(monthNameToMonthNumber(monthMatch[1])), Number(monthMatch[2]), asOfDate, year);
   }
 
   const numericMatch = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(message);
@@ -451,6 +492,19 @@ function parseSavingsGoalTargetDate(message: string, asOfDate: string): string |
     const year = numericMatch[3] ? normalizeYear(Number(numericMatch[3])) : undefined;
 
     return buildFutureDate(month, day, asOfDate, year);
+  }
+
+  const monthYearMatch =
+    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s+(\d{4})\b/i.exec(message);
+
+  if (monthYearMatch) {
+    return buildMonthEndDate(Number(monthNameToMonthNumber(monthYearMatch[1])), Number(monthYearMatch[2]), asOfDate);
+  }
+
+  const yearEndMatch = /\b(?:by\s+)?end of\s+(\d{4})\b/i.exec(message) ?? /\bby\s+(\d{4})\b/i.exec(message);
+
+  if (yearEndMatch) {
+    return buildYearEndDate(Number(yearEndMatch[1]), asOfDate);
   }
 
   return null;
@@ -490,6 +544,24 @@ function buildFutureDate(month: number, day: number, asOfDate: string, explicitY
   }
 
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function buildMonthEndDate(month: number, year: number, asOfDate: string): string | null {
+  if (month < 1 || month > 12 || year < 1900 || year > 2100) {
+    return null;
+  }
+
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+
+  return buildFutureDate(month, lastDay, asOfDate, year);
+}
+
+function buildYearEndDate(year: number, asOfDate: string): string | null {
+  if (year < 1900 || year > 2100) {
+    return null;
+  }
+
+  return buildFutureDate(12, 31, asOfDate, year);
 }
 
 function parseDateParts(value: string) {
@@ -557,6 +629,9 @@ export function getSavingsGoalForcedTool(
   }
 
   const targetAmountCents = extractSavingsGoalAmountCents(message);
+  const progressAmountCents = isSavingsGoalProgressPrompt(normalized)
+    ? extractSavingsGoalProgressAmountCents(message)
+    : null;
   const monthlyContributionCents = extractMonthlyContributionCents(message);
   const name = inferSavingsGoalName(message, normalized);
 
@@ -580,12 +655,12 @@ export function getSavingsGoalForcedTool(
     };
   }
 
-  if (isSavingsGoalProgressPrompt(normalized) && targetAmountCents !== null) {
+  if (isSavingsGoalProgressPrompt(normalized) && progressAmountCents !== null) {
     return {
       toolName: "update_savings_goal",
       args: {
         name,
-        current_amount_cents: targetAmountCents,
+        current_amount_cents: progressAmountCents,
       },
       requireCard: true,
     };
@@ -620,7 +695,8 @@ export function isSavingsGoalPrompt(normalized: string): boolean {
 }
 
 function isSavingsGoalCreatePrompt(normalized: string): boolean {
-  return /\b(create|start|set up|make|add|track|want|need|help)\b/.test(normalized) ||
+  return /\b(create|start|set up|make|add|track|want|need|help|put|contribute)\b/.test(normalized) ||
+    /\bset (?:a|an|new) savings? goals?\b/.test(normalized) ||
     /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized);
 }
 
@@ -643,6 +719,20 @@ function isSavingsGoalProgressPrompt(normalized: string): boolean {
 }
 
 function extractSavingsGoalAmountCents(message: string): number | null {
+  const candidates = extractMoneyAmountCandidates(message, 100_000_000).filter(
+    (candidate) => scoreBareSavingsGoalAmountCandidate(message, candidate.index, candidate.length) >= 0,
+  );
+
+  if (!candidates.length) {
+    return null;
+  }
+
+  candidates.sort((left, right) => right.score - left.score || right.index - left.index);
+
+  return candidates[0].amountCents;
+}
+
+function extractSavingsGoalProgressAmountCents(message: string): number | null {
   const candidates = extractMoneyAmountCandidates(message, 100_000_000);
 
   if (!candidates.length) {
@@ -654,12 +744,146 @@ function extractSavingsGoalAmountCents(message: string): number | null {
   return candidates[0].amountCents;
 }
 
+function extractBareSavingsGoalAmountCents(message: string): number | null {
+  const candidates: Array<{ amountCents: number; index: number; raw: string; score: number }> = [];
+
+  const bareAmountPattern = /\b(\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d{3,7}(?:\.\d{1,2})?)\b/g;
+
+  for (const match of message.matchAll(bareAmountPattern)) {
+    const raw = match[1];
+    const amount = Number(raw.replaceAll(",", ""));
+
+    if (!Number.isFinite(amount)) {
+      continue;
+    }
+
+    const amountCents = Math.round(amount * 100);
+
+    if (
+      amountCents > 0 &&
+      amountCents <= 100_000_000 &&
+      !isLikelyMonthlyAmountToken(message, match.index ?? 0, raw.length) &&
+      !isLikelyDurationToken(message, match.index ?? 0, raw.length)
+    ) {
+      candidates.push({
+        amountCents,
+        index: match.index ?? 0,
+        raw,
+        score: scoreBareSavingsGoalAmountCandidate(message, match.index ?? 0, raw.length),
+      });
+    }
+  }
+
+  const rankedCandidates = candidates.filter(
+    (candidate) => !isLikelyDateYearToken(message, candidate.raw, candidate.index),
+  );
+
+  rankedCandidates.sort((left, right) => right.score - left.score || right.index - left.index);
+
+  const candidate = rankedCandidates[0];
+
+  return candidate && candidate.score >= 0 ? candidate.amountCents : null;
+}
+
+function scoreBareSavingsGoalAmountCandidate(message: string, index: number, length: number): number {
+  const normalized = message.toLowerCase();
+  const before = normalized.slice(Math.max(0, index - 64), index);
+  const after = normalized.slice(index + length, index + length + 64);
+  let score = 0;
+
+  if (/\b(target|goal|cost|costs|need|save|saving|toward|towards|for)\b/.test(before)) {
+    score += 4;
+  }
+
+  if (/\b(actually|make it|change it to|set it to|to)\s*$/.test(before)) {
+    score += 6;
+  }
+
+  if (/^\s*(target|goal|cost|costs)\b/.test(after) || /\b(target|goal|cost|costs)\b/.test(after.slice(0, 24))) {
+    score += 8;
+  }
+
+  if (/\b(from)\s*$/.test(before)) {
+    score -= 4;
+  }
+
+  if (
+    /\b(already have|have already|already saved|saved so far|currently saved|current|progress|starting|started with)\b/.test(before) ||
+    /\bsaved\s*$/.test(before) ||
+    /^\s*(current|progress|already saved|already have)\b/.test(after) ||
+    /^\s*saved\b(?!\s+(for|toward|towards|by)\b)/.test(after)
+  ) {
+    score -= 12;
+  }
+
+  return score;
+}
+
+function isSavingsGoalConfirmationPrompt(message: string): boolean {
+  const normalized = normalizePrompt(message).replace(/’/g, "'").replace(/,/g, "");
+
+  return /^(yes|yeah|yep|ok|okay|sure|do it|create it|create it now|yes do it|please do|go ahead|sounds good|looks good|that works|works for me)( please)?$/.test(normalized) ||
+    /^(yes|yeah|yep|ok|okay|sure)\s+(please\s+)?(create it|do it|go ahead)( now)?( please)?$/.test(normalized) ||
+    /^go ahead( and)?\s+(create it|do it)( now)?$/.test(normalized) ||
+    /^please\s+(create it|do it)( now)?$/.test(normalized);
+}
+
+function isSavingsGoalCancelPrompt(message: string): boolean {
+  const normalized = normalizePrompt(message).replace(/’/g, "'");
+
+  return /^(no|nope|not now|cancel|stop|never mind|nevermind|no thanks|no thank you|don't|dont|do not)$/.test(normalized) ||
+    /^no,?\s+(thanks|thank you|don'?t|dont|do not|cancel|stop|not now)\b/.test(normalized) ||
+    /\b(don'?t|dont|do not)\s+(create|save|add|make)\b/.test(normalized);
+}
+
+function isLikelyDateYearToken(message: string, raw: string, index: number): boolean {
+  if (!isPlausibleYearToken(raw)) {
+    return false;
+  }
+
+  const before = message.slice(Math.max(0, index - 24), index).toLowerCase();
+  const after = message.slice(index + raw.length, index + raw.length + 12).toLowerCase();
+  const monthNameBeforeYear =
+    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s*$/.test(before);
+  const monthDayBeforeYear =
+    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s+\d{1,2}(?:st|nd|rd|th)?,?\s*$/.test(before);
+
+  return /[/-]\s*$|\b(by|on|until|before|after|in|during|through|end of|by end of)\s*$/.test(before) ||
+    monthNameBeforeYear ||
+    monthDayBeforeYear ||
+    /^\s*[/-]/.test(after);
+}
+
+function isPlausibleYearToken(raw: string): boolean {
+  if (!/^\d{4}$/.test(raw)) {
+    return false;
+  }
+
+  const year = Number(raw);
+
+  return year >= 1900 && year <= 2100;
+}
+
+function isLikelyMonthlyAmountToken(message: string, index: number, length: number): boolean {
+  const before = message.slice(Math.max(0, index - 18), index).toLowerCase();
+  const after = message.slice(index + length, index + length + 18).toLowerCase();
+
+  return /\b(?:monthly|per\s+month|a\s+month)\s*(?:\$|usd\s*)?$/.test(before) ||
+    /^\s*(?:\/\s*|per\s+|a\s+)?(?:monthly|month|mo)\b/.test(after);
+}
+
+function isLikelyDurationToken(message: string, index: number, length: number): boolean {
+  const after = message.slice(index + length, index + length + 18).toLowerCase();
+
+  return /^\s*(?:-\s*)?(?:days?|weeks?|months?|years?)\b/.test(after);
+}
+
 function extractMonthlyContributionCents(message: string): number | null {
   const monthlyPattern =
-    /(?:\$|usd\s*)\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\s*(?:\/|per\s+|a\s+)?month|\b(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)?\s*(?:\/|per\s+|a\s+)?month\b/gi;
+    /(?:\$|usd\s*)\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\s*(?:\/\s*|per\s+|a\s+)?(?:monthly|month|mo)\b|\b(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)?\s*(?:\/\s*|per\s+|a\s+)?(?:monthly|month|mo)\b|\b(?:monthly|per\s+month|a\s+month)\s*(?:\$|usd\s*)?\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\b/gi;
 
   for (const match of message.matchAll(monthlyPattern)) {
-    const rawAmount = match[1] ?? match[2];
+    const rawAmount = match[1] ?? match[2] ?? match[3];
     const amount = Number(rawAmount.replaceAll(",", ""));
 
     if (!Number.isFinite(amount)) {
@@ -680,7 +904,7 @@ function extractMoneyAmountCandidates(message: string, maxCents: number) {
   const amountPattern =
     /(?:\$|usd\s*)\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)|(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)/gi;
   const normalized = message.toLowerCase();
-  const candidates: Array<{ amountCents: number; index: number; score: number }> = [];
+  const candidates: Array<{ amountCents: number; index: number; length: number; score: number }> = [];
 
   for (const match of message.matchAll(amountPattern)) {
     const rawAmount = match[1] ?? match[2];
@@ -697,9 +921,14 @@ function extractMoneyAmountCandidates(message: string, maxCents: number) {
     }
 
     const index = match.index ?? 0;
+    if (isLikelyMonthlyAmountToken(message, index, match[0].length)) {
+      continue;
+    }
+
     candidates.push({
       amountCents,
       index,
+      length: match[0].length,
       score: scoreSavingsGoalAmountCandidate(normalized, index),
     });
   }

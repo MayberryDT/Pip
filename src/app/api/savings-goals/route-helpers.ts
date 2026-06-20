@@ -33,20 +33,11 @@ export const savingsGoalUpdateSchema = z.object({
 
 export function validateSavingsGoalInput(
   input: SavingsGoalInput | SavingsGoalUpdate,
-  existing?: SavingsGoal,
+  _existing?: SavingsGoal,
 ): string | null {
   const targetDate = "targetDate" in input ? input.targetDate : undefined;
   if (targetDate && targetDate <= getCurrentAppDate()) {
     return "Target date must be in the future.";
-  }
-
-  const includeInSpendableCash =
-    input.includeInSpendableCash ?? existing?.includeInSpendableCash ?? false;
-  const monthlyContributionCents =
-    input.monthlyContributionCents ?? existing?.monthlyContributionCents ?? 0;
-
-  if (includeInSpendableCash && monthlyContributionCents <= 0) {
-    return "Protected savings goals need a monthly contribution.";
   }
 
   return null;
@@ -57,25 +48,30 @@ export function shouldStalePipCashForGoalChange(
   after: SavingsGoal,
 ): boolean {
   if (!before) {
-    return after.includeInSpendableCash && after.monthlyContributionCents > 0;
+    return after.status === "active";
   }
 
-  const beforeProtected = before.status === "active" && before.includeInSpendableCash;
-  const afterProtected = after.status === "active" && after.includeInSpendableCash;
+  const beforeActive = before.status === "active";
+  const afterActive = after.status === "active";
+
+  if (beforeActive !== afterActive) {
+    return true;
+  }
+
+  if (!afterActive) {
+    return false;
+  }
 
   return (
-    beforeProtected !== afterProtected ||
-    (afterProtected && before.monthlyContributionCents !== after.monthlyContributionCents)
+    before.targetAmountCents !== after.targetAmountCents ||
+    before.targetDate !== after.targetDate ||
+    before.currentAmountCents !== after.currentAmountCents ||
+    before.monthlyContributionCents !== after.monthlyContributionCents
   );
 }
 
 export function shouldStalePipCashForGoalArchive(goal: SavingsGoal | null): boolean {
-  return Boolean(
-    goal &&
-      goal.status === "active" &&
-      goal.includeInSpendableCash &&
-      goal.monthlyContributionCents > 0,
-  );
+  return Boolean(goal && goal.status === "active");
 }
 
 export function toSavingsGoalPlanResponse(goal: SavingsGoal): SavingsGoalPlan {

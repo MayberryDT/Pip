@@ -60,7 +60,7 @@ describe("POST /api/feedback", () => {
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
     const supabase = createSupabaseClient({ id: "user-1", email: "play-review@animasai.co" });
     supabase.insert.mockResolvedValue({
-      error: new Error("relation tester_feedback does not exist"),
+      error: new Error("relation tester_feedback does not exist: access_token=provider-secret"),
     });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
@@ -73,7 +73,11 @@ describe("POST /api/feedback", () => {
     });
     expect(consoleError).toHaveBeenCalledWith(
       "[feedback] feedback save failed",
-      expect.any(Error),
+      expect.stringContaining("relation tester_feedback does not exist"),
+    );
+    expect(consoleError).toHaveBeenCalledWith(
+      "[feedback] feedback save failed",
+      expect.not.stringContaining("provider-secret"),
     );
   });
 

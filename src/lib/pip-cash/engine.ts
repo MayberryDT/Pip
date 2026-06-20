@@ -20,7 +20,7 @@ import {
 } from "@/lib/pip-cash/dedupe-credit-card-payments";
 import { calculateSpendableCashToday } from "@/lib/pip-cash/spendable-cash-today";
 import { toPipCashSnapshot } from "@/lib/pip-cash/account-filters";
-import { getProtectedSavingsGoalMonthlyCents } from "@/lib/savings-goals/plan";
+import { getActiveSavingsGoalMonthlyCents } from "@/lib/savings-goals/plan";
 
 const MATERIAL_PENDING_THRESHOLD_CENTS = 2000;
 
@@ -68,7 +68,10 @@ export function calculatePipCash(snapshot: FinancialSnapshot): PipCashResult {
   }
 
   const spendingTotalCents = Math.max(0, grossSpendingCents - refundTotalCents);
-  const savingsGoalMonthlyCents = getProtectedSavingsGoalMonthlyCents(snapshot.savingsGoals);
+  const savingsGoalMonthlyCents = getActiveSavingsGoalMonthlyCents(
+    snapshot.savingsGoals,
+    snapshot.settings.asOfDate,
+  );
   const totalSavingsProtectedMonthlyCents =
     snapshot.settings.protectedSavingsMonthlyCents + savingsGoalMonthlyCents;
   const rollingNetCents =
@@ -160,7 +163,7 @@ function buildDrivers(input: {
     drivers.push({
       id: "savings-goals",
       label: "Savings goals",
-      detail: "Protected goal contributions are kept out of Spendable Cash Today.",
+      detail: "Active savings goals are folded into Spendable Cash Today.",
       amountCents: -input.savingsGoalMonthlyCents,
       tone: "neutral",
     });
@@ -370,7 +373,7 @@ function toBalanceSummary(account: Account): AccountBalanceSummary {
     availableBalanceCents: account.availableBalanceCents,
     lastFour: account.lastFour,
     active: account.active,
-    includedInPipCash: account.includedInPipCash,
+    includedInPipCash: account.active !== false,
     isProtectedSavings: account.isProtectedSavings,
   };
 }

@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1920, height=1080">
+    <title>Pip - Check First</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: #fcf9f8;
+        color: #1c1b1b;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      #root {
+        position: relative;
+        overflow: hidden;
+        width: 1920px;
+        height: 1080px;
+        background:
+          radial-gradient(circle at 18% 12%, rgba(255, 253, 248, 0.9) 0 12%, rgba(255, 253, 248, 0) 34%),
+          radial-gradient(circle at 78% 70%, rgba(141, 166, 130, 0.24) 0 12%, rgba(141, 166, 130, 0) 36%),
+          linear-gradient(180deg, #fcf9f8 0%, #f6f3f2 100%);
+        isolation: isolate;
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      #scene-1 {
+        opacity: 1;
+      }
+
+      .scene-content {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        padding: 104px 126px;
+        gap: 72px;
+        box-sizing: border-box;
+      }
+
+      .kicker {
+        display: inline-flex;
+        width: max-content;
+        align-items: center;
+        gap: 12px;
+        border: 1px solid rgba(78, 101, 69, 0.18);
+        border-radius: 999px;
+        background: rgba(255, 253, 248, 0.72);
+        color: #434840;
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: 0;
+        line-height: 34px;
+        padding: 12px 22px;
+        box-shadow: 0 18px 50px rgba(78, 101, 69, 0.08);
+      }
+
+      .leaf-dot {
+        width: 15px;
+        height: 15px;
+        border-radius: 999px 999px 999px 0;
+        background: #8da682;
+        transform: rotate(-38deg);
+      }
+
+      h1,
+      h2 {
+        margin: 0;
+        color: #1c1b1b;
+        font-family: Georgia, serif;
+        font-weight: 500;
+        letter-spacing: 0;
+      }
+
+      .hero-title {
+        max-width: 760px;
+        font-size: 112px;
+        line-height: 0.97;
+      }
+
+      .section-title {
+        max-width: 780px;
+        font-size: 82px;
+        line-height: 1.02;
+      }
+
+      .accent-text {
+        color: #4e6545;
+        font-style: italic;
+      }
+
+      .copy {
+        max-width: 720px;
+        color: rgba(67, 72, 64, 0.86);
+        font-size: 32px;
+        font-weight: 400;
+        line-height: 1.38;
+      }
+
+      .proof-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+      }
+
+      .proof-chip {
+        border: 1px solid rgba(78, 101, 69, 0.2);
+        border-radius: 999px;
+        background: rgba(255, 253, 248, 0.78);
+        color: #4e6545;
+        font-size: 23px;
+        font-weight: 800;
+        line-height: 32px;
+        padding: 13px 20px;
+        box-shadow: 0 18px 40px rgba(78, 101, 69, 0.08);
+      }
+
+      .hero-copy {
+        position: relative;
+        z-index: 4;
+        display: flex;
+        max-width: 800px;
+        flex: 0 0 760px;
+        flex-direction: column;
+        justify-content: center;
+        gap: 32px;
+      }
+
+      .hero-stage {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+      }
+
+      .hero-glow,
+      .hero-sun,
+      .scene-glow {
+        position: absolute;
+        border-radius: 999px;
+        pointer-events: none;
+      }
+
+      .hero-glow {
+        right: 8%;
+        bottom: 8%;
+        width: 840px;
+        height: 620px;
+        background:
+          radial-gradient(circle at 48% 45%, rgba(255, 253, 248, 0.92), rgba(255, 253, 248, 0) 58%),
+          radial-gradient(circle at 52% 62%, rgba(141, 166, 130, 0.25), rgba(141, 166, 130, 0) 70%);
+        filter: blur(22px);
+      }
+
+      .hero-sun {
+        top: 84px;
+        right: 120px;
+        width: 430px;
+        height: 430px;
+        background: radial-gradient(circle, rgba(255, 249, 240, 0.92) 0 45%, rgba(244, 232, 215, 0.34) 46% 66%, rgba(244, 232, 215, 0) 67%);
+      }
+
+      .hero-product {
+        position: absolute;
+        right: -22px;
+        bottom: 28px;
+        z-index: 3;
+        width: 760px;
+        height: auto;
+        filter: drop-shadow(0 42px 70px rgba(28, 27, 27, 0.16));
+      }
+
+      .daily-card {
+        position: absolute;
+        top: 126px;
+        right: 520px;
+        z-index: 4;
+        width: 286px;
+        border: 1px solid rgba(255, 253, 248, 0.72);
+        border-radius: 34px;
+        background: rgba(255, 253, 248, 0.82);
+        box-shadow: 0 28px 70px rgba(28, 27, 27, 0.1);
+        padding: 26px 28px 28px;
+      }
+
+      .daily-card-label {
+        color: #545a50;
+        font-size: 20px;
+        font-weight: 800;
+        line-height: 1.1;
+      }
+
+      .daily-card-number {
+        margin-top: 8px;
+        color: #4e6545;
+        font-family: Georgia, serif;
+        font-size: 88px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+        line-height: 0.95;
+      }
+
+      .ground-shadow {
+        position: absolute;
+        right: 20px;
+        bottom: 32px;
+        width: 790px;
+        height: 120px;
+        border-radius: 999px;
+        background: radial-gradient(ellipse, rgba(78, 101, 69, 0.2) 0 24%, rgba(78, 101, 69, 0.08) 50%, rgba(78, 101, 69, 0) 72%);
+        filter: blur(18px);
+      }
+
+      .balance-content {
+        align-items: stretch;
+        padding: 80px 106px;
+        gap: 56px;
+      }
+
+      .balance-visual {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+        border: 1px solid rgba(196, 200, 189, 0.24);
+        border-radius: 44px;
+        background: #fffdf8;
+        box-shadow: 0 28px 78px rgba(28, 27, 27, 0.1);
+      }
+
+      .balance-media,
+      .ask-media {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        border-radius: inherit;
+      }
+
+      .balance-bg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .balance-panel {
+        position: absolute;
+        left: 54px;
+        top: 54px;
+        width: 438px;
+        border: 1px solid rgba(255, 253, 248, 0.72);
+        border-radius: 34px;
+        background: rgba(255, 253, 248, 0.86);
+        box-shadow: 0 24px 70px rgba(28, 27, 27, 0.1);
+        padding: 34px;
+      }
+
+      .money-line {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 26px;
+        border-bottom: 1px solid rgba(78, 101, 69, 0.14);
+        color: #545a50;
+        font-size: 24px;
+        font-weight: 800;
+        line-height: 1.2;
+        padding: 20px 0;
+      }
+
+      .money-line:first-child {
+        padding-top: 0;
+      }
+
+      .money-line:last-child {
+        border-bottom: 0;
+        padding-bottom: 0;
+      }
+
+      .money-line strong {
+        color: #1c1b1b;
+        font-family: Georgia, serif;
+        font-size: 42px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+      }
+
+      .money-line.final strong {
+        color: #4e6545;
+        font-size: 58px;
+      }
+
+      .balance-copy {
+        display: flex;
+        flex: 0 0 660px;
+        flex-direction: column;
+        justify-content: center;
+        gap: 30px;
+      }
+
+      .ask-content {
+        align-items: center;
+        padding: 86px 112px;
+      }
+
+      .ask-visual {
+        position: relative;
+        flex: 1;
+        min-width: 0;
+        height: 812px;
+        border: 1px solid rgba(196, 200, 189, 0.24);
+        border-radius: 44px;
+        background: #fffdf8;
+        box-shadow: 0 28px 78px rgba(28, 27, 27, 0.1);
+      }
+
+      .ask-bg {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .ask-thread {
+        position: absolute;
+        left: 64px;
+        top: 74px;
+        display: flex;
+        width: 536px;
+        flex-direction: column;
+        gap: 18px;
+      }
+
+      .bubble {
+        width: fit-content;
+        max-width: 510px;
+        border: 1px solid rgba(255, 253, 248, 0.74);
+        border-radius: 28px;
+        background: rgba(255, 253, 248, 0.86);
+        color: #1c1b1b;
+        box-shadow: 0 20px 48px rgba(28, 27, 27, 0.1);
+        font-size: 28px;
+        font-weight: 700;
+        line-height: 1.22;
+        padding: 22px 26px;
+      }
+
+      .bubble.pip {
+        background: rgba(232, 237, 225, 0.9);
+        color: #34492f;
+      }
+
+      .bubble span {
+        display: block;
+        margin-bottom: 8px;
+        color: #34492f;
+        font-size: 18px;
+        font-weight: 900;
+        text-transform: uppercase;
+      }
+
+      .ask-copy {
+        display: flex;
+        flex: 0 0 665px;
+        flex-direction: column;
+        gap: 30px;
+      }
+
+      .trust-strip {
+        display: flex;
+        gap: 14px;
+      }
+
+      .trust-strip span {
+        border-radius: 999px;
+        background: rgba(78, 101, 69, 0.1);
+        color: #4e6545;
+        font-size: 21px;
+        font-weight: 900;
+        line-height: 30px;
+        padding: 13px 18px;
+      }
+
+      .cta-content {
+        align-items: center;
+        justify-content: space-between;
+        padding: 94px 136px;
+      }
+
+      .cta-copy {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        width: 930px;
+        flex-direction: column;
+        gap: 30px;
+      }
+
+      .cta-title {
+        max-width: 880px;
+        font-size: 106px;
+        line-height: 0.98;
+      }
+
+      .pip-wave {
+        position: absolute;
+        right: 142px;
+        bottom: 58px;
+        z-index: 2;
+        width: 520px;
+        filter: drop-shadow(0 34px 58px rgba(28, 27, 27, 0.14));
+      }
+
+      .cta-button-row {
+        display: flex;
+        align-items: center;
+        gap: 22px;
+      }
+
+      .button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 999px;
+        background: #8da682;
+        color: #263b20;
+        box-shadow: 0 16px 34px rgba(78, 101, 69, 0.18);
+        font-size: 28px;
+        font-weight: 900;
+        line-height: 1;
+        padding: 24px 34px;
+      }
+
+      .url {
+        color: #4e6545;
+        font-size: 26px;
+        font-weight: 900;
+      }
+
+      .scene-glow {
+        right: 68px;
+        bottom: 62px;
+        z-index: 1;
+        width: 680px;
+        height: 500px;
+        background: radial-gradient(circle, rgba(141, 166, 130, 0.2), rgba(141, 166, 130, 0) 68%);
+        filter: blur(20px);
+      }
+
+      .ambient-rule {
+        position: absolute;
+        left: 110px;
+        right: 110px;
+        bottom: 84px;
+        height: 1px;
+        background: rgba(78, 101, 69, 0.16);
+        transform-origin: left center;
+      }
+
+      .transition-wash {
+        position: absolute;
+        inset: -8%;
+        z-index: 20;
+        background:
+          radial-gradient(circle at 68% 48%, rgba(255, 253, 248, 0.92) 0 12%, rgba(255, 253, 248, 0) 34%),
+          linear-gradient(90deg, rgba(244, 232, 215, 0), #f4e8d7 28%, #fffdf8 58%, rgba(252, 249, 248, 0));
+        opacity: 0;
+        transform: translateX(-112%) skewX(-8deg);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div data-hf-id="hf-5c6v" id="root" class="clip" data-composition-id="main" data-start="0" data-duration="16" data-track-index="1" data-width="1920" data-height="1080">
+      <section data-hf-id="hf-m01a" id="scene-1" class="scene" aria-label="Before you spend, check Pip">
+        <div data-hf-id="hf-cn5c" class="scene-content">
+          <div data-hf-id="hf-jloi" class="hero-copy">
+            <p data-hf-id="hf-twnj" class="kicker s1-kicker"><span data-hf-id="hf-eysj" class="leaf-dot"></span> One daily spending signal</p>
+            <h1 data-hf-id="hf-4g9k" class="hero-title s1-title">Before you spend, <span data-hf-id="hf-8szk" class="accent-text">check Pip.</span></h1>
+            <p data-hf-id="hf-za0r" class="copy s1-copy">Pip turns bank data into Spendable Cash Today, one calm number for the next purchase.</p>
+            <div data-hf-id="hf-cg2h" class="proof-row s1-proofs">
+              <span data-hf-id="hf-228k" class="proof-chip">No budget upkeep</span>
+              <span data-hf-id="hf-r1b7" class="proof-chip">Ask for the why</span>
+              <span data-hf-id="hf-n417" class="proof-chip">Read-only data</span>
+            </div>
+          </div>
+          <div data-hf-id="hf-h2p5" class="hero-stage">
+            <div data-hf-id="hf-1reu" class="hero-glow"></div>
+            <div data-hf-id="hf-pv0t" class="hero-sun"></div>
+            <div data-hf-id="hf-2g9q" class="ground-shadow"></div>
+            <img data-hf-id="hf-4gwl" class="hero-product s1-product" src="assets/pip/hero-product.png" alt="Pip beside a phone showing Spendable Cash Today">
+            <div data-hf-id="hf-bqkd" class="daily-card s1-card">
+              <p data-hf-id="hf-uu22" class="daily-card-label">Spendable Cash Today</p>
+              <p data-hf-id="hf-ulcn" class="daily-card-number">$84</p>
+            </div>
+          </div>
+        </div>
+        <div data-hf-id="hf-2wno" class="ambient-rule s1-rule"></div>
+      </section>
+
+      <section data-hf-id="hf-7wzg" id="scene-2" class="scene" aria-label="Your balance is not all open room">
+        <div data-hf-id="hf-xwuk" class="scene-content balance-content">
+          <div data-hf-id="hf-mgtx" class="balance-visual">
+            <div data-hf-id="hf-cuqe" class="balance-media" data-layout-allow-overflow="">
+              <img data-hf-id="hf-gqw8" class="balance-bg s2-bg" data-layout-allow-overflow="" src="assets/pip/balance-room.png" alt="A calm product scene showing bank balance, commitments, and Pip's daily number">
+            </div>
+            <div data-hf-id="hf-g8dt" class="balance-panel s2-panel">
+              <div data-hf-id="hf-q40z" class="money-line"><span data-hf-id="hf-cu9j">Bank balance</span><strong data-hf-id="hf-1jw1">$900</strong></div>
+              <div data-hf-id="hf-p80z" class="money-line"><span data-hf-id="hf-nd6w">Bills soon</span><strong data-hf-id="hf-c968">-$520</strong></div>
+              <div data-hf-id="hf-otpy" class="money-line"><span data-hf-id="hf-vy8r">Savings held</span><strong data-hf-id="hf-w292">-$250</strong></div>
+              <div data-hf-id="hf-tlub" class="money-line final"><span data-hf-id="hf-f8wa">Today</span><strong data-hf-id="hf-rix2">$84</strong></div>
+            </div>
+          </div>
+          <div data-hf-id="hf-kt6m" class="balance-copy">
+            <p data-hf-id="hf-0qm1" class="kicker s2-kicker"><span data-hf-id="hf-00bn" class="leaf-dot"></span> The better default</p>
+            <h2 data-hf-id="hf-8sab" class="section-title s2-title">Your balance is not all open room.</h2>
+            <p data-hf-id="hf-2k71" class="copy s2-copy">Pip subtracts money with a job before the next decision, so the visible number is actually useful.</p>
+          </div>
+        </div>
+        <div data-hf-id="hf-kdb9" class="ambient-rule s2-rule"></div>
+      </section>
+
+      <section data-hf-id="hf-c0o4" id="scene-3" class="scene" aria-label="Ask Pip why the number moved">
+        <div data-hf-id="hf-zx63" class="scene-content ask-content">
+          <div data-hf-id="hf-y2uj" class="ask-copy">
+            <p data-hf-id="hf-kzrg" class="kicker s3-kicker"><span data-hf-id="hf-zm0m" class="leaf-dot"></span> Ask Pip</p>
+            <h2 data-hf-id="hf-1eqo" class="section-title s3-title">Ask why the number moved.</h2>
+            <p data-hf-id="hf-jaht" class="copy s3-copy">When Spendable Cash Today changes, Pip explains the driver without making you dig through a dashboard.</p>
+            <div data-hf-id="hf-x5zm" class="trust-strip s3-trust">
+              <span data-hf-id="hf-ev3y">Read-only</span>
+              <span data-hf-id="hf-zplz">Cannot move money</span>
+              <span data-hf-id="hf-cdjw">No ads</span>
+            </div>
+          </div>
+          <div data-hf-id="hf-lhko" class="ask-visual">
+            <div data-hf-id="hf-n7s1" class="ask-media" data-layout-allow-overflow="">
+              <img data-hf-id="hf-4se1" class="ask-bg s3-bg" data-layout-allow-overflow="" src="assets/pip/ask-pip-proof.png" alt="Pip beside a phone in an Ask Pip product scene">
+            </div>
+            <div data-hf-id="hf-lje4" class="ask-thread">
+              <p data-hf-id="hf-c01f" class="bubble s3-bubble-1"><span data-hf-id="hf-71e8">You</span>Can I spend $50?</p>
+              <p data-hf-id="hf-e2lq" class="bubble pip s3-bubble-2"><span data-hf-id="hf-jhsa">Pip</span>Yes. You still have $84 for today.</p>
+              <p data-hf-id="hf-s7vm" class="bubble pip s3-bubble-3"><span data-hf-id="hf-iowe">Pip</span>Your phone bill already posted.</p>
+            </div>
+          </div>
+        </div>
+        <div data-hf-id="hf-9nb2" class="ambient-rule s3-rule"></div>
+      </section>
+
+      <section data-hf-id="hf-5rs9" id="scene-4" class="scene" aria-label="Check Pip before you spend">
+        <div data-hf-id="hf-4t0e" class="scene-content cta-content">
+          <div data-hf-id="hf-2fes" class="cta-copy">
+            <p data-hf-id="hf-ue0i" class="kicker s4-kicker"><span data-hf-id="hf-z7pl" class="leaf-dot"></span> Pip</p>
+            <h2 data-hf-id="hf-brf1" class="cta-title s4-title">Check Pip before you spend.</h2>
+            <p data-hf-id="hf-cpke" class="copy s4-copy">One calm number. One quick question when you need context. No spreadsheet habit required.</p>
+            <div data-hf-id="hf-hed4" class="cta-button-row">
+              <span data-hf-id="hf-i6ak" class="button s4-button">Get Pip</span>
+              <span data-hf-id="hf-1rd3" class="url s4-url">spendwithpip.com/app</span>
+            </div>
+          </div>
+          <div data-hf-id="hf-pm9r" class="scene-glow s4-glow"></div>
+          <img data-hf-id="hf-f95g" class="pip-wave s4-pip" src="assets/pip/pip-wave.png" alt="Pip waving while holding a leafy branch">
+        </div>
+        <div data-hf-id="hf-fmfz" class="ambient-rule s4-rule"></div>
+      </section>
+
+      <div data-hf-id="hf-3ru0" class="transition-wash" id="transition-wash"></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const mainTl = gsap.timeline({ paused: true });
+
+      function warmWash(fromScene, toScene, at) {
+        mainTl.set("#transition-wash", { xPercent: -112, opacity: 0, transformOrigin: "left center" }, at);
+        mainTl.to("#transition-wash", { xPercent: 0, opacity: 1, duration: 0.42, ease: "sine.inOut" }, at);
+        mainTl.set(toScene, { opacity: 1 }, at + 0.32);
+        mainTl.set(fromScene, { opacity: 0 }, at + 0.36);
+        mainTl.to("#transition-wash", { xPercent: 112, opacity: 0, duration: 0.48, ease: "power1.inOut" }, at + 0.42);
+      }
+
+      mainTl.from(".s1-kicker", { opacity: 0, y: 28, duration: 0.48, ease: "power3.out" }, 0.22);
+      mainTl.from(".s1-title", { opacity: 0, x: -42, duration: 0.68, ease: "expo.out" }, 0.38);
+      mainTl.from(".s1-copy", { opacity: 0, y: 36, duration: 0.52, ease: "sine.out" }, 0.72);
+      mainTl.from(".s1-proofs .proof-chip", { opacity: 0, y: 22, scale: 0.94, duration: 0.44, stagger: 0.08, ease: "back.out(1.4)" }, 0.96);
+      mainTl.from(".s1-product", { opacity: 0, x: 70, scale: 0.96, duration: 0.8, ease: "power2.out" }, 0.34);
+      mainTl.from(".s1-card", { opacity: 0, y: -26, scale: 0.9, duration: 0.5, ease: "back.out(1.55)" }, 1.12);
+      mainTl.from(".s1-rule", { scaleX: 0, duration: 0.7, ease: "power1.out" }, 0.54);
+      mainTl.to(".s1-product", { y: -14, duration: 2.4, repeat: 1, yoyo: true, ease: "sine.inOut" }, 1.8);
+      mainTl.to(".hero-glow", { scale: 1.06, duration: 2.8, repeat: 1, yoyo: true, ease: "sine.inOut" }, 1.2);
+
+      warmWash("#scene-1", "#scene-2", 3.55);
+      mainTl.from(".s2-bg", { scale: 1.05, opacity: 0, duration: 0.68, ease: "power2.out" }, 4.08);
+      mainTl.from(".s2-panel", { opacity: 0, x: -42, scale: 0.96, duration: 0.56, ease: "expo.out" }, 4.28);
+      mainTl.from(".s2-panel .money-line", { opacity: 0, y: 20, duration: 0.36, stagger: 0.08, ease: "power3.out" }, 4.48);
+      mainTl.from(".s2-kicker", { opacity: 0, y: 24, duration: 0.44, ease: "back.out(1.25)" }, 4.34);
+      mainTl.from(".s2-title", { opacity: 0, x: 46, duration: 0.62, ease: "power4.out" }, 4.52);
+      mainTl.from(".s2-copy", { opacity: 0, y: 34, duration: 0.5, ease: "sine.out" }, 4.92);
+      mainTl.from(".s2-rule", { scaleX: 0, duration: 0.68, ease: "power1.out" }, 4.2);
+      mainTl.to(".s2-bg", { scale: 1.025, duration: 2.9, repeat: 1, yoyo: true, ease: "sine.inOut" }, 5.1);
+
+      warmWash("#scene-2", "#scene-3", 7.45);
+      mainTl.from(".s3-kicker", { opacity: 0, y: 24, duration: 0.44, ease: "power3.out" }, 7.98);
+      mainTl.from(".s3-title", { opacity: 0, x: -44, duration: 0.62, ease: "expo.out" }, 8.16);
+      mainTl.from(".s3-copy", { opacity: 0, y: 32, duration: 0.5, ease: "sine.out" }, 8.54);
+      mainTl.from(".s3-trust span", { opacity: 0, y: 18, scale: 0.94, duration: 0.36, stagger: 0.07, ease: "back.out(1.35)" }, 8.86);
+      mainTl.from(".s3-bg", { opacity: 0, scale: 1.04, duration: 0.62, ease: "power2.out" }, 8.04);
+      mainTl.from(".s3-bubble-1", { opacity: 0, x: -30, duration: 0.42, ease: "power4.out" }, 8.48);
+      mainTl.from(".s3-bubble-2", { opacity: 0, x: -30, scale: 0.96, duration: 0.42, ease: "back.out(1.2)" }, 8.86);
+      mainTl.from(".s3-bubble-3", { opacity: 0, x: -30, scale: 0.96, duration: 0.42, ease: "power3.out" }, 9.24);
+      mainTl.from(".s3-rule", { scaleX: 0, duration: 0.68, ease: "power1.out" }, 8.12);
+      mainTl.to(".ask-bg", { scale: 1.03, duration: 2.7, repeat: 1, yoyo: true, ease: "sine.inOut" }, 9.6);
+
+      warmWash("#scene-3", "#scene-4", 11.52);
+      mainTl.from(".s4-kicker", { opacity: 0, y: 24, duration: 0.42, ease: "back.out(1.35)" }, 12.06);
+      mainTl.from(".s4-title", { opacity: 0, x: -46, duration: 0.66, ease: "expo.out" }, 12.24);
+      mainTl.from(".s4-copy", { opacity: 0, y: 34, duration: 0.5, ease: "sine.out" }, 12.66);
+      mainTl.from(".s4-button", { opacity: 0, y: 20, scale: 0.92, duration: 0.42, ease: "back.out(1.55)" }, 13.02);
+      mainTl.from(".s4-url", { opacity: 0, x: 24, duration: 0.4, ease: "power3.out" }, 13.2);
+      mainTl.from(".s4-pip", { opacity: 0, y: 42, scale: 0.92, duration: 0.7, ease: "back.out(1.25)" }, 12.52);
+      mainTl.from(".s4-rule", { scaleX: 0, duration: 0.68, ease: "power1.out" }, 12.14);
+      mainTl.to(".s4-glow", { scale: 1.08, duration: 2.1, repeat: 1, yoyo: true, ease: "sine.inOut" }, 12.8);
+      mainTl.to([".s4-title", ".s4-copy", ".s4-button", ".s4-url", ".s4-pip", ".s4-kicker"], { opacity: 0, y: -16, duration: 0.62, ease: "power1.in" }, 15.32);
+
+      window.__timelines["main"] = mainTl;
+    </script>
+  </body>
+</html>

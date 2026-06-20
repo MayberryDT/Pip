@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const syncJobMocks = vi.hoisted(() => ({
   runProviderSync: vi.fn(),
-  recordProductEvent: vi.fn(),
+  recordProductEventSafely: vi.fn(),
 }));
 
 vi.mock("@/lib/data/manual-sync", () => ({
@@ -10,7 +10,7 @@ vi.mock("@/lib/data/manual-sync", () => ({
 }));
 
 vi.mock("@/lib/data/product-events", () => ({
-  recordProductEvent: syncJobMocks.recordProductEvent,
+  recordProductEventSafely: syncJobMocks.recordProductEventSafely,
 }));
 
 import {
@@ -53,7 +53,7 @@ describe("Pip sync jobs", () => {
       priority: 50,
       dedupe_key: "plaid_webhook:plaid:institution-1",
     });
-    expect(syncJobMocks.recordProductEvent).toHaveBeenCalledWith(
+    expect(syncJobMocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase.client,
       "user-1",
       "pip_sync_job_created",
@@ -93,7 +93,7 @@ describe("Pip sync jobs", () => {
         id: "existing-job",
       },
     });
-    expect(syncJobMocks.recordProductEvent).not.toHaveBeenCalled();
+    expect(syncJobMocks.recordProductEventSafely).not.toHaveBeenCalled();
   });
 
   it("claims pending jobs with an incremented attempt count", async () => {

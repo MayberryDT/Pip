@@ -110,6 +110,32 @@ describe("POST /api/auth/sign-in", () => {
       },
     });
   });
+
+  it("logs unexpected sign-in failures without exposing secret-shaped values", async () => {
+    enableSupabaseEnv();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new Error("otp failed access_token=provider-secret sk-test-secret");
+    const supabase = createSupabaseClient();
+    supabase.auth.signInWithOtp.mockResolvedValue({
+      error,
+    });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    try {
+      const response = await POST(jsonRequest({ email: "test.user@example.com" }));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: "Sign-in failed.",
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        "[sign-in] sign-in failed",
+        "otp failed access_token=[redacted] [redacted]",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 function enableSupabaseEnv() {

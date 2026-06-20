@@ -16,17 +16,21 @@ describe("PipHome", () => {
     expect(visibleText).toContain("Pip");
     expect(visibleText).toContain("Spendable Cash Today");
     expect(visibleText).toContain("$104");
-    expect(visibleText).toContain("Current money window ends");
-    expect(visibleText).toContain("2 known limits");
-    expect(visibleText).not.toContain("I’m missing a card, so I may adjust this after you connect it.");
+    expect(visibleText).not.toContain("Current money window ends");
+    expect(visibleText).not.toContain("known limits");
+    expect(markup).not.toContain('data-testid="pip-trust-receipt"');
+    expect(visibleText).toMatch(/checked|ready|today|spend/i);
+    expect(markup).toContain("pip-character-medium");
+    expect(markup).toContain("/brand/pip-character/v001/medium/onboarding-wave.png");
+    expect(visibleText).toContain("I see a payment to Capital One, but that card is not connected.");
     expect(markup).not.toContain("pip-metric-subtitle");
     expect(markup).not.toContain("This may change if you connect the missing card.");
     expect(markup).toContain("Ask Pip anything...");
+    expect(markup).toContain("Accounts");
     expect(markup).toContain("What pattern are you using?");
     expect(markup).toContain("Check if the data looks right");
-    expect(markup).toContain("Show the biggest drivers");
+    expect(markup).not.toContain("Show the biggest drivers");
     expect(markup).not.toContain("Missing card");
-    expect(markup).not.toContain("Why today?");
     expect(markup).not.toContain("Test purchase");
     expect(markup).not.toContain("Why this number?");
     expect(markup).not.toContain("Can I spend $50?");
@@ -48,6 +52,23 @@ describe("PipHome", () => {
     expect(markup).toContain("What data do you use?");
     expect(visibleText).not.toContain("Data controls");
     expect(markup).not.toContain("Data controls");
+  });
+
+  it("shows the last live spendable number immediately when the server provides it", () => {
+    const result = __pipHomeTestHooks.getDemoPipCashResult();
+    const markup = renderToStaticMarkup(
+      <PipHome
+        authState={{ status: "ready", email: "tester@example.com" }}
+        enableAccountControls
+        initialResult={result}
+      />,
+    );
+    const visibleText = markup.replace(/<[^>]*>/g, " ");
+
+    expect(countOccurrences(markup, 'data-testid="pip-cash-number"')).toBe(1);
+    expect(visibleText).toContain("$104");
+    expect(visibleText).toContain("I see a payment to Capital One, but that card is not connected.");
+    expect(visibleText).not.toContain("I’m checking your connected data.");
   });
 
   it("keeps settings out of app chrome while bottom chips stay conversational", () => {
@@ -310,6 +331,17 @@ describe("PipHome", () => {
     ).toBe("plaid");
   });
 
+  it("does not skip app-open refresh only because a daily attempt already happened", () => {
+    expect(
+      __pipHomeTestHooks.getAppOpenRefreshProvider({
+        liveAccountControlsEnabled: true,
+        authStatus: "ready",
+        syncStatus: stalePlaidSyncStatus(),
+        hasAttemptedDailyRefresh: true,
+      }),
+    ).toBe("plaid");
+  });
+
   it("skips app-open refresh while a sync job is already pending", () => {
     expect(
       __pipHomeTestHooks.getAppOpenRefreshProvider({
@@ -320,6 +352,102 @@ describe("PipHome", () => {
         hasPendingSyncJob: true,
       }),
     ).toBeNull();
+  });
+
+  it("shows warm app-open checking, success, and skip copy", () => {
+    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "checking" })).toMatch(
+      /checking|searching/i,
+    );
+    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "ran" })).toMatch(
+      /checked|transactions/i,
+    );
+    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "skipped_recent" })).toMatch(
+      /checked|recently|already/i,
+    );
+    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "skipped_pending" })).toMatch(
+      /checking|already/i,
+    );
+    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "skipped_manual_only" })).toMatch(
+      /automatic refresh|manual/i,
+    );
+    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "no_provider" })).toMatch(
+      /connect|account/i,
+    );
+  });
+
+  it("maps app-open refresh failures to short Pip status copy", () => {
+    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "failed" })).toMatch(
+      /refresh|connection/i,
+    );
+    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "needs_repair" })).toMatch(
+      /refresh|connection/i,
+    );
+    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "partial" })).toMatch(
+      /refresh|connection/i,
+    );
+    expect(
+      __pipHomeTestHooks.getAppOpenSyncMessage({
+        ok: true,
+        status: "ran",
+        resultStatus: "partial",
+      }),
+    ).toMatch(/refresh|connection/i);
+    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: false })).toMatch(/refresh|connection/i);
+  });
+
+  it("uses the opening bubble planner for same-day spend and prompt chips", () => {
+    const result = __pipHomeTestHooks.getDemoPipCashResult();
+    const metric = result.spendableCashToday;
+
+    expect(metric).toBeDefined();
+
+    const plan = __pipHomeTestHooks.getReadyOpeningBubblePlan({
+      result: {
+        ...result,
+        spendableCashToday: {
+          ...metric!,
+          sameDayDiscretionarySpendCents: 1800,
+          sameDayPendingSpendCents: 1800,
+          sameDayLedger: {
+            ...metric!.sameDayLedger,
+            discretionarySpendCents: 1800,
+            pendingSpendCents: 1800,
+            items: [
+              {
+                transactionId: "target-pending",
+                accountId: "checking",
+                date: metric!.sameDayLedger.asOfDate,
+                label: "Target",
+                amountCents: -1800,
+                treatment: "daily_spend",
+                pending: true,
+                reason: "same-day card purchase",
+              },
+            ],
+          },
+        },
+      },
+      appOpenSyncMessage: __pipHomeTestHooks.getAppOpenSyncMessage({
+        ok: true,
+        status: "ran",
+      }) ?? undefined,
+    });
+    const chips = __pipHomeTestHooks.getOpeningBubblePromptChips({
+      openingBubblePlan: plan,
+      defaultChips: [
+        {
+          id: "settings",
+          label: "Settings",
+          prompt: "Settings",
+        },
+      ],
+    });
+
+    expect(plan).toMatchObject({
+      priority: "same_day_spend",
+      message: "I found pending $18 at Target and took it off today for now.",
+    });
+    expect(chips.map((chip) => chip.id)).toEqual(["why-today", "settings"]);
   });
 
   it("carries the latest pending savings goal action in conversation state", () => {

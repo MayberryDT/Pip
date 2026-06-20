@@ -94,6 +94,30 @@ describe("POST /api/auth/reviewer-login", () => {
       error: "Reviewer access is not configured for this build.",
     });
   });
+
+  it("logs unexpected sign-in failures without exposing secret-shaped values", async () => {
+    enableSupabaseEnv();
+    const error = new Error("network failed with access_token=provider-secret sk-test-secret");
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    routeMocks.createSupabaseServerClient.mockRejectedValue(error);
+
+    try {
+      const response = await POST(jsonRequest({ email: "play-review@animasai.co", password: "secret" }));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        code: "REVIEWER_SIGN_IN_FAILED",
+        error: "Reviewer sign-in failed.",
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        "[reviewer-login] sign-in failed",
+        "network failed with access_token=[redacted] [redacted]",
+      );
+      expect(consoleError.mock.calls[0]?.[1]).not.toBe(error);
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 function enableSupabaseEnv() {

@@ -138,7 +138,36 @@ values
     current_date + interval '1 year',
     200000,
     50000,
-    true
+      true
+  );
+
+insert into public.recurring_obligation_rules (
+  user_id,
+  merchant_key,
+  label,
+  expected_amount_cents,
+  expected_day,
+  source,
+  status
+)
+values
+  (
+    '00000000-0000-0000-0000-00000000a101',
+    'city-power',
+    'City Power A',
+    8400,
+    3,
+    'user_confirmed',
+    'active'
+  ),
+  (
+    '00000000-0000-0000-0000-00000000b202',
+    'city-power',
+    'City Power B',
+    9400,
+    3,
+    'user_confirmed',
+    'active'
   );
 
 insert into public.transactions (
@@ -283,6 +312,12 @@ attempted_cross_user_savings_goal_update as (
   where user_id = '00000000-0000-0000-0000-00000000b202'
   returning id
 ),
+attempted_cross_user_recurring_obligation_rule_update as (
+  update public.recurring_obligation_rules
+  set expected_amount_cents = 99999
+  where user_id = '00000000-0000-0000-0000-00000000b202'
+  returning id
+),
 attempted_cross_user_transaction_delete as (
   delete from public.transactions
   where user_id = '00000000-0000-0000-0000-00000000b202'
@@ -301,6 +336,7 @@ select
   (select count(*) from public.accounts) as visible_accounts,
   (select count(*) from public.account_preferences) as visible_account_preferences,
   (select count(*) from public.savings_goals) as visible_savings_goals,
+  (select count(*) from public.recurring_obligation_rules) as visible_recurring_obligation_rules,
   (select count(*) from public.transactions) as visible_transactions,
   (select count(*) from public.sync_runs) as visible_sync_runs,
   (select count(*) from public.pip_cash_snapshots) as visible_pip_cash_snapshots,
@@ -310,10 +346,12 @@ select
   (select count(*) from public.accounts where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_accounts,
   (select count(*) from public.account_preferences where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_account_preferences,
   (select count(*) from public.savings_goals where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_savings_goals,
+  (select count(*) from public.recurring_obligation_rules where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_recurring_obligation_rules,
   (select count(*) from public.transactions where user_id = '00000000-0000-0000-0000-00000000b202') as visible_other_user_transactions,
   (select count(*) from attempted_cross_user_account_update) as cross_user_account_updates,
   (select count(*) from attempted_cross_user_account_preference_update) as cross_user_account_preference_updates,
   (select count(*) from attempted_cross_user_savings_goal_update) as cross_user_savings_goal_updates,
+  (select count(*) from attempted_cross_user_recurring_obligation_rule_update) as cross_user_recurring_obligation_rule_updates,
   (select count(*) from attempted_cross_user_transaction_delete) as cross_user_transaction_deletes,
   (select count(*) from attempted_cross_user_event_delete) as cross_user_event_deletes;
 
