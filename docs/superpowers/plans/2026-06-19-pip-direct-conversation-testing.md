@@ -27,8 +27,8 @@ Expected:
 ```
 
 Relevant durable context:
-- GBrain slug: `sessions/2026/06/freecash-pip-savings-context-state-machine-implementation`
-- Draft PR: `https://github.com/MayberryDT/spendable/pull/1`
+- GBrain slug: `sessions/2026/06/pip-savings-context-state-machine-implementation`
+- Draft PR: use the current repository's PR #1 after confirming the GitHub repo rename.
 
 Important project rule:
 - Browser automation must use the Codex in-app Browser plugin with the `iab` backend first.

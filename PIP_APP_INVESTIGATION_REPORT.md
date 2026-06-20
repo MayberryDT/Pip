@@ -209,14 +209,14 @@ rollingNet =
   - spendingTotal
   - protectedSavingsMonthly
 
-freeCashToday =
+pipCashToday =
   rollingNet / windowDayCount
 ```
 
 Display:
 
 ```text
-round(freeCashToday) to nearest whole dollar
+round(pipCashToday) to nearest whole dollar
 ```
 
 Do not show cents in the main number.
@@ -341,11 +341,11 @@ if (missingCardDetected) {
   return ["Connect Amex", "Why does Amex matter?", "Stop asking"]
 }
 
-if (freeCashToday < 0) {
+if (pipCashToday < 0) {
   return ["Why am I negative?", "What should I avoid?", "When will this improve?"]
 }
 
-if (freeCashDroppedSharply) {
+if (pipCashDroppedSharply) {
   return ["Why did this drop?", "Show biggest changes", "Can I recover?"]
 }
 

@@ -66,7 +66,7 @@ Production currently serves that file with the release fingerprint above, which 
 From this directory:
 
 ```bash
-cd /home/tyler/Documents/FreeCash/mobile/android-twa
+cd "$(git rev-parse --show-toplevel)/mobile/android-twa"
 source /home/tyler/.secrets/pip-android/keystore.env
 export BUBBLEWRAP_KEYSTORE_PASSWORD="$PIP_ANDROID_KEYSTORE_PASSWORD"
 export BUBBLEWRAP_KEY_PASSWORD="$PIP_ANDROID_KEY_PASSWORD"
@@ -94,14 +94,14 @@ With an Android device connected and USB debugging enabled:
 
 ```bash
 adb devices -l
-adb install -r /home/tyler/Documents/FreeCash/mobile/android-twa/app-release-signed.apk
+adb install -r "$(git rev-parse --show-toplevel)/mobile/android-twa/app-release-signed.apk"
 adb shell monkey -p com.spendwithpip.app 1
 ```
 
 For update-over-install proof, build a later APK with a higher `versionCode`, then run:
 
 ```bash
-adb install -r /home/tyler/Documents/FreeCash/mobile/android-twa/app-release-signed.apk
+adb install -r "$(git rev-parse --show-toplevel)/mobile/android-twa/app-release-signed.apk"
 ```
 
 Expected behavior:

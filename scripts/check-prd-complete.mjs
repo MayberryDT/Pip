@@ -170,7 +170,7 @@ function validateInAppBrowserProof(report, errors) {
   expectTrue(page?.hasPip, "Page must show Pip.", errors);
   expectTrue(page?.hasSpendableCashToday, "Page must show Spendable Cash Today.", errors);
   expectTrue(page?.hasPipCashNumber, "Page must expose data-testid=\"pip-cash-number\".", errors);
-  expectFalse(page?.hasVisibleFreeCash, "Page must not show visible Free Cash.", errors);
+  expectFalse(page?.hasVisibleOldBrand, "Page must not show visible Free Cash.", errors);
   expectFalse(page?.hasVisiblePipCashToday, "Page must not show visible PIP Cash Today.", errors);
 
   const drivers = objectField(evidence, "driversQuestion");

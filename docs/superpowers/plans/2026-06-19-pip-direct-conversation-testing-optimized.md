@@ -40,7 +40,7 @@
 All test execution must use the feature worktree:
 
 ```bash
-cd /tmp/FreeCash-pip-savings-context-state-machine
+cd /tmp/Pip-savings-context-state-machine
 git status --short --branch
 git log --oneline --decorate -2
 ```
@@ -52,7 +52,7 @@ Expected:
 bb1e55f ... fix: stabilize Pip savings goal conversations
 ```
 
-Do not use the dirty main checkout at `/home/tyler/Documents/FreeCash` for test execution.
+Do not use the dirty main checkout for test execution.
 
 Shared output paths:
 
@@ -167,7 +167,7 @@ The controller merges sections into:
 **Owner:** Main agent.
 
 - [ ] Confirm the feature worktree exists and is clean.
-- [ ] Confirm `node_modules` is available. If the worktree has no `node_modules`, create a temporary symlink to `/home/tyler/Documents/FreeCash/node_modules` and remove it before final closeout.
+- [ ] Confirm `node_modules` is available. If the worktree has no `node_modules`, create a temporary symlink from the main checkout's `node_modules` and remove it before final closeout.
 - [ ] For local savings-goal testing, start the dev server with both savings feature flags enabled:
   `PIP_SAVINGS_GOALS_ENABLED=true NEXT_PUBLIC_SAVINGS_GOALS_ENABLED=true`.
 - [ ] Create `/tmp/pip-direct-conversation-artifacts`.
@@ -177,16 +177,17 @@ The controller merges sections into:
 Preflight commands:
 
 ```bash
-cd /tmp/FreeCash-pip-savings-context-state-machine
+cd /tmp/Pip-savings-context-state-machine
 git status --short --branch
-test -e node_modules || ln -s /home/tyler/Documents/FreeCash/node_modules node_modules
+main_checkout="$(git -C /tmp/Pip-savings-context-state-machine worktree list --porcelain | awk 'NR == 1 { print $2 }')"
+test -e node_modules || ln -s "$main_checkout/node_modules" node_modules
 mkdir -p /tmp/pip-direct-conversation-artifacts
 ```
 
 ## Task 1: Scripted API And Eval Transcript Pass
 
 **Owner:** Subagent worker.  
-**Workdir:** `/tmp/FreeCash-pip-savings-context-state-machine`  
+**Workdir:** `/tmp/Pip-savings-context-state-machine`
 **Parallel safety:** Can run independently before interactive Browser testing. Do not edit files.
 
 - [ ] Run focused tests:
@@ -239,7 +240,7 @@ Write:
 ## Task 2: Repo-Native Phone E2E Pass
 
 **Owner:** Subagent worker.  
-**Workdir:** `/tmp/FreeCash-pip-savings-context-state-machine`  
+**Workdir:** `/tmp/Pip-savings-context-state-machine`
 **Parallel safety:** Can run independently from Task 1 if port `3000` is free. If a dev server is already running, wait or report blocked instead of killing it. Do not edit files.
 
 - [ ] Run the focused phone E2E:
@@ -268,7 +269,7 @@ Write:
 ## Task 3: Interactive Local Phone UI Pass
 
 **Owner:** Main agent, because the shared in-app Browser session must be coordinated directly.  
-**Workdir:** `/tmp/FreeCash-pip-savings-context-state-machine`  
+**Workdir:** `/tmp/Pip-savings-context-state-machine`
 **Tooling:** Codex in-app Browser plugin with `iab` backend first.
 
 - [ ] Ensure local server is running:
@@ -318,7 +319,7 @@ Write:
 ## Task 4: Authenticated Real-Data Readiness And Pass
 
 **Owner:** Subagent for readiness checks, main agent for any Browser-authenticated interaction.  
-**Workdir:** `/tmp/FreeCash-pip-savings-context-state-machine`  
+**Workdir:** `/tmp/Pip-savings-context-state-machine`
 **Safety:** Do not create a real savings goal unless the authenticated session is a test/reviewer account or Tyler explicitly approves writes.
 
 ### Task 4A: Readiness Worker

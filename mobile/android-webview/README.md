@@ -41,7 +41,7 @@ Do not commit keystores, passwords, APKs, AABs, `.idsig` files, `local.propertie
 ## Play Internal-Test Build
 
 ```bash
-cd /home/tyler/Documents/FreeCash/mobile/android-webview
+cd "$(git rev-parse --show-toplevel)/mobile/android-webview"
 set -a
 source /home/tyler/.secrets/pip-android/keystore.env
 set +a
@@ -97,7 +97,7 @@ classes.dex does not include: androidbrowserhelper, trustedwebactivity, customta
 ## Device Smoke
 
 ```bash
-adb install -r /home/tyler/Documents/FreeCash/mobile/android-webview/artifacts/pip-android-v13.apk
+adb install -r "$(git rev-parse --show-toplevel)/mobile/android-webview/artifacts/pip-android-v13.apk"
 adb shell monkey -p com.spendwithpip.app 1
 adb shell dumpsys activity activities | rg "mResumedActivity|topResumedActivity|com.spendwithpip.app|com.android.chrome"
 adb logcat -d | rg "PipNativeShell"
