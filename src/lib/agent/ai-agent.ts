@@ -1,5 +1,4 @@
 import { Agent, OpenAIProvider, Runner, tool, type AgentInputItem } from "@openai/agents";
-import OpenAI from "openai";
 import { z } from "zod";
 import type {
   AgentCard,
@@ -58,11 +57,25 @@ import {
 } from "@/lib/agent/quality-variants";
 import { composeTrustPolicyAnswer, pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 import type { FinancialSnapshot } from "@/lib/types";
+import {
+  createOpenAIClient,
+  getOpenAIClientConfig,
+  getPipAiModel,
+  shouldUseModel,
+  type AiTransport,
+} from "@/lib/agent/openai-config";
 
-export const PIP_AI_MODEL = "gpt-5-nano";
-export const NETLIFY_AI_GATEWAY_MODEL = "gpt-5-nano";
+export {
+  createOpenAIClient,
+  getOpenAIApiKeyForSdk,
+  getOpenAIClientConfig,
+  getPipAiModel,
+  getPipAiTransport,
+  NETLIFY_AI_GATEWAY_MODEL,
+  PIP_AI_MODEL,
+  shouldUseModel,
+} from "@/lib/agent/openai-config";
 
-type AiTransport = NonNullable<AgentResponse["audit"]["transport"]>;
 type RawAgentFinalOutput = z.infer<typeof agentFinalOutputSchema>;
 type AgentFinalOutput = Omit<
   RawAgentFinalOutput,
@@ -71,12 +84,6 @@ type AgentFinalOutput = Omit<
   support?: string;
   guidanceCardDraft?: NonNullable<RawAgentFinalOutput["guidanceCardDraft"]>;
   promptChips: PromptChip[];
-};
-
-type OpenAIClientConfig = {
-  apiKey?: string;
-  baseURL?: string;
-  transport: AiTransport;
 };
 
 export type AgentHistoryItem = {
@@ -4552,75 +4559,6 @@ function createAgentResponseRepair(error: AgentUnavailableError): AgentResponseR
         : "invalid_final_output",
     detail: error.detail ? sanitizeErrorDetail(error.detail) : sanitizeErrorDetail(error.message),
   };
-}
-
-export function createOpenAIClient(config: OpenAIClientConfig = getOpenAIClientConfig()): OpenAI {
-  return new OpenAI({
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-  });
-}
-
-export function shouldUseModel(): boolean {
-  return (
-    Boolean(process.env.NETLIFY_AI_GATEWAY_BASE_URL && process.env.NETLIFY_AI_GATEWAY_KEY) ||
-    Boolean(process.env.OPENAI_API_KEY) ||
-    Boolean(process.env.OPENAI_BASE_URL)
-  );
-}
-
-export function getPipAiModel(env: Record<string, string | undefined> = process.env): string {
-  if (env.PIP_AI_MODEL) {
-    return env.PIP_AI_MODEL;
-  }
-
-  if (isNetlifyAiGatewayConfigured(env) || env.OPENAI_BASE_URL) {
-    return NETLIFY_AI_GATEWAY_MODEL;
-  }
-
-  return PIP_AI_MODEL;
-}
-
-export function getOpenAIApiKeyForSdk(env: Record<string, string | undefined> = process.env): string | undefined {
-  return getOpenAIClientConfig(env).apiKey;
-}
-
-export function getOpenAIClientConfig(
-  env: Record<string, string | undefined> = process.env,
-): OpenAIClientConfig {
-  if (isNetlifyAiGatewayConfigured(env)) {
-    return {
-      apiKey: env.NETLIFY_AI_GATEWAY_KEY,
-      baseURL: env.NETLIFY_AI_GATEWAY_BASE_URL,
-      transport: "netlify-ai-gateway",
-    };
-  }
-
-  if (env.OPENAI_BASE_URL) {
-    return {
-      apiKey: env.OPENAI_API_KEY || "netlify-ai-gateway",
-      baseURL: env.OPENAI_BASE_URL,
-      transport:
-        env.PIP_AI_TRANSPORT === "custom-openai-compatible"
-          ? "custom-openai-compatible"
-          : "netlify-ai-gateway",
-    };
-  }
-
-  return {
-    apiKey: env.OPENAI_API_KEY,
-    transport: "openai-direct",
-  };
-}
-
-function isNetlifyAiGatewayConfigured(env: Record<string, string | undefined>): boolean {
-  return Boolean(env.NETLIFY_AI_GATEWAY_BASE_URL && env.NETLIFY_AI_GATEWAY_KEY);
-}
-
-export function getPipAiTransport(
-  env: Record<string, string | undefined> = process.env,
-): AiTransport {
-  return getOpenAIClientConfig(env).transport;
 }
 
 function normalizePrompt(message: string): string {

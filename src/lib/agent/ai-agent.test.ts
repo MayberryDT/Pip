@@ -1,18 +1,20 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentFinalOutputSchema, agentMessageMaxChars, agentResponseSchema, cardSchema } from "@/lib/agent/response-schema";
 import {
-  PIP_AI_MODEL,
-  NETLIFY_AI_GATEWAY_MODEL,
   AgentUnavailableError,
-  getPipAiTransport,
-  getPipAiModel,
-  getOpenAIClientConfig,
-  getOpenAIApiKeyForSdk,
   runAIAgent,
   type PipAgentActions,
   toAgentErrorPayload,
   __agentTestHooks,
 } from "@/lib/agent/ai-agent";
+import {
+  NETLIFY_AI_GATEWAY_MODEL,
+  PIP_AI_MODEL,
+  getOpenAIApiKeyForSdk,
+  getOpenAIClientConfig,
+  getPipAiModel,
+  getPipAiTransport,
+} from "@/lib/agent/openai-config";
 import type { AgentCard } from "@/lib/agent/card-types";
 import { createMockModelClient } from "../../../tests/helpers/mock-agent-runtime";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
