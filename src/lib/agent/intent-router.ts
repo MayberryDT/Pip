@@ -466,6 +466,18 @@ function getDeterministicIntentId(normalized: string): string | null {
     return "policy.trust";
   }
 
+  if (isSpendableExplanationPrompt(normalized)) {
+    return "spendable.explanation";
+  }
+
+  if (isSpendingBreakdownPrompt(normalized)) {
+    return "spending.breakdown";
+  }
+
+  if (isCutbackOpportunityPrompt(normalized)) {
+    return "spending.cutback_opportunity";
+  }
+
   if (isSpendableDefinitionPrompt(normalized)) {
     return "definition.spendable_cash";
   }
@@ -490,7 +502,11 @@ function getDeterministicIntentId(normalized: string): string | null {
 }
 
 function isActualBalancePrompt(normalized: string): boolean {
-  if (!/\bbalances?\b/.test(normalized)) {
+  const hasBalanceIntent =
+    /\bbalances?\b/.test(normalized) ||
+    /\bhow much\b.{0,48}\b(checking|savings|account|bank)\b/.test(normalized);
+
+  if (!hasBalanceIntent) {
     return false;
   }
 
@@ -550,7 +566,7 @@ function isDataQualityPrompt(normalized: string): boolean {
     return false;
   }
 
-  return /\b(data quality|missing (?:card|data|something)|data (?:is|might be|may be|could be) missing|what data (?:might|may|could) be missing|pending (?:transactions?|items?)|incomplete|everything counted)\b/.test(normalized);
+  return /\b(data quality|missing (?:card|data|something)|data (?:is|might be|may be|could be) missing|what data (?:might|may|could) be missing|pending (?:transactions?|items?)|incomplete|everything counted|number complete)\b/.test(normalized);
 }
 
 function isTrustReceiptPrompt(normalized: string): boolean {
@@ -576,7 +592,25 @@ function isSyncStatusPrompt(normalized: string): boolean {
 }
 
 function isTrustPolicyPrompt(normalized: string): boolean {
-  return /\b(move my money|transfer my money|sell my data|train on my data|training data|who can see my data|plaid|financial advice|ai calculate|pay my bill|can pip pay|passwords?|tokens?)\b/.test(normalized);
+  return /\b(move my money|transfer my money|sell my data|train on my data|training data|who can see my data|plaid|financial advice|ai calculate|pay my bills?|can pip pay|can you pay|pay it for me|passwords?|tokens?)\b/.test(normalized);
+}
+
+function isSpendableExplanationPrompt(normalized: string): boolean {
+  return (
+    /\bbiggest drivers?\b/.test(normalized) ||
+    /\bwhy did it move\b/.test(normalized)
+  );
+}
+
+function isSpendingBreakdownPrompt(normalized: string): boolean {
+  return (
+    /\bbreak down my categories\b/.test(normalized) ||
+    /\bwhere did money go\b/.test(normalized)
+  );
+}
+
+function isCutbackOpportunityPrompt(normalized: string): boolean {
+  return /\b(money leaking|where .* leaking)\b/.test(normalized);
 }
 
 function isSpendableDefinitionPrompt(normalized: string): boolean {
@@ -857,7 +891,7 @@ function getClarificationLabel(intentId: string): string {
 }
 
 function isPolicyQuestion(normalized: string): boolean {
-  return /\b(can pip move|move my money|financial advice|plaid|privacy|sell my data|ai calculate|training data)\b/.test(normalized);
+  return /\b(can pip move|move my money|financial advice|plaid|privacy|sell my data|ai calculate|training data|pay my bills?|can you pay|pay it for me)\b/.test(normalized);
 }
 
 function stripUndefinedValues(input: Record<string, unknown>): Record<string, unknown> {

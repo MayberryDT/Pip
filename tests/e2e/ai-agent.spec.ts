@@ -319,8 +319,13 @@ test("dev test onboarding walks a fresh local user through setup", async ({ page
 
   await page.getByRole("button", { name: "Connect data" }).click();
   await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
-  await expect(page.getByRole("button", { name: "Manage accounts" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Manage accounts" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Settings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "What pattern are you using?" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Settings" }).click();
+  await expect(page.getByText("Settings are here.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Manage accounts" })).toBeVisible();
 });
 
 test("connect data does not leave the chat stuck while Plaid is loading", async ({ page }) => {

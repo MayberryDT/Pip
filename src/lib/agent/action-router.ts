@@ -144,7 +144,10 @@ function route(
 }
 
 function isDeleteDataRequest(normalized: string): boolean {
-  return /\b(delete|erase|remove)\b.{0,24}\b(my )?(stored )?(financial )?data\b/.test(normalized);
+  return (
+    /\b(delete|erase|remove)\b.{0,24}\b(my )?(account |stored |financial )?data\b/.test(normalized) ||
+    /\berase everything you know about me\b/.test(normalized)
+  );
 }
 
 function isRefreshActionPrompt(normalized: string): boolean {

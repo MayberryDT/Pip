@@ -172,7 +172,7 @@ export function composeTrustPolicyAnswer(
     return {
       category: "terms",
       message:
-        "I am decision support, not financial advice. Missing, pending, stale, or disconnected data can change the number.",
+        "I am decision support, not personalized money guidance. Missing, pending, stale, or disconnected data can change the number.",
       linkLabel: "Terms details",
       href: pipTrustPolicy.publicLinks.terms,
     };

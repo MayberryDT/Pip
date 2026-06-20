@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
+import { type ChangeEvent, type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { SendHorizontal } from "lucide-react";
 
 const composerMaxHeight = 216;
@@ -68,6 +68,10 @@ export function AgentInput({
     event.currentTarget.form?.requestSubmit();
   }
 
+  function handleInput(event: ChangeEvent<HTMLTextAreaElement> | FormEvent<HTMLTextAreaElement>) {
+    setMessage(event.currentTarget.value);
+  }
+
   return (
     <form
       ref={formRef}
@@ -81,7 +85,8 @@ export function AgentInput({
         rows={1}
         className="focus-ring pip-composer-input max-h-56 min-h-[3.55rem] w-full resize-none overflow-y-hidden rounded-[1.35rem] border border-line bg-porcelain/[0.34] px-5 py-4 pr-16 text-base font-medium leading-6 text-ink shadow-[0_14px_36px_rgba(60,50,40,0.04)] placeholder:text-taupe/[0.84] max-[380px]:min-h-[3.35rem] max-[380px]:text-[0.96rem]"
         value={message}
-        onChange={(event) => setMessage(event.target.value)}
+        onInput={handleInput}
+        onChange={handleInput}
         onFocus={() => scheduleComposerIntoView(formRef.current)}
         onKeyDown={handleKeyDown}
         placeholder={placeholder}

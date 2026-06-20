@@ -76,11 +76,6 @@ type PipHomeServerResult = PipCashResult & {
   };
 };
 
-const accountManagementPromptChip: PromptChip = {
-  id: "manage-accounts",
-  label: "Manage accounts",
-  prompt: "Show connected accounts",
-};
 const settingsPromptChip: PromptChip = {
   id: "settings",
   label: "Settings",
@@ -445,7 +440,7 @@ export function PipHome({
         }
 
         const nextPromptChips = liveAccountControlsEnabled
-          ? withAccountManagementPromptChip(response.promptChips)
+          ? withSettingsPromptChip(response.promptChips)
           : response.promptChips;
 
         setChips(nextPromptChips);
@@ -525,7 +520,7 @@ export function PipHome({
         ),
       );
       const responsePromptChips = liveAccountControlsEnabled
-        ? withAccountManagementPromptChip(response.promptChips)
+        ? withSettingsPromptChip(response.promptChips)
         : response.promptChips;
       const nextVisibleChips = getNextVisiblePromptChips(
         responsePromptChips,
@@ -1669,7 +1664,7 @@ function getSettingsActions(input: {
   if (input.hasConnectedData) {
     actions.push({
       id: "settings-connected-accounts",
-      label: "Connected accounts",
+      label: "Manage accounts",
       prompt: "Show connected accounts",
       style: "primary",
     });
@@ -1936,7 +1931,7 @@ function getDefaultPromptChips(
   }
 
   if (enableAccountControls && result) {
-    return withAccountManagementPromptChip(getSuggestedPrompts(result));
+    return withSettingsPromptChip(getSuggestedPrompts(result));
   }
 
   return result ? getSuggestedPrompts(result) : [];
@@ -1985,13 +1980,10 @@ function getReadyDataAction(syncStatus: SyncStatusResponse | null): ReadyDataAct
   };
 }
 
-function withAccountManagementPromptChip(chips: PromptChip[]): PromptChip[] {
+function withSettingsPromptChip(chips: PromptChip[]): PromptChip[] {
   return [
-    accountManagementPromptChip,
     settingsPromptChip,
-    ...chips.filter(
-      (chip) => chip.id !== accountManagementPromptChip.id && chip.id !== settingsPromptChip.id,
-    ),
+    ...chips.filter((chip) => chip.id !== "manage-accounts" && chip.id !== settingsPromptChip.id),
   ].slice(0, 3);
 }
 
@@ -2263,7 +2255,7 @@ export const __pipHomeTestHooks = {
   getSafeAgentFailureMessage,
   getSettingsActions,
   getSettingsConversationPromptChips,
-  withAccountManagementPromptChip,
+  withSettingsPromptChip,
 };
 
 function getPlaidEventProperties(

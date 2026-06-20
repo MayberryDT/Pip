@@ -614,12 +614,37 @@ describe("Pip agent eval harness", () => {
               usedTools: caseDef?.expectedTools ?? [],
               cards: cardTypes.map((type) => ({ type, title: type })),
               promptChips: [],
+              ...(caseDef?.expectedPendingActionType
+                ? { pendingAction: { type: caseDef.expectedPendingActionType } }
+                : {}),
             }),
           };
         },
       });
 
-      expect(majorCapabilityEvalCases).toHaveLength(12);
+      expect(majorCapabilityEvalCases).toHaveLength(20);
+      expect(majorCapabilityEvalCases.map((caseDef) => caseDef.capability)).toEqual([
+        "Guest start and chat tone",
+        "Spendable Cash explanation",
+        "Calculation transparency",
+        "Recent transaction read",
+        "Spending breakdown",
+        "Recurring bills and subscriptions",
+        "Spendable Cash forecast",
+        "Purchase simulation",
+        "Financial guidance read",
+        "Actionable cutback guidance",
+        "Actual balances",
+        "Connected account management",
+        "New account connection",
+        "Manual data refresh",
+        "Data quality and missing-data detection",
+        "Trust receipt",
+        "Read-only money movement boundary",
+        "Savings goal setup",
+        "Savings goal review",
+        "Privacy and destructive action safety",
+      ]);
       expect(report.status).toBe("passed");
       expect(report.failureCount).toBe(0);
       expect(report.suite).toBe("major-capabilities");
@@ -629,7 +654,7 @@ describe("Pip agent eval harness", () => {
       const writtenReport = JSON.parse(readFileSync(reportPath, "utf8"));
       expect(writtenReport).toMatchObject({
         suite: "major-capabilities",
-        caseCount: 12,
+        caseCount: 20,
         failureCount: 0,
         qualityBar: {
           requiredPassRate: "all selected cases",
@@ -640,6 +665,161 @@ describe("Pip agent eval harness", () => {
         inputMessage: majorCapabilityEvalCases[0].message,
         responseMessage: "I checked that for this scenario.",
       });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses canonical major-capability fixtures for the 20 capability gate", async () => {
+    const { majorCapabilities, majorCapabilityEvalCases } = await loadEvalHarness();
+
+    expect(majorCapabilities).toHaveLength(20);
+    expect(majorCapabilityEvalCases).toHaveLength(20);
+    expect(majorCapabilities.map((capability) => capability.id)).toEqual(
+      majorCapabilityEvalCases.map((caseDef) => caseDef.capabilityId),
+    );
+    expect(new Set(majorCapabilities.map((capability) => capability.id)).size).toBe(20);
+    expect(majorCapabilities.every((capability) => capability.tiers.includes("api"))).toBe(true);
+    expect(majorCapabilities.every((capability) => capability.safetyClass)).toBe(true);
+  });
+
+  it("can run the expanded major-capability API matrix", async () => {
+    const { buildMajorCapabilityExpandedCases, runAgentEval } = await loadEvalHarness();
+    const expandedCases = buildMajorCapabilityExpandedCases();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-major-expanded-"));
+    const reportPath = join(tempDir, "report.json");
+    const messages: string[] = [];
+
+    try {
+      const report = await runAgentEval({
+        baseUrl: "http://localhost:3999",
+        reportPath,
+        suite: "major-capabilities-expanded",
+        conversationPrefix: "major-expanded-test",
+        log: () => undefined,
+        fetchImpl: async (_url: string, options: { body?: string }) => {
+          const body = JSON.parse(options.body ?? "{}") as { message: string; scenario?: string };
+          messages.push(body.message);
+          const caseDef =
+            expandedCases.find((candidate) => candidate.message === body.message && candidate.scenario === body.scenario) ??
+            expandedCases.find((candidate) => candidate.message === body.message);
+          const cardTypes = caseDef?.expectedCards ?? (caseDef?.expectedAnyCards?.slice(0, 1) ?? []);
+
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              message: "I checked that for this scenario.",
+              responseMode: caseDef?.expectedResponseMode ?? (cardTypes.length > 0 ? "show_card" : "chat_only"),
+              usedTools: caseDef?.expectedTools ?? [],
+              cards: cardTypes.map((type) => ({ type, title: type })),
+              promptChips: [],
+              ...(caseDef?.expectedPendingActionType
+                ? { pendingAction: { type: caseDef.expectedPendingActionType } }
+                : {}),
+            }),
+          };
+        },
+      });
+
+      expect(report.suite).toBe("major-capabilities-expanded");
+      expect(report.caseCount).toBeGreaterThan(60);
+      expect(report.failureCount).toBe(0);
+      expect(messages).toContain("What did I buy lately?");
+      expect(messages).toContain("What charges hit this week?");
+      expect(messages).toContain("What can I cut back on?");
+      expect(messages).toContain("Erase everything you know about me");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("can run the major-capability multi-turn journey suite", async () => {
+    const { majorCapabilityMultiTurnCases, runAgentEval } = await loadEvalHarness();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-major-multiturn-"));
+    const reportPath = join(tempDir, "report.json");
+
+    try {
+      const report = await runAgentEval({
+        baseUrl: "http://localhost:3999",
+        reportPath,
+        suite: "major-capabilities-multiturn",
+        conversationPrefix: "major-multiturn-test",
+        log: () => undefined,
+        fetchImpl: async (_url: string, options: { body?: string }) => {
+          const body = JSON.parse(options.body ?? "{}") as { message: string };
+          const caseDef = majorCapabilityMultiTurnCases.find((candidate) => candidate.message === body.message);
+          const cardTypes = caseDef?.expectedCards ?? (caseDef?.expectedAnyCards?.slice(0, 1) ?? []);
+
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              message: "I checked that follow-up.",
+              responseMode: caseDef?.expectedResponseMode ?? (cardTypes.length > 0 ? "show_card" : "chat_only"),
+              usedTools: caseDef?.expectedTools ?? [],
+              cards: cardTypes.map((type) => ({ type, title: type })),
+              promptChips: [],
+            }),
+          };
+        },
+      });
+
+      expect(report.suite).toBe("major-capabilities-multiturn");
+      expect(report.caseCount).toBeGreaterThanOrEqual(12);
+      expect(report.failureCount).toBe(0);
+      expect(majorCapabilityMultiTurnCases.some((caseDef) => caseDef.history?.length > 0)).toBe(true);
+      expect(
+        majorCapabilityMultiTurnCases
+          .filter((caseDef) => caseDef.safetyClass === "confirmation_only")
+          .every((caseDef) => caseDef.forbiddenTools?.length),
+      ).toBe(true);
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("can run the non-destructive production-safe major subset with redacted reports", async () => {
+    const { buildMajorCapabilityProductionSafeCases, runAgentEval } = await loadEvalHarness();
+    const productionSafeCases = buildMajorCapabilityProductionSafeCases();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-major-prod-safe-"));
+    const reportPath = join(tempDir, "report.json");
+
+    try {
+      const report = await runAgentEval({
+        baseUrl: "https://spendwithpip.com",
+        reportPath,
+        suite: "major-capabilities-production-safe",
+        conversationPrefix: "production-safe-test",
+        log: () => undefined,
+        fetchImpl: async (_url: string, options: { body?: string }) => {
+          const body = JSON.parse(options.body ?? "{}") as { message: string };
+          const caseDef = productionSafeCases.find((candidate) => candidate.message === body.message);
+
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              message: "I checked that safely.",
+              responseMode: caseDef?.expectedResponseMode ?? "chat_only",
+              usedTools: caseDef?.expectedTools ?? [],
+              cards: [],
+              promptChips: [],
+            }),
+          };
+        },
+      });
+
+      const writtenReport = JSON.parse(readFileSync(reportPath, "utf8"));
+
+      expect(report.suite).toBe("major-capabilities-production-safe");
+      expect(report.failureCount).toBe(0);
+      expect(report.caseCount).toBeGreaterThan(0);
+      expect(report.caseCount).toBeLessThan(20);
+      expect(writtenReport.cases.every((entry: { inputMessage: string }) => entry.inputMessage === "[redacted]")).toBe(
+        true,
+      );
+      expect(writtenReport.cases.every((entry: Record<string, unknown>) => !("rawResponse" in entry))).toBe(true);
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
     }
@@ -748,12 +928,43 @@ async function loadEvalHarness() {
     runAgentEval: (input: Record<string, unknown>) => Promise<{
       status: "passed" | "failed";
       failureCount: number;
+      caseCount: number;
       routingOnly?: boolean;
       suite?: string;
       evaluationMethod?: string;
       cases: Array<{ failures: string[] }>;
     }>;
+    buildMajorCapabilityExpandedCases: () => Array<{
+      message: string;
+      scenario?: string;
+      expectedTools?: string[];
+      expectedCards?: string[];
+      expectedAnyCards?: string[];
+      expectedResponseMode?: string;
+      expectedPendingActionType?: string;
+    }>;
+    buildMajorCapabilityProductionSafeCases: () => Array<{
+      message: string;
+      expectedTools?: string[];
+      expectedResponseMode?: string;
+    }>;
+    majorCapabilityMultiTurnCases: Array<{
+      message: string;
+      history?: unknown[];
+      safetyClass?: string;
+      forbiddenTools?: string[];
+      expectedTools?: string[];
+      expectedCards?: string[];
+      expectedAnyCards?: string[];
+      expectedResponseMode?: string;
+    }>;
+    majorCapabilities: Array<{
+      id: string;
+      tiers: string[];
+      safetyClass: string;
+    }>;
     majorCapabilityEvalCases: Array<{
+      capabilityId: string;
       message: string;
       expectedTools?: string[];
       expectedCards?: string[];

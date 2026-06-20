@@ -2947,6 +2947,7 @@ function buildAgentResponse(
     usedTools,
     forcedToolRequiresCard: Boolean(context.forcedTool?.requireCard),
   });
+  const visibleModelOutput = selectVisibleModelOutput(parsed, context, guidanceSelection);
 
   if (input.requestKind === "prompt_chips" && promptChips.length < 3) {
     throw new AgentUnavailableError({
@@ -2958,7 +2959,7 @@ function buildAgentResponse(
   }
 
   const visibleAnswer = composeAgentVisibleAnswer({
-    modelOutput: parsed,
+    modelOutput: visibleModelOutput,
     userMessage: input.message,
     history: input.history,
     conversationState: {
@@ -3004,6 +3005,28 @@ function buildAgentResponse(
       },
     },
   });
+}
+
+function selectVisibleModelOutput(
+  parsed: AgentFinalOutput,
+  context: PipAgentContext,
+  guidanceSelection: {
+    guidanceSource: "model_draft" | "deterministic_fallback" | "none";
+  },
+): AgentFinalOutput {
+  if (
+    guidanceSelection.guidanceSource === "deterministic_fallback" &&
+    context.guidanceContext &&
+    shouldReturnGuidanceCard(context)
+  ) {
+    return {
+      ...parsed,
+      message: createDeterministicGuidanceMessage(context.guidanceContext),
+      responseMode: "guidance",
+    };
+  }
+
+  return parsed;
 }
 
 function selectFinalResponseMode(input: {
@@ -4612,6 +4635,8 @@ function isExplicitPipCashDriversPrompt(normalized: string): boolean {
   return (
     normalized === "why this number" ||
     normalized === "what changed" ||
+    normalized === "what are the biggest drivers" ||
+    normalized === "why did it move" ||
     /^(show( me)? )?(the )?(pip cash )?drivers( behind (this|the) number)?$/.test(normalized) ||
     /^(show( me)? )?(the )?(spendable cash|pip cash )?drivers?$/.test(normalized)
   );
@@ -4663,7 +4688,8 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b/.test(normalized) ||
     /\bspending opportunit(?:y|ies)\b/.test(normalized) ||
     /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
-    /\bwhere can i save\b/.test(normalized);
+    /\bwhere can i save\b/.test(normalized) ||
+    /\b(money leaking|where .* leaking)\b/.test(normalized);
 
   if (!hasOpportunityTerm) {
     return false;
@@ -4673,7 +4699,8 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
     /\b(what|where|which|find|show|spot|identify|help|how)\b/.test(normalized) ||
     /\bspending opportunit(?:y|ies)\b/.test(normalized) ||
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what|costs?|expenses?|cash)\b/.test(normalized) ||
-    /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized)
+    /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
+    /\b(money leaking|where .* leaking)\b/.test(normalized)
   );
 }
 
@@ -4745,6 +4772,9 @@ function getSavingsGoalForcedTool(
 
 function isSavingsGoalPrompt(normalized: string): boolean {
   return /\bsavings? goals?\b/.test(normalized) ||
+    /\bwhat goals am i tracking\b/.test(normalized) ||
+    /\bgoal progress\b/.test(normalized) ||
+    /\btrip fund\b.{0,32}\bdoing\b/.test(normalized) ||
     /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
     /\b(for|toward|towards)\b.{0,32}\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b/.test(normalized) ||
     /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized);
@@ -4757,6 +4787,9 @@ function isSavingsGoalCreatePrompt(normalized: string): boolean {
 
 function isSavingsGoalListPrompt(normalized: string): boolean {
   return /\b(show|list|what|which|update|progress|how are)\b.{0,32}\bsavings? goals?\b/.test(normalized) ||
+    /\bwhat goals am i tracking\b/.test(normalized) ||
+    /\bshow goal progress\b/.test(normalized) ||
+    /\btrip fund\b.{0,32}\bdoing\b/.test(normalized) ||
     /^savings? goals?$/.test(normalized);
 }
 
@@ -4771,7 +4804,7 @@ function isSavingsGoalProgressPrompt(normalized: string): boolean {
 }
 
 function isDataQualityPrompt(normalized: string): boolean {
-  return /\b(missing card|card missing|missing data|data missing|data (?:might|may|could) be missing|what data (?:might|may|could) be missing|connect(ed)? data|repair data|stale data|data quality|pending transactions?|pending items?)\b/.test(
+  return /\b(missing card|card missing|missing data|data missing|data (?:might|may|could) be missing|what data (?:might|may|could) be missing|connect(ed)? data|repair data|stale data|data quality|pending transactions?|pending items?|number complete)\b/.test(
     normalized,
   );
 }
@@ -5203,7 +5236,11 @@ function isExplicitBalancesPrompt(normalized: string): boolean {
 }
 
 function isNaturalAccountBalancePrompt(normalized: string): boolean {
-  if (!/\bbalances?\b/.test(normalized)) {
+  const hasBalanceIntent =
+    /\bbalances?\b/.test(normalized) ||
+    /\bhow much\b.{0,48}\b(checking|savings|account|bank)\b/.test(normalized);
+
+  if (!hasBalanceIntent) {
     return false;
   }
 
@@ -5687,5 +5724,6 @@ export const __agentTestHooks = {
   repairUnsupportedCardPromises,
   selectGuidanceCard,
   selectFinalResponseMode,
+  selectVisibleModelOutput,
   selectPromptChips,
 };

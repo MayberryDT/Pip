@@ -131,6 +131,11 @@ describe("PipHome", () => {
       "settings-feedback",
       "settings-delete-account",
     ]);
+    expect(settingsCard.actions.find((action) => action.id === "settings-connected-accounts")).toMatchObject({
+      label: "Manage accounts",
+      prompt: "Show connected accounts",
+      style: "primary",
+    });
     expect(termsCard).toMatchObject({
       type: "settings_detail",
       title: "Terms",
@@ -163,7 +168,7 @@ describe("PipHome", () => {
     })).toBe("delete-start");
   });
 
-  it("pins account management as the first live ready-state prompt chip", () => {
+  it("pins settings as the live ready-state prompt chip while account management lives in settings", () => {
     const chips = __pipHomeTestHooks.getDefaultPromptChips(
       { status: "ready", email: "tester@example.com" },
       true,
@@ -171,18 +176,15 @@ describe("PipHome", () => {
     );
 
     expect(chips.slice(0, 3).map((chip) => chip.id)).toEqual([
-      "manage-accounts",
       "settings",
       "ai-pattern-assumptions",
+      "ai-data-quality",
     ]);
     expect(chips[0]).toMatchObject({
-      label: "Manage accounts",
-      prompt: "Show connected accounts",
-    });
-    expect(chips[1]).toMatchObject({
       label: "Settings",
       prompt: "Settings",
     });
+    expect(chips.map((chip) => chip.id)).not.toContain("manage-accounts");
   });
 
   it("shows Plaid OAuth completion as a same-screen Pip message", () => {

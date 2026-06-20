@@ -189,6 +189,23 @@ describe("runAIAgent", () => {
     expect(selection.guidanceSource).toBe("deterministic_fallback");
   });
 
+  it("uses deterministic visible guidance text when the guidance card falls back", () => {
+    const visibleOutput = __agentTestHooks.selectVisibleModelOutput(
+      {
+        message:
+          "I found $104 today. Your normal room is $69.27, driven by normal spending and recent lighter spending. Watch data quality; I'd stay cautious about big purchases.",
+        responseMode: "guidance",
+        promptChips: [],
+      },
+      createGuidanceSelectorContext(),
+      { guidanceSource: "deterministic_fallback" },
+    );
+
+    expect(visibleOutput.message).toMatch(/^My read:/);
+    expect(visibleOutput.message).not.toContain("big purchases");
+    expect(visibleOutput.message).not.toContain("driven by");
+  });
+
   it("combines purchase simulation with guidance context for bank-balance assumption prompts", async () => {
     const response = await runAIAgent(
       { message: "I have $900 in checking, why can't I spend $300?" },
