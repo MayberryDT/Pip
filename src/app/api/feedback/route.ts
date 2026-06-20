@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getClientPipPlatform } from "@/lib/platform/android-shell";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -59,7 +60,7 @@ export async function POST(request: Request) {
       return NextResponse.json(body, { status: 503 });
     }
 
-    console.error("[feedback] feedback save failed", error);
+    console.error("[feedback] feedback save failed", getSafeErrorMessage(error, "Feedback save failed."));
     return NextResponse.json(body, { status: 500 });
   }
 }

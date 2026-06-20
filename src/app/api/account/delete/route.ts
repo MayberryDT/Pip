@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { deleteCurrentUserFinancialData } from "@/lib/data/financial-repository";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -62,7 +63,7 @@ export async function POST(request: Request) {
       return NextResponse.json(body, { status: 503 });
     }
 
-    console.error("[account-delete] account deletion failed", error);
+    console.error("[account-delete] account deletion failed", getSafeErrorMessage(error, "Account deletion failed."));
     return NextResponse.json(body, { status: 500 });
   }
 }

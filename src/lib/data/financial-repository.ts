@@ -9,6 +9,7 @@ import type {
   UserSettingsRow,
 } from "@/lib/supabase/database.types";
 import { getCurrentAppDate } from "@/lib/date/app-date";
+import { listRecurringObligationRulesForUser } from "@/lib/data/recurring-obligation-rules";
 import { isInstitutionStale } from "@/lib/data/sync-status";
 import { listSavingsGoalsForUser } from "@/lib/data/savings-goals-repository";
 import { isSavingsGoalsEnabled } from "@/lib/savings-goals/feature-flags";
@@ -26,6 +27,7 @@ export async function loadFinancialSnapshotForUser(
     transactionsResult,
     missingCardPreferencesResult,
     savingsGoals,
+    recurringObligationRules,
   ] = await Promise.all([
     supabase.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
     supabase.from("accounts").select("*").eq("user_id", userId),
@@ -35,6 +37,7 @@ export async function loadFinancialSnapshotForUser(
     }),
     supabase.from("missing_card_preferences").select("issuer_name").eq("user_id", userId),
     isSavingsGoalsEnabled() ? listSavingsGoalsForUser(supabase, userId) : Promise.resolve([]),
+    listRecurringObligationRulesForUser(supabase, userId),
   ]);
 
   if (settingsResult.error) {
@@ -74,6 +77,7 @@ export async function loadFinancialSnapshotForUser(
     transactions: transactions.map(mapTransactionRow),
     settings: mapUserSettingsRow(settings, suppressedMissingCardIssuers),
     savingsGoals,
+    recurringObligationRules,
   };
 }
 

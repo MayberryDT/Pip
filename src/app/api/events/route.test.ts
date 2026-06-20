@@ -124,6 +124,59 @@ describe("POST /api/events", () => {
       },
     );
   });
+
+  it("accepts onboarding monthly-savings selection events from the client", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.recordProductEvent.mockResolvedValue(undefined);
+
+    const response = await POST(
+      jsonRequest({
+        eventName: "monthly_savings_selected",
+        properties: {
+          protectedSavingsMonthlyCents: 35000,
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toEqual({
+      status: "recorded",
+    });
+    expect(routeMocks.recordProductEvent).toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "monthly_savings_selected",
+      {
+        protectedSavingsMonthlyCents: 35000,
+      },
+    );
+  });
+
+  it("logs event-write failures without exposing secret-shaped values", async () => {
+    enableSupabaseEnv();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new Error("event insert failed access_token=provider-secret sk-test-secret");
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.recordProductEvent.mockRejectedValue(error);
+
+    try {
+      const response = await POST(jsonRequest({ eventName: "pip_cash_viewed" }));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: "Event request failed.",
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        "[events] product event write failed",
+        "event insert failed access_token=[redacted] [redacted]",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 function enableSupabaseEnv() {

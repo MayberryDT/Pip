@@ -163,6 +163,31 @@ describe("/api/settings", () => {
       },
     );
   });
+
+  it("logs settings update failures without exposing secret-shaped values", async () => {
+    enableSupabaseEnv();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new Error("settings failed access_token=provider-secret sk-test-secret");
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.upsertUserSettings.mockRejectedValue(error);
+
+    try {
+      const response = await PUT(jsonRequest({ protectedSavingsMonthlyCents: 35000 }));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: "Settings request failed.",
+      });
+      expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "[settings] settings request failed",
+        "settings failed access_token=[redacted] [redacted]",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 function enableSupabaseEnv() {

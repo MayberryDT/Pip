@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadSyncStatusForUser } from "@/lib/data/sync-status";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -21,18 +22,16 @@ export async function GET() {
 
     return NextResponse.json(await loadSyncStatusForUser(supabase, user.id));
   } catch (error) {
+    if (!(error instanceof SupabaseConfigError)) {
+      console.error("[sync/status] status failed", getSafeErrorMessage(error, "Sync status request failed."));
+    }
+
     return NextResponse.json(toErrorBody(error), { status: 500 });
   }
 }
 
 function toErrorBody(error: unknown) {
   if (error instanceof SupabaseConfigError) {
-    return {
-      error: error.message,
-    };
-  }
-
-  if (error instanceof Error) {
     return {
       error: error.message,
     };

@@ -1,6 +1,15 @@
 import type { SavingsGoal, SavingsGoalPlan } from "@/lib/savings-goals/types";
+import { getCurrentAppDate } from "@/lib/date/app-date";
 
 const DAYS_PER_MONTH = 30.44;
+
+export type SavingsGoalContributionResolution = {
+  goalId: string;
+  name: string;
+  monthlyContributionCents: number;
+  source: "explicit" | "target_date";
+  needsPlan: boolean;
+};
 
 export function buildSavingsGoalPlan(goal: SavingsGoal, asOfDate: string): SavingsGoalPlan {
   const remainingCents = Math.max(0, goal.targetAmountCents - goal.currentAmountCents);
@@ -41,10 +50,57 @@ export function buildSavingsGoalPlan(goal: SavingsGoal, asOfDate: string): Savin
   };
 }
 
-export function getProtectedSavingsGoalMonthlyCents(goals: SavingsGoal[] = []) {
-  return goals
-    .filter((goal) => goal.status === "active" && goal.includeInSpendableCash)
-    .reduce((sum, goal) => sum + goal.monthlyContributionCents, 0);
+export function resolveSavingsGoalMonthlyContribution(
+  goal: SavingsGoal,
+  asOfDate: string,
+): SavingsGoalContributionResolution {
+  if (goal.status !== "active") {
+    return {
+      goalId: goal.id,
+      name: goal.name,
+      monthlyContributionCents: 0,
+      source: "explicit",
+      needsPlan: false,
+    };
+  }
+
+  if (goal.monthlyContributionCents > 0) {
+    return {
+      goalId: goal.id,
+      name: goal.name,
+      monthlyContributionCents: goal.monthlyContributionCents,
+      source: "explicit",
+      needsPlan: false,
+    };
+  }
+
+  const plan = buildSavingsGoalPlan(goal, asOfDate);
+
+  return {
+    goalId: goal.id,
+    name: goal.name,
+    monthlyContributionCents: plan.recommendedMonthlyContributionCents ?? 0,
+    source: "target_date",
+    needsPlan: plan.recommendedMonthlyContributionCents === undefined,
+  };
+}
+
+export function getActiveSavingsGoalMonthlyCents(
+  goals: SavingsGoal[] = [],
+  asOfDate: string,
+) {
+  return goals.reduce(
+    (sum, goal) =>
+      sum + resolveSavingsGoalMonthlyContribution(goal, asOfDate).monthlyContributionCents,
+    0,
+  );
+}
+
+export function getProtectedSavingsGoalMonthlyCents(
+  goals: SavingsGoal[] = [],
+  asOfDate = getCurrentAppDate(),
+) {
+  return getActiveSavingsGoalMonthlyCents(goals, asOfDate);
 }
 
 function getSavingsGoalWarning(goal: SavingsGoal, remainingCents: number): string | undefined {

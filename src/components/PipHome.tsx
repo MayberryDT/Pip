@@ -17,7 +17,6 @@ import {
   getConnectLabel,
   getConnectionStatusMessage,
   getRefreshProvider,
-  shouldRefreshConnectedDataForToday,
   type FinancialProvider,
   type SyncStatusResponse,
 } from "@/components/data-controls-helpers";
@@ -28,9 +27,10 @@ import {
   getSpendableCashTodayState,
 } from "@/lib/pip-cash/spendable-cash-today";
 import {
-  buildSpendableTrustReceipt,
-  formatTrustReceiptInline,
-} from "@/lib/pip-cash/trust-receipt";
+  planOpeningBubble,
+  type OpeningBubbleInput,
+  type OpeningBubblePlan,
+} from "@/lib/pip/opening-bubble-planner";
 import { formatMoney } from "@/lib/money";
 import type { PipCashResult } from "@/lib/types";
 import { AgentInput } from "@/components/AgentInput";
@@ -42,14 +42,18 @@ import { openPlaidLink } from "@/lib/providers/plaid/link-browser";
 import type { PlaidEventMetadata } from "@/lib/providers/plaid/link-browser";
 import { isSavingsGoalsClientEnabled } from "@/lib/savings-goals/feature-flags";
 import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
+import {
+  AgentRequestError,
+  fetchAgentResponse,
+  getAgentErrorText,
+  getConversationState,
+  getNextVisiblePromptChips,
+  getSafeAgentFailureMessage,
+  mergePromptChipHistory,
+  type AgentThreadItem,
+} from "@/components/pip-home/agent-session";
 
-type ThreadItem = {
-  id: string;
-  userText: string;
-  response?: AgentResponse;
-  errorText?: string;
-  isPending?: boolean;
-};
+type ThreadItem = AgentThreadItem;
 
 type PipHomeServerResult = PipCashResult & {
   freshness?: {
@@ -76,11 +80,6 @@ type PipHomeServerResult = PipCashResult & {
   };
 };
 
-const accountManagementPromptChip: PromptChip = {
-  id: "manage-accounts",
-  label: "Manage accounts",
-  prompt: "Show connected accounts",
-};
 const settingsPromptChip: PromptChip = {
   id: "settings",
   label: "Settings",
@@ -126,12 +125,14 @@ export function PipHome({
   authState,
   devOnboardingFlow = false,
   enableAccountControls = false,
+  initialResult,
 }: {
   authNotice?: "auth-error";
   connectionNotice?: "plaid-connected";
   authState?: PipAuthState;
   devOnboardingFlow?: boolean;
   enableAccountControls?: boolean;
+  initialResult?: PipHomeServerResult | null;
 }) {
   const [scenario, setScenario] = useState<FakeDataScenario>("default");
   const snapshot = useMemo(() => getFakeSnapshot(scenario), [scenario]);
@@ -145,10 +146,13 @@ export function PipHome({
   const canUseInAppAccountActions =
     liveAccountControlsEnabled && activeAuthState?.status === "ready";
   const onboardingPromptControlsEnabled = liveAccountControlsEnabled || devOnboardingFlow;
-  const [serverResult, setServerResult] = useState<PipHomeServerResult | null>(null);
+  const [serverResult, setServerResult] = useState<PipHomeServerResult | null>(
+    () => initialResult ?? null,
+  );
   const [serverErrorText, setServerErrorText] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatusResponse | null>(null);
-  const [hasLoadedServerState, setHasLoadedServerState] = useState(false);
+  const [appOpenSyncMessage, setAppOpenSyncMessage] = useState("");
+  const [hasLoadedServerState, setHasLoadedServerState] = useState(Boolean(initialResult));
   const [backendReloadKey, setBackendReloadKey] = useState(0);
   const appOpenRefreshInFlightRef = useRef(false);
   const lastAppOpenRefreshRequestAtRef = useRef(0);
@@ -163,10 +167,6 @@ export function PipHome({
       : liveAccountControlsEnabled
         ? serverResult
         : localResult;
-  const trustReceipt = useMemo(
-    () => result ? buildSpendableTrustReceipt({ result, syncStatus }) : null,
-    [result, syncStatus],
-  );
   const hasLoadedServerResult = Boolean(result);
   const pipCashTodayCents = result ? getDisplayedSpendableCashTodayCents(result) : undefined;
   const protectedSavingsGoalMonthlyCents =
@@ -177,10 +177,20 @@ export function PipHome({
     isSavingsGoalsClientEnabled() && protectedSavingsGoalMonthlyCents > 0;
   const [thread, setThread] = useState<ThreadItem[]>([]);
   const [chips, setChips] = useState<PromptChip[]>(() =>
-    getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, result),
+    getReadyPromptChips({
+      authState: activeAuthState,
+      enableAccountControls: onboardingPromptControlsEnabled,
+      result,
+      appOpenSyncMessage,
+    }),
   );
   const [chipHistory, setChipHistory] = useState<PromptChip[]>(() =>
-    getDefaultPromptChips(activeAuthState, onboardingPromptControlsEnabled, result),
+    getReadyPromptChips({
+      authState: activeAuthState,
+      enableAccountControls: onboardingPromptControlsEnabled,
+      result,
+      appOpenSyncMessage,
+    }),
   );
   const promptChipRequestKeyRef = useRef<string | null>(null);
   const lastNonEmptyChipsRef = useRef<PromptChip[]>(chips);
@@ -365,20 +375,22 @@ export function PipHome({
       return;
     }
 
-    const defaultChips = getDefaultPromptChips(
-      activeAuthState,
-      onboardingPromptControlsEnabled,
+    const nextChips = getReadyPromptChips({
+      authState: activeAuthState,
+      enableAccountControls: onboardingPromptControlsEnabled,
       result,
-    );
+      appOpenSyncMessage,
+    });
 
-    setChips(defaultChips);
-    setChipHistory(defaultChips);
+    setChips(nextChips);
+    setChipHistory(nextChips);
 
     if (!liveAccountControlsEnabled) {
       setThread([]);
     }
   }, [
     activeAuthState,
+    appOpenSyncMessage,
     hasConversation,
     liveAccountControlsEnabled,
     localResult,
@@ -445,7 +457,7 @@ export function PipHome({
         }
 
         const nextPromptChips = liveAccountControlsEnabled
-          ? withAccountManagementPromptChip(response.promptChips)
+          ? withSettingsPromptChip(response.promptChips)
           : response.promptChips;
 
         setChips(nextPromptChips);
@@ -525,7 +537,7 @@ export function PipHome({
         ),
       );
       const responsePromptChips = liveAccountControlsEnabled
-        ? withAccountManagementPromptChip(response.promptChips)
+        ? withSettingsPromptChip(response.promptChips)
         : response.promptChips;
       const nextVisibleChips = getNextVisiblePromptChips(
         responsePromptChips,
@@ -937,14 +949,9 @@ export function PipHome({
                 >
                   {result ? formatMoney(getDisplayedSpendableCashTodayCents(result)) : "$--"}
                 </div>
-                {trustReceipt ? (
-                  <p className="pip-metric-receipt" data-testid="pip-trust-receipt">
-                    {formatTrustReceiptInline(trustReceipt)}
-                  </p>
-                ) : null}
                 {showSavingsGoalMetricNote ? (
                   <p className="pip-metric-receipt" data-testid="pip-savings-goal-note">
-                    Savings Goals: {formatMoney(protectedSavingsGoalMonthlyCents)}/month tracked in Pip and kept out. Pip does not move money.
+                    Savings Goals: {formatMoney(protectedSavingsGoalMonthlyCents)}/month included before today’s number. Pip does not move money.
                   </p>
                 ) : null}
               </>
@@ -970,7 +977,11 @@ export function PipHome({
               variant="needs-data"
             />
           ) : thread.length === 0 ? (
-            <DefaultAssistantIntro connectionNotice={connectionNotice} result={result} />
+            <DefaultAssistantIntro
+              appOpenSyncMessage={appOpenSyncMessage}
+              connectionNotice={connectionNotice}
+              result={result}
+            />
           ) : (
             <AgentThread
               thread={thread}
@@ -1072,7 +1083,7 @@ export function PipHome({
     }
 
     if (liveAccountControlsEnabled) {
-      void trackProductEvent("protected_savings_selected", {
+      void trackProductEvent("monthly_savings_selected", {
         protectedSavingsMonthlyCents: amountCents,
       });
     }
@@ -1275,24 +1286,42 @@ export function PipHome({
 
     appOpenRefreshInFlightRef.current = true;
     lastAppOpenRefreshRequestAtRef.current = now;
+    setAppOpenSyncMessage(getAppOpenSyncMessage({ ok: true, status: "checking" }) ?? "");
 
     try {
       const response = await fetch("/api/sync/app-open", {
         method: "POST",
       });
       const payload = await response.json().catch(() => null);
+      const status = payload && typeof payload === "object" && "status" in payload
+        ? payload.status
+        : undefined;
+      const resultStatus =
+        payload &&
+        typeof payload === "object" &&
+        "result" in payload &&
+        payload.result &&
+        typeof payload.result === "object" &&
+        "status" in payload.result
+          ? payload.result.status
+          : undefined;
+      const syncMessage = getAppOpenSyncMessage({
+        ok: response.ok,
+        status,
+        resultStatus,
+      });
 
       if (
         response.ok &&
-        payload &&
-        typeof payload === "object" &&
-        "status" in payload &&
-        (payload.status === "ran" ||
-          payload.status === "needs_repair" ||
-          payload.status === "failed")
+        (status === "ran" ||
+          status === "needs_repair" ||
+          status === "failed")
       ) {
         setBackendReloadKey((current) => current + 1);
       }
+      setAppOpenSyncMessage(syncMessage ?? "");
+    } catch {
+      setAppOpenSyncMessage(getAppOpenSyncMessage({ ok: false }) ?? "");
     } finally {
       appOpenRefreshInFlightRef.current = false;
     }
@@ -1454,20 +1483,34 @@ function ReadyIntro({
 }
 
 function DefaultAssistantIntro({
+  appOpenSyncMessage,
   connectionNotice,
   result,
 }: {
+  appOpenSyncMessage?: string;
   connectionNotice?: "plaid-connected";
   result: PipCashResult | null;
 }) {
   if (result) {
+    const openingBubblePlan = getReadyOpeningBubblePlan({ result, appOpenSyncMessage });
+    const showAppOpenSyncMessage =
+      appOpenSyncMessage &&
+      appOpenSyncMessage !== openingBubblePlan.message &&
+      openingBubblePlan.priority !== "normal";
+
     return (
       <div
-        className="assistant-ready-intro-panel is-quiet min-h-0 flex-1 overflow-y-auto pb-1"
+        className="assistant-ready-intro-panel min-h-0 flex-1 overflow-y-auto pb-1"
         data-testid="agent-thread"
         aria-label="Pip chat"
       >
         {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
+        <PipIntroScene
+          priority
+          title={openingBubblePlan.message}
+        >
+          {showAppOpenSyncMessage ? <p>{appOpenSyncMessage}</p> : null}
+        </PipIntroScene>
       </div>
     );
   }
@@ -1669,7 +1712,7 @@ function getSettingsActions(input: {
   if (input.hasConnectedData) {
     actions.push({
       id: "settings-connected-accounts",
-      label: "Connected accounts",
+      label: "Manage accounts",
       prompt: "Show connected accounts",
       style: "primary",
     });
@@ -1738,6 +1781,156 @@ function getSettingsConversationPromptChips(input: {
     .slice(0, 3);
 
   return filtered.length > 0 ? filtered : settingsConversationFallbackPromptChips;
+}
+
+function getReadyOpeningBubblePlan(input: {
+  appOpenSyncMessage?: string;
+  result: PipCashResult;
+}): OpeningBubblePlan {
+  return planOpeningBubble({
+    refresh: getOpeningBubbleRefresh(input.appOpenSyncMessage),
+    sameDaySpend: getOpeningBubbleSameDaySpend(input.result),
+    missingData: getOpeningBubbleMissingData(input.result),
+    tight: getOpeningBubbleTightNotice(input.result),
+    savingsOpportunity: getOpeningBubbleSavingsOpportunity(input.result),
+    spendableCashTodayCents: getDisplayedSpendableCashTodayCents(input.result),
+  });
+}
+
+function getOpeningBubbleRefresh(
+  message: string | undefined,
+): OpeningBubbleInput["refresh"] | undefined {
+  if (!message) {
+    return undefined;
+  }
+
+  if (/checking|searching/i.test(message)) {
+    return {
+      status: "checking",
+      message,
+    };
+  }
+
+  if (/could not|connection|repair/i.test(message)) {
+    return {
+      status: "failed",
+      message,
+    };
+  }
+
+  if (/recently|already|automatic refresh|last spendable|manual/i.test(message)) {
+    return {
+      status: "skipped",
+      message,
+    };
+  }
+
+  return {
+    status: "ran",
+    message,
+  };
+}
+
+function getOpeningBubbleSameDaySpend(result: PipCashResult): OpeningBubbleInput["sameDaySpend"] {
+  const ledger = result.spendableCashToday?.sameDayLedger;
+  const dailySpendItems =
+    ledger?.items.filter((item) => item.treatment === "daily_spend") ?? [];
+  const largestItem = dailySpendItems.reduce<(typeof dailySpendItems)[number] | undefined>(
+    (largest, item) =>
+      !largest || Math.abs(item.amountCents) > Math.abs(largest.amountCents) ? item : largest,
+    undefined,
+  );
+
+  if (largestItem) {
+    return {
+      amountCents: Math.abs(largestItem.amountCents),
+      merchantName: largestItem.label,
+      pending: largestItem.pending,
+    };
+  }
+
+  const sameDaySpendCents = result.spendableCashToday?.sameDayDiscretionarySpendCents ?? 0;
+
+  return sameDaySpendCents > 0
+    ? {
+        amountCents: sameDaySpendCents,
+      }
+    : undefined;
+}
+
+function getOpeningBubbleMissingData(result: PipCashResult): OpeningBubbleInput["missingData"] {
+  const missingCardWarning = result.spendableCashToday?.warnings.find(
+    (warning) => warning.id === "missing-card",
+  );
+
+  if (!missingCardWarning) {
+    return undefined;
+  }
+
+  return {
+    message: missingCardWarning.detail || "I may be missing a card, so this number could still move.",
+  };
+}
+
+function getOpeningBubbleTightNotice(result: PipCashResult): OpeningBubbleInput["tight"] {
+  const state = getSpendableCashTodayState(result);
+
+  if (state === "shortfall") {
+    const shortfallCents =
+      result.spendableCashToday?.shortfallCents ?? Math.max(0, -result.pipCashTodayCents);
+
+    return {
+      message: `Today is already over by ${formatMoney(shortfallCents)}. I would keep spending paused where you can.`,
+    };
+  }
+
+  if (state === "tight") {
+    return {
+      message: `Today is tight. You have ${formatMoney(getDisplayedSpendableCashTodayCents(result))} left.`,
+    };
+  }
+
+  if (state === "overspending") {
+    return {
+      message: "Today is running tight because spending is ahead of the plan.",
+    };
+  }
+
+  return undefined;
+}
+
+function getOpeningBubbleSavingsOpportunity(result: PipCashResult): boolean {
+  const plannedMonthlySavingsCents =
+    (result.monthlySavingsCents ?? 0) +
+    (result.savingsGoalMonthlyCents ?? 0) +
+    result.protectedSavingsMonthlyCents;
+
+  return plannedMonthlySavingsCents <= 0;
+}
+
+function getOpeningBubblePromptChips(input: {
+  openingBubblePlan: OpeningBubblePlan;
+  defaultChips: PromptChip[];
+}): PromptChip[] {
+  if (input.openingBubblePlan.chips.length === 0) {
+    return input.defaultChips;
+  }
+
+  const nextChips = [...input.openingBubblePlan.chips];
+
+  for (const chip of input.defaultChips) {
+    if (nextChips.some((existing) => existing.id === chip.id)) {
+      continue;
+    }
+
+    nextChips.push(chip);
+
+    if (nextChips.length >= 3) {
+      break;
+    }
+  }
+
+  return nextChips;
 }
 
 function getChatOnlyRequest(input: {
@@ -1936,10 +2129,35 @@ function getDefaultPromptChips(
   }
 
   if (enableAccountControls && result) {
-    return withAccountManagementPromptChip(getSuggestedPrompts(result));
+    return withSettingsPromptChip(getSuggestedPrompts(result));
   }
 
   return result ? getSuggestedPrompts(result) : [];
+}
+
+function getReadyPromptChips(input: {
+  authState: PipAuthState | undefined;
+  enableAccountControls: boolean;
+  result: PipCashResult | null;
+  appOpenSyncMessage?: string;
+}): PromptChip[] {
+  const defaultChips = getDefaultPromptChips(
+    input.authState,
+    input.enableAccountControls,
+    input.result,
+  );
+
+  if (!input.result) {
+    return defaultChips;
+  }
+
+  return getOpeningBubblePromptChips({
+    openingBubblePlan: getReadyOpeningBubblePlan({
+      result: input.result,
+      appOpenSyncMessage: input.appOpenSyncMessage,
+    }),
+    defaultChips,
+  });
 }
 
 type ReadyDataAction = {
@@ -1985,13 +2203,10 @@ function getReadyDataAction(syncStatus: SyncStatusResponse | null): ReadyDataAct
   };
 }
 
-function withAccountManagementPromptChip(chips: PromptChip[]): PromptChip[] {
+function withSettingsPromptChip(chips: PromptChip[]): PromptChip[] {
   return [
-    accountManagementPromptChip,
     settingsPromptChip,
-    ...chips.filter(
-      (chip) => chip.id !== accountManagementPromptChip.id && chip.id !== settingsPromptChip.id,
-    ),
+    ...chips.filter((chip) => chip.id !== "manage-accounts" && chip.id !== settingsPromptChip.id),
   ].slice(0, 3);
 }
 
@@ -2011,153 +2226,6 @@ function getSaveMonthlySavingsErrorText(error: unknown): string {
   return "I couldn’t save that amount yet. Please try again.";
 }
 
-class AgentRequestError extends Error {
-  code?: string;
-  status: number;
-
-  constructor(input: {
-    message: string;
-    status: number;
-    code?: string;
-  }) {
-    super(input.message);
-    this.name = "AgentRequestError";
-    this.code = input.code;
-    this.status = input.status;
-  }
-}
-
-async function fetchAgentResponse(
-  message: string,
-  scenario: FakeDataScenario,
-  thread: ThreadItem[],
-  visibleChips: PromptChip[],
-  chipHistory: PromptChip[],
-  conversationId: string,
-  selectedPromptChipId?: string,
-  requestKind: "chat" | "prompt_chips" = "chat",
-): Promise<AgentResponse> {
-  const response = await fetch("/api/agent", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({
-      message,
-      requestKind,
-      conversationId,
-      scenario,
-      selectedPromptChipId,
-      history: getThreadHistory(thread),
-      conversationState: getConversationState(thread, visibleChips, chipHistory),
-    }),
-  });
-
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null);
-    const code = payload && typeof payload.code === "string" ? payload.code : undefined;
-
-    throw new AgentRequestError({
-      code,
-      status: response.status,
-      message: getSafeAgentFailureMessage({
-        code,
-        status: response.status,
-      }),
-    });
-  }
-
-  return response.json();
-}
-
-function getThreadHistory(thread: ThreadItem[]) {
-  return thread.flatMap((item) => {
-    const history: Array<{ role: "user" | "assistant"; content: string }> = [
-      {
-        role: "user",
-        content: item.userText,
-      },
-    ];
-
-    if (item.response?.message) {
-      history.push({
-        role: "assistant",
-        content: item.response.message,
-      });
-    }
-
-    return history;
-  }).slice(-8);
-}
-
-function getConversationState(
-  thread: ThreadItem[],
-  visibleChips: PromptChip[],
-  chipHistory: PromptChip[],
-) {
-  const shownCards = thread
-    .flatMap((item) => item.response?.cards ?? [])
-    .map((card) => ({
-      type: card.type,
-      title: card.title,
-    }))
-    .slice(-8);
-  const lastToolNames = thread
-    .flatMap((item) => item.response?.usedTools ?? item.response?.audit.toolNames ?? [])
-    .slice(-8);
-  const promptChips = [
-    ...chipHistory,
-    ...thread.flatMap((item) => item.response?.promptChips ?? []),
-    ...visibleChips,
-  ].slice(-24);
-  const latestResponse = [...thread]
-    .reverse()
-    .find((item) => item.response)
-    ?.response;
-  const pendingAction = latestResponse?.pendingAction;
-
-  return {
-    shownCards,
-    lastToolNames,
-    promptChips,
-    ...(pendingAction ? { pendingAction } : {}),
-  };
-}
-
-function mergePromptChipHistory(...chipSets: PromptChip[][]): PromptChip[] {
-  const merged: PromptChip[] = [];
-  const seen = new Set<string>();
-
-  chipSets.flat().forEach((chip) => {
-    const key = `${chip.label.toLowerCase()}|${chip.prompt.toLowerCase()}`;
-
-    if (seen.has(key)) {
-      return;
-    }
-
-    seen.add(key);
-    merged.push(chip);
-  });
-
-  return merged.slice(-24);
-}
-
-function getNextVisiblePromptChips(
-  responseChips: PromptChip[],
-  currentChips: PromptChip[],
-  lastNonEmptyChips: PromptChip[],
-): PromptChip[] {
-  if (responseChips.length > 0) {
-    return responseChips;
-  }
-
-  if (currentChips.length > 0) {
-    return currentChips;
-  }
-
-  return lastNonEmptyChips;
-}
-
 function getAppOpenRefreshProvider(input: {
   liveAccountControlsEnabled: boolean;
   authStatus?: PipAuthState["status"];
@@ -2169,64 +2237,67 @@ function getAppOpenRefreshProvider(input: {
     !input.liveAccountControlsEnabled ||
     input.authStatus !== "ready" ||
     !input.syncStatus ||
-    input.hasAttemptedDailyRefresh ||
     input.hasPendingSyncJob ||
-    !shouldRefreshConnectedDataForToday(input.syncStatus)
+    !canRefreshData(input.syncStatus)
   ) {
     return null;
   }
 
   const provider = getRefreshProvider(input.syncStatus);
 
-  if (!provider || !canRefreshData(input.syncStatus)) {
+  if (!provider) {
     return null;
   }
 
   return provider;
 }
 
-function getAgentErrorText(error: unknown): string {
-  if (error instanceof AgentRequestError) {
-    return error.message;
+function getAppOpenSyncMessage(input: {
+  ok: boolean;
+  resultStatus?: unknown;
+  status?: unknown;
+  fallbackMessage?: string;
+}): string | null {
+  if (!input.ok) {
+    return input.fallbackMessage ?? "I could not refresh your bank data. Your connection may need attention.";
   }
 
-  return getSafeAgentFailureMessage();
-}
-
-function getSafeAgentFailureMessage(input?: {
-  code?: string;
-  status?: number;
-}): string {
-  const code = input?.code ?? "";
-  const status = input?.status ?? 0;
-
-  if (
-    status === 401 ||
-    status === 403 ||
-    code === "authentication-required" ||
-    code === "no-financial-data"
-  ) {
-    return "I need your setup finished before I can answer that.";
+  if (input.status === "checking") {
+    return "I’m checking your connected transactions now.";
   }
 
   if (
-    status === 503 ||
-    code === "missing-openai-config" ||
-    code === "model-unavailable"
+    input.status === "failed" ||
+    input.status === "needs_repair" ||
+    input.status === "partial" ||
+    input.resultStatus === "failed" ||
+    input.resultStatus === "needs_repair" ||
+    input.resultStatus === "partial"
   ) {
-    return "I can’t reach the answer service right now. Try again in a moment.";
+    return "I could not fully refresh your bank data. Your connection may need attention.";
   }
 
-  if (
-    status === 502 ||
-    code === "invalid-agent-output" ||
-    code === "invalid-agent-response" ||
-    code === "agent-output-rejected"
-  ) {
-    return "I couldn’t answer that cleanly. Try again, or ask for the math.";
+  if (input.status === "ran") {
+    return "I checked your transactions. Your spendable number is up to date.";
   }
 
-  return "I couldn’t answer that cleanly. Try again.";
+  if (input.status === "skipped_recent" || input.status === "skipped_fresh") {
+    return "I checked recently, so I’m using your latest spendable number.";
+  }
+
+  if (input.status === "skipped_pending") {
+    return "I’m already checking transactions. I’ll keep using the last number while that finishes.";
+  }
+
+  if (input.status === "skipped_manual_only") {
+    return "Automatic refresh is off, so I’m using your last spendable number.";
+  }
+
+  if (input.status === "no_provider") {
+    return "Connect an account and I can check transactions automatically.";
+  }
+
+  return null;
 }
 
 function getClientErrorMessage(error: unknown): string {
@@ -2255,15 +2326,19 @@ export const __pipHomeTestHooks = {
   getDefaultPromptChips,
   getDemoPipCashResult: () => calculatePipCash(getFakeSnapshot("default")),
   getAgentErrorText,
+  getAppOpenSyncMessage,
   getAppOpenRefreshProvider,
   getClientActionErrorText,
   getConversationState,
+  getOpeningBubblePromptChips,
+  getReadyOpeningBubblePlan,
+  getReadyPromptChips,
   getNextVisiblePromptChips,
   getReadyDataAction,
   getSafeAgentFailureMessage,
   getSettingsActions,
   getSettingsConversationPromptChips,
-  withAccountManagementPromptChip,
+  withSettingsPromptChip,
 };
 
 function getPlaidEventProperties(

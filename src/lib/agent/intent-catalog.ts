@@ -10,8 +10,6 @@ export type DeterministicAgentToolName =
   | "start_new_account_connection"
   | "repair_account_connection"
   | "start_account_selection_update"
-  | "set_account_inclusion"
-  | "set_account_protected_savings"
   | "create_savings_goal"
   | "list_savings_goals"
   | "update_savings_goal"
@@ -28,6 +26,7 @@ export type DeterministicAgentToolName =
   | "get_pattern_assumptions"
   | "get_recent_spending_pressure"
   | "get_spending_opportunity"
+  | "correct_recurring_obligation"
   | "get_spending_breakdown"
   | "get_recurring_activity"
   | "forecast_spendable_cash"
@@ -55,8 +54,6 @@ export type IntentSlot =
   | "horizon_days"
   | "institution_name"
   | "account_name"
-  | "include_in_pip_cash"
-  | "is_protected_savings"
   | "confirmation_text";
 
 export type IntentCatalogEntry = {
@@ -105,8 +102,10 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
       "why this number",
       "why is it this amount today",
       "show the biggest drivers behind today's number",
+      "what are the biggest drivers",
       "what changed in my money",
       "why did it drop",
+      "why did it move",
       "what is driving today",
       "why is spendable cash low",
       "explain today's number",
@@ -117,7 +116,7 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
       "show spending by category",
       "what did i buy lately",
     ],
-    lexicalBoosts: ["why", "drivers", "driving", "behind", "changed", "drop", "dropped", "explain", "today's number", "number"],
+    lexicalBoosts: ["why", "drivers", "biggest drivers", "driving", "behind", "changed", "move", "drop", "dropped", "explain", "today's number", "number"],
     lexicalHardNegatives: ["formula", "calculation", "balance", "balances", "transactions", "charges", "category"],
     followUpParents: [],
     followUpChildren: ["math.breakdown", "recurring.activity", "spendable.forecast"],
@@ -258,7 +257,9 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
     positiveExamples: [
       "show my spending breakdown",
       "break down my spending",
+      "break down my categories",
       "where is my money going",
+      "where did money go",
       "where is my money going by category",
       "show spending by category",
       "which merchants am i spending with",
@@ -271,7 +272,7 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
       "what bills are coming up",
       "show the formula",
     ],
-    lexicalBoosts: ["breakdown", "break down", "category", "categories", "merchant", "merchants", "income sources", "card payments", "where is my money going"],
+    lexicalBoosts: ["breakdown", "break down", "category", "categories", "merchant", "merchants", "income sources", "card payments", "where is my money going", "where did money go"],
     lexicalHardNegatives: ["recurring", "subscription", "formula", "math", "cut back", "save money", "latest purchases"],
     followUpParents: ["transactions.recent"],
     followUpChildren: ["spending.cutback_opportunity"],
@@ -372,6 +373,7 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
       "what is still pending",
       "why does this look incomplete",
       "is everything counted",
+      "is this number complete",
       "what data might be missing",
     ],
     negativeExamples: [
@@ -380,7 +382,7 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
       "delete my data",
       "show recent charges",
     ],
-    lexicalBoosts: ["missing card", "missing data", "data might be missing", "data quality", "pending transactions", "pending items", "incomplete", "everything counted"],
+    lexicalBoosts: ["missing card", "missing data", "data might be missing", "data quality", "pending transactions", "pending items", "incomplete", "everything counted", "number complete"],
     lexicalHardNegatives: ["refresh", "sync now", "delete", "trust receipt", "recent charges"],
     followUpParents: [],
     followUpChildren: ["trust.receipt", "sync.status"],
@@ -479,6 +481,7 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
       "where can i save this week",
       "how do i reduce expenses",
       "find waste in my spending",
+      "where is money leaking",
       "find a spending opportunity",
       "what should i stop buying",
       "what costs should i cut",
@@ -489,7 +492,7 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
       "show recent transactions",
       "set my savings cushion",
     ],
-    lexicalBoosts: ["cut back", "cutback", "spending opportunity", "save more", "save money", "overspending", "waste", "stop buying", "reduce expenses", "costs should i cut"],
+    lexicalBoosts: ["cut back", "cutback", "spending opportunity", "save more", "save money", "overspending", "waste", "money leaking", "stop buying", "reduce expenses", "costs should i cut"],
     lexicalHardNegatives: ["monthly savings", "savings cushion", "settings", "show breakdown", "transactions"],
     followUpParents: ["transactions.recent", "spending.breakdown"],
     followUpChildren: ["spending.breakdown"],
@@ -633,52 +636,6 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
     negativeExamples: ["show actual account balances", "show connected accounts"],
     lexicalBoosts: ["change selected", "selected accounts", "accounts count", "forgot to select", "from today's number"],
     lexicalHardNegatives: ["balance", "balances", "show connected"],
-    followUpParents: ["account.connected_accounts"],
-    followUpChildren: [],
-  },
-  {
-    id: "account.inclusion",
-    family: "account_action",
-    surface: "account_action",
-    risk: "write_action",
-    priority: 90,
-    toolName: "set_account_inclusion",
-    cardTypes: [],
-    responseMode: "update_context",
-    requiresSnapshot: false,
-    requiresConfirmation: false,
-    destructive: false,
-    supportedInPromptChips: false,
-    conversationJob: "setup",
-    description: "Include or exclude an account from Spendable Cash Today.",
-    positiveExamples: ["exclude my business checking", "ignore that account", "use my checking account again", "include this card"],
-    negativeExamples: ["show account balances", "show connected accounts"],
-    lexicalBoosts: ["exclude", "ignore", "stop using", "include", "start using", "use this account"],
-    lexicalHardNegatives: ["balance", "balances", "show connected"],
-    requiredSlots: ["account_name"],
-    followUpParents: ["account.connected_accounts"],
-    followUpChildren: [],
-  },
-  {
-    id: "account.protected_savings",
-    family: "account_action",
-    surface: "account_action",
-    risk: "write_action",
-    priority: 90,
-    toolName: "set_account_protected_savings",
-    cardTypes: [],
-    responseMode: "update_context",
-    requiresSnapshot: false,
-    requiresConfirmation: false,
-    destructive: false,
-    supportedInPromptChips: false,
-    conversationJob: "setup",
-    description: "Mark or unmark an account as protected savings.",
-    positiveExamples: ["make savings protected savings", "mark this account as protected savings", "stop treating savings as protected", "do not treat this as protected"],
-    negativeExamples: ["set my monthly savings cushion", "show my savings balance"],
-    lexicalBoosts: ["protected savings", "mark", "make", "stop treating", "do not treat"],
-    lexicalHardNegatives: ["monthly savings", "savings cushion", "balance"],
-    requiredSlots: ["account_name"],
     followUpParents: ["account.connected_accounts"],
     followUpChildren: [],
   },
@@ -832,9 +789,9 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
     supportedInPromptChips: false,
     conversationJob: "data_quality",
     description: "Answer trust, privacy, Plaid, money movement, AI calculation, and advice-boundary policy questions.",
-    positiveExamples: ["can pip move my money", "does ai calculate my number", "does pip sell my data", "how does plaid work", "is this financial advice"],
+    positiveExamples: ["can pip move my money", "can you pay my bills", "does ai calculate my number", "does pip sell my data", "how does plaid work", "is this financial advice"],
     negativeExamples: ["show my trust receipt", "delete my data", "connect my bank"],
-    lexicalBoosts: ["move my money", "transfer money", "plaid", "privacy", "sell my data", "ai calculate", "financial advice", "advisor", "training data"],
+    lexicalBoosts: ["move my money", "transfer money", "pay bills", "pay my bills", "plaid", "privacy", "sell my data", "ai calculate", "financial advice", "advisor", "training data"],
     lexicalHardNegatives: ["show receipt", "delete", "connect", "repair"],
     followUpParents: [],
     followUpChildren: [],

@@ -31,6 +31,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
   }
 
+  let userId: string | null = null;
+  let admin: ReturnType<typeof createSupabaseAdminClient> | null = null;
+  let institutionName = "Teller institution";
+
   try {
     const supabase = await createSupabaseServerClient();
     const {
@@ -42,6 +46,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Authentication required." }, { status: 401 });
     }
 
+    userId = user.id;
     const body = await request.json().catch(() => null);
     const parsed = enrollmentSchema.safeParse(body);
 
@@ -56,8 +61,8 @@ export async function POST(request: Request) {
     }
 
     const config = getTellerConfig();
-    const admin = createSupabaseAdminClient();
-    const institutionName = parsed.data.enrollment.institution?.name ?? "Teller institution";
+    admin = createSupabaseAdminClient();
+    institutionName = parsed.data.enrollment.institution?.name ?? "Teller institution";
     const institution = await upsertTellerInstitution(admin, {
       userId: user.id,
       institutionName,
@@ -87,6 +92,15 @@ export async function POST(request: Request) {
 
     return response;
   } catch (error) {
+    if (userId && admin) {
+      await recordProductEventSafely(admin, userId, "connect_session_failed", {
+        provider: "teller",
+        status: "enrollment-storage-failed",
+        institutionName,
+        error: getSafeErrorMessage(error, "Teller enrollment request failed."),
+      });
+    }
+
     return NextResponse.json(toErrorBody(error), { status: 500 });
   }
 }

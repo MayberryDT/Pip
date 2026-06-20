@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { clientReportedProductEventNames, recordProductEvent } from "@/lib/data/product-events";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -42,18 +43,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ status: "recorded" });
   } catch (error) {
+    if (!(error instanceof SupabaseConfigError)) {
+      console.error("[events] product event write failed", getSafeErrorMessage(error, "Event request failed."));
+    }
+
     return NextResponse.json(toErrorBody(error), { status: 500 });
   }
 }
 
 function toErrorBody(error: unknown) {
   if (error instanceof SupabaseConfigError) {
-    return {
-      error: error.message,
-    };
-  }
-
-  if (error instanceof Error) {
     return {
       error: error.message,
     };

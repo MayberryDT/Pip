@@ -149,8 +149,8 @@ If `git status --short` prints unrelated changes, do not stage or revert them.
 If using a worktree:
 
 ```bash
-git worktree add ../FreeCash-pip-phone-dogfood-repair main
-cd ../FreeCash-pip-phone-dogfood-repair
+git worktree add ../Pip-phone-dogfood-repair main
+cd ../Pip-phone-dogfood-repair
 ```
 
 If using a branch in the current checkout:

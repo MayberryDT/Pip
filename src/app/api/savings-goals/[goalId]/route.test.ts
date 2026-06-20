@@ -77,19 +77,21 @@ describe("/api/savings-goals/[goalId]", () => {
     );
   });
 
-  it("marks snapshots stale when protection is enabled", async () => {
+  it("marks snapshots stale when an active goal monthly amount changes even if the legacy include flag is false", async () => {
     enableSupabaseEnv();
     routeMocks.isSavingsGoalsEnabled.mockReturnValue(true);
     const supabase = createSupabaseClient({ id: "user-1" });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
-    routeMocks.loadSavingsGoalForUser.mockResolvedValue(goal());
+    routeMocks.loadSavingsGoalForUser.mockResolvedValue(goal({
+      includeInSpendableCash: false,
+      monthlyContributionCents: 30000,
+    }));
     routeMocks.updateSavingsGoalForUser.mockResolvedValue(goal({
-      includeInSpendableCash: true,
+      includeInSpendableCash: false,
       monthlyContributionCents: 40000,
     }));
 
     const response = await PATCH(jsonRequest({
-      includeInSpendableCash: true,
       monthlyContributionCents: 40000,
     }), routeContext());
 
@@ -98,18 +100,18 @@ describe("/api/savings-goals/[goalId]", () => {
     expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,
       "user-1",
-      "savings_goal_spendable_protection_enabled",
+      "savings_goal_updated",
       expect.any(Object),
     );
   });
 
-  it("archives a protected goal and marks snapshots stale", async () => {
+  it("archives an active goal and marks snapshots stale even when the legacy include flag is false", async () => {
     enableSupabaseEnv();
     routeMocks.isSavingsGoalsEnabled.mockReturnValue(true);
     const supabase = createSupabaseClient({ id: "user-1" });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
     routeMocks.loadSavingsGoalForUser.mockResolvedValue(goal({
-      includeInSpendableCash: true,
+      includeInSpendableCash: false,
       monthlyContributionCents: 40000,
     }));
     routeMocks.archiveSavingsGoalForUser.mockResolvedValue(goal({
@@ -126,9 +128,36 @@ describe("/api/savings-goals/[goalId]", () => {
       "user-1",
       "savings_goal_archived",
       expect.objectContaining({
-        wasProtected: true,
+        wasProtected: false,
       }),
     );
+  });
+
+  it("logs savings-goal update failures without exposing secret-shaped values", async () => {
+    enableSupabaseEnv();
+    routeMocks.isSavingsGoalsEnabled.mockReturnValue(true);
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new Error("update failed access_token=provider-secret sk-test-secret");
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.loadSavingsGoalForUser.mockResolvedValue(goal());
+    routeMocks.updateSavingsGoalForUser.mockRejectedValue(error);
+
+    try {
+      const response = await PATCH(jsonRequest({ name: "Italy Trip" }), routeContext());
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: "Savings goals request failed.",
+      });
+      expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalled();
+      expect(consoleError).toHaveBeenCalledWith(
+        "[savings-goals] request failed",
+        "update failed access_token=[redacted] [redacted]",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 });
 

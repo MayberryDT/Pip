@@ -8,6 +8,7 @@ import {
 } from "@/lib/data/savings-goals-repository";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { isSavingsGoalsEnabled } from "@/lib/savings-goals/feature-flags";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -106,18 +107,16 @@ export async function POST(request: Request) {
 
     return NextResponse.json(toSavingsGoalPlanResponse(goal), { status: 201 });
   } catch (error) {
+    if (!(error instanceof SupabaseConfigError)) {
+      console.error("[savings-goals] request failed", getSafeErrorMessage(error, "Savings goals request failed."));
+    }
+
     return NextResponse.json(toErrorBody(error), { status: 500 });
   }
 }
 
 function toErrorBody(error: unknown) {
   if (error instanceof SupabaseConfigError) {
-    return {
-      error: error.message,
-    };
-  }
-
-  if (error instanceof Error) {
     return {
       error: error.message,
     };

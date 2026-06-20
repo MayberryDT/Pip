@@ -1,4 +1,9 @@
 import { PipHome } from "@/components/PipHome";
+import {
+  getCurrentPipCashState,
+  NoFinancialDataError,
+  type PipCashApiState,
+} from "@/lib/data/current-snapshot";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -63,11 +68,22 @@ export default async function AppPage({
     return <PipHome authState={{ status: "needs-consent", email: user.email ?? "" }} />;
   }
 
+  let initialResult: PipCashApiState | null = null;
+
+  try {
+    initialResult = await getCurrentPipCashState({});
+  } catch (error) {
+    if (!(error instanceof NoFinancialDataError)) {
+      throw error;
+    }
+  }
+
   return (
     <PipHome
       authState={{ status: "ready", email: user.email ?? "" }}
       connectionNotice={connectionNotice}
       enableAccountControls
+      initialResult={initialResult}
     />
   );
 }

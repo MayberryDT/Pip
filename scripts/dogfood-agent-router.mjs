@@ -17,8 +17,6 @@ const sideEffectTools = new Set([
   "start_new_account_connection",
   "repair_account_connection",
   "start_account_selection_update",
-  "set_account_inclusion",
-  "set_account_protected_savings",
   "request_remove_institution_confirmation",
 ]);
 

@@ -1,5 +1,4 @@
 import { Agent, OpenAIProvider, Runner, tool, type AgentInputItem } from "@openai/agents";
-import OpenAI from "openai";
 import { z } from "zod";
 import type {
   AgentCard,
@@ -7,22 +6,24 @@ import type {
   AgentPendingAction,
   AgentResponse,
   PromptChip,
-  SavingsGoalPendingField,
 } from "@/lib/agent/card-types";
 import {
   type GuidanceCardDraft,
   validateGuidanceCardDraft,
 } from "@/lib/agent/guidance-card";
 import {
+  AgentUnavailableError,
+  getErrorDetail,
+  isModelOutputValidationDetail,
+  sanitizeErrorDetail,
+} from "@/lib/agent/agent-errors";
+import {
   agentFinalOutputSchema,
-  agentMessageMaxChars,
   agentResponseSchema,
 } from "@/lib/agent/response-schema";
 import {
   getOnboardingPromptChips,
-  getReadyPromptChipExamples,
   getSuggestedPrompts,
-  isRetiredDefaultPromptChip,
 } from "@/lib/agent/suggested-prompts";
 import {
   composeAgentVisibleAnswer,
@@ -34,9 +35,9 @@ import {
   resolveIntentRoute,
 } from "@/lib/agent/intent-router";
 import {
-  planPromptChips,
-  type PromptChipPlan,
-} from "@/lib/agent/prompt-chip-planner";
+  getAvailablePromptChips,
+  selectPromptChips,
+} from "@/lib/agent/prompt-chip-selection";
 import { buildFinancialGuidanceToolResult, runAgentTool } from "@/lib/agent/tool-runner";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import { fakeSnapshot } from "@/lib/fake-data";
@@ -50,6 +51,15 @@ import {
 import { buildSpendableTrustReceipt } from "@/lib/pip-cash/trust-receipt";
 import type { SavingsGoalInput, SavingsGoalUpdate } from "@/lib/savings-goals/types";
 import { formatMoney, formatMoneyWithCents } from "@/lib/money";
+import {
+  createDeterministicSavingsGoalResponse,
+  createDeterministicTrustPromptChips,
+  createDeterministicUnavailableActionResponse,
+  createSavingsGoalParameters,
+  getSavingsGoalForcedTool,
+  isSavingsGoalPrompt,
+  updateSavingsGoalParameters,
+} from "@/lib/agent/savings-goal-flow";
 import type { PipPlatform } from "@/lib/platform/android-shell";
 import type { PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
 import {
@@ -58,11 +68,34 @@ import {
 } from "@/lib/agent/quality-variants";
 import { composeTrustPolicyAnswer, pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 import type { FinancialSnapshot } from "@/lib/types";
+import {
+  createOpenAIClient,
+  getOpenAIClientConfig,
+  getPipAiModel,
+  shouldUseModel,
+  type AiTransport,
+} from "@/lib/agent/openai-config";
+import {
+  containsDisallowedFinalLanguage,
+  getVisibleResponseSurfaceLimits,
+  getUnsupportedCardPromise,
+  guardVisibleFinalMessage,
+  repairUnsupportedCardPromises,
+} from "@/lib/agent/visible-response-guard";
 
-export const PIP_AI_MODEL = "gpt-5-nano";
-export const NETLIFY_AI_GATEWAY_MODEL = "gpt-5-nano";
+export {
+  createOpenAIClient,
+  getOpenAIApiKeyForSdk,
+  getOpenAIClientConfig,
+  getPipAiModel,
+  getPipAiTransport,
+  NETLIFY_AI_GATEWAY_MODEL,
+  PIP_AI_MODEL,
+  shouldUseModel,
+} from "@/lib/agent/openai-config";
+export { AgentUnavailableError, toAgentErrorPayload } from "@/lib/agent/agent-errors";
+export type { AgentErrorPayload } from "@/lib/agent/agent-errors";
 
-type AiTransport = NonNullable<AgentResponse["audit"]["transport"]>;
 type RawAgentFinalOutput = z.infer<typeof agentFinalOutputSchema>;
 type AgentFinalOutput = Omit<
   RawAgentFinalOutput,
@@ -71,12 +104,6 @@ type AgentFinalOutput = Omit<
   support?: string;
   guidanceCardDraft?: NonNullable<RawAgentFinalOutput["guidanceCardDraft"]>;
   promptChips: PromptChip[];
-};
-
-type OpenAIClientConfig = {
-  apiKey?: string;
-  baseURL?: string;
-  transport: AiTransport;
 };
 
 export type AgentHistoryItem = {
@@ -150,6 +177,12 @@ export type PipAgentActions = {
     name?: string;
     includeInSpendableCash: boolean;
     monthlyContributionCents?: number;
+  }) => Promise<PipAgentActionResult>;
+  correctRecurringObligation?: (input: {
+    merchantName: string;
+    treatment: "bill" | "not_bill";
+    expectedAmountCents?: number;
+    expectedDay?: number;
   }) => Promise<PipAgentActionResult>;
   requestRemoveInstitutionConfirmation?: (input: {
     institutionId?: string;
@@ -226,41 +259,6 @@ const institutionTargetParameters = z.object({
   institution_id: z.string().min(1).max(120).optional(),
   institution_name: z.string().min(1).max(160).optional(),
 });
-const accountInclusionParameters = z.object({
-  account_id: z.string().min(1).max(120).optional(),
-  account_name: z.string().min(1).max(160).optional(),
-  include_in_pip_cash: z.boolean(),
-});
-const protectedSavingsAccountParameters = z.object({
-  account_id: z.string().min(1).max(120).optional(),
-  account_name: z.string().min(1).max(160).optional(),
-  is_protected_savings: z.boolean(),
-});
-const savingsGoalTargetParameters = z.object({
-  goal_id: z.string().min(1).max(120).optional(),
-  name: z.string().min(1).max(80).optional(),
-});
-const createSavingsGoalParameters = z.object({
-  name: z.string().trim().min(1).max(80),
-  target_amount_cents: z.number().int().positive().max(100_000_000),
-  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-  starting_amount_cents: z.number().int().min(0).max(100_000_000).optional(),
-  current_amount_cents: z.number().int().min(0).max(100_000_000).optional(),
-  monthly_contribution_cents: z.number().int().min(0).max(100_000_000).optional(),
-  include_in_spendable_cash: z.boolean().optional(),
-});
-const updateSavingsGoalParameters = savingsGoalTargetParameters.extend({
-  target_amount_cents: z.number().int().positive().max(100_000_000).optional(),
-  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
-  current_amount_cents: z.number().int().min(0).max(100_000_000).optional(),
-  monthly_contribution_cents: z.number().int().min(0).max(100_000_000).optional(),
-  include_in_spendable_cash: z.boolean().optional(),
-  status: z.enum(["active", "paused", "completed", "archived"]).optional(),
-});
-const savingsGoalProtectionParameters = savingsGoalTargetParameters.extend({
-  include_in_spendable_cash: z.boolean(),
-  monthly_contribution_cents: z.number().int().min(0).max(100_000_000).optional(),
-});
 const removeInstitutionParameters = institutionTargetParameters.extend({
   confirmation_text: z.string().min(1).max(160),
 });
@@ -276,34 +274,13 @@ const forecastParameters = z.object({
 const insightCardParameters = z.object({
   topic: z.enum(["payday_impact", "spendable_factors"]),
 });
-
-export class AgentUnavailableError extends Error {
-  code: string;
-  status: number;
-  detail?: string;
-
-  constructor(input: {
-    code: string;
-    message: string;
-    status?: number;
-    detail?: string;
-    cause?: unknown;
-  }) {
-    super(input.message);
-    this.name = "AgentUnavailableError";
-    this.code = input.code;
-    this.status = input.status ?? 503;
-    this.detail = input.detail;
-    this.cause = input.cause;
-  }
-}
-
-export type AgentErrorPayload = {
-  code: string;
-  error: string;
-  detail?: string;
-  status: number;
-};
+const recurringObligationCorrectionParameters = z.object({
+  merchant_name: z.string().min(1).max(120),
+  treatment: z.enum(["bill", "not_bill"]),
+  expected_amount_cents: z.number().int().positive().max(1_000_000).optional(),
+  expected_day: z.number().int().min(1).max(31).optional(),
+});
+const bridgeVisibleLimits = getVisibleResponseSurfaceLimits("bridge");
 
 export async function runAIAgent(
   input: RunAiAgentInput,
@@ -313,6 +290,12 @@ export async function runAIAgent(
 
   if (deterministicNoToolResponse) {
     return deterministicNoToolResponse;
+  }
+
+  const deterministicPromptChipRefreshResponse = createDeterministicPromptChipRefreshResponse(input);
+
+  if (deterministicPromptChipRefreshResponse) {
+    return deterministicPromptChipRefreshResponse;
   }
 
   if (runtime) {
@@ -325,10 +308,18 @@ export async function runAIAgent(
     return deterministicTrustResponse;
   }
 
-  const deterministicSavingsGoalResponse = await createDeterministicSavingsGoalResponse(input);
+  const deterministicSavingsGoalResponse = isRetiredSavingsGoalProtectionPrompt(input)
+    ? null
+    : await createDeterministicSavingsGoalResponse(input);
 
   if (deterministicSavingsGoalResponse) {
     return deterministicSavingsGoalResponse;
+  }
+
+  const deterministicBillCorrectionResponse = await createDeterministicBillCorrectionResponse(input);
+
+  if (deterministicBillCorrectionResponse) {
+    return deterministicBillCorrectionResponse;
   }
 
   const deterministicConnectedAccountsResponse = await createDeterministicConnectedAccountsResponse(input);
@@ -337,7 +328,9 @@ export async function runAIAgent(
     return deterministicConnectedAccountsResponse;
   }
 
-  const deterministicUnavailableActionResponse = createDeterministicUnavailableActionResponse(input);
+  const deterministicUnavailableActionResponse = isRetiredSavingsGoalProtectionPrompt(input)
+    ? null
+    : createDeterministicUnavailableActionResponse(input);
 
   if (deterministicUnavailableActionResponse) {
     return deterministicUnavailableActionResponse;
@@ -406,6 +399,61 @@ export async function runAIAgent(
   throw lastError ?? new AgentUnavailableError({
     code: "openai-request-failed",
     message: "AI request failed.",
+  });
+}
+
+function createDeterministicPromptChipRefreshResponse(input: RunAiAgentInput): AgentResponse | null {
+  if (input.requestKind !== "prompt_chips") {
+    return null;
+  }
+
+  const context = createPipContext(input);
+  const result = context.snapshot ? calculatePipCash(context.snapshot) : null;
+  const promptChipPlan = selectPromptChips(
+    {
+      message: "Ready.",
+      promptChips: [],
+    },
+    context,
+    result,
+    {
+      input,
+      cards: [],
+      usedTools: [],
+      isSupportedCardPrompt,
+    },
+  );
+
+  if (promptChipPlan.chips.length < 3) {
+    throw new AgentUnavailableError({
+      code: "prompt-chip-refresh-unavailable",
+      message: "Prompt chip refresh did not produce enough chips.",
+      status: 502,
+      detail: "Prompt chip refresh must include three prompt chips.",
+    });
+  }
+
+  return agentResponseSchema.parse({
+    message: "Ready.",
+    cards: [],
+    promptChips: promptChipPlan.chips,
+    usedTools: [],
+    responseMode: "chat_only",
+    audit: {
+      toolNames: [],
+      usedModel: false,
+      quality: {
+        conversationJob: promptChipPlan.conversationJob,
+        answerPatternId: "prompt-chip-refresh",
+        chipFamilyIds: promptChipPlan.familyIds,
+        repeatedJob: promptChipPlan.repeatedJob,
+        repeatedTool: promptChipPlan.repeatedTool,
+        repeatedCard: promptChipPlan.repeatedCard,
+        repeatedMessage: false,
+        repetitionAdjusted: false,
+        chipFallbackReason: promptChipPlan.fallbackReason,
+      },
+    },
   });
 }
 
@@ -504,495 +552,49 @@ async function createDeterministicConnectedAccountsResponse(input: RunAiAgentInp
   );
 }
 
-function createDeterministicUnavailableActionResponse(input: RunAiAgentInput): AgentResponse | null {
+async function createDeterministicBillCorrectionResponse(
+  input: RunAiAgentInput,
+): Promise<AgentResponse | null> {
   const forcedTool = getForcedAgentTool(input);
 
-  if (!forcedTool || !isSavingsGoalToolName(forcedTool.toolName)) {
+  if (forcedTool?.toolName !== "correct_recurring_obligation") {
     return null;
   }
 
-  if (hasSavingsGoalAction(input, forcedTool.toolName)) {
-    return null;
-  }
+  const context = createPipContext(input);
+  const toolInput = recurringObligationCorrectionParameters.parse(forcedTool.args);
+  recordTool(context, "correct_recurring_obligation");
+  const actionResult = input.actions?.correctRecurringObligation
+    ? await input.actions.correctRecurringObligation({
+        merchantName: toolInput.merchant_name,
+        treatment: toolInput.treatment,
+        expectedAmountCents: toolInput.expected_amount_cents,
+        expectedDay: toolInput.expected_day,
+      })
+    : {
+        ok: false,
+        status: "bill_correction_unavailable",
+        message: "Bill corrections are not available yet.",
+      };
+  const result = applyActionResult(context, actionResult);
+  const billCopy = toolInput.treatment === "bill"
+    ? `I’ll treat ${toolInput.merchant_name} as a monthly bill now.`
+    : `I’ll stop treating ${toolInput.merchant_name} as a monthly bill.`;
 
-  const onboardingState = input.onboardingState ?? {
-    status: "ready" as const,
-    hasFinancialData: false,
-  };
-  const message = onboardingState.status === "guest"
-    ? "I can help set that up after you sign in."
-    : onboardingState.status === "needs-consent"
-      ? "Finish setup first, then I can help with savings goals."
-      : "Savings goals are not available yet.";
-
-  return agentResponseSchema.parse({
-    message,
-    cards: [],
-    promptChips: getOnboardingPromptChips(onboardingState),
-    usedTools: [forcedTool.toolName],
-    responseMode: "chat_only",
-    audit: {
-      toolNames: [forcedTool.toolName],
-      usedModel: false,
-    },
-  });
-}
-
-async function createDeterministicSavingsGoalResponse(input: RunAiAgentInput): Promise<AgentResponse | null> {
-  const normalized = normalizePrompt(input.message);
-  const pendingAction = input.conversationState?.pendingAction;
-  const forcedTool = getForcedAgentTool(input);
-
-  if (pendingAction?.type === "create_savings_goal") {
-    return createSavingsGoalDraftResponse(input, pendingAction);
-  }
-
-  if (forcedTool?.toolName === "update_savings_goal") {
-    return updateSavingsGoalDeterministically(input, forcedTool.args);
-  }
-
-  if (forcedTool?.toolName === "set_savings_goal_protection") {
-    return setSavingsGoalProtectionDeterministically(input, forcedTool.args);
-  }
-
-  if (isSavingsGoalContextProgressPrompt(normalized)) {
-    return listSavingsGoalsDeterministically(input);
-  }
-
-  if (!isSavingsGoalPrompt(normalized)) {
-    return null;
-  }
-
-  if (isSavingsGoalListPrompt(normalized)) {
-    return listSavingsGoalsDeterministically(input);
-  }
-
-  if (!isSavingsGoalCreatePrompt(normalized)) {
-    return null;
-  }
-
-  return createSavingsGoalDraftResponse(input, undefined);
-}
-
-async function updateSavingsGoalDeterministically(
-  input: RunAiAgentInput,
-  args: ForcedAgentTool["args"],
-): Promise<AgentResponse | null> {
-  if (!input.actions?.updateSavingsGoal) {
-    return null;
-  }
-
-  const toolInput = updateSavingsGoalParameters.parse(args);
-  const result = await input.actions.updateSavingsGoal({
-    goalId: toolInput.goal_id,
-    name: toolInput.name,
-    targetAmountCents: toolInput.target_amount_cents,
-    targetDate: toolInput.target_date,
-    currentAmountCents: toolInput.current_amount_cents,
-    monthlyContributionCents: toolInput.monthly_contribution_cents,
-    includeInSpendableCash: toolInput.include_in_spendable_cash,
-    status: toolInput.status,
-  });
-  const cards = result.cards ?? [];
-
-  return agentResponseSchema.parse({
-    message: result.ok
-      ? getSavingsGoalUpdatedMessage(cards)
-      : result.message ?? "I could not update that savings goal yet.",
-    cards,
-    promptChips: createDeterministicTrustPromptChips(input),
-    usedTools: ["update_savings_goal"],
-    responseMode: cards.length > 0 ? "show_card" : "chat_only",
-    ...(result.clientAction ? { clientAction: result.clientAction } : {}),
-    audit: {
-      toolNames: ["update_savings_goal"],
-      usedModel: false,
-    },
-  });
-}
-
-async function setSavingsGoalProtectionDeterministically(
-  input: RunAiAgentInput,
-  args: ForcedAgentTool["args"],
-): Promise<AgentResponse | null> {
-  if (!input.actions?.setSavingsGoalProtection) {
-    return null;
-  }
-
-  const toolInput = savingsGoalProtectionParameters.parse(args);
-  const result = await input.actions.setSavingsGoalProtection({
-    goalId: toolInput.goal_id,
-    name: toolInput.name,
-    includeInSpendableCash: toolInput.include_in_spendable_cash,
-    monthlyContributionCents: toolInput.monthly_contribution_cents,
-  });
-  const cards = result.cards ?? [];
-
-  return agentResponseSchema.parse({
-    message: result.ok
-      ? getSavingsGoalUpdatedMessage(cards)
-      : result.message ?? "I could not update that savings goal yet.",
-    cards,
-    promptChips: createDeterministicTrustPromptChips(input),
-    usedTools: ["set_savings_goal_protection"],
-    responseMode: cards.length > 0 ? "show_card" : "chat_only",
-    ...(result.clientAction ? { clientAction: result.clientAction } : {}),
-    audit: {
-      toolNames: ["set_savings_goal_protection"],
-      usedModel: false,
-    },
-  });
-}
-
-async function createSavingsGoalDraftResponse(
-  input: RunAiAgentInput,
-  pendingAction: Extract<AgentPendingAction, { type: "create_savings_goal" }> | undefined,
-): Promise<AgentResponse> {
-  const draft = mergeSavingsGoalDraft(input.message, pendingAction);
-  const missing = getMissingSavingsGoalFields(draft);
-  const onboardingState = input.onboardingState ?? {
-    status: "ready" as const,
-    hasFinancialData: false,
-  };
-
-  if (missing.includes("target_amount")) {
-    return agentResponseSchema.parse({
-      message: `How much do you want to save for ${formatSavingsGoalNameForPrompt(draft.name)}?`,
-      cards: [],
-      promptChips: createDeterministicTrustPromptChips(input),
-      usedTools: [],
-      responseMode: "clarify",
-      pendingAction: {
-        ...draft,
-        missing,
-      },
-      audit: {
-        toolNames: [],
-        usedModel: false,
-      },
-    });
-  }
-
-  if (onboardingState.status === "guest" && !input.actions?.createSavingsGoal) {
-    return agentResponseSchema.parse({
-      message: "I can help set that up after you sign in.",
-      cards: [],
-      promptChips: getOnboardingPromptChips(onboardingState),
-      usedTools: ["create_savings_goal"],
+  return buildAgentResponse(
+    {
+      message: result.ok
+        ? `${billCopy} I’ll refresh today’s number with that correction.`
+        : result.message ?? "I could not save that bill correction yet.",
+      support: null,
       responseMode: "chat_only",
-      pendingAction: {
-        ...draft,
-        missing: [],
-      },
-      audit: {
-        toolNames: ["create_savings_goal"],
-        usedModel: false,
-      },
-    });
-  }
-
-  if (!input.actions?.createSavingsGoal) {
-    return agentResponseSchema.parse({
-      message: "Savings goals are not available yet. I kept the goal details here so we can try again.",
-      cards: [],
-      promptChips: getOnboardingPromptChips(onboardingState),
-      usedTools: ["create_savings_goal"],
-      responseMode: "chat_only",
-      pendingAction: {
-        ...draft,
-        missing: [],
-      },
-      audit: {
-        toolNames: ["create_savings_goal"],
-        usedModel: false,
-      },
-    });
-  }
-
-  const targetAmountCents = draft.targetAmountCents;
-
-  if (!targetAmountCents) {
-    return agentResponseSchema.parse({
-      message: `How much do you want to save for ${formatSavingsGoalNameForPrompt(draft.name)}?`,
-      cards: [],
-      promptChips: createDeterministicTrustPromptChips(input),
-      usedTools: [],
-      responseMode: "clarify",
-      pendingAction: {
-        ...draft,
-        missing: ["target_amount"],
-      },
-      audit: {
-        toolNames: [],
-        usedModel: false,
-      },
-    });
-  }
-
-  const result = await input.actions.createSavingsGoal({
-    name: draft.name,
-    targetAmountCents,
-    targetDate: draft.targetDate,
-    startingAmountCents: draft.startingAmountCents,
-    currentAmountCents: draft.currentAmountCents,
-    monthlyContributionCents: draft.monthlyContributionCents,
-    includeInSpendableCash: draft.includeInSpendableCash,
-  });
-
-  if (!result.ok) {
-    return agentResponseSchema.parse({
-      message: result.message ?? "I could not save that goal yet. I kept the details so we can try again.",
-      cards: result.cards ?? [],
-      promptChips: getOnboardingPromptChips(onboardingState),
-      usedTools: ["create_savings_goal"],
-      responseMode: result.cards?.length ? "show_card" : "chat_only",
-      pendingAction: {
-        ...draft,
-        missing: [],
-      },
-      audit: {
-        toolNames: ["create_savings_goal"],
-        usedModel: false,
-      },
-    });
-  }
-
-  const cards = result.cards ?? [];
-
-  return agentResponseSchema.parse({
-    message: getSavingsGoalCreatedMessage(cards, draft),
-    cards,
-    promptChips: getOnboardingPromptChips(onboardingState),
-    usedTools: ["create_savings_goal"],
-    responseMode: cards.length > 0 ? "show_card" : "chat_only",
-    ...(result.clientAction ? { clientAction: result.clientAction } : {}),
-    audit: {
-      toolNames: ["create_savings_goal"],
+    },
+    context,
+    input,
+    {
       usedModel: false,
     },
-  });
-}
-
-async function listSavingsGoalsDeterministically(input: RunAiAgentInput): Promise<AgentResponse | null> {
-  if (!input.actions?.listSavingsGoals) {
-    return null;
-  }
-
-  const result = await input.actions.listSavingsGoals();
-  const cards = result.cards ?? [];
-
-  return agentResponseSchema.parse({
-    message: result.ok
-      ? getSavingsGoalListMessage(cards)
-      : result.message ?? "I do not see a saved savings goal yet. Tell me what you want to save for and the target amount.",
-    cards,
-    promptChips: createDeterministicTrustPromptChips(input),
-    usedTools: ["list_savings_goals"],
-    responseMode: cards.length > 0 ? "show_card" : "chat_only",
-    ...(result.clientAction ? { clientAction: result.clientAction } : {}),
-    audit: {
-      toolNames: ["list_savings_goals"],
-      usedModel: false,
-    },
-  });
-}
-
-function mergeSavingsGoalDraft(
-  message: string,
-  pendingAction: Extract<AgentPendingAction, { type: "create_savings_goal" }> | undefined,
-): Extract<AgentPendingAction, { type: "create_savings_goal" }> {
-  const normalized = normalizePrompt(message);
-  const targetAmountCents = extractSavingsGoalAmountCents(message) ?? pendingAction?.targetAmountCents;
-  const monthlyContributionCents = extractMonthlyContributionCents(message) ?? pendingAction?.monthlyContributionCents;
-  const targetDate = parseSavingsGoalTargetDate(message, getAgentAsOfDate()) ?? pendingAction?.targetDate;
-  const inferredName = inferSavingsGoalName(message, normalized);
-  const name = pendingAction?.name && pendingAction.name !== "Savings goal"
-    ? pendingAction.name
-    : inferredName;
-
-  return {
-    type: "create_savings_goal",
-    name,
-    ...(targetAmountCents === undefined || targetAmountCents === null ? {} : { targetAmountCents }),
-    ...(targetDate ? { targetDate } : {}),
-    ...(pendingAction?.startingAmountCents === undefined ? {} : { startingAmountCents: pendingAction.startingAmountCents }),
-    ...(pendingAction?.currentAmountCents === undefined ? {} : { currentAmountCents: pendingAction.currentAmountCents }),
-    ...(monthlyContributionCents === undefined || monthlyContributionCents === null ? {} : { monthlyContributionCents }),
-    ...(pendingAction?.includeInSpendableCash === undefined ? {} : { includeInSpendableCash: pendingAction.includeInSpendableCash }),
-  };
-}
-
-function getMissingSavingsGoalFields(
-  draft: Extract<AgentPendingAction, { type: "create_savings_goal" }>,
-): SavingsGoalPendingField[] {
-  return draft.targetAmountCents ? [] : ["target_amount"];
-}
-
-function getSavingsGoalCreatedMessage(
-  cards: AgentCard[],
-  draft: Extract<AgentPendingAction, { type: "create_savings_goal" }>,
-): string {
-  const planCard = cards.find((card): card is Extract<AgentCard, { type: "savings_goal_plan" }> =>
-    card.type === "savings_goal_plan"
   );
-
-  if (!planCard) {
-    return `I saved ${formatMoney(draft.targetAmountCents ?? 0)} for ${formatSavingsGoalNameForPrompt(draft.name)}.`;
-  }
-
-  return `I saved the ${planCard.name} savings goal. ${formatMoney(planCard.remainingCents)} left to track in Pip.`;
-}
-
-function getSavingsGoalListMessage(cards: AgentCard[]): string {
-  const summaryCard = cards.find((card): card is Extract<AgentCard, { type: "savings_goals_summary" }> =>
-    card.type === "savings_goals_summary"
-  );
-
-  if (!summaryCard) {
-    return "I pulled your savings goals.";
-  }
-
-  if (summaryCard.activeGoalCount === 0) {
-    return "I do not see a saved savings goal yet. Tell me what you want to save for and the target amount.";
-  }
-
-  const goal = summaryCard.goals[0];
-
-  if (!goal) {
-    return "I pulled your savings goals.";
-  }
-
-  return `${goal.name}: ${formatMoney(goal.remainingCents)} left to track in Pip.`;
-}
-
-function getSavingsGoalUpdatedMessage(cards: AgentCard[]): string {
-  const planCard = cards.find((card): card is Extract<AgentCard, { type: "savings_goal_plan" }> =>
-    card.type === "savings_goal_plan"
-  );
-
-  if (!planCard) {
-    return "I updated the savings goal.";
-  }
-
-  return `${planCard.name}: ${formatMoney(planCard.remainingCents)} left to track in Pip.`;
-}
-
-function formatSavingsGoalNameForPrompt(name: string): string {
-  return name.trim() || "that goal";
-}
-
-function parseSavingsGoalTargetDate(message: string, asOfDate: string): string | null {
-  const monthPattern =
-    /\b(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\s+(\d{1,2})(?:st|nd|rd|th)?\b/i;
-  const monthMatch = monthPattern.exec(message);
-
-  if (monthMatch) {
-    return buildFutureDate(Number(monthNameToMonthNumber(monthMatch[1])), Number(monthMatch[2]), asOfDate);
-  }
-
-  const numericMatch = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/.exec(message);
-
-  if (numericMatch) {
-    const month = Number(numericMatch[1]);
-    const day = Number(numericMatch[2]);
-    const year = numericMatch[3] ? normalizeYear(Number(numericMatch[3])) : undefined;
-
-    return buildFutureDate(month, day, asOfDate, year);
-  }
-
-  return null;
-}
-
-function monthNameToMonthNumber(value: string): number {
-  const normalized = value.toLowerCase();
-  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-  const index = months.findIndex((month) => normalized.startsWith(month));
-
-  return index + 1;
-}
-
-function normalizeYear(year: number): number {
-  return year < 100 ? 2000 + year : year;
-}
-
-function buildFutureDate(month: number, day: number, asOfDate: string, explicitYear?: number): string | null {
-  if (month < 1 || month > 12 || day < 1 || day > 31) {
-    return null;
-  }
-
-  const asOf = parseDateParts(asOfDate);
-  let year = explicitYear ?? asOf.year;
-  const candidate = new Date(Date.UTC(year, month - 1, day));
-
-  if (
-    candidate.getUTCFullYear() !== year ||
-    candidate.getUTCMonth() !== month - 1 ||
-    candidate.getUTCDate() !== day
-  ) {
-    return null;
-  }
-
-  if (!explicitYear && candidate.getTime() < Date.UTC(asOf.year, asOf.month - 1, asOf.day)) {
-    year += 1;
-  }
-
-  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-}
-
-function parseDateParts(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-
-  return { year, month, day };
-}
-
-function getAgentAsOfDate(): string {
-  return process.env.PIP_APP_DATE || "2026-06-19";
-}
-
-function isSavingsGoalContextProgressPrompt(normalized: string): boolean {
-  if (/\b(save|saving|set up|start|create|add|track)\b/.test(normalized)) {
-    return false;
-  }
-
-  return /\b(how much|what|show|update|progress|on track|left|remaining|need)\b/.test(normalized) &&
-    /\b(that goal|the goal|my goal|goal|savings goal|japan|trip|vacation|big purchase)\b/.test(normalized);
-}
-
-function isSavingsGoalToolName(toolName: DeterministicAgentToolName): boolean {
-  return [
-    "create_savings_goal",
-    "list_savings_goals",
-    "update_savings_goal",
-    "set_savings_goal_protection",
-  ].includes(toolName);
-}
-
-function hasSavingsGoalAction(input: RunAiAgentInput, toolName: DeterministicAgentToolName): boolean {
-  switch (toolName) {
-    case "create_savings_goal":
-      return Boolean(input.actions?.createSavingsGoal);
-    case "list_savings_goals":
-      return Boolean(input.actions?.listSavingsGoals);
-    case "update_savings_goal":
-      return Boolean(input.actions?.updateSavingsGoal);
-    case "set_savings_goal_protection":
-      return Boolean(input.actions?.setSavingsGoalProtection);
-    default:
-      return false;
-  }
-}
-
-function createDeterministicTrustPromptChips(input: RunAiAgentInput): PromptChip[] {
-  const snapshot = input.snapshot ?? (input.onboardingState ? undefined : fakeSnapshot);
-
-  if (snapshot) {
-    return getSuggestedPrompts(calculatePipCash(snapshot));
-  }
-
-  return getOnboardingPromptChips(input.onboardingState ?? {
-    status: "ready",
-    hasFinancialData: false,
-  });
 }
 
 function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined {
@@ -1021,6 +623,10 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     });
 
     if (decision.kind === "route") {
+      if (isRetiredToolName(decision.toolName)) {
+        return undefined;
+      }
+
       return {
         toolName: decision.toolName,
         args: decision.args,
@@ -1030,6 +636,16 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
   }
 
   return getLegacyForcedAgentTool(input);
+}
+
+function isRetiredSavingsGoalProtectionPrompt(input: RunAiAgentInput): boolean {
+  const forcedTool = getSavingsGoalForcedTool(input.message.trim(), normalizePrompt(input.message.trim()));
+
+  return forcedTool?.toolName === "set_savings_goal_protection";
+}
+
+function isRetiredToolName(toolName: DeterministicAgentToolName): boolean {
+  return toolName === "set_savings_goal_protection";
 }
 
 function getLegacyForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined {
@@ -1068,7 +684,7 @@ function getLegacyForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | und
 
   const savingsGoalTool = getSavingsGoalForcedTool(message, normalized);
 
-  if (savingsGoalTool) {
+  if (savingsGoalTool && !isRetiredToolName(savingsGoalTool.toolName)) {
     return savingsGoalTool;
   }
 
@@ -1086,6 +702,12 @@ function getLegacyForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | und
       args: {},
       requireCard: false,
     };
+  }
+
+  const recurringCorrectionTool = getRecurringObligationCorrectionTool(message, normalized);
+
+  if (recurringCorrectionTool) {
+    return recurringCorrectionTool;
   }
 
   if (isGeneralSpendingQuestion(normalized) && isSpendingPrompt(normalized)) {
@@ -1623,70 +1245,6 @@ function createPipTools() {
         }));
       },
     }),
-    tool<typeof accountInclusionParameters, PipAgentContext>({
-      name: "set_account_inclusion",
-      description:
-        "Include or exclude one account from Spendable Cash Today without disconnecting the provider. Use when the user says ignore, stop using, use again, include, or exclude a specific account.",
-      parameters: accountInclusionParameters,
-      strict: true,
-      async execute(input, runContext) {
-        const context = getToolContext(runContext);
-        const toolInput = getToolInput(context, "set_account_inclusion", input, accountInclusionParameters);
-        recordTool(context, "set_account_inclusion");
-
-        const unavailable = getAccountManagementUnavailableResult(context);
-
-        if (unavailable) {
-          return unavailable;
-        }
-
-        if (!context.actions?.setAccountInclusion) {
-          return {
-            ok: false,
-            status: "account_management_unavailable",
-            message: "Account preferences are not available in this environment.",
-          };
-        }
-
-        return applyActionResult(context, await context.actions.setAccountInclusion({
-          accountId: toolInput.account_id,
-          accountName: toolInput.account_name,
-          includeInPipCash: toolInput.include_in_pip_cash,
-        }));
-      },
-    }),
-    tool<typeof protectedSavingsAccountParameters, PipAgentContext>({
-      name: "set_account_protected_savings",
-      description:
-        "Set or unset protected-savings treatment for one account. Use when the user asks to make an account protected savings or to stop treating a savings account as protected.",
-      parameters: protectedSavingsAccountParameters,
-      strict: true,
-      async execute(input, runContext) {
-        const context = getToolContext(runContext);
-        const toolInput = getToolInput(context, "set_account_protected_savings", input, protectedSavingsAccountParameters);
-        recordTool(context, "set_account_protected_savings");
-
-        const unavailable = getAccountManagementUnavailableResult(context);
-
-        if (unavailable) {
-          return unavailable;
-        }
-
-        if (!context.actions?.setAccountProtectedSavings) {
-          return {
-            ok: false,
-            status: "account_management_unavailable",
-            message: "Account preferences are not available in this environment.",
-          };
-        }
-
-        return applyActionResult(context, await context.actions.setAccountProtectedSavings({
-          accountId: toolInput.account_id,
-          accountName: toolInput.account_name,
-          isProtectedSavings: toolInput.is_protected_savings,
-        }));
-      },
-    }),
     tool<typeof createSavingsGoalParameters, PipAgentContext>({
       name: "create_savings_goal",
       description:
@@ -1766,33 +1324,6 @@ function createPipTools() {
           monthlyContributionCents: toolInput.monthly_contribution_cents,
           includeInSpendableCash: toolInput.include_in_spendable_cash,
           status: toolInput.status,
-        }));
-      },
-    }),
-    tool<typeof savingsGoalProtectionParameters, PipAgentContext>({
-      name: "set_savings_goal_protection",
-      description:
-        "Choose whether a savings goal's monthly contribution is kept out of Spendable Cash Today.",
-      parameters: savingsGoalProtectionParameters,
-      strict: true,
-      async execute(input, runContext) {
-        const context = getToolContext(runContext);
-        const toolInput = getToolInput(context, "set_savings_goal_protection", input, savingsGoalProtectionParameters);
-        recordTool(context, "set_savings_goal_protection");
-
-        if (!context.actions?.setSavingsGoalProtection) {
-          return {
-            ok: false,
-            status: "savings_goals_unavailable",
-            message: "Savings goals are not available in this environment.",
-          };
-        }
-
-        return applyActionResult(context, await context.actions.setSavingsGoalProtection({
-          goalId: toolInput.goal_id,
-          name: toolInput.name,
-          includeInSpendableCash: toolInput.include_in_spendable_cash,
-          monthlyContributionCents: toolInput.monthly_contribution_cents,
         }));
       },
     }),
@@ -2051,6 +1582,38 @@ function createPipTools() {
           rowCount: card?.type === "insight_card" ? card.rows.length : 0,
           suggestedPrompts: response.promptChips,
         };
+      },
+    }),
+    tool<typeof recurringObligationCorrectionParameters, PipAgentContext>({
+      name: "correct_recurring_obligation",
+      description:
+        "Persist a user's correction about whether a merchant should be treated as a monthly bill. Use when they say a merchant is a bill, is not a bill, or give the usual monthly amount for a bill.",
+      parameters: recurringObligationCorrectionParameters,
+      strict: true,
+      async execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(
+          context,
+          "correct_recurring_obligation",
+          input,
+          recurringObligationCorrectionParameters,
+        );
+        recordTool(context, "correct_recurring_obligation");
+
+        if (!context.actions?.correctRecurringObligation) {
+          return {
+            ok: false,
+            status: "bill_correction_unavailable",
+            message: "Bill corrections are not available yet.",
+          };
+        }
+
+        return applyActionResult(context, await context.actions.correctRecurringObligation({
+          merchantName: toolInput.merchant_name,
+          treatment: toolInput.treatment,
+          expectedAmountCents: toolInput.expected_amount_cents,
+          expectedDay: toolInput.expected_day,
+        }));
       },
     }),
     tool<typeof emptyToolParameters, PipAgentContext>({
@@ -2572,7 +2135,7 @@ function createPipInstructions(runContext: {
   );
 
   return [
-    "You are Pip, a calm financial assistant for the Pip app.",
+    "You are Pip, a warm daily money companion for the Pip app.",
     "You speak as Pip in first person. Say I, me, and my when you describe what you do.",
     "Never describe yourself in third person in visible replies. Do not say Pip does, Pip can, Pip will, Pip helps, or Pip shows.",
     "For financial answers, prefer first-person verbs like I found, I see, I counted, or I can.",
@@ -2583,7 +2146,7 @@ function createPipInstructions(runContext: {
     "Use get_financial_guidance_context before giving a read based on the user's actual finances, unless a judgmental purchase simulation already returned guidanceContext in the same turn.",
     "For a grounded read, use evidence IDs from guidanceContext. Do not invent facts, categories, merchants, balances, bills, or dollar amounts.",
     "You may be direct about spending pace, whether things look stable or tight, whether a purchase adds pressure, whether monthly savings look reasonable for now, whether bills or everyday spending are the bigger pressure, whether cash reality is limiting the number, whether data quality limits the read, and general high-interest debt priority.",
-    "You may gently disagree with the user when evidence conflicts with their assumption. Use phrases like my read, I'd treat this as, the conservative move, this adds pressure, this looks stable, this looks tight, I would be careful with that, or I would not treat that as open room.",
+    "Use soft, evidence-based pushback when the numbers conflict with the user's assumption. Use phrases like my read, I'd treat this as, the conservative move, this adds pressure, this looks stable, this looks tight, I would be careful with that, or I would not treat that as open room.",
     "Do not call this financial advice. Do not use canned responses, moralize, shame, or over-explain.",
     "Do not give securities advice, crypto advice, tax advice, legal advice, bankruptcy advice, specific credit-card recommendations, specific loan recommendations, specific lender recommendations, insurance product recommendations, or instructions to skip required bills.",
     "Use Spendable Cash Today for the top daily metric. Do not say PIP legacy cash wording in visible replies.",
@@ -2595,15 +2158,15 @@ function createPipInstructions(runContext: {
     "The Spendable Cash Today number is calculated by Pip's product logic. AI explains and answers; AI does not own the money calculation.",
     "Pip uses Plaid for read-only account connection. Pip cannot move money, withdraw funds, transfer funds, make payments, or store bank usernames and passwords.",
     "Use tools for setup and account actions. Do not pretend an action happened unless the matching tool returned ok.",
-    "You can help users manage connected accounts through tools. Use account tools when the user asks what accounts are connected, wants to add a bank/card, repair a connection, change selected accounts, exclude or include an account, mark protected savings, or remove an institution.",
+    "You can help users manage connected accounts through tools. Use account tools when the user asks what accounts are connected, wants to add a bank/card, repair a connection, change selected accounts, or remove an institution.",
+    "All active connected accounts count toward Spendable Cash Today. Do not offer account-level include, ignore, or savings-label controls.",
     "Account management stays chat-owned. Do not mention settings pages, dashboards, menus, tabs, or separate account screens.",
     "Use get_connected_accounts when the user asks what is connected, when an account/institution target is unclear, or when more than one target could match.",
     "Use start_new_account_connection for adding a new bank or card. Use repair_account_connection for reconnecting one stale or broken institution. Use start_account_selection_update for changing which accounts Pip can see at an existing institution.",
-    "Use set_account_inclusion when the user wants to ignore, exclude, include, or use an account again without disconnecting its institution.",
-    "Use set_account_protected_savings when the user wants to mark or unmark a specific account as protected savings.",
     "Use savings goal tools when the user wants to save for a trip, big purchase, emergency fund, or named goal.",
     "Use create_savings_goal when the user gives a target amount for a new goal. Use list_savings_goals when they ask what goals are tracked or want an update.",
-    "Use update_savings_goal when the user changes progress, target amount, target date, monthly contribution, or status. Use set_savings_goal_protection when they want a goal's monthly plan kept out of Spendable Cash Today.",
+    "Use update_savings_goal when the user changes progress, target amount, target date, monthly contribution, or status.",
+    "Every active savings goal affects Spendable Cash Today. Do not offer a separate protection toggle for savings goals.",
     "Savings goals are tracking and planning only. Pip does not move money, open a savings account, or transfer funds for a goal.",
     "For institution removal, call request_remove_institution_confirmation first. Only call remove_institution when the latest user message matches the exact confirmation text.",
     "For greetings, do not mention forecasts, cards, views, breakdowns, transactions, or app features. Just invite one simple next question.",
@@ -2629,6 +2192,7 @@ function createPipInstructions(runContext: {
     "If the user asks how they are doing, what you think, what they should do, whether spending is too high, whether to lower monthly savings, whether they are broke, or asks for your read, call get_financial_guidance_context.",
     "If the user asks for a trend, forecast, projection, or next-days view, call forecast_spendable_cash.",
     "If the user asks about recurring bills, subscriptions, monthly charges, or likely upcoming repeats, call get_recurring_activity.",
+    "If the user corrects whether a merchant is a monthly bill, subscription, recurring item, or not a bill, call correct_recurring_obligation. If the merchant name is missing, ask one short clarifying question.",
     "If the user asks for a complete, item, category, merchant, income, spending, refund, or card-payment breakdown, call get_spending_breakdown.",
     "Only ask for an amount when the user is clearly asking you to simulate or test a specific purchase but did not provide the amount.",
     "For general spend questions without an amount, call get_pip_cash_snapshot. Explain what the number signals, but do not give a max spend limit.",
@@ -2660,7 +2224,7 @@ function createPipInstructions(runContext: {
     "Do not use stock template phrasing like 'Here is...' as the whole reply. Respond to the user's exact wording and current conversation.",
     "Write at a fifth-grade reading level.",
     "Keep visible replies to one short sentence when possible, two short sentences max.",
-    "The visible message must be 45 words or fewer and 260 characters or fewer.",
+    `For this bridge response, the visible message must be ${bridgeVisibleLimits.maxWords} words or fewer and ${bridgeVisibleLimits.maxChars} characters or fewer.`,
     "Use message for the direct lead sentence. Use support only when one short extra sentence adds useful context.",
     "Use common words. Avoid formal phrases like deterministic, rolling-window pattern, liquidity, optimal, analyze, or sufficient.",
     "Never use k shorthand for money. Say $210, not $0.21k.",
@@ -2717,7 +2281,7 @@ function createAgentInput(
             financial_context_for_prompt_chips: createPromptChipFinancialContext(context.snapshot),
             prompt_chip_examples: context.availablePromptChips,
             response_style:
-              `Answer at a fifth-grade reading level. Use 45 words or fewer and ${agentMessageMaxChars} characters or fewer.`,
+              `Answer at a fifth-grade reading level. Use bridge limits: ${bridgeVisibleLimits.maxWords} words or fewer and ${bridgeVisibleLimits.maxChars} characters or fewer.`,
             repair: context.repair ?? null,
           }),
         },
@@ -2937,6 +2501,7 @@ function buildAgentResponse(
     input,
     cards,
     usedTools,
+    isSupportedCardPrompt,
   });
   const promptChips = promptChipPlan.chips;
   const responseMode = selectFinalResponseMode({
@@ -2947,6 +2512,7 @@ function buildAgentResponse(
     usedTools,
     forcedToolRequiresCard: Boolean(context.forcedTool?.requireCard),
   });
+  const visibleModelOutput = selectVisibleModelOutput(parsed, context, guidanceSelection);
 
   if (input.requestKind === "prompt_chips" && promptChips.length < 3) {
     throw new AgentUnavailableError({
@@ -2958,7 +2524,7 @@ function buildAgentResponse(
   }
 
   const visibleAnswer = composeAgentVisibleAnswer({
-    modelOutput: parsed,
+    modelOutput: visibleModelOutput,
     userMessage: input.message,
     history: input.history,
     conversationState: {
@@ -2971,10 +2537,12 @@ function buildAgentResponse(
     cards,
     usedTools,
     selectedPromptChipId: input.selectedPromptChipId,
-    maxChars: agentMessageMaxChars,
-    maxWords: 45,
+    maxChars: bridgeVisibleLimits.maxChars,
+    maxWords: bridgeVisibleLimits.maxWords,
   });
-  const guardedMessage = guardVisibleFinalMessage(visibleAnswer.message, cards);
+  const guardedMessage = guardVisibleFinalMessage(visibleAnswer.message, cards, {
+    surface: "bridge",
+  });
 
   return agentResponseSchema.parse({
     message: guardedMessage,
@@ -3004,6 +2572,28 @@ function buildAgentResponse(
       },
     },
   });
+}
+
+function selectVisibleModelOutput(
+  parsed: AgentFinalOutput,
+  context: PipAgentContext,
+  guidanceSelection: {
+    guidanceSource: "model_draft" | "deterministic_fallback" | "none";
+  },
+): AgentFinalOutput {
+  if (
+    guidanceSelection.guidanceSource === "deterministic_fallback" &&
+    context.guidanceContext &&
+    shouldReturnGuidanceCard(context)
+  ) {
+    return {
+      ...parsed,
+      message: createDeterministicGuidanceMessage(context.guidanceContext),
+      responseMode: "guidance",
+    };
+  }
+
+  return parsed;
 }
 
 function selectFinalResponseMode(input: {
@@ -3650,203 +3240,6 @@ function buildGuidanceAudit(
   };
 }
 
-function selectPromptChips(
-  parsed: AgentFinalOutput,
-  context: PipAgentContext,
-  result: ReturnType<typeof calculatePipCash> | null,
-  options: {
-    input: RunAiAgentInput;
-    cards: AgentCard[];
-    usedTools: string[];
-  },
-) : PromptChipPlan {
-  const generated = sanitizeGeneratedPromptChips(parsed.promptChips, context);
-  const fallback = result ? [] : getOnboardingPromptChips(context.onboardingState);
-
-  if (!result) {
-    return {
-      chips: mergeGeneratedPromptChips(generated, fallback),
-      conversationJob: "setup",
-      familyIds: [],
-      repeatedJob: false,
-      repeatedTool: false,
-      repeatedCard: false,
-      fallbackReason: generated.length > 0 ? "generated-supplement" : "none",
-    };
-  }
-
-  return planPromptChips({
-    result,
-    message: options.input.message,
-    history: options.input.history,
-    shownCards: context.conversationState.shownCards,
-    lastToolNames: context.conversationState.lastToolNames,
-    promptChips: context.conversationState.promptChips,
-    responseCards: options.cards,
-    responseToolNames: options.usedTools,
-    selectedPromptChipId: options.input.selectedPromptChipId,
-    syncStatus: context.syncStatus,
-    assistantMessage: [parsed.message, parsed.support].filter(Boolean).join(" "),
-    onboardingState: context.onboardingState,
-    generatedChips: generated,
-  });
-}
-
-function mergeGeneratedPromptChips(
-  generated: PromptChip[],
-  fallback: PromptChip[],
-): PromptChip[] {
-  const merged: PromptChip[] = [];
-  const seenPrompts = new Set<string>();
-
-  [...generated, ...fallback].forEach((chip) => {
-    const key = normalizePrompt(chip.prompt);
-
-    if (seenPrompts.has(key)) {
-      return;
-    }
-
-    seenPrompts.add(key);
-    merged.push(chip);
-  });
-
-  return merged.slice(0, 3);
-}
-
-function sanitizeGeneratedPromptChips(
-  chips: PromptChip[],
-  context: PipAgentContext,
-): PromptChip[] {
-  const seenIds = new Set<string>();
-  const seenPrompts = new Set<string>();
-  const recentTexts = new Set(
-    context.conversationState.promptChips.flatMap((chip) => [
-      normalizePrompt(chip.label),
-      normalizePrompt(chip.prompt),
-    ]),
-  );
-  const sanitized: PromptChip[] = [];
-  const recentFallback: PromptChip[] = [];
-
-  chips.forEach((chip, index) => {
-    const next = sanitizeGeneratedPromptChip(chip, context, index);
-
-    if (!next) {
-      return;
-    }
-
-    const promptKey = normalizePrompt(next.prompt);
-    const labelKey = normalizePrompt(next.label);
-    let id = next.id;
-
-    if (seenPrompts.has(promptKey)) {
-      return;
-    }
-
-    if (seenIds.has(id)) {
-      id = withPromptChipIdSuffix(id, index);
-    }
-
-    seenIds.add(id);
-    seenPrompts.add(promptKey);
-    const sanitizedChip = {
-      ...next,
-      id,
-    };
-
-    if (recentTexts.has(promptKey) || recentTexts.has(labelKey)) {
-      if (context.requestKind === "prompt_chips") {
-        recentFallback.push(sanitizedChip);
-      }
-
-      return;
-    }
-
-    sanitized.push(sanitizedChip);
-  });
-
-  if (context.requestKind === "prompt_chips") {
-    return [...sanitized, ...recentFallback].slice(0, 3);
-  }
-
-  return sanitized.slice(0, 3);
-}
-
-function sanitizeGeneratedPromptChip(
-  chip: PromptChip,
-  context: PipAgentContext,
-  index: number,
-): PromptChip | null {
-  const label = cleanPromptChipText(chip.label, 56);
-  const prompt = cleanPromptChipText(chip.prompt, 160);
-
-  if (!label || !prompt) {
-    return null;
-  }
-
-  if (isRetiredDefaultPromptChip({ label, prompt })) {
-    return null;
-  }
-
-  if (containsDisallowedFinalLanguage(`${label} ${prompt}`)) {
-    return null;
-  }
-
-  const capabilitySafeChip = sanitizePromptChipCapability({ label, prompt }, context);
-
-  if (!capabilitySafeChip) {
-    return null;
-  }
-
-  if (/^discuss\b/i.test(capabilitySafeChip.label)) {
-    return null;
-  }
-
-  const requestedId = normalizePromptChipId(chip.id);
-  const privilegedId = getPermittedPrivilegedPromptChipId(
-    requestedId,
-    context,
-    `${capabilitySafeChip.label} ${capabilitySafeChip.prompt}`,
-  );
-  const id = privilegedId ?? createGeneratedPromptChipId(
-    requestedId,
-    capabilitySafeChip.label,
-    capabilitySafeChip.prompt,
-    index,
-  );
-
-  return {
-    id,
-    label: capabilitySafeChip.label,
-    prompt: capabilitySafeChip.prompt,
-  };
-}
-
-function sanitizePromptChipCapability(
-  chip: Pick<PromptChip, "label" | "prompt">,
-  context: PipAgentContext,
-): Pick<PromptChip, "label" | "prompt"> | null {
-  const text = normalizePrompt(`${chip.label} ${chip.prompt}`);
-
-  if (!hasPromptChipDisplayVerb(text)) {
-    return chip;
-  }
-
-  if (!context.snapshot) {
-    return null;
-  }
-
-  if (isSupportedCardPrompt(text)) {
-    return chip;
-  }
-
-  return downgradePromptChipToDiscussion(chip);
-}
-
-function hasPromptChipDisplayVerb(normalized: string): boolean {
-  return /\b(show|see|list|pull|view|forecast|breakdown|trend view)\b/.test(normalized);
-}
-
 function isSupportedCardPrompt(normalized: string): boolean {
   if (isCatalogSupportedCardPrompt(normalized)) {
     return true;
@@ -3868,569 +3261,6 @@ function isSupportedCardPrompt(normalized: string): boolean {
     isDataQualityPrompt(normalized) ||
     (isSpecificSpendSimulationPrompt(normalized) && extractExplicitPurchaseAmountCents(normalized) !== null)
   );
-}
-
-function downgradePromptChipToDiscussion(
-  chip: Pick<PromptChip, "label" | "prompt">,
-): Pick<PromptChip, "label" | "prompt"> {
-  const subject = chip.label
-    .replace(/^(show|see|list|pull|view|forecast|break down|breakdown)\s+/i, "")
-    .replace(/\b(cards?|view)\b/gi, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const discussionSubject = /^compare$/i.test(subject) ? "credit card options" : subject;
-  const label = cleanPromptChipText(`Discuss ${discussionSubject || "this"}`, 36);
-  const promptBase = chip.prompt
-    .replace(/^(i want to|i'd like to|can you|could you|please)\s+/i, "")
-    .replace(/^(show|see|list|pull|view|forecast|break down|breakdown)\s+(me\s+)?/i, "Let's discuss ")
-    .replace(/\bcard options\b/gi, "credit card options")
-    .replace(/\bcard use\b/gi, "credit card use")
-    .replace(/\bcard usage\b/gi, "credit card usage")
-    .replace(/\bcards\b/gi, "credit cards");
-  const prompt = cleanPromptChipText(promptBase, 160);
-
-  return {
-    label,
-    prompt: /^let'?s discuss/i.test(prompt) ? prompt : `Let's discuss ${prompt}`,
-  };
-}
-
-function getPermittedPrivilegedPromptChipId(
-  id: string,
-  context: PipAgentContext,
-  visibleText: string,
-): string | null {
-  const normalized = visibleText.toLowerCase();
-
-  if (id === "get-signed-up") {
-    return context.onboardingState.status === "guest" &&
-      /\b(sign|signed|google|start|continue)\b/.test(normalized)
-      ? id
-      : null;
-  }
-
-  if (id === "connect-data") {
-    return !context.snapshot &&
-      context.onboardingState.status !== "needs-consent" &&
-      /\b(connect|data|account|plaid)\b/.test(normalized)
-      ? id
-      : null;
-  }
-
-  if (id === "use-default-savings") {
-    return context.onboardingState.status === "needs-consent" &&
-      /\b(200|default|continue|ok|yes)\b/.test(normalized)
-      ? id
-      : null;
-  }
-
-  if (id === "set-250-savings") {
-    return context.onboardingState.status === "needs-consent" && /\b250\b/.test(normalized)
-      ? id
-      : null;
-  }
-
-  return null;
-}
-
-function cleanPromptChipText(text: string, maxLength: number): string {
-  return text.replace(/\s+/g, " ").trim().slice(0, maxLength).trim();
-}
-
-function normalizePromptChipId(id: string): string {
-  return id
-    .toLowerCase()
-    .replace(/[^a-z0-9._:-]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
-
-function createGeneratedPromptChipId(
-  requestedId: string,
-  label: string,
-  prompt: string,
-  index: number,
-): string {
-  if (requestedId.startsWith("ai-")) {
-    return requestedId;
-  }
-
-  const slug = normalizePromptChipId(`${label}-${prompt}`).replace(/^ai-/, "").slice(0, 60);
-
-  return `ai-${slug || `suggestion-${index + 1}`}`.slice(0, 80);
-}
-
-function withPromptChipIdSuffix(id: string, index: number): string {
-  const suffix = `-${index + 1}`;
-  return `${id.slice(0, 80 - suffix.length)}${suffix}`;
-}
-
-function getAvailablePromptChips(input: {
-  snapshot?: FinancialSnapshot;
-  onboardingState: PipAgentOnboardingState;
-}): PromptChip[] {
-  if (input.snapshot) {
-    return getReadyPromptChipExamples();
-  }
-
-  return getOnboardingPromptChips(input.onboardingState);
-}
-
-function guardVisibleFinalMessage(message: string, cards: AgentCard[] = []): string {
-  if (countWords(message) > 45) {
-    throw new AgentUnavailableError({
-      code: "model-returned-too-long-final-message",
-      message: "AI returned a response that was too long for Pip.",
-      status: 502,
-      detail: "Visible replies must be 45 words or fewer.",
-    });
-  }
-
-  const disallowedLanguage = getDisallowedFinalLanguageDetail(message);
-
-  if (disallowedLanguage) {
-    const repairedMessage = repairDisallowedFinalLanguageText(message, disallowedLanguage);
-
-    if (
-      repairedMessage &&
-      countWords(repairedMessage) <= 45 &&
-      !getDisallowedFinalLanguageDetail(repairedMessage) &&
-      !getUnsupportedCardPromise(repairedMessage, cards)
-    ) {
-      return repairedMessage;
-    }
-
-    throw new AgentUnavailableError({
-      code: "model-returned-disallowed-final-message",
-      message: "AI returned a response that violates Pip language rules.",
-      status: 502,
-      detail: disallowedLanguage,
-    });
-  }
-
-  const unsupportedPromise = getUnsupportedCardPromise(message, cards);
-
-  if (cards.length > 0 && /\?\s*$/.test(message.trim())) {
-    const repairedMessage = removeTrailingQuestionSentence(message);
-
-    if (
-      repairedMessage &&
-      countWords(repairedMessage) <= 45 &&
-      !getDisallowedFinalLanguageDetail(repairedMessage) &&
-      !getUnsupportedCardPromise(repairedMessage, cards)
-    ) {
-      return repairedMessage;
-    }
-
-    throw new AgentUnavailableError({
-      code: "model-returned-disallowed-final-message",
-      message: "AI returned a response that violates Pip language rules.",
-      status: 502,
-      detail: "Card replies should not end with a follow-up question.",
-    });
-  }
-
-  if (unsupportedPromise) {
-    const repairedMessage = repairUnsupportedCardPromises(message, cards);
-
-    if (
-      repairedMessage &&
-      countWords(repairedMessage) <= 45 &&
-      !getDisallowedFinalLanguageDetail(repairedMessage) &&
-      !getUnsupportedCardPromise(repairedMessage, cards)
-    ) {
-      return repairedMessage;
-    }
-
-    throw new AgentUnavailableError({
-      code: "model-promised-unsupported-card",
-      message: "AI promised a card or view that Pip did not return.",
-      status: 502,
-      detail: unsupportedPromise,
-    });
-  }
-
-  return message;
-}
-
-function repairUnsupportedCardPromises(message: string, cards: AgentCard[]): string | null {
-  let candidate = message;
-
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    const issue = getUnsupportedCardPromise(candidate, cards);
-
-    if (!issue) {
-      const shortened = shortenCardlessRepairedMessage(candidate, cards);
-
-      return shortened === message ? null : shortened;
-    }
-
-    const repaired = repairUnsupportedCardPromiseText(candidate, issue);
-
-    if (!repaired || repaired === candidate) {
-      return repairGenericCardlessDisplayText(candidate, cards);
-    }
-
-    candidate = repaired;
-  }
-
-  return getUnsupportedCardPromise(candidate, cards)
-    ? repairGenericCardlessDisplayText(candidate, cards)
-    : shortenCardlessRepairedMessage(candidate, cards);
-}
-
-function shortenCardlessRepairedMessage(message: string, cards: AgentCard[]): string {
-  if (cards.length > 0 || countWords(message) <= 45) {
-    return message;
-  }
-
-  const shortened = message
-    .replace(/\bIf you want, I can .*$/i, "Ask me to test a dollar amount instead.")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (countWords(shortened) <= 45 && !getUnsupportedCardPromise(shortened, cards)) {
-    return shortened;
-  }
-
-  return message;
-}
-
-function repairGenericCardlessDisplayText(message: string, cards: AgentCard[]): string | null {
-  if (cards.length > 0) {
-    return null;
-  }
-
-  const repaired = message
-    .replace(/\bIf you want, I can .*$/i, "Ask me to test a dollar amount instead.")
-    .replace(/\bi see\b/gi, "I understand")
-    .replace(/\bshow impact\b/gi, "talk through impact")
-    .replace(/\bpull up (the )?latest drivers\b/gi, "talk through the latest factors")
-    .replace(/\b(show|showing|shown|showed|see|list|listed|pull|pulled|view)( me)?\b/gi, "talk through")
-    .replace(/\bsimulate a small purchase\b/gi, "test a spending amount")
-    .replace(/\bpurchases?\b/gi, "spending")
-    .replace(/\bdrivers?\b/gi, "factors")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (repaired === message || getUnsupportedCardPromise(repaired, cards)) {
-    return null;
-  }
-
-  return repaired;
-}
-
-function repairDisallowedFinalLanguageText(message: string, detail: string): string | null {
-  if (detail === "guarantee") {
-    const repaired = message
-      .replace(/\bguaranteed\b/gi, "promised")
-      .replace(/\bguarantees\b/gi, "promises")
-      .replace(/\bguarantee\b/gi, "promise")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    return repaired === message ? null : repaired;
-  }
-
-  if (detail !== "detached metric opening") {
-    return null;
-  }
-
-  const repaired = message
-    .replace(/^spendable cash today is\s+/i, "I found Spendable Cash Today ")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return repaired === message ? null : repaired;
-}
-
-function removeTrailingQuestionSentence(message: string): string | null {
-  const repaired = message.trim().replace(/\s*[^.!?]*\?\s*$/, "").trim();
-
-  return repaired && repaired !== message.trim() ? repaired : null;
-}
-
-function repairUnsupportedCardPromiseText(message: string, detail: string): string | null {
-  if (detail === "forecast promised without forecast card") {
-    const repaired = message
-      .replace(/\b(want me to|should i|can i) forecast\b/gi, "$1 talk through")
-      .replace(/\bi can forecast\b/gi, "I can talk through")
-      .replace(/\bshow( me)? (a )?forecast\b/gi, "talk through a possible pattern")
-      .replace(/\b(show|showing|shown|showed|see|pull|pulled|view)( me)?\b/gi, "talk through")
-      .replace(/\b(?:the\s+)?next\s+\d+\s*days?\b/gi, "the next stretch")
-      .replace(/\b(?:the\s+)?next\s+(few|couple of)\s+days?\b/gi, "the next stretch")
-      .replace(/\bforecast\b/gi, "possible pattern")
-      .replace(/\bprojection\b/gi, "possible pattern")
-      .replace(/\bprojected\b/gi, "estimated")
-      .replace(/\bbreak down\b/gi, "talk through")
-      .replace(/\bbreakdown\b/gi, "summary")
-      .replace(/\btrend view\b/gi, "trend")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    return repaired === message ? null : repaired;
-  }
-
-  if (detail === "breakdown promised without breakdown card") {
-    const repaired = message
-      .replace(/\bi see (?:my |the )?main drivers?:?/gi, "The same main drivers still apply:")
-      .replace(/\b(show|showing|shown|showed|see|pull|pulled|view|list|listed)( me)?\b/gi, "talk through")
-      .replace(/\bbreak down\b/gi, "talk through")
-      .replace(/\bbreakdown\b/gi, "summary")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    return repaired === message ? null : repaired;
-  }
-
-  if (detail === "recurring activity promised without recurring card") {
-    const repaired = message
-      .replace(/\bhere (is|are)\b.{0,24}\b(recurring|repeating|subscriptions?|monthly charges?|upcoming bills?|bills? coming up)\b/gi, "I can talk through likely repeats")
-      .replace(/\b(show|showing|shown|showed|list|listed|pull|pulled|view)( me)?\b.{0,28}\b(recurring|repeating|subscriptions?|monthly charges?|upcoming bills?|bills? coming up)\b/gi, "talk through likely repeats")
-      .replace(/\b(show|showing|shown|showed|list|listed|pull|pulled|view)( me)?\b/gi, "talk through")
-      .replace(/\brecurring activity\b/gi, "likely repeats")
-      .replace(/\brecurring\b/gi, "repeating")
-      .replace(/\bsubscriptions?\b/gi, "repeat charges")
-      .replace(/\bupcoming bills?\b/gi, "bills that may repeat")
-      .replace(/\bbills? coming up\b/gi, "bills that may repeat")
-      .replace(/\bmonthly charges?\b/gi, "repeat charges")
-      .replace(/\blikely repeats i found:/gi, "likely repeats:")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    return repaired === message ? null : repaired;
-  }
-
-  if (detail === "transactions promised without transaction card") {
-    const repaired = message
-      .replace(/\bshow how (?:a )?purchases? would affect it\b/gi, "talk through how spending would affect it")
-      .replace(/\b(show|showing|shown|showed|see|list|listed|pull|pulled|view)( me)?\b.{0,28}\b(transactions?|charges?|purchases?|activity)\b/gi, "talk through recent activity")
-      .replace(/\btransactions?\b/gi, "activity")
-      .replace(/\bcharges?\b/gi, "activity")
-      .replace(/\bpurchases?\b/gi, "spending")
-      .replace(/\bactivity I found:/gi, "activity:")
-      .replace(/\s+/g, " ")
-      .trim();
-
-    return repaired === message ? null : repaired;
-  }
-
-  if (detail !== "card promised without card") {
-    return null;
-  }
-
-  const repaired = message
-    .replace(/\bpull up (?:today(?:'|\u2019)s )?cash picture\b/gi, "talk through today's cash picture")
-    .replace(/\bshow how (?:a )?purchases? would affect it\b/gi, "talk through how spending would affect it")
-    .replace(/\bfuller view\b/gi, "fuller picture")
-    .replace(/\b(the )?view\b/gi, "$1picture")
-    .replace(/\bmissing cards?\b/gi, "missing data source")
-    .replace(/\bcards? (are|is|were|was) connected\b/gi, "data sources $1 connected")
-    .replace(/\bconnect(?:ed)? (the )?missing cards?\b/gi, "connect $1missing data source")
-    .replace(/\bshow( me)? (your )?credit card options\b/gi, "talk through credit card options")
-    .replace(/\bshow( me)? (your )?card options\b/gi, "talk through card options")
-    .replace(/\bshow( me)? (some )?credit cards\b/gi, "talk through credit cards")
-    .replace(/\bshow( me)? (some )?cards\b/gi, "talk through cards")
-    .replace(/\bshow( me)? (the )?full summary\b/gi, "talk through the full summary")
-    .replace(/\bshow( me)? (more )?(details?|detail)\b/gi, "talk through more detail")
-    .replace(/\bview (your )?credit card options\b/gi, "talk through credit card options")
-    .replace(/\bview (your )?card options\b/gi, "talk through card options")
-    .replace(/\b(show|view|pull|list)( me)? (your )?card (options|choices|types|ideas|offers|details|use|usage)\b/gi, "talk through credit card $4")
-    .replace(/\b(show|view|pull|list)( me)? (your )?cards\b/gi, "talk through credit cards")
-    .replace(/\bcard (options|choices|types|ideas|offers|details|use|usage)\b/gi, "credit card $1")
-    .replace(/\bdata cards?\b/gi, "data source")
-    .replace(/\bdetails? cards?\b/gi, "details")
-    .replace(/\bquick chart\b/gi, "quick summary")
-    .replace(/\b(want to|would you like to|if you want,? i can) see\b/gi, "$1 talk through")
-    .replace(/\bi see\b/gi, "I understand")
-    .replace(/\b(show|showing|shown|showed|see|list|listed|pull|pulled|view)( me)?\b/gi, "talk through")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  return repaired === message ? null : repaired;
-}
-
-function getUnsupportedCardPromise(message: string, cards: AgentCard[]): string | null {
-  const normalized = message.toLowerCase().replace(/[\u2018\u2019]/g, "'");
-
-  if (cards.length === 0 && /\bpull up (?:today(?:'|\u2019)s )?cash picture\b/.test(normalized)) {
-    return "card promised without card";
-  }
-
-  if (cards.length === 0 && /\bshow how (?:a )?purchases? would affect it\b/.test(normalized)) {
-    return "transactions promised without transaction card";
-  }
-
-  if (!containsDisplayPromise(normalized)) {
-    return null;
-  }
-
-  if (isNoDataCardRefusal(normalized)) {
-    return null;
-  }
-
-  if (isSuggestionMenuResponse(normalized) && !hasSpecificDisplayCapabilityPromise(normalized)) {
-    return null;
-  }
-
-  if (/\b(forecast|project(?:ion)?|trend|trend view|next \d+\s*days?)\b/.test(normalized)) {
-    return hasCard(cards, "spendable_cash_forecast") ? null : "forecast promised without forecast card";
-  }
-
-  if (/\b(recurring|repeating|subscription|subscriptions|monthly charges?|bills? (are )?coming up|upcoming bills?)\b/.test(normalized)) {
-    return hasAnyCard(cards, ["recurring_activity", "spendable_cash_forecast"])
-      ? null
-      : "recurring activity promised without recurring card";
-  }
-
-  if (/\b(drivers?|breakdown|categories|merchants|card payments?)\b/.test(normalized)) {
-    return hasAnyCard(cards, ["spending_breakdown", "pip_cash_explanation", "math_breakdown", "insight_card"])
-      ? null
-      : "breakdown promised without breakdown card";
-  }
-
-  if (/\b(transactions?|charges?|purchases?|activity)\b/.test(normalized)) {
-    return hasAnyCard(cards, ["recent_transactions", "spending_breakdown"])
-      ? null
-      : "transactions promised without transaction card";
-  }
-
-  if (/\bbalances?\b/.test(normalized)) {
-    return hasCard(cards, "true_balances") ? null : "balances promised without balances card";
-  }
-
-  if (/\b(math|formula|calculation)\b/.test(normalized)) {
-    return hasCard(cards, "math_breakdown") ? null : "math promised without math card";
-  }
-
-  const normalizedWithoutCreditCardTopic = normalized.replace(/\b(?:credit|debit) cards?\b/g, "");
-  const appCardPromisePattern =
-    /\b(?:this|the) cards?\b|\b(?:data|details?) cards?\b|\bcards?\s+(?:view|options|details|data)\b|\b(?:show|view|pull|list)\b.{0,40}\b(?:cards?|full summary|details?)\b|\bcards?\b.{0,20}\b(?:shown|below)\b/;
-
-  if (appCardPromisePattern.test(normalizedWithoutCreditCardTopic)) {
-    return cards.length > 0 ? null : "card promised without card";
-  }
-
-  if (
-    /\b(showing|shown|showed|this card|the card|the view|trend view|fuller view)\b/.test(normalized) ||
-    (cards.length === 0 && /\b(missing cards?|cards? (?:are|is|were|was) connected)\b/.test(normalizedWithoutCreditCardTopic))
-  ) {
-    return cards.length > 0 ? null : "card promised without card";
-  }
-
-  if (cards.length === 0 && /\b(show|see|view|pull)( me| you| up)?\b/.test(normalized)) {
-    return "card promised without card";
-  }
-
-  return null;
-}
-
-function isNoDataCardRefusal(normalized: string): boolean {
-  const noDataContext =
-    /\b(no data|no financial data|not connected|haven't connected|have not connected|data isn't connected|data is not connected|without connected data|until .*connect(?:ed)? data)\b/.test(normalized);
-  const refusalVerb =
-    /\b(can'?t|cannot|unable|not able|don't|do not|won't|will not)\b.{0,90}\b(show|list|pull|view|forecast|break ?down|simulate|check)\b/.test(normalized);
-  const displaySubject =
-    /\b(forecast|breakdown|transactions?|subscriptions?|recurring|activity|charges?|purchases?|math|balances?|drivers?|card payments?)\b/.test(normalized);
-
-  return displaySubject && (noDataContext || refusalVerb);
-}
-
-function isSuggestionMenuResponse(normalized: string): boolean {
-  return /\b(you can ask|you could ask|try asking|ask me about|want to ask|if you want|pick a chip|choose a chip|tap a chip|tell me a dollar amount)\b/.test(normalized);
-}
-
-function hasSpecificDisplayCapabilityPromise(normalized: string): boolean {
-  return /\b(forecast|project(?:ion)?|trend|trend view|breakdown|transactions?|charges?|purchases?|activity|recurring|repeating|subscriptions?|monthly charges?|upcoming bills?|bills? coming up|balances?|math|formula|calculation|cards?)\b/.test(normalized);
-}
-
-function containsDisplayPromise(normalized: string): boolean {
-  return /\b(show|showing|shown|showed|see|pull|pulled|view|here is|here are)\b/.test(normalized) ||
-    /\btrend view\b/.test(normalized) ||
-    /\b(?:this|the|data|details?) cards?\b|\bcards?\b.{0,20}\b(?:shown|below)\b/.test(normalized) ||
-    (
-      /\b(breakdown|forecast|projection|projected)\b/.test(normalized) &&
-      /\b(show|showing|shown|showed|pull|pulled|view|here is|here are)\b/.test(normalized)
-    );
-}
-
-function hasCard(cards: AgentCard[], cardType: AgentCard["type"]): boolean {
-  return cards.some((card) => card.type === cardType);
-}
-
-function hasAnyCard(cards: AgentCard[], cardTypes: AgentCard["type"][]): boolean {
-  return cardTypes.some((cardType) => hasCard(cards, cardType));
-}
-
-function containsDisallowedFinalLanguage(message: string): boolean {
-  return Boolean(getDisallowedFinalLanguageDetail(message));
-}
-
-function getDisallowedFinalLanguageDetail(message: string): string | null {
-  const normalized = message.toLowerCase();
-  const guaranteedSpendingPhrase = ["safe", "to", "spend"].join(" ");
-  const disallowedPatterns: Array<[RegExp, string]> = [
-    [new RegExp(`\\b${guaranteedSpendingPhrase}\\b`), guaranteedSpendingPhrase],
-    [/\bsafe to buy\b/, "safe to buy"],
-    [/\byou can afford\b/, "you can afford"],
-    [/\bi recommend\b/, "i recommend"],
-    [/\bmy recommendation\b/, "my recommendation"],
-    [/\bfinancial advice\b/, "financial advice"],
-    [/\bfinancial advisor\b/, "financial advisor"],
-    [/\byou should (?:buy|spend|purchase|order)\b/, "you should spend"],
-    [/\byou shouldn'?t (?:buy|spend|purchase|order)\b/, "you shouldn't spend"],
-    [/\b(buy|sell|hold)\b.{0,24}\b(stocks?|shares?|etf|fund|securities?)\b/, "securities advice"],
-    [/\binvest in\b.{0,40}\b(stocks?|shares?|etf|fund|securities?|nvidia|tesla|apple|crypto|bitcoin|ethereum)\b/, "investment advice"],
-    [/\b(buy|sell|hold)\b.{0,24}\b(crypto|bitcoin|ethereum|token)\b/, "crypto advice"],
-    [/\b(open|apply for|sign up for)\b.{0,40}\b(credit card|card|loan|lender|insurance)\b/, "product advice"],
-    [/\b(take|choose|get)\b.{0,28}\b(personal loan|payday loan|balance transfer card)\b/, "product advice"],
-    [/\b(refinance with|file bankruptcy|skip rent|write this off)\b/, "blocked domain advice"],
-    [/\bdashboard\b/, "dashboard"],
-    [new RegExp(`\\b${"free" + " cash"}\\b`), "legacy cash wording"],
-    [/\bbudget(?:ing)?\b/, "budget"],
-    [/\bexpense tracking\b/, "expense tracking"],
-    [/\bfinancial planning\b/, "financial planning"],
-    [/\bi'?m proud of you\b/, "proud of you"],
-    [/\byou'?ve got this\b/, "you've got this"],
-    [/\bmoney journey\b/, "money journey"],
-    [/\bmindful choice\b/, "mindful choice"],
-    [/\bmoney companion\b/, "money companion"],
-    [/\bai coach\b/, "AI coach"],
-    [/\bpip\s+(?:is|does|can|will|would|helps?|shows?|uses?|turns|stores|needs|calculates?|explains?|answers?)\b/, "third-person Pip self-reference"],
-    [/^spendable cash today is\b/, "detached metric opening"],
-    [/\bdeterministic\b/, "deterministic"],
-    [/-?\$\d+(?:\.\d+)?k\b|\$-?\d+(?:\.\d+)?k\b/i, "money k shorthand"],
-    [/\brolling-window pattern\b/, "rolling-window pattern"],
-    [/\bliquidity\b/, "liquidity"],
-    [/\boptimal\b/, "optimal"],
-    [/\bsufficient\b/, "sufficient"],
-    [/\b(?:page|tab|section|area)\s+(?:for|with)\b/, "page/tab/section"],
-    [/\breview (?:them|it|transactions?|balances?) there\b/, "review it there"],
-  ];
-
-  for (const [pattern, detail] of disallowedPatterns) {
-    if (pattern.test(normalized)) {
-      return detail;
-    }
-  }
-
-  if (hasDisallowedGuaranteeLanguage(normalized)) {
-    return "guarantee";
-  }
-
-  return null;
-}
-
-function hasDisallowedGuaranteeLanguage(normalized: string): boolean {
-  if (!/\bguarantee(?:d|s)?\b/.test(normalized)) {
-    return false;
-  }
-
-  return !/\b(?:not guaranteed|no guarantee|not a guarantee)\b/.test(normalized);
-}
-
-function countWords(message: string): number {
-  return message.trim().split(/\s+/).filter(Boolean).length;
 }
 
 function toAgentUnavailableError(error: unknown): AgentUnavailableError {
@@ -4531,75 +3361,6 @@ function createAgentResponseRepair(error: AgentUnavailableError): AgentResponseR
   };
 }
 
-export function createOpenAIClient(config: OpenAIClientConfig = getOpenAIClientConfig()): OpenAI {
-  return new OpenAI({
-    apiKey: config.apiKey,
-    baseURL: config.baseURL,
-  });
-}
-
-export function shouldUseModel(): boolean {
-  return (
-    Boolean(process.env.NETLIFY_AI_GATEWAY_BASE_URL && process.env.NETLIFY_AI_GATEWAY_KEY) ||
-    Boolean(process.env.OPENAI_API_KEY) ||
-    Boolean(process.env.OPENAI_BASE_URL)
-  );
-}
-
-export function getPipAiModel(env: Record<string, string | undefined> = process.env): string {
-  if (env.PIP_AI_MODEL) {
-    return env.PIP_AI_MODEL;
-  }
-
-  if (isNetlifyAiGatewayConfigured(env) || env.OPENAI_BASE_URL) {
-    return NETLIFY_AI_GATEWAY_MODEL;
-  }
-
-  return PIP_AI_MODEL;
-}
-
-export function getOpenAIApiKeyForSdk(env: Record<string, string | undefined> = process.env): string | undefined {
-  return getOpenAIClientConfig(env).apiKey;
-}
-
-export function getOpenAIClientConfig(
-  env: Record<string, string | undefined> = process.env,
-): OpenAIClientConfig {
-  if (isNetlifyAiGatewayConfigured(env)) {
-    return {
-      apiKey: env.NETLIFY_AI_GATEWAY_KEY,
-      baseURL: env.NETLIFY_AI_GATEWAY_BASE_URL,
-      transport: "netlify-ai-gateway",
-    };
-  }
-
-  if (env.OPENAI_BASE_URL) {
-    return {
-      apiKey: env.OPENAI_API_KEY || "netlify-ai-gateway",
-      baseURL: env.OPENAI_BASE_URL,
-      transport:
-        env.PIP_AI_TRANSPORT === "custom-openai-compatible"
-          ? "custom-openai-compatible"
-          : "netlify-ai-gateway",
-    };
-  }
-
-  return {
-    apiKey: env.OPENAI_API_KEY,
-    transport: "openai-direct",
-  };
-}
-
-function isNetlifyAiGatewayConfigured(env: Record<string, string | undefined>): boolean {
-  return Boolean(env.NETLIFY_AI_GATEWAY_BASE_URL && env.NETLIFY_AI_GATEWAY_KEY);
-}
-
-export function getPipAiTransport(
-  env: Record<string, string | undefined> = process.env,
-): AiTransport {
-  return getOpenAIClientConfig(env).transport;
-}
-
 function normalizePrompt(message: string): string {
   return message
     .toLowerCase()
@@ -4612,6 +3373,8 @@ function isExplicitPipCashDriversPrompt(normalized: string): boolean {
   return (
     normalized === "why this number" ||
     normalized === "what changed" ||
+    normalized === "what are the biggest drivers" ||
+    normalized === "why did it move" ||
     /^(show( me)? )?(the )?(pip cash )?drivers( behind (this|the) number)?$/.test(normalized) ||
     /^(show( me)? )?(the )?(spendable cash|pip cash )?drivers?$/.test(normalized)
   );
@@ -4663,7 +3426,8 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b/.test(normalized) ||
     /\bspending opportunit(?:y|ies)\b/.test(normalized) ||
     /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
-    /\bwhere can i save\b/.test(normalized);
+    /\bwhere can i save\b/.test(normalized) ||
+    /\b(money leaking|where .* leaking)\b/.test(normalized);
 
   if (!hasOpportunityTerm) {
     return false;
@@ -4673,7 +3437,8 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
     /\b(what|where|which|find|show|spot|identify|help|how)\b/.test(normalized) ||
     /\bspending opportunit(?:y|ies)\b/.test(normalized) ||
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what|costs?|expenses?|cash)\b/.test(normalized) ||
-    /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized)
+    /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
+    /\b(money leaking|where .* leaking)\b/.test(normalized)
   );
 }
 
@@ -4682,96 +3447,8 @@ function isSavingsSetupOrSettingsPrompt(normalized: string): boolean {
     /\bsave\b.{0,24}\b(account settings|settings|preferences)\b/.test(normalized);
 }
 
-function getSavingsGoalForcedTool(
-  message: string,
-  normalized: string,
-): ForcedAgentTool | undefined {
-  if (!isSavingsGoalPrompt(normalized)) {
-    return undefined;
-  }
-
-  const targetAmountCents = extractSavingsGoalAmountCents(message);
-  const monthlyContributionCents = extractMonthlyContributionCents(message);
-  const name = inferSavingsGoalName(message, normalized);
-
-  if (isSavingsGoalListPrompt(normalized)) {
-    return {
-      toolName: "list_savings_goals",
-      args: {},
-      requireCard: true,
-    };
-  }
-
-  if (isSavingsGoalProtectionPrompt(normalized)) {
-    return {
-      toolName: "set_savings_goal_protection",
-      args: {
-        name,
-        include_in_spendable_cash: !/\b(track only|don'?t protect|do not protect|stop protecting|not in spendable|don'?t keep|do not keep)\b/.test(normalized),
-        ...(monthlyContributionCents === null ? {} : { monthly_contribution_cents: monthlyContributionCents }),
-      },
-      requireCard: true,
-    };
-  }
-
-  if (isSavingsGoalProgressPrompt(normalized) && targetAmountCents !== null) {
-    return {
-      toolName: "update_savings_goal",
-      args: {
-        name,
-        current_amount_cents: targetAmountCents,
-      },
-      requireCard: true,
-    };
-  }
-
-  if (targetAmountCents !== null && isSavingsGoalCreatePrompt(normalized)) {
-    return {
-      toolName: "create_savings_goal",
-      args: {
-        name,
-        target_amount_cents: targetAmountCents,
-        ...(monthlyContributionCents === null ? {} : { monthly_contribution_cents: monthlyContributionCents }),
-        include_in_spendable_cash:
-          monthlyContributionCents !== null &&
-          /\b(keep|hold|reserve|protect|out of spendable|spendable cash|monthly plan)\b/.test(normalized),
-      },
-      requireCard: true,
-    };
-  }
-
-  return undefined;
-}
-
-function isSavingsGoalPrompt(normalized: string): boolean {
-  return /\bsavings? goals?\b/.test(normalized) ||
-    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
-    /\b(for|toward|towards)\b.{0,32}\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b/.test(normalized) ||
-    /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized);
-}
-
-function isSavingsGoalCreatePrompt(normalized: string): boolean {
-  return /\b(create|start|set up|make|add|track|want|need|help)\b/.test(normalized) ||
-    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized);
-}
-
-function isSavingsGoalListPrompt(normalized: string): boolean {
-  return /\b(show|list|what|which|update|progress|how are)\b.{0,32}\bsavings? goals?\b/.test(normalized) ||
-    /^savings? goals?$/.test(normalized);
-}
-
-function isSavingsGoalProtectionPrompt(normalized: string): boolean {
-  return /\b(keep|hold|reserve|protect|track only|don'?t protect|do not protect|stop protecting)\b.{0,48}\b(goal|spendable cash|spendable)\b/.test(normalized) ||
-    /\b(goal|savings? goal)\b.{0,48}\b(out of spendable|out of today'?s number|not in spendable|kept out)\b/.test(normalized);
-}
-
-function isSavingsGoalProgressPrompt(normalized: string): boolean {
-  return /\b(saved|have|already have|tracked|progress|current)\b.{0,32}\b\$?\d/.test(normalized) &&
-    /\b(goal|savings? goal|toward|towards|for)\b/.test(normalized);
-}
-
 function isDataQualityPrompt(normalized: string): boolean {
-  return /\b(missing card|card missing|missing data|data missing|data (?:might|may|could) be missing|what data (?:might|may|could) be missing|connect(ed)? data|repair data|stale data|data quality|pending transactions?|pending items?)\b/.test(
+  return /\b(missing card|card missing|missing data|data missing|data (?:might|may|could) be missing|what data (?:might|may|could) be missing|connect(ed)? data|repair data|stale data|data quality|pending transactions?|pending items?|number complete)\b/.test(
     normalized,
   );
 }
@@ -4853,6 +3530,105 @@ function isExplicitForecastPrompt(normalized: string): boolean {
     !/\bif i (?:only )?spend\b/.test(normalized) &&
     !isExplicitRecurringPrompt(normalized)
   );
+}
+
+function getRecurringObligationCorrectionTool(
+  message: string,
+  normalized: string,
+): ForcedAgentTool | undefined {
+  const treatment = getRecurringObligationCorrectionTreatment(normalized);
+
+  if (!treatment) {
+    return undefined;
+  }
+
+  const merchantName = extractRecurringObligationMerchantName(message, normalized, treatment);
+
+  if (!merchantName) {
+    return undefined;
+  }
+
+  const expectedAmountCents = extractExplicitPurchaseAmountCents(message) ?? undefined;
+
+  return {
+    toolName: "correct_recurring_obligation",
+    args: {
+      merchant_name: merchantName,
+      treatment,
+      ...(expectedAmountCents ? { expected_amount_cents: expectedAmountCents } : {}),
+    },
+    requireCard: false,
+  };
+}
+
+function getRecurringObligationCorrectionTreatment(
+  normalized: string,
+): "bill" | "not_bill" | null {
+  if (
+    /\b(not|isn'?t|is not|wasn'?t|was not|don'?t|do not|stop)\b.{0,24}\b(bill|recurring|monthly charge|subscription)\b/.test(normalized) ||
+    /\b(mark|treat|count)\b.{0,20}\b(not|as not)\b.{0,16}\b(bill|recurring|monthly charge|subscription)\b/.test(normalized)
+  ) {
+    return "not_bill";
+  }
+
+  if (
+    /\b(treat|mark|count|set)\b.{0,28}\b(as )?(a )?(monthly )?(bill|recurring|subscription|monthly charge)\b/.test(normalized) ||
+    /\b(is|was|should be)\b.{0,12}\b(a )?(monthly )?(bill|recurring|subscription|monthly charge)\b/.test(normalized) ||
+    /\bbill is usually\b/.test(normalized)
+  ) {
+    return "bill";
+  }
+
+  return null;
+}
+
+function extractRecurringObligationMerchantName(
+  message: string,
+  normalized: string,
+  treatment: "bill" | "not_bill",
+): string | null {
+  const patterns = treatment === "bill"
+    ? [
+        /\btreat\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bmark\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bcount\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bset\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\b(.+?)\s+(?:is|was|should be)\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bmy\s+(.+?)\s+bill\s+is\s+usually\b/i,
+      ]
+    : [
+        /\b(.+?)\s+(?:isn'?t|is not|wasn'?t|was not)\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bdon'?t\s+(?:treat|mark|count)\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bdo not\s+(?:treat|mark|count)\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bstop\s+(?:treating|marking|counting)\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+      ];
+
+  for (const pattern of patterns) {
+    const match = message.match(pattern);
+    const merchantName = cleanRecurringObligationMerchantName(match?.[1]);
+
+    if (merchantName) {
+      return merchantName;
+    }
+  }
+
+  return null;
+}
+
+function cleanRecurringObligationMerchantName(value: string | undefined): string | null {
+  const cleaned = value
+    ?.replace(/\b(my|the|a|an|that|this)\b/gi, " ")
+    .replace(/\b(for|to)\s+\$?\d[\d,.]*\b/gi, " ")
+    .replace(/\$\s*\d[\d,.]*/g, " ")
+    .replace(/\b\d+(?:\.\d{1,2})?\s*(?:dollars?|bucks?)\b/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!cleaned || cleaned.length < 2) {
+    return null;
+  }
+
+  return cleaned.slice(0, 120);
 }
 
 function isExplicitRecurringPrompt(normalized: string): boolean {
@@ -4997,32 +3773,6 @@ function getAccountManagementForcedTool(
     };
   }
 
-  const inclusionIntent = getAccountInclusionIntent(normalized);
-
-  if (inclusionIntent) {
-    return {
-      toolName: "set_account_inclusion",
-      args: {
-        account_name: inclusionIntent.accountName,
-        include_in_pip_cash: inclusionIntent.include,
-      },
-      requireCard: false,
-    };
-  }
-
-  const protectedSavingsIntent = getProtectedSavingsAccountIntent(normalized);
-
-  if (protectedSavingsIntent) {
-    return {
-      toolName: "set_account_protected_savings",
-      args: {
-        account_name: protectedSavingsIntent.accountName,
-        is_protected_savings: protectedSavingsIntent.protected,
-      },
-      requireCard: false,
-    };
-  }
-
   if (isRemoveInstitutionRequest(normalized)) {
     return {
       toolName: "request_remove_institution_confirmation",
@@ -5093,50 +3843,6 @@ function isAccountSelectionPrompt(normalized: string): boolean {
   );
 }
 
-function getAccountInclusionIntent(normalized: string): { include: boolean; accountName?: string } | null {
-  const excludeMatch = /^(ignore|exclude|hide|stop using|don'?t use|do not use)\s+(.+)$/.exec(normalized);
-
-  if (excludeMatch) {
-    return {
-      include: false,
-      accountName: cleanupAccountTarget(excludeMatch[2]),
-    };
-  }
-
-  const includeMatch = /^(use|include|start using)\s+(.+?)(?: again)?$/.exec(normalized);
-
-  if (includeMatch && /\b(account|checking|savings|card|that|this|business|shared)\b/.test(includeMatch[2])) {
-    return {
-      include: true,
-      accountName: cleanupAccountTarget(includeMatch[2]),
-    };
-  }
-
-  return null;
-}
-
-function getProtectedSavingsAccountIntent(normalized: string): { protected: boolean; accountName?: string } | null {
-  const unsetMatch = /^(don'?t|do not|stop)\s+treat(?:ing)?\s+(.+?)\s+as protected/.exec(normalized);
-
-  if (unsetMatch) {
-    return {
-      protected: false,
-      accountName: cleanupAccountTarget(unsetMatch[2]),
-    };
-  }
-
-  const setMatch = /^(make|mark|set)\s+(.+?)\s+(?:as |my )?protected savings/.exec(normalized);
-
-  if (setMatch) {
-    return {
-      protected: true,
-      accountName: cleanupAccountTarget(setMatch[2]),
-    };
-  }
-
-  return null;
-}
-
 function isRemoveInstitutionRequest(normalized: string): boolean {
   if (/\b(do not|don't|dont|not)\s+(remove|disconnect|unlink)\b/.test(normalized)) {
     return false;
@@ -5203,7 +3909,11 @@ function isExplicitBalancesPrompt(normalized: string): boolean {
 }
 
 function isNaturalAccountBalancePrompt(normalized: string): boolean {
-  if (!/\bbalances?\b/.test(normalized)) {
+  const hasBalanceIntent =
+    /\bbalances?\b/.test(normalized) ||
+    /\bhow much\b.{0,48}\b(checking|savings|account|bank)\b/.test(normalized);
+
+  if (!hasBalanceIntent) {
     return false;
   }
 
@@ -5308,139 +4018,6 @@ function extractExplicitPurchaseAmountCents(message: string): number | null {
   candidates.sort((left, right) => right.score - left.score || right.index - left.index);
 
   return candidates[0].amountCents;
-}
-
-function extractSavingsGoalAmountCents(message: string): number | null {
-  const candidates = extractMoneyAmountCandidates(message, 100_000_000);
-
-  if (!candidates.length) {
-    return null;
-  }
-
-  candidates.sort((left, right) => right.score - left.score || right.index - left.index);
-
-  return candidates[0].amountCents;
-}
-
-function extractMonthlyContributionCents(message: string): number | null {
-  const monthlyPattern =
-    /(?:\$|usd\s*)\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)\s*(?:\/|per\s+|a\s+)?month|\b(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)?\s*(?:\/|per\s+|a\s+)?month\b/gi;
-
-  for (const match of message.matchAll(monthlyPattern)) {
-    const rawAmount = match[1] ?? match[2];
-    const amount = Number(rawAmount.replaceAll(",", ""));
-
-    if (!Number.isFinite(amount)) {
-      continue;
-    }
-
-    const amountCents = Math.round(amount * 100);
-
-    if (amountCents > 0 && amountCents <= 100_000_000) {
-      return amountCents;
-    }
-  }
-
-  return null;
-}
-
-function extractMoneyAmountCandidates(message: string, maxCents: number) {
-  const amountPattern =
-    /(?:\$|usd\s*)\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?)|(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)/gi;
-  const normalized = message.toLowerCase();
-  const candidates: Array<{ amountCents: number; index: number; score: number }> = [];
-
-  for (const match of message.matchAll(amountPattern)) {
-    const rawAmount = match[1] ?? match[2];
-    const amount = Number(rawAmount.replaceAll(",", ""));
-
-    if (!Number.isFinite(amount)) {
-      continue;
-    }
-
-    const amountCents = Math.round(amount * 100);
-
-    if (amountCents <= 0 || amountCents > maxCents) {
-      continue;
-    }
-
-    const index = match.index ?? 0;
-    candidates.push({
-      amountCents,
-      index,
-      score: scoreSavingsGoalAmountCandidate(normalized, index),
-    });
-  }
-
-  return candidates;
-}
-
-function scoreSavingsGoalAmountCandidate(message: string, index: number): number {
-  const before = message.slice(Math.max(0, index - 64), index);
-  const after = message.slice(index, index + 64);
-  let score = 0;
-
-  if (/\b(goal|target|cost|costs|save|saving|trip|vacation|travel|car|home|house|wedding|emergency fund|big purchase)\b/.test(before)) {
-    score += 8;
-  }
-
-  if (/\b(goal|target|cost|costs|save|saving|trip|vacation|travel|car|home|house|wedding|emergency fund|big purchase)\b/.test(after)) {
-    score += 6;
-  }
-
-  if (/\bper month|\/month|a month\b/.test(after)) {
-    score -= 4;
-  }
-
-  return score;
-}
-
-function inferSavingsGoalName(message: string, normalized: string): string {
-  const saveForMatch = /\bsave\b.{0,16}\b(?:for|toward|towards)\s+(?:a |an |the |my )?([^,.?]+?)(?:\s+(?:that|which|and|but|for|by|with|it'?s|it's|it is|costs?|will|would)\b|$)/i.exec(message);
-
-  if (saveForMatch?.[1]) {
-    return cleanSavingsGoalName(saveForMatch[1]);
-  }
-
-  if (/\b(emergency fund)\b/.test(normalized)) {
-    return "Emergency fund";
-  }
-
-  if (/\b(vacation|travel|trip)\b/.test(normalized)) {
-    return "Trip";
-  }
-
-  if (/\b(car)\b/.test(normalized)) {
-    return "Car";
-  }
-
-  if (/\b(wedding)\b/.test(normalized)) {
-    return "Wedding";
-  }
-
-  if (/\b(house|home)\b/.test(normalized)) {
-    return "Home";
-  }
-
-  if (/\bbig purchase\b/.test(normalized)) {
-    return "Big purchase";
-  }
-
-  return "Savings goal";
-}
-
-function cleanSavingsGoalName(value: string): string {
-  const cleaned = value
-    .replace(/\b(it'?s|it is|that'?s|that is)\b.*$/i, "")
-    .replace(/\b(costs?|will cost|would cost|for)\b.*$/i, "")
-    .replace(/\$\s*\d[\d,]*(?:\.\d{1,2})?/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-  const trimmed = cleaned || "Savings goal";
-
-  return trimmed
-    .slice(0, 80)
-    .replace(/^./, (char) => char.toUpperCase());
 }
 
 function scorePurchaseAmountCandidate(message: string, index: number): number {
@@ -5606,77 +4183,6 @@ function isRepairablePlaidErrorCode(errorCode: string | null | undefined): boole
   ].includes((errorCode ?? "").toLowerCase());
 }
 
-export function toAgentErrorPayload(error: unknown): AgentErrorPayload {
-  if (error instanceof AgentUnavailableError) {
-    if (isAgentOutputError(error)) {
-      return {
-        code: "invalid-agent-output",
-        error: "AI returned an invalid response.",
-        detail: error.detail,
-        status: 502,
-      };
-    }
-
-    return {
-      code: error.code,
-      error: error.message,
-      detail: error.detail,
-      status: error.status,
-    };
-  }
-
-  const detail = getErrorDetail(error);
-
-  if (isModelOutputValidationDetail(detail)) {
-    return {
-      code: "invalid-agent-output",
-      error: "AI returned an invalid response.",
-      detail,
-      status: 502,
-    };
-  }
-
-  return {
-    code: "agent-error",
-    error: "Agent failed.",
-    detail,
-    status: 500,
-  };
-}
-
-function getErrorDetail(error: unknown): string {
-  if (error instanceof Error) {
-    return sanitizeErrorDetail(error.message);
-  }
-
-  return "Unknown AI error.";
-}
-
-function isAgentOutputError(error: AgentUnavailableError): boolean {
-  return error.status === 502 && (
-    [
-      "invalid-agent-output",
-      "model-returned-invalid-final-output",
-      "model-returned-invalid-guidance-card",
-      "model-returned-disallowed-final-message",
-      "model-promised-unsupported-card",
-      "model-returned-no-prompt-chips",
-      "model-returned-too-long-final-message",
-    ].includes(error.code) ||
-    isModelOutputValidationDetail(`${error.message} ${error.detail ?? ""}`)
-  );
-}
-
-function isModelOutputValidationDetail(detail: string): boolean {
-  return /invalid output type|schema validation|expected schema|too[_ -]?(?:big|long)|invalid final response|model[- ]output validation|final output schema|response validation|zoderror/i.test(
-    detail,
-  );
-}
-
-function sanitizeErrorDetail(detail: string): string {
-  return detail.replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]").slice(0, 180);
-}
-
 export const __agentTestHooks = {
   createBroadChatFallbackFinalOutput,
   getForcedAgentTool,
@@ -5687,5 +4193,14 @@ export const __agentTestHooks = {
   repairUnsupportedCardPromises,
   selectGuidanceCard,
   selectFinalResponseMode,
-  selectPromptChips,
+  selectVisibleModelOutput,
+  selectPromptChips: (
+    parsed: Parameters<typeof selectPromptChips>[0],
+    context: Parameters<typeof selectPromptChips>[1],
+    result: Parameters<typeof selectPromptChips>[2],
+    options: Omit<Parameters<typeof selectPromptChips>[3], "isSupportedCardPrompt">,
+  ) => selectPromptChips(parsed, context, result, {
+    ...options,
+    isSupportedCardPrompt,
+  }),
 };

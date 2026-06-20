@@ -66,6 +66,26 @@ describe("savings goals repository", () => {
     ]);
   });
 
+  it("defaults new goals into the legacy spendable-cash column", async () => {
+    const calls: unknown[][] = [];
+    const supabase = createClient({
+      calls,
+      singleRow: row(),
+    });
+
+    await createSavingsGoalForUser(supabase, "user-1", {
+      name: "Trip",
+      targetAmountCents: 500000,
+    });
+
+    expect(calls).toContainEqual([
+      "insert",
+      expect.objectContaining({
+        include_in_spendable_cash: true,
+      }),
+    ]);
+  });
+
   it("loads one goal scoped to the authenticated user", async () => {
     const calls: unknown[][] = [];
     const supabase = createClient({

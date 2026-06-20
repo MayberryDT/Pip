@@ -10,7 +10,7 @@ import {
   createPipReactionEventForUser,
   loadRecentPipReactionEventsForUser,
 } from "@/lib/data/pip-reactions";
-import { recordProductEvent } from "@/lib/data/product-events";
+import { recordProductEventSafely } from "@/lib/data/product-events";
 import {
   choosePipReaction,
   comparePipCashResults,
@@ -27,7 +27,14 @@ import type {
 import { ProviderSyncError, type ProviderConnectionStatus } from "@/lib/providers/provider-errors";
 import { getFinancialDataProvider, ProviderUnavailableError } from "@/lib/providers/provider-registry";
 import { sanitizeSensitiveText } from "@/lib/security/error-messages";
-import type { Account, FinancialSnapshot, PipCashResult, Transaction } from "@/lib/types";
+import type {
+  Account,
+  FinancialSnapshot,
+  PipCashResult,
+  SameDayLedgerItem,
+  SameDayLedgerTreatment,
+  Transaction,
+} from "@/lib/types";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 export const MANUAL_SYNC_RATE_LIMIT_MS = 60_000;
@@ -43,9 +50,33 @@ export type ManualSyncResult = {
   transactionCount: number;
   balanceCount: number;
   pipCashTodayCents: number;
+  previousSpendableCashTodayCents?: number;
+  currentSpendableCashTodayCents?: number;
+  spendableDeltaCents?: number;
+  sameDayNewSpendCents?: number;
+  sameDayNewTransactions?: ManualSyncSameDayTransactionSummary[];
+  createdReactionSummary?: ManualSyncCreatedReactionSummary;
   failedInstitutionCount: number;
   failures: ManualSyncFailure[];
   createdReactionType?: PipReactionType;
+};
+
+export type ManualSyncSameDayTransactionSummary = {
+  date: string;
+  label: string;
+  amountCents: number;
+  pending: boolean;
+  treatment: SameDayLedgerTreatment;
+};
+
+export type ManualSyncCreatedReactionSummary = {
+  reactionType: PipReactionType;
+  trigger: PipReactionTrigger;
+  currentState: string;
+  previousState?: string;
+  spendableDeltaCents: number;
+  intensity: 1 | 2 | 3;
+  summary?: string;
 };
 
 export type PipSyncReason =
@@ -220,6 +251,12 @@ export async function runProviderSync(
       currentResult: result,
       now,
     });
+    const previousSpendableCashTodayCents = previousPipCashResult
+      ? getDisplayedSpendableCashTodayCents(previousPipCashResult)
+      : undefined;
+    const sameDayNewTransactions = getSameDayNewTransactions(previousPipCashResult, result);
+    const sameDayNewSpendCents = getSameDayNewSpendCents(sameDayNewTransactions);
+
     await finishSyncRun(supabase, {
       syncRunId: syncRun.id,
       institutionId: input.institutionId ?? institutionIds[0],
@@ -269,8 +306,18 @@ export async function runProviderSync(
       transactionCount,
       balanceCount,
       pipCashTodayCents: spendableCashTodayCents,
+      ...(previousSpendableCashTodayCents !== undefined
+        ? {
+            previousSpendableCashTodayCents,
+            spendableDeltaCents: spendableCashTodayCents - previousSpendableCashTodayCents,
+          }
+        : {}),
+      currentSpendableCashTodayCents: spendableCashTodayCents,
+      sameDayNewSpendCents,
+      sameDayNewTransactions,
       failedInstitutionCount: syncFailures.length,
       failures: syncFailures.map(toManualSyncFailure),
+      ...(createdReaction ? { createdReactionSummary: toCreatedReactionSummary(createdReaction) } : {}),
       ...(createdReaction?.reactionType ? { createdReactionType: createdReaction.reactionType } : {}),
     };
   } catch (error) {
@@ -306,6 +353,61 @@ export async function runProviderSync(
 
     throw error;
   }
+}
+
+function getSameDayNewTransactions(
+  previousResult: PipCashResult | null,
+  currentResult: PipCashResult,
+): ManualSyncSameDayTransactionSummary[] {
+  const previousItems = previousResult?.spendableCashToday?.sameDayLedger.items ?? [];
+  const previousKeys = new Set(previousItems.map(getSameDayLedgerItemKey));
+  const currentItems = currentResult.spendableCashToday?.sameDayLedger.items ?? [];
+
+  return currentItems
+    .filter((item) => !previousKeys.has(getSameDayLedgerItemKey(item)))
+    .map(toSameDayTransactionSummary);
+}
+
+function getSameDayLedgerItemKey(item: SameDayLedgerItem): string {
+  return [
+    item.date,
+    sanitizeSensitiveText(item.label).trim().toLowerCase(),
+    item.amountCents,
+    item.pending ? "pending" : "posted",
+    item.treatment,
+  ].join("|");
+}
+
+function toSameDayTransactionSummary(
+  item: SameDayLedgerItem,
+): ManualSyncSameDayTransactionSummary {
+  return {
+    date: item.date,
+    label: sanitizeSensitiveText(item.label).slice(0, 120),
+    amountCents: item.amountCents,
+    pending: item.pending,
+    treatment: item.treatment,
+  };
+}
+
+function getSameDayNewSpendCents(items: ManualSyncSameDayTransactionSummary[]): number {
+  return items
+    .filter((item) => item.treatment === "daily_spend")
+    .reduce((sum, item) => sum + Math.max(0, -item.amountCents), 0);
+}
+
+function toCreatedReactionSummary(
+  reaction: NonNullable<Awaited<ReturnType<typeof maybeCreateSyncReaction>>>,
+): ManualSyncCreatedReactionSummary {
+  return {
+    reactionType: reaction.reactionType,
+    trigger: reaction.trigger,
+    currentState: reaction.currentState,
+    ...(reaction.previousState ? { previousState: reaction.previousState } : {}),
+    spendableDeltaCents: reaction.spendableDeltaCents,
+    intensity: reaction.intensity,
+    ...(reaction.summary ? { summary: sanitizeSensitiveText(reaction.summary).slice(0, 160) } : {}),
+  };
 }
 
 async function syncProviderConnections(
@@ -909,7 +1011,7 @@ async function recordSyncCompletionEvent(
   } satisfies Json;
 
   if (input.reason === "manual") {
-    await recordProductEvent(
+    await recordProductEventSafely(
       supabase,
       input.userId,
       input.status === "partial" ? "manual_sync_partial" : "manual_sync_succeeded",
@@ -918,7 +1020,7 @@ async function recordSyncCompletionEvent(
     return;
   }
 
-  await recordProductEvent(supabase, input.userId, "pip_sync_job_completed", {
+  await recordProductEventSafely(supabase, input.userId, "pip_sync_job_completed", {
     ...commonProperties,
     reason: input.reason,
     status: input.status,
@@ -948,11 +1050,11 @@ async function recordSyncFailureEvent(
   } satisfies Json;
 
   if (input.reason === "manual") {
-    await recordProductEvent(supabase, input.userId, "manual_sync_failed", commonProperties);
+    await recordProductEventSafely(supabase, input.userId, "manual_sync_failed", commonProperties);
     return;
   }
 
-  await recordProductEvent(supabase, input.userId, "pip_sync_job_failed", {
+  await recordProductEventSafely(supabase, input.userId, "pip_sync_job_failed", {
     ...commonProperties,
     reason: input.reason,
   });

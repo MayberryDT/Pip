@@ -1,7 +1,7 @@
 import type { Account, FinancialSnapshot, Transaction } from "@/lib/types";
 
 export function isAccountActiveInPipCash(account: Account): boolean {
-  return account.active !== false && account.includedInPipCash !== false;
+  return account.active !== false;
 }
 
 export function filterPipCashAccounts(accounts: Account[]): Account[] {

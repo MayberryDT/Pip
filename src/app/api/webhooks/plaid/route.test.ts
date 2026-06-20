@@ -126,6 +126,19 @@ describe("POST /api/webhooks/plaid", () => {
         source_sync_job_id: "job-1",
       }),
     );
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase.client,
+      "user-1",
+      "plaid_webhook_received",
+      expect.objectContaining({
+        webhookType: "TRANSACTIONS",
+        webhookCode: "SYNC_UPDATES_AVAILABLE",
+        itemId: "item-1",
+        institutionId: "institution-1",
+        syncJobId: "job-1",
+        created: true,
+      }),
+    );
   });
 
   it("records and ignores unsupported Plaid webhook codes", async () => {
@@ -164,6 +177,68 @@ describe("POST /api/webhooks/plaid", () => {
       expect.objectContaining({
         processing_status: "ignored",
         error_message: "unsupported",
+      }),
+    );
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase.client,
+      "user-1",
+      "plaid_webhook_ignored",
+      expect.objectContaining({
+        webhookType: "TRANSACTIONS",
+        webhookCode: "DEFAULT_UPDATE",
+        itemId: "item-1",
+        reason: "unsupported",
+      }),
+    );
+  });
+
+  it("records failed Plaid webhook enqueue attempts", async () => {
+    enableSupabaseEnv();
+    const supabase = createWebhookSupabaseClient();
+    routeMocks.createSupabaseAdminClient.mockReturnValue(supabase.client);
+    routeMocks.getPipSyncFeatureFlags.mockReturnValue({
+      syncJobsEnabled: true,
+      scheduledSyncEnabled: false,
+      scheduledSyncBatchSize: 10,
+      scheduledSyncMaxJobs: 10,
+      scheduledSyncMinIntervalMinutes: 240,
+      plaidWebhookVerify: false,
+    });
+    routeMocks.loadPlaidCredentialByItemId.mockResolvedValue({
+      userId: "user-1",
+      institutionId: "institution-1",
+    });
+    routeMocks.enqueuePipSyncJob.mockRejectedValue(new Error("queue insert failed: access_token=provider-secret"));
+
+    const response = await POST(
+      request({
+        webhook_type: "TRANSACTIONS",
+        webhook_code: "SYNC_UPDATES_AVAILABLE",
+        item_id: "item-1",
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: "Plaid webhook processing failed.",
+    });
+    expect(supabase.webhookUpdates).toContainEqual(
+      expect.objectContaining({
+        processing_status: "failed",
+        user_id: "user-1",
+        error_message: "queue insert failed: access_token=[redacted]",
+      }),
+    );
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase.client,
+      "user-1",
+      "plaid_webhook_failed",
+      expect.objectContaining({
+        webhookType: "TRANSACTIONS",
+        webhookCode: "SYNC_UPDATES_AVAILABLE",
+        itemId: "item-1",
+        institutionId: "institution-1",
+        error: "queue insert failed: access_token=[redacted]",
       }),
     );
   });

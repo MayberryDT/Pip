@@ -154,6 +154,39 @@ describe("POST /api/providers/teller/enrollment", () => {
     expect(response.headers.get("set-cookie")).toContain("pip_teller_nonce=");
   });
 
+  it("records a failed Teller connection event when credential storage fails", async () => {
+    enableSupabaseEnv();
+    const admin = createAdminSupabase();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createServerSupabase({ id: "user-1" }));
+    routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
+    routeMocks.getTellerConfig.mockReturnValue({
+      environment: "sandbox",
+    });
+    routeMocks.storeTellerCredential.mockRejectedValue(
+      new Error("store failed access_token=teller-token sk-test-secret"),
+    );
+    routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
+
+    const response = await POST(
+      jsonRequest(validEnrollmentBody({ nonce: "nonce-123" }), {
+        cookie: "pip_teller_nonce=nonce-123",
+      }),
+    );
+
+    expect(response.status).toBe(500);
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      admin,
+      "user-1",
+      "connect_session_failed",
+      {
+        provider: "teller",
+        status: "enrollment-storage-failed",
+        institutionName: "Northstar Bank",
+        error: "store failed access_token=[redacted] [redacted]",
+      },
+    );
+  });
+
   it("redacts secret-shaped internal errors before returning them", async () => {
     enableSupabaseEnv();
     routeMocks.createSupabaseServerClient.mockResolvedValue(createServerSupabase({ id: "user-1" }));

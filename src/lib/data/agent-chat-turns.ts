@@ -1,6 +1,7 @@
 import { appendFile, readFile } from "node:fs/promises";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentResponse } from "@/lib/agent/card-types";
+import { getSafeErrorMessage, sanitizeSensitiveText } from "@/lib/security/error-messages";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 type AgentChatTurnRow = Database["public"]["Tables"]["agent_chat_turns"]["Row"];
@@ -60,9 +61,9 @@ export async function recordAgentChatTurn(
   const { error } = await supabase.from("agent_chat_turns").insert({
     user_id: input.userId ?? null,
     conversation_id: input.conversationId,
-    user_message: input.userMessage,
-    assistant_message: response?.message ?? null,
-    error_message: input.errorMessage ?? null,
+    user_message: sanitizeSensitiveText(input.userMessage),
+    assistant_message: response?.message ? sanitizeSensitiveText(response.message) : null,
+    error_message: input.errorMessage ? sanitizeSensitiveText(input.errorMessage) : null,
     response_mode: response?.responseMode ?? null,
     used_tools: response?.usedTools ?? [],
     card_types: response?.cards.map((card) => card.type) ?? [],
@@ -154,9 +155,9 @@ async function appendLocalAgentChatTurn(input: AgentChatTurnInput) {
     id: createLocalTurnId(),
     userId: input.userId ?? null,
     conversationId: input.conversationId,
-    userMessage: input.userMessage,
-    assistantMessage: response?.message ?? null,
-    errorMessage: input.errorMessage ?? null,
+    userMessage: sanitizeSensitiveText(input.userMessage),
+    assistantMessage: response?.message ? sanitizeSensitiveText(response.message) : null,
+    errorMessage: input.errorMessage ? sanitizeSensitiveText(input.errorMessage) : null,
     responseMode: response?.responseMode ?? null,
     usedTools: response?.usedTools ?? [],
     cardTypes: response?.cards.map((card) => card.type) ?? [],
@@ -174,8 +175,8 @@ async function appendLocalAgentChatTurn(input: AgentChatTurnInput) {
 function summarizePromptChips(response: AgentResponse | undefined): Json {
   return (response?.promptChips ?? []).map((chip) => ({
     id: chip.id,
-    label: chip.label,
-    prompt: chip.prompt,
+    label: sanitizeSensitiveText(chip.label),
+    prompt: sanitizeSensitiveText(chip.prompt),
   }));
 }
 
@@ -208,9 +209,5 @@ function createLocalTurnId(): string {
 }
 
 function getSafeLogError(error: unknown): string {
-  if (!(error instanceof Error)) {
-    return "Unknown chat logging error.";
-  }
-
-  return error.message.slice(0, 180);
+  return getSafeErrorMessage(error, "Unknown chat logging error.").slice(0, 180);
 }

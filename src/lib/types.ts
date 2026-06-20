@@ -81,6 +81,73 @@ export type ClassifiedSpendableTransaction = {
   reason: string;
 };
 
+export type SameDayLedgerTreatment =
+  | "daily_spend"
+  | "daily_refund"
+  | "expected_bill"
+  | "bill_variance"
+  | "card_settlement"
+  | "transfer"
+  | "ignored";
+
+export type SameDayLedgerItem = {
+  transactionId: string;
+  accountId: string;
+  date: string;
+  label: string;
+  amountCents: number;
+  treatment: SameDayLedgerTreatment;
+  expectedAmountCents?: number;
+  varianceCents?: number;
+  pending: boolean;
+  reason: string;
+};
+
+export type SameDayLedger = {
+  asOfDate: string;
+  items: SameDayLedgerItem[];
+  discretionarySpendCents: number;
+  refundCents: number;
+  billVarianceCents: number;
+  pendingSpendCents: number;
+};
+
+export type RecurringObligation = {
+  merchantKey: string;
+  label: string;
+  expectedAmountCents: number;
+  expectedDay?: number;
+};
+
+export type RecurringObligationRuleSource =
+  | "user_confirmed"
+  | "user_correction"
+  | "auto_detected";
+
+export type RecurringObligationRuleStatus = "active" | "ignored";
+
+export type RecurringObligationRule = RecurringObligation & {
+  id: string;
+  userId: string;
+  cadence: "monthly";
+  source: RecurringObligationRuleSource;
+  status: RecurringObligationRuleStatus;
+  lastConfirmedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RecurringObligationSuggestion = RecurringObligation & {
+  transactionCount: number;
+  source: "auto_detected";
+};
+
+export type RecurringObligationModel = {
+  confirmed: RecurringObligation[];
+  suggestions: RecurringObligationSuggestion[];
+  ignoredMerchantKeys: string[];
+};
+
 export type PipCashDriver = {
   id: string;
   label: string;
@@ -121,6 +188,12 @@ export type RollingWindow = {
 export type SpendableCashTodayResult = {
   metricVersion: "v2";
   spendableCashTodayCents: number;
+  startingSpendableCashTodayCents: number;
+  sameDayDiscretionarySpendCents: number;
+  sameDayRefundCents: number;
+  billVarianceCents: number;
+  sameDayPendingSpendCents: number;
+  sameDayLedger: SameDayLedger;
   shortfallCents: number;
   patternShortfallCents: number;
   behaviorShortfallCents: number;
@@ -187,6 +260,7 @@ export type FinancialSnapshot = {
   transactions: Transaction[];
   settings: UserSettings;
   savingsGoals?: SavingsGoal[];
+  recurringObligationRules?: RecurringObligationRule[];
 };
 
 export type FinancialDataState = {

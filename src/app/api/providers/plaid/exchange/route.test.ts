@@ -144,6 +144,16 @@ describe("POST /api/providers/plaid/exchange", () => {
         providerInstitutionId: "ins_1",
       },
     );
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      admin,
+      "user-1",
+      "plaid_exchange_succeeded",
+      {
+        provider: "plaid",
+        institutionName: "Northstar Bank",
+        providerInstitutionId: "ins_1",
+      },
+    );
   });
 
   it("reuses a failed same-institution Plaid row when reconnect returns a new item id", async () => {
@@ -220,7 +230,9 @@ describe("POST /api/providers/plaid/exchange", () => {
 
   it("redacts secret-shaped internal errors before returning them", async () => {
     enableSupabaseEnv();
+    const admin = createAdminSupabase();
     routeMocks.createSupabaseServerClient.mockResolvedValue(createServerSupabase({ id: "user-1" }));
+    routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
     routeMocks.getPlaidConfig.mockReturnValue({
       environment: "sandbox",
     });
@@ -234,6 +246,16 @@ describe("POST /api/providers/plaid/exchange", () => {
     expect(response.status).toBe(500);
     expect(payload.error).toBe(
       "Plaid failed with PLAID_SECRET=[redacted] [redacted] public_token=[redacted]",
+    );
+    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+      admin,
+      "user-1",
+      "plaid_exchange_failed",
+      {
+        provider: "plaid",
+        institutionName: "Plaid institution",
+        error: "Plaid failed with PLAID_SECRET=[redacted] [redacted] public_token=[redacted]",
+      },
     );
     expect(JSON.stringify(payload)).not.toContain("secret");
     expect(JSON.stringify(payload)).not.toContain("public-123");

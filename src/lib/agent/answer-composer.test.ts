@@ -126,6 +126,101 @@ describe("answer composer", () => {
     expect(answer.answerPatternId).toBe("forecast");
   });
 
+  it("uses the model bridge for bill cards instead of a canned recurring answer", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "I found two likely bills coming up, with Netflix looking closest.",
+      },
+      userMessage: "What bills are coming up?",
+      cards: [
+        {
+          type: "recurring_activity",
+          title: "Likely repeats",
+          asOfDate: "2026-06-20",
+          horizonDays: 45,
+          items: [
+            {
+              id: "netflix",
+              label: "Netflix",
+              expectedDate: "2026-06-27",
+              amountCents: -1799,
+              kind: "purchase",
+              cadence: "monthly",
+              confidence: "medium",
+              sourceTransactionCount: 3,
+              lastSeenDate: "2026-05-27",
+            },
+          ],
+        },
+      ],
+      usedTools: ["get_recurring_activity"],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "I found two likely bills coming up, with Netflix looking closest.",
+      answerPatternId: "model",
+    });
+  });
+
+  it("uses deterministic bridge copy for empty recurring cards without freshness language", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "I don’t see any upcoming subscriptions in my current view.",
+      },
+      userMessage: "Do I have any subscriptions coming up?",
+      cards: [
+        {
+          type: "recurring_activity",
+          title: "Likely recurring activity",
+          asOfDate: "2026-06-20",
+          horizonDays: 45,
+          items: [],
+        },
+      ],
+      usedTools: ["get_recurring_activity"],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "I checked likely repeats and don’t see upcoming subscriptions.",
+      answerPatternId: "recurring-activity-empty",
+    });
+  });
+
+  it("uses the model bridge for savings-goal cards instead of a canned setup answer", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "Trip is now tracked, and its monthly plan counts in Spendable Cash Today.",
+      },
+      userMessage: "Create my trip savings goal",
+      cards: [
+        {
+          type: "savings_goal_plan",
+          title: "Savings goal",
+          goalId: "goal-trip",
+          name: "Trip",
+          targetAmountCents: 500000,
+          currentAmountCents: 0,
+          remainingCents: 500000,
+          monthlyContributionCents: 30000,
+          includeInSpendableCash: true,
+          summary: "$5,000 left for Trip.",
+        },
+      ],
+      usedTools: ["create_savings_goal"],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "Trip is now tracked, and its monthly plan counts in Spendable Cash Today.",
+      answerPatternId: "model",
+    });
+  });
+
   it("uses cutback insight card facts instead of a generic insight bridge", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {

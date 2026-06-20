@@ -5,7 +5,9 @@ import {
   isDedupedCreditCardPayment,
 } from "@/lib/pip-cash/dedupe-credit-card-payments";
 import { toPipCashSnapshot } from "@/lib/pip-cash/account-filters";
-import { getProtectedSavingsGoalMonthlyCents } from "@/lib/savings-goals/plan";
+import { buildRecurringObligations } from "@/lib/pip-cash/recurring-obligations";
+import { buildSameDayLedger } from "@/lib/pip-cash/same-day-ledger";
+import { getActiveSavingsGoalMonthlyCents } from "@/lib/savings-goals/plan";
 import type {
   Account,
   ClassifiedSpendableTransaction,
@@ -68,9 +70,13 @@ export function calculateSpendableCashToday(
   const accountById = new Map(snapshot.accounts.map((account) => [account.id, account]));
   const transactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts)
     .filter((transaction) => transaction.date <= asOfDate);
-  const recurringKeys = detectRecurringObligationKeys(transactions);
+  const baselineTransactions = transactions.filter((transaction) => transaction.date < asOfDate);
+  const recurringKeys = detectRecurringObligationKeys(baselineTransactions);
   const classifiedTransactions = transactions.map((transaction) =>
     classifySpendableTransaction(transaction, accountById, recurringKeys),
+  );
+  const baselineClassifiedTransactions = classifiedTransactions.filter(
+    (item) => item.transaction.date < asOfDate,
   );
   const completedMonthKeys = enumerateMonthKeys(lookbackStartDate, lookbackEndDate);
   const completedSummaries = completedMonthKeys.map((month) =>
@@ -86,9 +92,18 @@ export function calculateSpendableCashToday(
     getMonthKey(asOfDate),
     classifiedTransactions.filter(
       (item) =>
-        item.transaction.date >= currentMonthStartDate && item.transaction.date <= asOfDate,
+        item.transaction.date >= currentMonthStartDate && item.transaction.date < asOfDate,
     ),
   );
+  const recurringObligations = buildRecurringObligations({
+    snapshot,
+    rules: snapshot.recurringObligationRules ?? [],
+  });
+  const sameDayLedger = buildSameDayLedger({
+    asOfDate,
+    transactions: classifiedTransactions,
+    obligations: recurringObligations.confirmed,
+  });
   const baselineSummaries = activeCompletedSummaries.length > 0
     ? activeCompletedSummaries
     : [scalePartialMonthSummary(currentMonthSummary, currentMonthElapsedDays)];
@@ -99,7 +114,7 @@ export function calculateSpendableCashToday(
   );
   const averageMonthlyRecurringObligationsCents = Math.max(
     robustAverage(baselineSummaries.map((summary) => summary.recurringObligationsCents)),
-    estimateObservedRecurringObligations(classifiedTransactions),
+    estimateObservedRecurringObligations(baselineClassifiedTransactions),
   );
   const averageMonthlyEverydaySpendCents = robustAverage(
     baselineSummaries.map((summary) =>
@@ -108,7 +123,10 @@ export function calculateSpendableCashToday(
   );
   const protectedSavingsMonthlyCents = snapshot.settings.protectedSavingsMonthlyCents;
   const monthlySavingsCents = protectedSavingsMonthlyCents;
-  const savingsGoalMonthlyCents = getProtectedSavingsGoalMonthlyCents(snapshot.savingsGoals);
+  const savingsGoalMonthlyCents = getActiveSavingsGoalMonthlyCents(
+    snapshot.savingsGoals,
+    asOfDate,
+  );
   const totalSavingsProtectedMonthlyCents = monthlySavingsCents + savingsGoalMonthlyCents;
   const hiddenCushionCents = calculateHiddenCushion(averageMonthlyIncomeCents);
   const monthlyEverydayPoolCents =
@@ -144,7 +162,10 @@ export function calculateSpendableCashToday(
   const adaptiveDailyAllowanceCents =
     baselineDailyAllowanceCents + behaviorAdjustmentCents;
   const availableCashBeforePendingCents = calculateAvailableCashGuardrail(snapshot.accounts);
-  const pendingCommittedSpendCents = calculatePendingCommittedSpend(classifiedTransactions);
+  const pendingCommittedSpendCents = calculatePendingCommittedSpend(
+    classifiedTransactions,
+    asOfDate,
+  );
   const availableCashGuardrailCents = Math.max(
     0,
     availableCashBeforePendingCents - pendingCommittedSpendCents,
@@ -162,11 +183,17 @@ export function calculateSpendableCashToday(
   const lowConfidenceDailyCapCents = completedMonthCount === 0
     ? LOW_CONFIDENCE_DAILY_CAP_CENTS
     : undefined;
-  const spendableCashTodayCents = lowConfidenceDailyCapCents === undefined
+  const startingSpendableCashTodayCents = lowConfidenceDailyCapCents === undefined
     ? cashCappedAllowanceCents
     : Math.min(cashCappedAllowanceCents, lowConfidenceDailyCapCents);
   const lowConfidenceCapApplied =
     lowConfidenceDailyCapCents !== undefined && cashCappedAllowanceCents > lowConfidenceDailyCapCents;
+  const liveSpendableCashTodayCents =
+    startingSpendableCashTodayCents -
+    sameDayLedger.discretionarySpendCents +
+    sameDayLedger.refundCents +
+    sameDayLedger.billVarianceCents;
+  const spendableCashTodayCents = Math.max(0, liveSpendableCashTodayCents);
   const cashGuardrailApplied = cashRealityAdjustmentCents >= materialDailyChangeCents;
   const cashGuardrailShareOfBaseline =
     baselineDailyAllowanceCents > 0
@@ -181,6 +208,7 @@ export function calculateSpendableCashToday(
     Math.round(patternShortfallCents / DAYS_PER_MONTH),
     behaviorShortfallCents,
     cashShortfallCents,
+    Math.max(0, -liveSpendableCashTodayCents),
   );
   const warnings = input.warnings ?? [];
   const dataStates = buildSpendableDataStates({
@@ -209,6 +237,12 @@ export function calculateSpendableCashToday(
   return {
     metricVersion: "v2",
     spendableCashTodayCents,
+    startingSpendableCashTodayCents,
+    sameDayDiscretionarySpendCents: sameDayLedger.discretionarySpendCents,
+    sameDayRefundCents: sameDayLedger.refundCents,
+    billVarianceCents: sameDayLedger.billVarianceCents,
+    sameDayPendingSpendCents: sameDayLedger.pendingSpendCents,
+    sameDayLedger,
     shortfallCents,
     patternShortfallCents,
     behaviorShortfallCents,
@@ -589,10 +623,17 @@ function calculateAvailableCashGuardrail(accounts: Account[]): number {
     );
 }
 
-function calculatePendingCommittedSpend(items: ClassifiedSpendableTransaction[]): number {
+function calculatePendingCommittedSpend(
+  items: ClassifiedSpendableTransaction[],
+  asOfDate: string,
+): number {
   return items
     .filter((item) => {
       if (!item.transaction.pending) {
+        return false;
+      }
+
+      if (item.transaction.date === asOfDate) {
         return false;
       }
 
@@ -762,7 +803,7 @@ function buildSpendableDrivers(input: {
       ? [{
           id: "savings-goals",
           label: "Savings goals",
-          detail: "Protected goal contributions are kept out of Spendable Cash Today.",
+          detail: "Active savings goals are folded into today's number.",
           amountCents: -input.savingsGoalMonthlyCents,
           tone: "neutral" as const,
         }]

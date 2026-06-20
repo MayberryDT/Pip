@@ -6,17 +6,35 @@ import {
   qualityHoldoutCases,
   qualityWorkingCases,
 } from "../tests/fixtures/agent-quality/champion-challenger-cases.mjs";
+import {
+  buildMajorCapabilityExpandedCases,
+  buildMajorCapabilityProductionSafeCases,
+  majorCapabilities,
+  majorCapabilityEvalCases,
+  majorCapabilityMultiTurnCases,
+} from "../tests/fixtures/agent-major-capabilities.mjs";
 
 const DEFAULT_BASE_URL = "http://127.0.0.1:3000";
 const DEFAULT_REPORT_PATH = "/tmp/pip-agent-eval-report.json";
 const DEFAULT_TIMEOUT_MS = 45_000;
 const MAJOR_CAPABILITY_SUITE = "major-capabilities";
+const MAJOR_CAPABILITY_EXPANDED_SUITE = "major-capabilities-expanded";
+const MAJOR_CAPABILITY_MULTITURN_SUITE = "major-capabilities-multiturn";
+const MAJOR_CAPABILITY_PRODUCTION_SAFE_SUITE = "major-capabilities-production-safe";
 const QUALITY_WORKING_SUITE = "quality-working";
 const QUALITY_HOLDOUT_SUITE = "quality-holdout";
 const EVALUATION_METHOD = "pass/fail per scenario with shared response-contract checks";
 const QUALITY_BAR = {
   requiredPassRate: "all selected cases",
   rerunPolicy: "fix root cause, rerun affected scenarios, then rerun complete suite",
+};
+
+export {
+  buildMajorCapabilityExpandedCases,
+  buildMajorCapabilityProductionSafeCases,
+  majorCapabilities,
+  majorCapabilityEvalCases,
+  majorCapabilityMultiTurnCases,
 };
 
 const ALL_CARD_TYPES = [
@@ -252,7 +270,7 @@ export const agentEvalCases = [
   },
   {
     id: "phone-savings-japan-context",
-    description: "Amount/date follow-up with a pending Japan savings goal should create the goal.",
+    description: "Amount/date follow-up with a pending Japan savings goal should preview and ask for confirmation before saving.",
     message: "It costs $3,000 by December 1st",
     history: [
       { role: "user", content: "I want to save for Japan" },
@@ -265,9 +283,11 @@ export const agentEvalCases = [
         missing: ["target_amount"],
       },
     },
-    expectedTools: ["create_savings_goal"],
-    expectedCards: ["savings_goal_plan"],
-    expectedResponseMode: "show_card",
+    expectedPendingActionType: "create_savings_goal",
+    expectedResponseMode: "clarify",
+    expectNoCards: true,
+    forbiddenTools: ["create_savings_goal"],
+    forbiddenCards: ["savings_goal_plan"],
     forbidFalseSavingsCreate: true,
   },
   {
@@ -415,110 +435,6 @@ export const agentEvalCases = [
     message: "Should I open a balance transfer card?",
     expectNoCards: true,
     forbiddenCards: ["guidance_card", "purchase_simulation"],
-  },
-];
-
-export const majorCapabilityEvalCases = [
-  {
-    id: "major-guest-start",
-    capability: "Guest start and chat tone",
-    description: "A first-time user greeting should stay conversational without inventing a card.",
-    message: "hi",
-    expectNoCards: true,
-    expectedResponseMode: "chat_only",
-  },
-  {
-    id: "major-spendable-explanation",
-    capability: "Spendable Cash explanation",
-    description: "A why-this-number prompt should use deterministic drivers and show the explanation card.",
-    message: "Why this number?",
-    expectedTools: ["get_pip_cash_drivers"],
-    expectedCards: ["pip_cash_explanation"],
-  },
-  {
-    id: "major-spendable-math",
-    capability: "Calculation transparency",
-    description: "A math prompt should use deterministic math and show the calculation card.",
-    message: "Show the math",
-    expectedTools: ["get_pip_cash_math"],
-    expectedCards: ["math_breakdown"],
-  },
-  {
-    id: "major-recent-transactions",
-    capability: "Recent transaction read",
-    description: "A natural purchase-history prompt should show recent transactions.",
-    message: "What did I buy lately?",
-    expectedTools: ["get_recent_transactions"],
-    expectedCards: ["recent_transactions"],
-  },
-  {
-    id: "major-spending-breakdown",
-    capability: "Spending breakdown",
-    description: "A category prompt should show grouped spending facts.",
-    message: "Where is my money going by category?",
-    expectedTools: ["get_spending_breakdown"],
-    expectedCards: ["spending_breakdown"],
-  },
-  {
-    id: "major-recurring-activity",
-    capability: "Recurring bills and subscriptions",
-    description: "A subscription prompt should show recurring activity.",
-    message: "Do I have any subscriptions coming up?",
-    expectedTools: ["get_recurring_activity"],
-    expectedCards: ["recurring_activity"],
-  },
-  {
-    id: "major-forecast",
-    capability: "Spendable Cash forecast",
-    description: "Trend language should show the forecast card instead of making a card-less promise.",
-    message: "Show 7 day trend",
-    expectedTools: ["forecast_spendable_cash"],
-    expectedCards: ["spendable_cash_forecast"],
-  },
-  {
-    id: "major-purchase-test",
-    capability: "Purchase simulation",
-    description: "A specific spend question should simulate the purchase.",
-    message: "Can I spend $50?",
-    expectedTools: ["simulate_purchase", "get_financial_guidance_context"],
-    expectedCards: ["purchase_simulation"],
-  },
-  {
-    id: "major-cutback-opportunity",
-    capability: "Actionable guidance",
-    description: "A cutback prompt should use grounded spending opportunity logic.",
-    message: "Where am I overspending?",
-    scenario: "cutback-dining",
-    expectedTools: ["get_spending_opportunity"],
-    expectedCards: ["insight_card"],
-    forbiddenCards: ["guidance_card", "spending_breakdown", "recurring_activity", "purchase_simulation"],
-    forbidGenericCutbackAdvice: true,
-  },
-  {
-    id: "major-true-balances",
-    capability: "Actual balances",
-    description: "Bank-balance wording should show balances, not account-management setup.",
-    message: "Show my bank balance",
-    expectedTools: ["get_true_balances"],
-    expectedCards: ["true_balances"],
-    forbiddenTools: ["get_connected_accounts"],
-  },
-  {
-    id: "major-savings-goal-routing",
-    capability: "Savings goal setup",
-    description: "A concrete savings-goal request should route to savings-goal creation.",
-    message: "I want to save for a trip that costs $5,000",
-    expectedTools: ["create_savings_goal"],
-    routingOnly: true,
-  },
-  {
-    id: "major-delete-data-safety",
-    capability: "Privacy and destructive action safety",
-    description: "A delete-data request should ask for confirmation instead of deleting immediately.",
-    message: "Delete my data",
-    expectedTools: ["request_delete_data_confirmation"],
-    forbiddenTools: ["delete_user_data"],
-    routingOnly: true,
   },
 ];
 
@@ -1019,6 +935,8 @@ export async function runAgentEval({
   const normalizedSuite = normalizeSuiteName(suite, routingOnly);
   const casePool = cases ?? selectCasePool({ suite: normalizedSuite, routingOnly });
   const selectedCases = selectEvalCases(casePool, caseIds);
+  const shouldRedactReport = redactReport || normalizedSuite === MAJOR_CAPABILITY_PRODUCTION_SAFE_SUITE;
+  const shouldIncludeRawResponse = includeRawResponse && normalizedSuite !== MAJOR_CAPABILITY_PRODUCTION_SAFE_SUITE;
   const results = [];
   const scoringResults = [];
 
@@ -1064,12 +982,12 @@ export async function runAgentEval({
       httpOk,
       error: networkError,
     });
-    const reportEvaluation = redactReport ? redactEvaluationForReport(evaluation) : evaluation;
+    const reportEvaluation = shouldRedactReport ? redactEvaluationForReport(evaluation) : evaluation;
 
     const baseResult = {
       id: caseDef.id,
       description: caseDef.description,
-      inputMessage: redactReport ? "[redacted]" : caseDef.message,
+      inputMessage: shouldRedactReport ? "[redacted]" : caseDef.message,
       group: caseDef.group,
       quality: caseDef.quality,
       scenario: requestBody.scenario,
@@ -1082,13 +1000,13 @@ export async function runAgentEval({
       inputMessage: caseDef.message,
       ...evaluation,
       responseMessage: evaluation.message,
-      ...(includeRawResponse ? { rawResponse: payload } : {}),
+      ...(shouldIncludeRawResponse ? { rawResponse: payload } : {}),
     };
     const result = {
       ...baseResult,
       ...reportEvaluation,
       responseMessage: reportEvaluation.message,
-      ...(includeRawResponse ? { rawResponse: payload } : {}),
+      ...(shouldIncludeRawResponse ? { rawResponse: payload } : {}),
     };
 
     results.push(result);
@@ -1143,8 +1061,13 @@ function mergeQualityScoresIntoReport({ report, scoringReport }) {
 }
 
 function normalizeSuiteName(suite, routingOnly) {
-  if (suite === MAJOR_CAPABILITY_SUITE) {
-    return MAJOR_CAPABILITY_SUITE;
+  if (
+    suite === MAJOR_CAPABILITY_SUITE ||
+    suite === MAJOR_CAPABILITY_EXPANDED_SUITE ||
+    suite === MAJOR_CAPABILITY_MULTITURN_SUITE ||
+    suite === MAJOR_CAPABILITY_PRODUCTION_SAFE_SUITE
+  ) {
+    return suite;
   }
 
   if (suite === QUALITY_WORKING_SUITE || suite === QUALITY_HOLDOUT_SUITE) {
@@ -1161,6 +1084,18 @@ function normalizeSuiteName(suite, routingOnly) {
 function selectCasePool({ suite, routingOnly }) {
   if (suite === MAJOR_CAPABILITY_SUITE) {
     return majorCapabilityEvalCases;
+  }
+
+  if (suite === MAJOR_CAPABILITY_EXPANDED_SUITE) {
+    return buildMajorCapabilityExpandedCases();
+  }
+
+  if (suite === MAJOR_CAPABILITY_MULTITURN_SUITE) {
+    return majorCapabilityMultiTurnCases;
+  }
+
+  if (suite === MAJOR_CAPABILITY_PRODUCTION_SAFE_SUITE) {
+    return buildMajorCapabilityProductionSafeCases();
   }
 
   if (suite === QUALITY_WORKING_SUITE) {
@@ -1264,14 +1199,19 @@ Usage:
   npm run eval:agent
   npm run eval:agent -- --routing-only
   npm run eval:agent:major
+  npm run eval:agent -- --suite major-capabilities-expanded
   npm run eval:agent -- --suite quality-working --variant direct-answer
 
 Options:
-  --routing-only              Use the smaller routing-only pool
-  --suite major-capabilities  Run the 12-scenario major-capability suite
-  --suite quality-working     Run the quality working-set suite
-  --suite quality-holdout     Run the quality holdout suite
-  --major-capabilities        Alias for --suite major-capabilities
-  --variant ID                Send x-pip-agent-variant for challenger evaluation
+  --routing-only                         Use the smaller routing-only pool
+  --suite major-capabilities             Run the 20-scenario major-capability suite
+  --suite major-capabilities-expanded    Run paraphrase and fake-state major-capability API matrix
+  --suite major-capabilities-multiturn   Run seeded multi-turn major-capability journeys
+  --suite major-capabilities-production-safe
+                                           Run the redacted non-destructive production-safe subset
+  --suite quality-working                Run the quality working-set suite
+  --suite quality-holdout                Run the quality holdout suite
+  --major-capabilities                   Alias for --suite major-capabilities
+  --variant ID                           Send x-pip-agent-variant for challenger evaluation
 `);
 }

@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AgentResponse } from "@/lib/agent/card-types";
+import { getSafeErrorMessage, sanitizeSensitiveText } from "@/lib/security/error-messages";
 import type { Database, Json } from "@/lib/supabase/database.types";
 
 export const productEventNames = [
@@ -61,9 +62,11 @@ export const productEventNames = [
   "savings_goal_archived",
   "savings_goal_spendable_protection_enabled",
   "savings_goal_spendable_protection_disabled",
+  "recurring_obligation_corrected",
   "plaid_webhook_received",
   "plaid_webhook_ignored",
   "plaid_webhook_failed",
+  "app_open_sync_decision",
 ] as const;
 
 export type ProductEventName = (typeof productEventNames)[number];
@@ -88,6 +91,7 @@ export const clientReportedProductEventNames = [
   "account_selection_started",
   "account_selection_succeeded",
   "account_selection_failed",
+  "monthly_savings_selected",
 ] as const;
 
 export type ClientReportedProductEventName = (typeof clientReportedProductEventNames)[number];
@@ -101,7 +105,7 @@ export async function recordProductEvent(
   const { error } = await supabase.from("product_events").insert({
     user_id: userId,
     event_name: eventName,
-    properties,
+    properties: sanitizeEventProperties(properties),
   });
 
   if (error) {
@@ -194,19 +198,38 @@ export function getAgentProductEventNames(
 }
 
 function getSafeEventErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) {
-    return "Unknown product event logging error.";
-  }
-
-  return sanitizeEventLogMessage(error.message);
+  return getSafeErrorMessage(error, "Unknown product event logging error.").slice(0, 180);
 }
 
-function sanitizeEventLogMessage(message: string): string {
-  return message
-    .replace(/sk-[A-Za-z0-9_-]+/g, "[redacted]")
-    .replace(
-      /\b(access[_-]?token|secret|private[_-]?key)\s*[:=]\s*["']?[^"',}\s]+/gi,
-      "$1=[redacted]",
-    )
-    .slice(0, 180);
+function sanitizeEventProperties(value: Json): Json {
+  if (typeof value === "string") {
+    return sanitizeSensitiveText(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(sanitizeEventProperties);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, entry]) => [
+        key,
+        entry === undefined ? entry : sanitizeEventProperty(key, entry),
+      ]),
+    ) as Json;
+  }
+
+  return value;
+}
+
+function sanitizeEventProperty(key: string, value: Json): Json {
+  if (isSensitivePropertyKey(key)) {
+    return "[redacted]";
+  }
+
+  return sanitizeEventProperties(value);
+}
+
+function isSensitivePropertyKey(key: string): boolean {
+  return /(?:access[_-]?token|public[_-]?token|refresh[_-]?token|secret|private[_-]?key|authorization)/i.test(key);
 }

@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
-import { runManualSync } from "@/lib/data/manual-sync";
+import { runManualSync, runProviderSync } from "@/lib/data/manual-sync";
 import type { Database } from "@/lib/supabase/database.types";
+import type { FinancialSnapshot, PipCashResult } from "@/lib/types";
 
 const mocks = vi.hoisted(() => ({
   getFinancialDataProvider: vi.fn(),
   loadCachedPipCashResultForUser: vi.fn(),
   loadFinancialSnapshotForUser: vi.fn(),
-  recordProductEvent: vi.fn(),
+  recordProductEventSafely: vi.fn(),
 }));
 
 vi.mock("@/lib/providers/provider-registry", async () => {
@@ -23,7 +24,7 @@ vi.mock("@/lib/providers/provider-registry", async () => {
 });
 
 vi.mock("@/lib/data/product-events", () => ({
-  recordProductEvent: mocks.recordProductEvent,
+  recordProductEventSafely: mocks.recordProductEventSafely,
 }));
 
 vi.mock("@/lib/data/financial-repository", () => ({
@@ -35,7 +36,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.loadCachedPipCashResultForUser.mockResolvedValue(null);
   mocks.loadFinancialSnapshotForUser.mockResolvedValue(null);
-  mocks.recordProductEvent.mockResolvedValue(undefined);
+  mocks.recordProductEventSafely.mockResolvedValue(undefined);
 });
 
 describe("manual sync provider failures", () => {
@@ -285,7 +286,7 @@ describe("manual sync provider failures", () => {
         ["id", "institution-1"],
       ],
     });
-    expect(mocks.recordProductEvent).toHaveBeenCalledWith(
+    expect(mocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,
       "user-1",
       "manual_sync_failed",
@@ -366,7 +367,7 @@ describe("manual sync provider failures", () => {
         ["id", "institution-failed"],
       ],
     });
-    expect(mocks.recordProductEvent).toHaveBeenCalledWith(
+    expect(mocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,
       "user-1",
       "manual_sync_failed",
@@ -380,7 +381,7 @@ describe("manual sync provider failures", () => {
       },
     );
     expect(JSON.stringify(captures)).not.toContain("provider-secret");
-    expect(JSON.stringify(mocks.recordProductEvent.mock.calls)).not.toContain("provider-token");
+    expect(JSON.stringify(mocks.recordProductEventSafely.mock.calls)).not.toContain("provider-token");
   });
 
   it("keeps successful institutions usable when another connected Plaid institution fails", async () => {
@@ -513,7 +514,7 @@ describe("manual sync provider failures", () => {
         }),
       ]),
     );
-    expect(mocks.recordProductEvent).toHaveBeenCalledWith(
+    expect(mocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,
       "user-1",
       "manual_sync_failed",
@@ -523,7 +524,7 @@ describe("manual sync provider failures", () => {
         repairRequired: true,
       }),
     );
-    expect(mocks.recordProductEvent).toHaveBeenCalledWith(
+    expect(mocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,
       "user-1",
       "manual_sync_partial",
@@ -532,6 +533,155 @@ describe("manual sync provider failures", () => {
         failedInstitutionCount: 1,
       }),
     );
+  });
+
+  it("records app-open sync completions with the background sync reason", async () => {
+    const now = new Date("2026-06-05T12:00:00.000Z");
+    const captures = createCaptures();
+    const supabase = createManualSyncClient(captures);
+
+    mocks.getFinancialDataProvider.mockReturnValue({
+      createConnectSession: vi.fn(),
+      handleConnectCallback: vi.fn().mockResolvedValue({
+        provider: "plaid",
+        institutionId: "institution-good",
+        institutionName: "Good Bank",
+        status: "connected",
+      }),
+      syncAccounts: vi.fn().mockResolvedValue([
+        {
+          id: "provider-account-1",
+          name: "Everyday Checking",
+          institutionName: "Good Bank",
+          kind: "checking",
+          balanceCents: 100000,
+        },
+      ]),
+      syncTransactions: vi.fn().mockResolvedValue([]),
+      syncBalances: vi.fn().mockResolvedValue([
+        {
+          accountId: "provider-account-1",
+          name: "Everyday Checking",
+          institutionName: "Good Bank",
+          kind: "checking",
+          balanceCents: 100000,
+        },
+      ]),
+    });
+
+    await runProviderSync(supabase, {
+      userId: "user-1",
+      provider: "plaid",
+      reason: "app_open",
+      now,
+    });
+
+    expect(mocks.recordProductEventSafely).toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "pip_sync_job_completed",
+      expect.objectContaining({
+        provider: "plaid",
+        reason: "app_open",
+        status: "succeeded",
+        accountCount: 1,
+        failedInstitutionCount: 0,
+      }),
+    );
+    expect(mocks.recordProductEventSafely).not.toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "manual_sync_succeeded",
+      expect.anything(),
+    );
+  });
+
+  it("returns display-safe app-open deltas and same-day transaction summaries", async () => {
+    const now = new Date("2026-06-05T12:00:00.000Z");
+    const captures = createCaptures();
+    const supabase = createManualSyncClient(captures);
+
+    mocks.loadCachedPipCashResultForUser.mockResolvedValue(createCachedPipCashResult(12000));
+    mocks.loadFinancialSnapshotForUser.mockResolvedValue(createFinancialSnapshot());
+    mocks.getFinancialDataProvider.mockReturnValue({
+      createConnectSession: vi.fn(),
+      handleConnectCallback: vi.fn().mockResolvedValue({
+        provider: "plaid",
+        institutionId: "institution-good",
+        institutionName: "Good Bank",
+        status: "connected",
+      }),
+      syncAccounts: vi.fn().mockResolvedValue([
+        {
+          id: "provider-account-1",
+          name: "Everyday Checking",
+          institutionName: "Good Bank",
+          kind: "checking",
+          balanceCents: 100000,
+          lastFour: "1234",
+        },
+      ]),
+      syncTransactions: vi.fn().mockResolvedValue([
+        {
+          id: "provider-tx-secret",
+          accountId: "provider-account-1",
+          date: "2026-06-05",
+          description: "Coffee Shop",
+          merchantName: "Coffee Shop",
+          amountCents: -425,
+          kind: "purchase",
+          metadata: {
+            accessToken: "provider-token",
+          },
+        },
+      ]),
+      syncBalances: vi.fn().mockResolvedValue([
+        {
+          accountId: "provider-account-1",
+          name: "Everyday Checking",
+          institutionName: "Good Bank",
+          kind: "checking",
+          balanceCents: 100000,
+        },
+      ]),
+    });
+
+    const result = await runProviderSync(supabase, {
+      userId: "user-1",
+      provider: "plaid",
+      reason: "app_open",
+      now,
+    });
+
+    const previousSpendableCashTodayCents = result.previousSpendableCashTodayCents;
+    const currentSpendableCashTodayCents = result.currentSpendableCashTodayCents;
+
+    expect(previousSpendableCashTodayCents).toBe(12000);
+    expect(currentSpendableCashTodayCents).toEqual(expect.any(Number));
+    expect(result.spendableDeltaCents).toBe(
+      currentSpendableCashTodayCents! - previousSpendableCashTodayCents!,
+    );
+    expect(result.sameDayNewSpendCents).toBe(425);
+    expect(result.sameDayNewTransactions).toEqual([
+      {
+        date: "2026-06-05",
+        label: "Coffee Shop",
+        amountCents: -425,
+        pending: false,
+        treatment: "daily_spend",
+      },
+    ]);
+    expect(result.createdReactionSummary).toMatchObject({
+      reactionType: expect.any(String),
+      intensity: expect.any(Number),
+      summary: expect.any(String),
+    });
+    expect(result.sameDayNewTransactions?.[0]).not.toHaveProperty("transactionId");
+    expect(result.sameDayNewTransactions?.[0]).not.toHaveProperty("accountId");
+    expect(result.sameDayNewTransactions?.[0]).not.toHaveProperty("metadata");
+    expect(JSON.stringify(result)).not.toContain("provider-token");
+    expect(JSON.stringify(result)).not.toContain("provider-tx-secret");
+    expect(JSON.stringify(result)).not.toContain("1234");
   });
 
   it("uses a provider's coordinated institution sync path when available", async () => {
@@ -625,6 +775,70 @@ function createCaptures() {
       rows: Record<string, unknown>[];
       options?: Record<string, unknown>;
     }>,
+  };
+}
+
+function createCachedPipCashResult(spendableCashTodayCents: number): PipCashResult {
+  return {
+    pipCashTodayCents: spendableCashTodayCents,
+    rollingNetCents: 0,
+    incomeTotalCents: 0,
+    spendingTotalCents: 0,
+    refundTotalCents: 0,
+    protectedSavingsMonthlyCents: 0,
+    window: {
+      startDate: "2026-06-01",
+      endDate: "2026-06-05",
+      dayCount: 30,
+      daysElapsed: 5,
+      daysRemaining: 25,
+    },
+    drivers: [],
+    warnings: [],
+    dataStates: [],
+    trueBalances: [],
+    spendableCashToday: {
+      spendableCashTodayCents,
+      sameDayLedger: {
+        asOfDate: "2026-06-05",
+        items: [],
+      },
+      state: "healthy",
+      confidence: "high",
+    },
+  } as unknown as PipCashResult;
+}
+
+function createFinancialSnapshot(): FinancialSnapshot {
+  return {
+    accounts: [
+      {
+        id: "account-db-1",
+        name: "Everyday Checking",
+        institutionName: "Good Bank",
+        kind: "checking",
+        balanceCents: 100000,
+        lastFour: "1234",
+      },
+    ],
+    transactions: [
+      {
+        id: "provider-tx-secret",
+        accountId: "account-db-1",
+        date: "2026-06-05",
+        description: "Coffee Shop",
+        merchantName: "Coffee Shop",
+        amountCents: -425,
+        kind: "purchase",
+        metadata: {
+          accessToken: "provider-token",
+        },
+      } as FinancialSnapshot["transactions"][number],
+    ],
+    settings: {
+      asOfDate: "2026-06-05",
+      protectedSavingsMonthlyCents: 0,
+    },
   };
 }
 

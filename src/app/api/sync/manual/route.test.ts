@@ -361,6 +361,29 @@ describe("POST /api/sync/manual", () => {
       institutionName: "Plaid Bank",
     });
   });
+
+  it("logs unexpected sync failures without exposing secret-shaped values", async () => {
+    enableSupabaseEnv();
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new Error("sync failed access_token=provider-secret sk-test-secret");
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
+    routeMocks.runManualSync.mockRejectedValue(error);
+
+    try {
+      const response = await POST(jsonRequest({ provider: "plaid" }));
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({
+        error: "Manual sync failed.",
+      });
+      expect(consoleError).toHaveBeenCalledWith(
+        "[sync/manual] sync failed",
+        "sync failed access_token=[redacted] [redacted]",
+      );
+    } finally {
+      consoleError.mockRestore();
+    }
+  });
 });
 
 function enableSupabaseEnv() {

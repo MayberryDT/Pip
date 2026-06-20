@@ -1,7 +1,7 @@
 import type { SyncStatus } from "@/lib/data/sync-status";
 import type { FinancialProviderName } from "@/lib/providers/FinancialDataProvider";
 
-const APP_OPEN_SYNC_COOLDOWN_MS = 10 * 60 * 1000;
+const APP_OPEN_DUPLICATE_GUARD_MS = 60 * 1000;
 const refreshableProviders = new Set<FinancialProviderName>(["plaid", "teller"]);
 const reconnectRequiredErrorCodes = new Set(["provider-token-decrypt-failed"]);
 const repairablePlaidErrorCodes = new Set([
@@ -23,9 +23,15 @@ export type AppOpenSyncDecision =
   | {
       status: "run";
       provider: FinancialProviderName;
+      reason: "app_open_check";
     }
   | {
       status: "no_provider" | "skipped_pending" | "skipped_fresh" | "skipped_recent";
+      reason:
+        | "no_refreshable_provider"
+        | "sync_in_flight"
+        | "fresh_enough"
+        | "recent_duplicate";
       message: string;
       retryAfterSeconds?: number;
       lastSuccessfulSyncAt?: string;
@@ -36,6 +42,7 @@ export type AppOpenSyncDecision =
       institutionId: string;
       institutionName: string;
       errorCode: string | null;
+      reason: "provider_needs_repair";
       message: string;
     };
 
@@ -46,10 +53,7 @@ export function getAppOpenSyncDecision(input: {
 }): AppOpenSyncDecision {
   const repairInstitution = input.syncStatus.institutions.find(isRepairOnlyInstitution);
   const refreshableInstitutions = getRefreshableInstitutions(input.syncStatus);
-  const dueInstitution = refreshableInstitutions.find((institution) =>
-    isInstitutionDueForAppOpen(institution, input.now),
-  );
-  const provider = (dueInstitution ?? refreshableInstitutions[0])?.provider ?? null;
+  const provider = refreshableInstitutions[0]?.provider ?? null;
 
   if (!provider) {
     if (repairInstitution) {
@@ -59,12 +63,14 @@ export function getAppOpenSyncDecision(input: {
         institutionId: repairInstitution.id,
         institutionName: repairInstitution.institutionName,
         errorCode: repairInstitution.errorCode,
+        reason: "provider_needs_repair",
         message: `${repairInstitution.institutionName} needs to reconnect before Pip can refresh.`,
       };
     }
 
     return {
       status: "no_provider",
+      reason: "no_refreshable_provider",
       message: "No connected financial provider can refresh yet.",
     };
   }
@@ -72,6 +78,7 @@ export function getAppOpenSyncDecision(input: {
   if (input.hasPendingSyncJob) {
     return {
       status: "skipped_pending",
+      reason: "sync_in_flight",
       message: "A refresh is already queued or running.",
     };
   }
@@ -86,23 +93,17 @@ export function getAppOpenSyncDecision(input: {
   if (retryAfterSeconds > 0) {
     return {
       status: "skipped_recent",
+      reason: "recent_duplicate",
       message: "A refresh ran recently.",
       retryAfterSeconds,
       ...(lastSuccessfulSyncAt ? { lastSuccessfulSyncAt } : {}),
     };
   }
 
-  if (dueInstitution) {
-    return {
-      status: "run",
-      provider,
-    };
-  }
-
   return {
-    status: "skipped_fresh",
-    message: "Connected data is already fresh for this app open.",
-    ...(lastSuccessfulSyncAt ? { lastSuccessfulSyncAt } : {}),
+    status: "run",
+    provider,
+    reason: "app_open_check",
   };
 }
 
@@ -118,20 +119,6 @@ function getRefreshableInstitutions(syncStatus: SyncStatus): RefreshableInstitut
 
     return !isRepairOnlyInstitution(item);
   });
-}
-
-function isInstitutionDueForAppOpen(
-  institution: SyncStatus["institutions"][number],
-  now: Date,
-): boolean {
-  if (!institution.lastSuccessfulSyncAt || institution.isStale) {
-    return true;
-  }
-
-  return (
-    now.getTime() - new Date(institution.lastSuccessfulSyncAt).getTime() >=
-    APP_OPEN_SYNC_COOLDOWN_MS
-  );
 }
 
 function isRepairOnlyInstitution(institution: SyncStatus["institutions"][number]): boolean {
@@ -173,9 +160,9 @@ function getCooldownRetryAfterSeconds(latestStartedAt: Date | null, now: Date): 
 
   const elapsedMs = now.getTime() - latestStartedAt.getTime();
 
-  if (elapsedMs >= APP_OPEN_SYNC_COOLDOWN_MS) {
+  if (elapsedMs >= APP_OPEN_DUPLICATE_GUARD_MS) {
     return 0;
   }
 
-  return Math.ceil((APP_OPEN_SYNC_COOLDOWN_MS - elapsedMs) / 1000);
+  return Math.ceil((APP_OPEN_DUPLICATE_GUARD_MS - elapsedMs) / 1000);
 }

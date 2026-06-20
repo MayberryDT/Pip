@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import type { AgentCard, AgentResponse } from "@/lib/agent/card-types";
+import type { AgentResponse } from "@/lib/agent/card-types";
 import {
   AuthenticationRequiredError,
   getCurrentFinancialSnapshot,
@@ -12,6 +12,7 @@ import {
   type ConnectedAccountsResult,
   deleteCurrentUserFinancialData,
   loadConnectedAccountsForUser,
+  loadFinancialSnapshotForUser,
   loadInstitutionForUser,
   markPipCashSnapshotsStaleForUser,
   removeInstitutionForUser,
@@ -25,12 +26,13 @@ import {
   loadSavingsGoalForUser,
   updateSavingsGoalForUser,
 } from "@/lib/data/savings-goals-repository";
-import { runManualSync, ManualSyncRateLimitError } from "@/lib/data/manual-sync";
 import {
-  getAgentProductEventNames,
-  recordProductEventSafely,
-  type ProductEventName,
-} from "@/lib/data/product-events";
+  ignoreRecurringObligationForUser,
+  normalizeMerchantKey,
+  upsertRecurringObligationRuleForUser,
+} from "@/lib/data/recurring-obligation-rules";
+import { runManualSync, ManualSyncRateLimitError } from "@/lib/data/manual-sync";
+import { recordProductEventSafely } from "@/lib/data/product-events";
 import { loadSyncStatusForUser, type SyncStatus } from "@/lib/data/sync-status";
 import {
   runAIAgent,
@@ -74,8 +76,18 @@ import { getSafeErrorMessage, sanitizeSensitiveText } from "@/lib/security/error
 import { getClientPipPlatform } from "@/lib/platform/android-shell";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import type { Database, Json } from "@/lib/supabase/database.types";
+import type { Database } from "@/lib/supabase/database.types";
 import type { FinancialSnapshot } from "@/lib/types";
+import {
+  createChatTurnRequestMetadata,
+  recordAgentEvents,
+} from "@/lib/agent/route-telemetry";
+import {
+  buildAccountConnectionsCard,
+  createLocalDevConnectedAccounts,
+  resolveAccountTarget,
+  resolveInstitutionTarget,
+} from "@/lib/agent/account-connections";
 
 const requestSchema = z.object({
   message: z.string().min(1).max(500),
@@ -196,7 +208,11 @@ export async function POST(request: Request) {
 
       await Promise.all([
         recordAgentEvents(routeContext.eventContext, {
+          conversationId,
           message: parsed.data.message,
+          requestKind: parsed.data.requestKind ?? "chat",
+          scenario: parsed.data.scenario,
+          selectedPromptChipId: parsed.data.selectedPromptChipId,
           historyLength: parsed.data.history?.length ?? 0,
           response,
           pipCashTodayCents: routeResult
@@ -235,29 +251,6 @@ export async function POST(request: Request) {
 
     return NextResponse.json(body, { status });
   }
-}
-
-function createChatTurnRequestMetadata(
-  input: AgentRouteRequest,
-  routeContext: RouteAgentContext | undefined,
-  response?: AgentResponse,
-): Record<string, Json> {
-  return {
-    scenario: input.scenario ?? null,
-    requestKind: input.requestKind ?? "chat",
-    selectedPromptChipId: input.selectedPromptChipId ?? null,
-    historyLength: input.history?.length ?? 0,
-    shownCardCount: input.conversationState?.shownCards?.length ?? 0,
-    lastToolCount: input.conversationState?.lastToolNames?.length ?? 0,
-    promptChipCount: input.conversationState?.promptChips?.length ?? 0,
-    onboardingStatus: routeContext?.onboardingState.status ?? null,
-    hasFinancialData: routeContext?.onboardingState.hasFinancialData ?? false,
-    hasSnapshot: Boolean(routeContext?.snapshot),
-    syncInstitutionCount: routeContext?.syncStatus?.institutions.length ?? 0,
-    syncHasStaleInstitution: routeContext?.syncStatus?.hasStaleInstitution ?? false,
-    latestSyncStatus: routeContext?.syncStatus?.latestSyncRun?.status ?? null,
-    responseQuality: response?.audit.quality ? response.audit.quality as unknown as Json : null,
-  };
 }
 
 function createServerConversationId(): string {
@@ -515,6 +508,18 @@ function createLocalDevAgentActions(snapshot: FinancialSnapshot): PipAgentAction
         cards: [buildSavingsGoalPlanCard(toSavingsGoalPlanResponse(updated))],
       };
     },
+    async correctRecurringObligation({ merchantName, treatment }) {
+      return {
+        ok: true,
+        status: treatment === "bill" ? "recurring_obligation_confirmed" : "recurring_obligation_ignored",
+        message: treatment === "bill"
+          ? `I’ll treat ${merchantName} as a monthly bill.`
+          : `I’ll stop treating ${merchantName} as a monthly bill.`,
+        clientAction: {
+          type: "reload",
+        },
+      };
+    },
     async setSavingsGoalProtection(goalInput) {
       const target = goalInput.goalId
         ? localDevSavingsGoals.find((goal) => goal.id === goalInput.goalId)
@@ -545,49 +550,6 @@ function createLocalDevAgentActions(snapshot: FinancialSnapshot): PipAgentAction
       };
     },
   };
-}
-
-function createLocalDevConnectedAccounts(snapshot: FinancialSnapshot): ConnectedAccountsResult {
-  const accountsByInstitutionName = new Map<string, FinancialSnapshot["accounts"]>();
-
-  for (const account of snapshot.accounts) {
-    const accounts = accountsByInstitutionName.get(account.institutionName) ?? [];
-    accounts.push(account);
-    accountsByInstitutionName.set(account.institutionName, accounts);
-  }
-
-  return {
-    institutions: [...accountsByInstitutionName.entries()].map(([institutionName, accounts], index) => ({
-      institutionId: `local-dev-${index + 1}`,
-      institutionName,
-      provider: "mock",
-      status: "mocked",
-      lastSuccessfulSyncAt: null,
-      needsRepair: false,
-      accounts: accounts.map((account) => ({
-        accountId: account.id,
-        name: account.name,
-        kind: account.kind,
-        ...(account.lastFour ? { lastFour: account.lastFour } : {}),
-        includedInPipCash: account.includedInPipCash ?? !account.isProtectedSavings,
-        isProtectedSavings: Boolean(account.isProtectedSavings),
-        active: account.active ?? true,
-        roleLabel: getLocalDevAccountRoleLabel(account),
-      })),
-    })),
-  };
-}
-
-function getLocalDevAccountRoleLabel(account: FinancialSnapshot["accounts"][number]): string {
-  if (account.isProtectedSavings) {
-    return "Monthly Savings";
-  }
-
-  if (account.kind === "credit_card") {
-    return "Credit card";
-  }
-
-  return "Spendable Cash";
 }
 
 function createLocalDevSavingsGoal(input: SavingsGoalInput): SavingsGoal {
@@ -1037,6 +999,64 @@ function createAgentActions(input: {
           : {}),
       };
     },
+    async correctRecurringObligation({ merchantName, treatment, expectedAmountCents, expectedDay }) {
+      const { supabase, userId } = input.eventContext;
+
+      if (treatment === "not_bill") {
+        await ignoreRecurringObligationForUser(supabase, userId, merchantName);
+        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await recordProductEventSafely(supabase, userId, "recurring_obligation_corrected", {
+          merchantName,
+          treatment,
+        });
+
+        return {
+          ok: true,
+          status: "recurring_obligation_ignored",
+          message: `I’ll stop treating ${merchantName} as a monthly bill.`,
+          clientAction: {
+            type: "reload",
+          },
+        };
+      }
+
+      const inferred = await inferRecurringObligationFromSnapshot(supabase, userId, {
+        merchantName,
+        expectedAmountCents,
+        expectedDay,
+      });
+
+      if (!inferred.expectedAmountCents) {
+        return {
+          ok: false,
+          status: "recurring_obligation_amount_required",
+          message: `Tell me the usual monthly amount for ${merchantName}.`,
+        };
+      }
+
+      await upsertRecurringObligationRuleForUser(supabase, userId, {
+        merchantKey: normalizeMerchantKey(merchantName),
+        label: merchantName,
+        expectedAmountCents: inferred.expectedAmountCents,
+        expectedDay: inferred.expectedDay,
+      });
+      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await recordProductEventSafely(supabase, userId, "recurring_obligation_corrected", {
+        merchantName,
+        treatment,
+        expectedAmountCents: inferred.expectedAmountCents,
+        expectedDay: inferred.expectedDay,
+      });
+
+      return {
+        ok: true,
+        status: "recurring_obligation_confirmed",
+        message: `I’ll treat ${merchantName} as a monthly bill.`,
+        clientAction: {
+          type: "reload",
+        },
+      };
+    },
     async requestRemoveInstitutionConfirmation({ institutionId, institutionName }) {
       const { supabase, userId } = input.eventContext;
       const resolved = await resolveInstitutionTarget(supabase, {
@@ -1200,64 +1220,6 @@ function toToolFailureResult(error: unknown, status: string): PipAgentActionResu
   };
 }
 
-async function recordAgentEvents(
-  context: EventContext | null,
-  input: {
-    message: string;
-    historyLength: number;
-    response: AgentResponse;
-    pipCashTodayCents: number | null;
-    isShortfall?: boolean;
-  },
-) {
-  if (!context) {
-    return;
-  }
-
-  const cardTypes = input.response.cards.map((card) => card.type);
-  const eventNames = getRouteAgentEventNames(input.response, input.pipCashTodayCents, {
-    isFollowUp: input.historyLength > 0,
-    isShortfall: input.isShortfall,
-  });
-
-  await Promise.all(
-    eventNames.map((eventName) =>
-      recordProductEventSafely(context.supabase, context.userId, eventName, {
-        cardTypes: cardTypes.join(","),
-        usedTools: input.response.usedTools.join(","),
-        responseMode: input.response.responseMode,
-        clientAction: input.response.clientAction?.type ?? "none",
-        messageLength: input.message.length,
-        historyLength: input.historyLength,
-        isFollowUp: input.historyLength > 0,
-        pipCashTodayCents: input.pipCashTodayCents,
-        guidance: input.response.audit.guidance
-          ? input.response.audit.guidance as unknown as Json
-          : null,
-        guidanceState: input.response.audit.guidance?.state ?? null,
-        guidanceStance: input.response.audit.guidance?.stance ?? null,
-        guidanceSource: input.response.audit.guidance?.guidanceSource ?? null,
-        guidanceValidationOutcome: input.response.audit.guidance?.validationOutcome ?? null,
-        guidanceEvidenceIds: input.response.audit.guidance?.evidenceIds?.join(",") ?? null,
-      }),
-    ),
-  );
-}
-
-function getRouteAgentEventNames(
-  response: AgentResponse,
-  pipCashTodayCents: number | null,
-  context: { isFollowUp?: boolean; isShortfall?: boolean } = {},
-): ProductEventName[] {
-  if (typeof pipCashTodayCents === "number") {
-    return getAgentProductEventNames(response, pipCashTodayCents, context);
-  }
-
-  return context.isFollowUp
-    ? ["agent_question_asked", "agent_follow_up_asked"]
-    : ["agent_question_asked"];
-}
-
 type PlaidConnectRequest =
   | {
       needsSelection?: false;
@@ -1337,65 +1299,6 @@ async function getPlaidConnectRequest(
   };
 }
 
-function buildAccountConnectionsCard(result: ConnectedAccountsResult): AgentCard {
-  return {
-    type: "account_connections",
-    title: "Account connections",
-    institutions: result.institutions.map((institution, index) => ({
-      institutionId: institution.institutionId,
-      institutionName: institution.institutionName,
-      provider: institution.provider,
-      status: institution.status,
-      lastSuccessfulSyncAt: institution.lastSuccessfulSyncAt,
-      accounts: institution.accounts,
-      actions: buildAccountConnectionActions(institution, index),
-    })),
-  };
-}
-
-function buildAccountConnectionActions(
-  institution: ConnectedAccountsResult["institutions"][number],
-  index: number,
-): Extract<AgentCard, { type: "account_connections" }>["institutions"][number]["actions"] {
-  const actions: Extract<AgentCard, { type: "account_connections" }>["institutions"][number]["actions"] = [];
-
-  if (index === 0) {
-    actions.push({
-      id: "add-account",
-      label: "Add account",
-      prompt: "Add account",
-      style: "primary",
-    });
-  }
-
-  if (institution.needsRepair) {
-    actions.push({
-      id: `repair-${institution.institutionId}`,
-      label: "Reconnect",
-      prompt: `Reconnect ${institution.institutionName}`,
-      style: "primary",
-    });
-  }
-
-  if (institution.provider === "plaid") {
-    actions.push({
-      id: `change-${institution.institutionId}`,
-      label: "Change accounts",
-      prompt: `Change ${institution.institutionName} accounts`,
-      style: "secondary",
-    });
-  }
-
-  actions.push({
-    id: `remove-${institution.institutionId}`,
-    label: "Remove",
-    prompt: `Remove ${institution.institutionName}`,
-    style: "danger",
-  });
-
-  return actions;
-}
-
 type SavingsGoalResolution =
   | {
       needsSelection?: false;
@@ -1460,152 +1363,6 @@ async function resolveSavingsGoalTarget(
   };
 }
 
-type InstitutionResolution =
-  | {
-      needsSelection?: false;
-      institutionId: string;
-    }
-  | {
-      needsSelection: true;
-      status: string;
-      message: string;
-      accounts: ConnectedAccountsResult;
-    };
-
-async function resolveInstitutionTarget(
-  supabase: SupabaseClient<Database>,
-  input: {
-    userId: string;
-    institutionId?: string;
-    institutionName?: string;
-    provider?: FinancialProviderName;
-    allowSingleDefault?: boolean;
-  },
-): Promise<InstitutionResolution> {
-  const accounts = await loadConnectedAccountsForUser(supabase, input.userId);
-  const institutions = accounts.institutions.filter((institution) =>
-    input.provider ? institution.provider === input.provider : true,
-  );
-
-  if (input.institutionId) {
-    const institution = institutions.find((candidate) => candidate.institutionId === input.institutionId);
-
-    if (institution) {
-      return {
-        institutionId: institution.institutionId,
-      };
-    }
-  }
-
-  const target = normalizeTarget(input.institutionName);
-
-  if (target) {
-    const matches = institutions.filter((institution) =>
-      normalizeTarget(institution.institutionName).includes(target),
-    );
-
-    if (matches.length === 1) {
-      return {
-        institutionId: matches[0].institutionId,
-      };
-    }
-
-    return {
-      needsSelection: true,
-      status: matches.length > 1 ? "ambiguous_institution" : "institution_not_found",
-      message: matches.length > 1
-        ? "More than one institution matched that name."
-        : "I could not find that institution.",
-      accounts,
-    };
-  }
-
-  if (input.allowSingleDefault && institutions.length === 1) {
-    return {
-      institutionId: institutions[0].institutionId,
-    };
-  }
-
-  return {
-    needsSelection: true,
-    status: "institution_choice_required",
-    message: "Choose which institution to use.",
-    accounts,
-  };
-}
-
-type AccountResolution =
-  | {
-      needsSelection?: false;
-      accountId: string;
-    }
-  | {
-      needsSelection: true;
-      status: string;
-      message: string;
-      accounts: ConnectedAccountsResult;
-    };
-
-async function resolveAccountTarget(
-  supabase: SupabaseClient<Database>,
-  input: {
-    userId: string;
-    accountId?: string;
-    accountName?: string;
-  },
-): Promise<AccountResolution> {
-  const accounts = await loadConnectedAccountsForUser(supabase, input.userId);
-  const accountList = accounts.institutions.flatMap((institution) =>
-    institution.accounts.map((account) => ({
-      ...account,
-      institutionName: institution.institutionName,
-    })),
-  );
-
-  if (input.accountId) {
-    const account = accountList.find((candidate) => candidate.accountId === input.accountId);
-
-    if (account) {
-      return {
-        accountId: account.accountId,
-      };
-    }
-  }
-
-  const target = normalizeTarget(input.accountName);
-
-  if (target) {
-    const matches = accountList.filter((account) => {
-      const accountName = normalizeTarget(account.name);
-      const institutionName = normalizeTarget(account.institutionName);
-
-      return accountName.includes(target) || `${institutionName} ${accountName}`.includes(target);
-    });
-
-    if (matches.length === 1) {
-      return {
-        accountId: matches[0].accountId,
-      };
-    }
-
-    return {
-      needsSelection: true,
-      status: matches.length > 1 ? "ambiguous_account" : "account_not_found",
-      message: matches.length > 1
-        ? "More than one account matched that name."
-        : "I could not find that account.",
-      accounts,
-    };
-  }
-
-  return {
-    needsSelection: true,
-    status: "account_choice_required",
-    message: "Choose which account to use.",
-    accounts,
-  };
-}
-
 function normalizeTarget(value: string | undefined): string {
   return (value ?? "")
     .trim()
@@ -1629,6 +1386,41 @@ function getRefreshProvider(syncStatus: SyncStatus | null): FinancialProviderNam
   }
 
   return null;
+}
+
+async function inferRecurringObligationFromSnapshot(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+  input: {
+    merchantName: string;
+    expectedAmountCents?: number;
+    expectedDay?: number;
+  },
+): Promise<{
+  expectedAmountCents?: number;
+  expectedDay?: number;
+}> {
+  if (input.expectedAmountCents && input.expectedDay) {
+    return {
+      expectedAmountCents: input.expectedAmountCents,
+      expectedDay: input.expectedDay,
+    };
+  }
+
+  const snapshot = await loadFinancialSnapshotForUser(supabase, userId);
+  const merchantKey = normalizeMerchantKey(input.merchantName);
+  const match = snapshot?.transactions
+    .filter((transaction) => transaction.amountCents < 0)
+    .filter((transaction) =>
+      normalizeMerchantKey(transaction.merchantName ?? transaction.description) === merchantKey,
+    )
+    .sort((left, right) => right.date.localeCompare(left.date))
+    .at(0);
+
+  return {
+    expectedAmountCents: input.expectedAmountCents ?? (match ? Math.abs(match.amountCents) : undefined),
+    expectedDay: input.expectedDay ?? (match ? Number(match.date.slice(8, 10)) : undefined),
+  };
 }
 
 function getProviderErrorCode(error: unknown): string | null {

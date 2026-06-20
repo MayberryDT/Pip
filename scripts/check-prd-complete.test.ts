@@ -258,7 +258,7 @@ function createValidInAppBrowserEvidence() {
       hasPip: true,
       hasSpendableCashToday: true,
       hasPipCashNumber: true,
-      hasVisibleFreeCash: false,
+      hasVisibleOldBrand: false,
       hasVisiblePipCashToday: false,
     },
     driversQuestion: {

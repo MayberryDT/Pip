@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getAppOrigin } from "@/lib/url/app-origin";
@@ -42,18 +43,16 @@ export async function POST(request: Request) {
       status: "sent",
     });
   } catch (error) {
+    if (!(error instanceof SupabaseConfigError)) {
+      console.error("[sign-in] sign-in failed", getSafeErrorMessage(error, "Sign-in failed."));
+    }
+
     return NextResponse.json(toErrorBody(error), { status: 500 });
   }
 }
 
 function toErrorBody(error: unknown) {
   if (error instanceof SupabaseConfigError) {
-    return {
-      error: error.message,
-    };
-  }
-
-  if (error instanceof Error) {
     return {
       error: error.message,
     };

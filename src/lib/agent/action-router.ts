@@ -74,34 +74,6 @@ export function resolveActionIntent(message: string, slots: IntentSlots): Action
     );
   }
 
-  const inclusionIntent = getAccountInclusionIntent(actionText);
-
-  if (inclusionIntent) {
-    return route(
-      "account.inclusion",
-      {
-        account_name: inclusionIntent.accountName,
-        include_in_pip_cash: inclusionIntent.include,
-      },
-      0.93,
-      "account inclusion update",
-    );
-  }
-
-  const protectedSavingsIntent = getProtectedSavingsAccountIntent(actionText);
-
-  if (protectedSavingsIntent) {
-    return route(
-      "account.protected_savings",
-      {
-        account_name: protectedSavingsIntent.accountName,
-        is_protected_savings: protectedSavingsIntent.protected,
-      },
-      0.93,
-      "protected savings account update",
-    );
-  }
-
   if (isRemoveInstitutionRequest(actionText)) {
     return route(
       "institution.remove_request",
@@ -144,7 +116,10 @@ function route(
 }
 
 function isDeleteDataRequest(normalized: string): boolean {
-  return /\b(delete|erase|remove)\b.{0,24}\b(my )?(stored )?(financial )?data\b/.test(normalized);
+  return (
+    /\b(delete|erase|remove)\b.{0,24}\b(my )?(account |stored |financial )?data\b/.test(normalized) ||
+    /\berase everything you know about me\b/.test(normalized)
+  );
 }
 
 function isRefreshActionPrompt(normalized: string): boolean {
@@ -190,50 +165,6 @@ function isAccountSelectionPrompt(normalized: string): boolean {
     /\b(add|select|remove)\b.{0,30}\b(account|card|checking|savings)\b.{0,20}\bfrom\b/.test(normalized) ||
     /\bforgot to select\b/.test(normalized)
   );
-}
-
-function getAccountInclusionIntent(normalized: string): { include: boolean; accountName?: string } | null {
-  const excludeMatch = /^(ignore|exclude|hide|stop using|don'?t use|do not use)\s+(.+)$/.exec(normalized);
-
-  if (excludeMatch) {
-    return {
-      include: false,
-      accountName: cleanupAccountTarget(excludeMatch[2]),
-    };
-  }
-
-  const includeMatch = /^(use|include|start using)\s+(.+?)(?: again)?$/.exec(normalized);
-
-  if (includeMatch && /\b(account|checking|savings|card|that|this|business|shared)\b/.test(includeMatch[2])) {
-    return {
-      include: true,
-      accountName: cleanupAccountTarget(includeMatch[2]),
-    };
-  }
-
-  return null;
-}
-
-function getProtectedSavingsAccountIntent(normalized: string): { protected: boolean; accountName?: string } | null {
-  const unsetMatch = /^(don'?t|do not|stop)\s+treat(?:ing)?\s+(.+?)\s+as protected/.exec(normalized);
-
-  if (unsetMatch) {
-    return {
-      protected: false,
-      accountName: cleanupAccountTarget(unsetMatch[2]),
-    };
-  }
-
-  const setMatch = /^(make|mark|set)\s+(.+?)\s+(?:as |my )?protected savings/.exec(normalized);
-
-  if (setMatch) {
-    return {
-      protected: true,
-      accountName: cleanupAccountTarget(setMatch[2]),
-    };
-  }
-
-  return null;
 }
 
 function isRemoveInstitutionRequest(normalized: string): boolean {
