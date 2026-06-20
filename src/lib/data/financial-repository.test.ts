@@ -247,6 +247,25 @@ describe("financial repository row mapping", () => {
     expect(calls).toContainEqual(["from", "recurring_obligation_rules"]);
     expect(calls).toContainEqual(["eq", "user_id", "user-1"]);
   });
+
+  it("keeps loading production financial snapshots when recurring rules are not deployed yet", async () => {
+    const supabase = createFinancialSnapshotClient({
+      calls: [],
+      settings: settingsRow(),
+      accounts: [accountRow()],
+      transactions: [transactionRow()],
+      recurringObligationRules: [],
+      recurringObligationRulesError: {
+        code: "42P01",
+        message: 'relation "public.recurring_obligation_rules" does not exist',
+      },
+    });
+
+    await expect(loadFinancialSnapshotForUser(supabase, "user-1")).resolves.toMatchObject({
+      accounts: [expect.objectContaining({ id: "account-1" })],
+      recurringObligationRules: [],
+    });
+  });
 });
 
 function createPipCashSnapshotsClient(input: {
@@ -301,6 +320,7 @@ function createFinancialSnapshotClient(input: {
   accountPreferences?: AccountPreferenceRow[];
   transactions: TransactionRow[];
   recurringObligationRules: RecurringObligationRuleRow[];
+  recurringObligationRulesError?: { code?: string; message?: string };
 }): SupabaseClient<Database> {
   return {
     from(tableName: string) {
@@ -326,7 +346,12 @@ function createFinancialSnapshotClient(input: {
           });
         },
         then(resolve: (value: unknown) => unknown, reject: (reason: unknown) => unknown) {
-          return Promise.resolve(resolve({ data: rowsForTable(tableName, input), error: null })).catch(reject);
+          return Promise.resolve(resolve({
+            data: rowsForTable(tableName, input),
+            error: tableName === "recurring_obligation_rules"
+              ? input.recurringObligationRulesError ?? null
+              : null,
+          })).catch(reject);
         },
       };
 
@@ -342,6 +367,7 @@ function rowsForTable(
     accountPreferences?: AccountPreferenceRow[];
     transactions: TransactionRow[];
     recurringObligationRules: RecurringObligationRuleRow[];
+    recurringObligationRulesError?: { code?: string; message?: string };
   },
 ) {
   if (tableName === "accounts") {

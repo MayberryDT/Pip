@@ -33,6 +33,43 @@ describe("recurring obligation rules repository", () => {
     expect(calls).toContainEqual(["order", "updated_at", { ascending: false }]);
   });
 
+  it("returns an empty list when the rules table is not deployed yet", async () => {
+    const calls: unknown[][] = [];
+    const supabase = createClient({
+      calls,
+      listError: {
+        code: "42P01",
+        message: 'relation "public.recurring_obligation_rules" does not exist',
+      },
+    });
+
+    await expect(listRecurringObligationRulesForUser(supabase, "user-1")).resolves.toEqual([]);
+  });
+
+  it("returns an empty list when the rules table is missing from the PostgREST schema cache", async () => {
+    const calls: unknown[][] = [];
+    const supabase = createClient({
+      calls,
+      listError: {
+        code: "PGRST205",
+        message: "Could not find the table 'public.recurring_obligation_rules' in the schema cache",
+      },
+    });
+
+    await expect(listRecurringObligationRulesForUser(supabase, "user-1")).resolves.toEqual([]);
+  });
+
+  it("still throws recurring rule permission errors", async () => {
+    const calls: unknown[][] = [];
+    const error = {
+      code: "42501",
+      message: "permission denied for table recurring_obligation_rules",
+    };
+    const supabase = createClient({ calls, listError: error });
+
+    await expect(listRecurringObligationRulesForUser(supabase, "user-1")).rejects.toBe(error);
+  });
+
   it("upserts user-confirmed monthly bill rules by user and merchant", async () => {
     const calls: unknown[][] = [];
     const supabase = createClient({ calls, singleRow: row() });
@@ -112,6 +149,7 @@ function row(overrides: Partial<RecurringObligationRuleRow> = {}): RecurringObli
 function createClient(input: {
   calls: unknown[][];
   listRows?: RecurringObligationRuleRow[];
+  listError?: { code?: string; message?: string };
   singleRow?: RecurringObligationRuleRow;
 }): SupabaseClient<Database> {
   const query = {
@@ -131,7 +169,7 @@ function createClient(input: {
       input.calls.push(["order", column, options]);
       return Promise.resolve({
         data: input.listRows ?? [],
-        error: null,
+        error: input.listError ?? null,
       });
     },
     single() {

@@ -20,6 +20,10 @@ export async function listRecurringObligationRulesForUser(
     .order("updated_at", { ascending: false });
 
   if (error) {
+    if (isRecurringObligationRulesTableUnavailable(error)) {
+      return [];
+    }
+
     throw error;
   }
 
@@ -114,4 +118,17 @@ export function normalizeMerchantKey(value: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function isRecurringObligationRulesTableUnavailable(error: {
+  code?: string;
+  message?: string;
+}) {
+  if (error.code === "42P01" || error.code === "PGRST205") {
+    return true;
+  }
+
+  return /\brecurring_obligation_rules\b/i.test(error.message ?? "")
+    && /\b(relation|table)\b/i.test(error.message ?? "")
+    && /\b(does not exist|not found|schema cache)\b/i.test(error.message ?? "");
 }
