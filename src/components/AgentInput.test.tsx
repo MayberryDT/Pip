@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { __agentInputTestHooks } from "@/components/AgentInput";
 
@@ -86,6 +88,15 @@ describe("AgentInput", () => {
       ),
     ).toBe("auto");
     expect(__agentInputTestHooks.getComposerScrollBehavior(matchMediaFor([]))).toBe("smooth");
+  });
+
+  it("leaves room above the composer input so its outline is not clipped", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const dockCss = css.slice(css.indexOf(".pip-composer-dock {"), css.indexOf(".pip-composer-dock::before"));
+    const paddingTop = dockCss.match(/padding-top:\s*([\d.]+)rem;/);
+
+    expect(dockCss).toContain("overflow: visible;");
+    expect(Number(paddingTop?.[1])).toBeGreaterThanOrEqual(0.75);
   });
 });
 

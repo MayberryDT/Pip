@@ -4095,7 +4095,8 @@ button {
 }
 
 .pip-composer-dock {
-  padding-top: 0.48rem;
+  overflow: visible;
+  padding-top: 0.75rem;
 }
 
 .pip-composer-dock::before {
