@@ -90,13 +90,19 @@ describe("AgentInput", () => {
     expect(__agentInputTestHooks.getComposerScrollBehavior(matchMediaFor([]))).toBe("smooth");
   });
 
-  it("leaves room above the composer input so its outline is not clipped", () => {
+  it("leaves room around the focused composer input so its outline is not clipped", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const dockCss = css.slice(css.indexOf(".pip-composer-dock {"), css.indexOf(".pip-composer-dock::before"));
+    const paddingRight = dockCss.match(/padding-right:\s*([\d.]+)rem;/);
+    const paddingBottom = dockCss.match(/padding-bottom:\s*([\d.]+)rem;/);
+    const paddingLeft = dockCss.match(/padding-left:\s*([\d.]+)rem;/);
     const paddingTop = dockCss.match(/padding-top:\s*([\d.]+)rem;/);
 
     expect(dockCss).toContain("overflow: visible;");
     expect(Number(paddingTop?.[1])).toBeGreaterThanOrEqual(0.75);
+    expect(Number(paddingRight?.[1])).toBeGreaterThanOrEqual(0.5);
+    expect(Number(paddingBottom?.[1])).toBeGreaterThanOrEqual(0.375);
+    expect(Number(paddingLeft?.[1])).toBeGreaterThanOrEqual(0.5);
   });
 });
 
