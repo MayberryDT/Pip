@@ -3507,6 +3507,17 @@ button {
   }
 }
 
+.article-hero-figure {
+  min-height: auto;
+  aspect-ratio: 16 / 9;
+  background: #fffdf8;
+}
+
+.article-hero-figure img {
+  height: 100%;
+  object-fit: contain;
+}
+
 @media (max-width: 340px) {
   .pip-home-title-lockup {
     font-size: 2.45rem;

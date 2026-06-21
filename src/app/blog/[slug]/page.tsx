@@ -111,7 +111,12 @@ export default async function ArticlePage({ params }: PageProps) {
               </div>
             </div>
             <div className="col-span-12 lg:col-span-4 lg:col-start-9">
-              <SwissFigure asset={getArticleVisual(article)} priority variant="poster" />
+              <SwissFigure
+                asset={getArticleVisual(article)}
+                className="article-hero-figure"
+                priority
+                variant="poster"
+              />
             </div>
             <div className="col-span-12 lg:col-span-3">
               <ArticleTableOfContents article={article} />
