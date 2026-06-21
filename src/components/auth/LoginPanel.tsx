@@ -20,7 +20,7 @@ export function LoginPanel() {
           title="Hi, I’m Pip. I’ll help you find today's spending room."
           actions={
             <Link
-              className="focus-ring flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
+              className="focus-ring ui-pressable flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
               href="/api/auth/oauth/google"
             >
               Continue with Google
@@ -38,17 +38,17 @@ export function LoginPanel() {
         </PipIntroScene>
         <div className="mt-8 flex gap-4 text-xs font-semibold text-ink/[0.45]">
           {showReviewerSignIn ? (
-            <Link className="hover:text-ink" href="/reviewer-login">
+            <Link className="focus-ring pip-text-action-link hover:text-ink" href="/reviewer-login">
               Play reviewer sign-in
             </Link>
           ) : null}
-          <Link className="hover:text-ink" href="/privacy">
+          <Link className="focus-ring pip-text-action-link hover:text-ink" href="/privacy">
             Privacy
           </Link>
-          <Link className="hover:text-ink" href="/terms">
+          <Link className="focus-ring pip-text-action-link hover:text-ink" href="/terms">
             Terms
           </Link>
-          <Link className="hover:text-ink" href="/support">
+          <Link className="focus-ring pip-text-action-link hover:text-ink" href="/support">
             Support
           </Link>
         </div>

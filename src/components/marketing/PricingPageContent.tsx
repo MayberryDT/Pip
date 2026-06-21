@@ -89,14 +89,14 @@ export function PricingPageContent() {
               spend.
             </SwissText>
             <Link
-              className="focus-ring mt-6 inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink"
+              className="focus-ring pip-text-action-link mt-6 gap-2 text-sm font-bold text-moss hover:text-ink"
               href={pipTrustPolicy.publicLinks.security}
             >
               Read the security model
               <ArrowRight aria-hidden="true" size={16} />
             </Link>
             <Link
-              className="focus-ring mt-4 inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink"
+              className="focus-ring pip-text-action-link mt-4 gap-2 text-sm font-bold text-moss hover:text-ink"
               href={pipTrustPolicy.publicLinks.howNumberWorks}
             >
               Read how the number works
@@ -150,7 +150,7 @@ export function PricingPageContent() {
           </div>
           <div className="col-span-12 lg:col-span-4 lg:col-start-9">
             <MarketingCtaLink
-              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-porcelain px-6 text-sm font-bold text-ink transition hover:bg-paper"
+              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-porcelain px-6 text-sm font-bold text-ink hover:bg-paper"
               eventLabel="pricing_final_get_pip"
               eventProperties={{ intent: "get_pip" }}
               href={getProductAccessHref()}

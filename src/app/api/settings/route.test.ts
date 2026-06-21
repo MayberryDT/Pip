@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const routeMocks = vi.hoisted(() => ({
+  createSupabaseAdminClient: vi.fn(),
   createSupabaseServerClient: vi.fn(),
   upsertUserSettings: vi.fn(),
   markPipCashSnapshotsStaleForUser: vi.fn(),
@@ -9,6 +10,10 @@ const routeMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: routeMocks.createSupabaseServerClient,
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: routeMocks.createSupabaseAdminClient,
 }));
 
 vi.mock("@/lib/data/financial-repository", () => ({
@@ -132,7 +137,9 @@ describe("/api/settings", () => {
   it("updates protected savings and records the beta event for authenticated users", async () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ id: "user-1" });
+    const admin = { from: vi.fn() };
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
     routeMocks.upsertUserSettings.mockResolvedValue({
       asOfDate: "2026-06-06",
       protectedSavingsMonthlyCents: 35000,
@@ -153,6 +160,7 @@ describe("/api/settings", () => {
     expect(routeMocks.markPipCashSnapshotsStaleForUser).toHaveBeenCalledWith(
       supabase,
       "user-1",
+      admin,
     );
     expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,

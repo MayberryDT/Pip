@@ -54,7 +54,7 @@ const exactAssetPaths: Partial<Record<`${PipCharacterSize}/${PipCharacterExpress
   "medium/onboarding-wave": "/brand/pip-character/v001/medium/onboarding-wave.png",
 };
 
-const legacyPipFallbackPath = "/brand/pip-profile-clean.png";
+const fallbackPipCharacterPath = avatarAssetPaths.normal;
 
 export function getPipCharacterAssetSources(
   size: PipCharacterSize,
@@ -63,7 +63,7 @@ export function getPipCharacterAssetSources(
   return [
     exactAssetPaths[`${size}/${expression}`],
     avatarAssetPaths.normal,
-    legacyPipFallbackPath,
+    fallbackPipCharacterPath,
   ].filter((source, index, sources): source is string => {
     return Boolean(source) && sources.indexOf(source) === index;
   });
@@ -73,7 +73,7 @@ export function getPipCharacterAssetPath(
   size: PipCharacterSize,
   expression: PipCharacterExpression,
 ): string {
-  return getPipCharacterAssetSources(size, expression)[0] ?? legacyPipFallbackPath;
+  return getPipCharacterAssetSources(size, expression)[0] ?? fallbackPipCharacterPath;
 }
 
 function expressionFromMood(mood: PipCharacterMood): PipCharacterExpression {
@@ -103,7 +103,7 @@ export function PipCharacter({
   const resolvedExpression = expression ?? expressionFromMood(mood);
   const sources = getPipCharacterAssetSources(size, resolvedExpression);
   const [sourceIndex, setSourceIndex] = useState(0);
-  const src = sources[Math.min(sourceIndex, sources.length - 1)] ?? legacyPipFallbackPath;
+  const src = sources[Math.min(sourceIndex, sources.length - 1)] ?? fallbackPipCharacterPath;
 
   useEffect(() => {
     setSourceIndex(0);

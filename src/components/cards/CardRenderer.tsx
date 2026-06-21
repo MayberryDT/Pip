@@ -273,7 +273,7 @@ export function CardRenderer({
           {card.issuerName && onSuppressMissingCard ? (
             <button
               type="button"
-              className="focus-ring mt-3 inline-flex min-h-10 items-center gap-2 rounded-full border border-line bg-porcelain/[0.58] px-4 text-sm font-semibold text-ink"
+              className="focus-ring ui-pressable mt-3 inline-flex min-h-10 items-center gap-2 rounded-full border border-line bg-porcelain/[0.58] px-4 text-sm font-semibold text-ink"
               onClick={() => onSuppressMissingCard(card.issuerName as string)}
             >
               <EyeOff aria-hidden="true" size={16} />
@@ -698,7 +698,7 @@ function getAccountActionClassName(
   style: Extract<AgentCard, { type: "account_connections" }>["institutions"][number]["actions"][number]["style"],
 ): string {
   const base =
-    "focus-ring inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold";
+    "focus-ring ui-pressable inline-flex min-h-10 items-center rounded-full border px-3 text-xs font-semibold";
 
   if (style === "danger") {
     return `${base} border-coral/30 bg-coral/[0.08] text-coral`;
@@ -715,7 +715,7 @@ function getSettingsActionClassName(
   style: Extract<AgentCard, { type: "settings_panel" }>["actions"][number]["style"],
 ): string {
   const base =
-    "focus-ring inline-flex min-h-9 items-center rounded-full border px-3 text-xs font-semibold";
+    "focus-ring ui-pressable inline-flex min-h-10 items-center rounded-full border px-3 text-xs font-semibold";
 
   if (style === "danger") {
     return `${base} border-coral/30 bg-coral/[0.08] text-coral`;

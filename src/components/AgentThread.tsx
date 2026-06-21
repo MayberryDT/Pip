@@ -27,6 +27,7 @@ export type AgentReportInput = {
 };
 
 const defaultAgentErrorText = "I couldn’t answer that cleanly. Try again.";
+type MatchMedia = (query: string) => { matches: boolean };
 
 export function AgentThread({
   thread,
@@ -50,7 +51,7 @@ export function AgentThread({
     window.requestAnimationFrame(() => {
       node.scrollIntoView({
         block: "end",
-        behavior: "smooth",
+        behavior: getThreadScrollBehavior(),
       });
     });
   }
@@ -70,18 +71,30 @@ export function AgentThread({
 
     container.scrollTo({
       top: targetTop,
-      behavior: "smooth",
+      behavior: getThreadScrollBehavior(),
     });
   }, [thread.length, thread.at(-1)?.response?.message, thread.at(-1)?.errorText, thread.at(-1)?.isPending]);
 
   if (thread.length === 0) {
-    return <div className="min-h-0 flex-1" data-testid="agent-thread" />;
+    return (
+      <div
+        className="min-h-0 flex-1"
+        data-testid="agent-thread"
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions text"
+        ref={containerRef}
+      />
+    );
   }
 
   return (
     <div
       className="chat-thread-in min-h-0 flex-1 space-y-4 overflow-y-auto pb-2 pr-1"
       data-testid="agent-thread"
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions text"
       ref={containerRef}
     >
       {thread.map((item, itemIndex) => (
@@ -194,7 +207,7 @@ export function ReportResponseControl({
     <div className="space-y-2">
       <button
         type="button"
-        className="focus-ring inline-flex min-h-7 items-center gap-1.5 rounded-full px-1.5 text-[0.68rem] font-semibold text-taupe/75 transition hover:text-ink"
+        className="focus-ring ui-pressable inline-flex min-h-11 items-center gap-1.5 rounded-full px-2.5 text-[0.68rem] font-semibold text-taupe/75 hover:text-ink"
         onClick={() => {
           setIsOpen((current) => !current);
           setStatusText("");
@@ -214,7 +227,7 @@ export function ReportResponseControl({
                 key={option.value}
                 type="button"
                 className={[
-                  "focus-ring min-h-8 rounded-full border px-3 text-xs font-semibold transition",
+                  "focus-ring ui-pressable min-h-11 rounded-full border px-3 text-xs font-semibold",
                   reason === option.value
                     ? "border-moss bg-moss text-paper"
                     : "border-line bg-white/55 text-ink/75 hover:border-moss",
@@ -240,7 +253,7 @@ export function ReportResponseControl({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              className="focus-ring inline-flex min-h-8 items-center justify-center rounded-full bg-ink px-3 text-xs font-bold text-paper transition disabled:bg-ink/35"
+              className="focus-ring ui-pressable inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-3 text-xs font-bold text-paper disabled:bg-ink/35"
               disabled={isSubmitting}
               onClick={submitReport}
             >
@@ -248,7 +261,7 @@ export function ReportResponseControl({
             </button>
             <button
               type="button"
-              className="focus-ring inline-flex min-h-8 items-center justify-center rounded-full border border-line bg-white/55 px-3 text-xs font-semibold text-ink/75"
+              className="focus-ring ui-pressable inline-flex min-h-11 items-center justify-center rounded-full border border-line bg-white/55 px-3 text-xs font-semibold text-ink/75"
               onClick={() => {
                 setIsOpen(false);
                 setStatusText("");
@@ -294,6 +307,14 @@ const reportReasonOptions: Array<{
   },
 ];
 
+function getThreadScrollBehavior(matchMedia: MatchMedia | undefined = getMatchMedia()): ScrollBehavior {
+  return matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
+function getMatchMedia(): MatchMedia | undefined {
+  return typeof window === "undefined" ? undefined : window.matchMedia?.bind(window);
+}
+
 function getReportErrorText(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -304,6 +325,7 @@ function getReportErrorText(error: unknown): string {
 
 export const __agentThreadTestHooks = {
   getReportErrorText,
+  getThreadScrollBehavior,
   reportReasonOptions,
 };
 

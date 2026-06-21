@@ -2,6 +2,9 @@
   "name": "pip",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "24.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "NEXT_PRIVATE_BUILD_WORKER=0 next build --webpack",
@@ -43,6 +46,8 @@
     "play:android-copy:verify": "node scripts/play-review/check-android-visible-copy.mjs",
     "privacy:audit-user": "node scripts/privacy/audit-user-data.mjs",
     "privacy:delete-user-data": "node scripts/privacy/delete-user-data.mjs",
+    "privacy:reconcile-account-deletions": "node scripts/privacy/reconcile-account-deletions.mjs",
+    "privacy:purge-agent-chats": "node scripts/privacy/purge-agent-chat-turns.mjs",
     "pip:character:import": "node scripts/pip-character/import-local-pip-assets.mjs",
     "pip:character:normalize": "node scripts/pip-character/normalize-pip-assets.mjs",
     "pip:character:review": "node scripts/pip-character/generate-pip-review-page.mjs",
@@ -58,11 +63,11 @@
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.107.0",
     "lucide-react": "^0.468.0",
-    "next": "latest",
+    "next": "16.2.7",
     "openai": "^6.42.0",
     "plaid": "^42.2.0",
-    "react": "latest",
-    "react-dom": "latest",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "zod": "^4.4.3"
   },
   "overrides": {

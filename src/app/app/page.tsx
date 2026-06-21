@@ -26,6 +26,10 @@ export default async function AppPage({
     return <PipHome authState={{ status: "guest" }} authNotice={authNotice} devOnboardingFlow />;
   }
 
+  if (devOnboardingState === "demo") {
+    return <PipHome />;
+  }
+
   if (devOnboardingState === "consent") {
     return <PipHome authState={{ status: "needs-consent", email: "tester@example.com" }} />;
   }
@@ -71,7 +75,7 @@ export default async function AppPage({
   let initialResult: PipCashApiState | null = null;
 
   try {
-    initialResult = await getCurrentPipCashState({});
+    initialResult = await getCurrentPipCashState({ recordFreshnessViewed: true });
   } catch (error) {
     if (!(error instanceof NoFinancialDataError)) {
       throw error;

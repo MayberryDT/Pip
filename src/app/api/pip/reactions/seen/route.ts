@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { markPipReactionSeenForUser } from "@/lib/data/pip-reactions";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -10,7 +10,7 @@ const requestSchema = z.object({
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   try {
@@ -21,14 +21,14 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const body = await request.json().catch(() => null);
     const parsed = requestSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid reaction seen request." }, { status: 400 });
+      return sensitiveJson({ error: "Invalid reaction seen request." }, { status: 400 });
     }
 
     const reaction = await markPipReactionSeenForUser(supabase, {
@@ -37,15 +37,15 @@ export async function POST(request: Request) {
     });
 
     if (!reaction) {
-      return NextResponse.json({ error: "Reaction not found." }, { status: 404 });
+      return sensitiveJson({ error: "Reaction not found." }, { status: 404 });
     }
 
-    return NextResponse.json({
+    return sensitiveJson({
       status: "seen",
       reaction,
     });
   } catch (error) {
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

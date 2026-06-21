@@ -34,6 +34,31 @@ export type OperatorAgentChatTurn = {
 };
 
 const localChatLogPath = "/tmp/pip-agent-chat-turns.jsonl";
+const AGENT_CHAT_USER_EXCERPT_MAX_CHARS = 240;
+const AGENT_CHAT_ASSISTANT_EXCERPT_MAX_CHARS = 320;
+const AGENT_CHAT_ERROR_EXCERPT_MAX_CHARS = 240;
+const AGENT_CHAT_PROMPT_CHIP_LABEL_MAX_CHARS = 56;
+const AGENT_CHAT_PROMPT_CHIP_PROMPT_MAX_CHARS = 160;
+const AGENT_CHAT_METADATA_STRING_MAX_CHARS = 160;
+const AGENT_CHAT_METADATA_ARRAY_MAX_ITEMS = 8;
+const allowedMetadataKeys = new Set([
+  "scenario",
+  "requestKind",
+  "selectedPromptChipId",
+  "historyLength",
+  "shownCardCount",
+  "lastToolCount",
+  "promptChipCount",
+  "onboardingStatus",
+  "hasFinancialData",
+  "hasSnapshot",
+  "syncInstitutionCount",
+  "syncHasStaleInstitution",
+  "latestSyncStatus",
+  "responseQuality",
+  "errorCode",
+  "status",
+]);
 
 export async function recordAgentChatTurnSafely(
   supabase: SupabaseClient<Database> | null,
@@ -61,9 +86,13 @@ export async function recordAgentChatTurn(
   const { error } = await supabase.from("agent_chat_turns").insert({
     user_id: input.userId ?? null,
     conversation_id: input.conversationId,
-    user_message: sanitizeSensitiveText(input.userMessage),
-    assistant_message: response?.message ? sanitizeSensitiveText(response.message) : null,
-    error_message: input.errorMessage ? sanitizeSensitiveText(input.errorMessage) : null,
+    user_message: minimizeChatText(input.userMessage, AGENT_CHAT_USER_EXCERPT_MAX_CHARS),
+    assistant_message: response?.message
+      ? minimizeChatText(response.message, AGENT_CHAT_ASSISTANT_EXCERPT_MAX_CHARS)
+      : null,
+    error_message: input.errorMessage
+      ? minimizeChatText(input.errorMessage, AGENT_CHAT_ERROR_EXCERPT_MAX_CHARS)
+      : null,
     response_mode: response?.responseMode ?? null,
     used_tools: response?.usedTools ?? [],
     card_types: response?.cards.map((card) => card.type) ?? [],
@@ -155,9 +184,13 @@ async function appendLocalAgentChatTurn(input: AgentChatTurnInput) {
     id: createLocalTurnId(),
     userId: input.userId ?? null,
     conversationId: input.conversationId,
-    userMessage: sanitizeSensitiveText(input.userMessage),
-    assistantMessage: response?.message ? sanitizeSensitiveText(response.message) : null,
-    errorMessage: input.errorMessage ? sanitizeSensitiveText(input.errorMessage) : null,
+    userMessage: minimizeChatText(input.userMessage, AGENT_CHAT_USER_EXCERPT_MAX_CHARS),
+    assistantMessage: response?.message
+      ? minimizeChatText(response.message, AGENT_CHAT_ASSISTANT_EXCERPT_MAX_CHARS)
+      : null,
+    errorMessage: input.errorMessage
+      ? minimizeChatText(input.errorMessage, AGENT_CHAT_ERROR_EXCERPT_MAX_CHARS)
+      : null,
     responseMode: response?.responseMode ?? null,
     usedTools: response?.usedTools ?? [],
     cardTypes: response?.cards.map((card) => card.type) ?? [],
@@ -175,25 +208,111 @@ async function appendLocalAgentChatTurn(input: AgentChatTurnInput) {
 function summarizePromptChips(response: AgentResponse | undefined): Json {
   return (response?.promptChips ?? []).map((chip) => ({
     id: chip.id,
-    label: sanitizeSensitiveText(chip.label),
-    prompt: sanitizeSensitiveText(chip.prompt),
+    label: minimizeChatText(chip.label, AGENT_CHAT_PROMPT_CHIP_LABEL_MAX_CHARS),
+    prompt: minimizeChatText(chip.prompt, AGENT_CHAT_PROMPT_CHIP_PROMPT_MAX_CHARS),
   }));
 }
 
 function buildRequestMetadata(input: AgentChatTurnInput): Json {
-  const metadata = isJsonObject(input.requestMetadata)
-    ? { ...input.requestMetadata }
-    : {};
+  const metadata: { [key: string]: Json } = {};
+  const rawMetadata = isJsonObject(input.requestMetadata) ? input.requestMetadata : {};
+
+  for (const [key, value] of Object.entries(rawMetadata)) {
+    if (!allowedMetadataKeys.has(key)) {
+      continue;
+    }
+
+    const minimizedValue = key === "responseQuality"
+      ? summarizeResponseQuality(value)
+      : minimizeMetadataValue(value);
+
+    if (minimizedValue !== undefined) {
+      metadata[key] = minimizedValue;
+    }
+  }
+
   const guidance = input.response?.audit.guidance;
 
   if (guidance) {
     metadata.guidanceSource = guidance.guidanceSource ?? null;
     metadata.guidanceValidationOutcome = guidance.validationOutcome;
     metadata.guidanceStance = guidance.stance ?? null;
-    metadata.guidanceEvidenceIds = guidance.evidenceIds ?? [];
+    metadata.guidanceEvidenceIds = (guidance.evidenceIds ?? [])
+      .slice(0, AGENT_CHAT_METADATA_ARRAY_MAX_ITEMS)
+      .map((evidenceId) => minimizeChatText(evidenceId, AGENT_CHAT_METADATA_STRING_MAX_CHARS));
   }
 
   return metadata;
+}
+
+function minimizeMetadataValue(value: Json | undefined): Json | undefined {
+  if (typeof value === "string") {
+    return minimizeChatText(value, AGENT_CHAT_METADATA_STRING_MAX_CHARS);
+  }
+
+  if (typeof value === "number" || typeof value === "boolean" || value === null) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .filter((item): item is string | number | boolean | null =>
+        typeof item === "string" ||
+        typeof item === "number" ||
+        typeof item === "boolean" ||
+        item === null,
+      )
+      .slice(0, AGENT_CHAT_METADATA_ARRAY_MAX_ITEMS)
+      .map((item) =>
+        typeof item === "string"
+          ? minimizeChatText(item, AGENT_CHAT_METADATA_STRING_MAX_CHARS)
+          : item,
+      );
+  }
+
+  return undefined;
+}
+
+function summarizeResponseQuality(value: Json | undefined): Json | undefined {
+  if (isJsonObject(value) && typeof value.reviewPassed === "boolean") {
+    return value.reviewPassed ? "passed" : "failed";
+  }
+
+  if (
+    isJsonObject(value) &&
+    typeof value.conversationJob === "string" &&
+    typeof value.answerPatternId === "string"
+  ) {
+    const state = value.repetitionAdjusted === true ? "adjusted" : "ok";
+
+    return minimizeChatText(
+      `${value.conversationJob}:${value.answerPatternId}:${state}`,
+      AGENT_CHAT_METADATA_STRING_MAX_CHARS,
+    );
+  }
+
+  return minimizeMetadataValue(value);
+}
+
+function minimizeChatText(value: string, maxChars: number): string {
+  return redactPaymentDetails(sanitizeSensitiveText(value)).slice(0, maxChars);
+}
+
+function redactPaymentDetails(value: string): string {
+  return value
+    .replace(/\b(?:\d[ -]?){13,19}\b/g, "[redacted]")
+    .replace(
+      /\b((?:card|account)\s+(?:ending\s+in|ending\s+with|last[-\s]?(?:four|4)|number(?:\s+is)?))\s+\d{4}\b/gi,
+      "$1 [redacted]",
+    )
+    .replace(
+      /\b((?:last[-_ ]?(?:four|4)|mask|account[-_ ]?number|routing[-_ ]?number)\s*[:=]\s*)\d{4,19}\b/gi,
+      "$1[redacted]",
+    )
+    .replace(
+      /\b((?:account|routing)\s+number\s+(?:is\s+)?)\d{5,19}\b/gi,
+      "$1[redacted]",
+    );
 }
 
 function isJsonObject(value: Json | undefined): value is { [key: string]: Json | undefined } {

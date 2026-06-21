@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { getAppOpenSyncDecision, type AppOpenSyncDecision } from "@/lib/data/app-open-sync";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { loadPendingPipSyncJobsForUser } from "@/lib/data/sync-jobs";
@@ -8,12 +7,14 @@ import { loadManualRefreshOnlyForUser } from "@/lib/data/user-settings";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { ProviderUnavailableError } from "@/lib/providers/provider-registry";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST() {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   try {
@@ -24,14 +25,14 @@ export async function POST() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const now = new Date();
     const isManualRefreshOnly = await loadManualRefreshOnlyForUser(supabase, user.id);
 
     if (isManualRefreshOnly) {
-      return NextResponse.json({
+      return sensitiveJson({
         status: "skipped_manual_only",
         reason: "manual_refresh_only",
         message: "Automatic refresh is disabled for this account.",
@@ -58,25 +59,27 @@ export async function POST() {
         ),
       });
 
-      return NextResponse.json(decision);
+      return sensitiveJson(decision);
     }
 
     try {
+      const writeSupabase = createSupabaseAdminClient();
       const result = await runProviderSync(supabase, {
         userId: user.id,
         provider: decision.provider,
         reason: "app_open",
         now,
+        writeSupabase,
       });
 
-      return NextResponse.json({
+      return sensitiveJson({
         status: "ran",
         provider: decision.provider,
         result,
       });
     } catch (error) {
       if (error instanceof ProviderSyncError && error.repairRequired) {
-        return NextResponse.json({
+        return sensitiveJson({
           status: "needs_repair",
           reason: "provider_needs_repair",
           provider: error.provider,
@@ -91,7 +94,7 @@ export async function POST() {
     }
   } catch (error) {
     if (error instanceof ProviderUnavailableError) {
-      return NextResponse.json(
+      return sensitiveJson(
         {
           status: "failed",
           error: error.message,
@@ -104,7 +107,7 @@ export async function POST() {
       console.error("[sync/app-open] sync failed", getSafeErrorMessage(error, "App-open sync failed."));
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

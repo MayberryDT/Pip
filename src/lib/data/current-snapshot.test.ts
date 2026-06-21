@@ -151,7 +151,7 @@ describe("getCurrentPipCashState", () => {
       intensity: 1,
     });
 
-    await expect(getCurrentPipCashState({})).resolves.toMatchObject({
+    await expect(getCurrentPipCashState({ recordFreshnessViewed: true })).resolves.toMatchObject({
       pipCashTodayCents: 1234,
       freshness: {
         state: "syncing",
@@ -176,6 +176,35 @@ describe("getCurrentPipCashState", () => {
         hasStaleInstitution: false,
       },
     );
+  });
+
+  it("does not record freshness telemetry unless explicitly requested", async () => {
+    const supabase = createSupabaseClient({ id: "user-1" });
+    const cachedResult = {
+      ...calculatePipCash(fakeSnapshot),
+      pipCashTodayCents: 1234,
+    };
+
+    mocks.isSupabaseConfigured.mockReturnValue(true);
+    mocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    mocks.loadCachedPipCashResultForUser.mockResolvedValue(cachedResult);
+    mocks.loadSyncStatusForUser.mockResolvedValue({
+      institutions: [],
+      latestSyncRun: null,
+      hasStaleInstitution: false,
+    });
+    mocks.loadPendingPipSyncJobsForUser.mockResolvedValue([]);
+    mocks.loadLatestUnseenPipReactionForUser.mockResolvedValue(null);
+
+    await expect(getCurrentPipCashState({ recordFreshnessViewed: false })).resolves.toMatchObject({
+      pipCashTodayCents: 1234,
+      freshness: {
+        state: "fresh",
+        hasPendingSyncJob: false,
+        hasStaleInstitution: false,
+      },
+    });
+    expect(mocks.recordProductEventSafely).not.toHaveBeenCalled();
   });
 });
 

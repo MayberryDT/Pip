@@ -17,6 +17,8 @@ import TermsPage from "@/app/terms/page";
 import AndroidAccessPage from "@/app/android-access/page";
 import DeleteAccountPage from "@/app/delete-account/page";
 import { marketingAssets, requiredMarketingAssetRoles } from "@/lib/marketing/assets";
+import { getPublishedArticles } from "@/lib/marketing/content";
+import { publicMarketingPages } from "@/lib/marketing/site";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 
@@ -86,6 +88,10 @@ describe("marketing website pages", () => {
     expect(html).toContain(marketingAssets.homepageHeroProduct.src);
     expect(html).toContain(marketingAssets.homepageBalanceRoom.src);
     expect(html).toContain(marketingAssets.homepageAskPip.src);
+    expect(html).not.toContain("Yes. You still have $84 for today.");
+    expect(html).toContain(
+      "After a $50 purchase, today&#x27;s estimate would be about $84, assuming no missing or pending activity.",
+    );
     expect(html).toContain(marketingAssets.blogMeetPipCard.src);
     expect(html).toContain(">How the number works</a>");
     expect(html).toContain("editorial-mobile-menu");
@@ -123,7 +129,11 @@ describe("marketing website pages", () => {
 
   it("keeps the mobile hero subject from being clipped", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
-    const mobileHeroCss = css.slice(css.lastIndexOf("@media (max-width: 767px)"));
+    const mobileHeroCss = sliceCssFromMediaQueryContaining(
+      css,
+      "@media (max-width: 767px)",
+      ".pip-home-title-lockup {\n    max-width: none;",
+    );
 
     expect(css).toContain(".pip-title-line {\n  display: block;\n  white-space: nowrap;");
     expect(css).toContain(".pip-home-title .pip-title-line-accent,");
@@ -143,7 +153,7 @@ describe("marketing website pages", () => {
     const tabletCss = css
       .slice(css.lastIndexOf("@media (max-width: 980px)"))
       .split("@media (max-width: 900px)")[0];
-    const mobileCss = css.slice(css.lastIndexOf("@media (max-width: 767px)"));
+    const mobileCss = sliceCssFromMediaQueryContaining(css, "@media (max-width: 767px)", ".pip-generated-figure,");
     const posterCss = css
       .slice(css.indexOf(".pip-story-poster-anti,\n.pip-story-poster-final {"))
       .split(".pip-story-poster-anti::before")[0];
@@ -223,7 +233,7 @@ describe("marketing website pages", () => {
     expect(html).toContain("application/ld+json");
     expect(html).toContain("BreadcrumbList");
     expect(html).toContain("Get Pip and try Spendable Cash Today");
-    expect(html).toContain(marketingAssets.articleCoverTemplate.src);
+    expect(html).toContain(marketingAssets.blogSpendableCashCard.src);
   });
 
   it("renders rich article blocks on published article pages", async () => {
@@ -252,6 +262,22 @@ describe("marketing website pages", () => {
     expect(urls).toContain("https://spendwithpip.com/blog/how-much-can-i-spend-today");
     expect(urls).not.toContain("https://spendwithpip.com/app");
     expect(urls).not.toContain("https://spendwithpip.com/blog/daily-spending-allowance-vs-budget");
+  });
+
+  it("uses marketing metadata as the source for public sitemap dates", () => {
+    const entries = new Map(sitemap().map((entry) => [entry.url, entry]));
+
+    for (const page of publicMarketingPages) {
+      expect(entries.get(`https://spendwithpip.com${page.path === "/" ? "/" : page.path}`)?.lastModified).toEqual(
+        new Date(`${page.updatedAt}T00:00:00Z`),
+      );
+    }
+
+    const article = getPublishedArticles().find((candidate) => candidate.slug === "what-is-spendable-cash-today");
+
+    expect(entries.get("https://spendwithpip.com/blog/what-is-spendable-cash-today")?.lastModified).toEqual(
+      new Date(`${article?.updatedAt}T00:00:00Z`),
+    );
   });
 
   it("keeps robots focused on public marketing pages", () => {
@@ -357,3 +383,13 @@ describe("marketing website pages", () => {
     }
   });
 });
+
+function sliceCssFromMediaQueryContaining(css: string, mediaQuery: string, selector: string): string {
+  const selectorIndex = css.indexOf(selector);
+  expect(selectorIndex).toBeGreaterThanOrEqual(0);
+
+  const mediaIndex = css.lastIndexOf(mediaQuery, selectorIndex);
+  expect(mediaIndex).toBeGreaterThanOrEqual(0);
+
+  return css.slice(mediaIndex);
+}

@@ -268,10 +268,12 @@ export async function removeInstitutionForUser(
   input: {
     userId: string;
     institutionId: string;
+    writeSupabase?: SupabaseClient<Database>;
   },
 ): Promise<ConnectedInstitutionRow> {
   const institution = await loadInstitutionForUser(supabase, input);
-  const { error } = await supabase
+  const writeSupabase = input.writeSupabase ?? supabase;
+  const { error } = await writeSupabase
     .from("connected_institutions")
     .delete()
     .eq("user_id", input.userId)
@@ -336,8 +338,9 @@ export async function upsertUserSettings(
 export async function markPipCashSnapshotsStaleForUser(
   supabase: SupabaseClient<Database>,
   userId: string,
+  writeSupabase: SupabaseClient<Database> = supabase,
 ) {
-  const { error } = await supabase
+  const { error } = await writeSupabase
     .from("pip_cash_snapshots")
     .update({
       stale: true,
@@ -352,6 +355,68 @@ export async function markPipCashSnapshotsStaleForUser(
 
 export async function deleteCurrentUserFinancialData(supabase: SupabaseClient<Database>) {
   const { error } = await supabase.rpc("delete_current_user_financial_data");
+
+  if (error) {
+    throw error;
+  }
+}
+
+const accountDeletionUserTables = [
+  "ai_response_reports",
+  "tester_feedback",
+  "pip_reaction_events",
+  "pip_sync_jobs",
+  "agent_chat_turns",
+  "product_events",
+  "recurring_obligation_rules",
+  "savings_goals",
+  "pip_cash_snapshots",
+  "sync_runs",
+  "missing_card_preferences",
+  "account_preferences",
+  "transactions",
+  "accounts",
+  "connected_institutions",
+  "user_settings",
+  "data_deletion_requests",
+] as const;
+
+export async function deleteUserFinancialDataByUserId(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+) {
+  const { data: syncJobs, error: syncJobsError } = await supabase
+    .from("pip_sync_jobs")
+    .select("id")
+    .eq("user_id", userId);
+
+  if (syncJobsError) {
+    throw syncJobsError;
+  }
+
+  await expectNoSupabaseError(
+    supabase.schema("private").from("provider_credentials").delete().eq("user_id", userId),
+  );
+
+  const syncJobIds = (syncJobs ?? []).map((row) => row.id);
+
+  if (syncJobIds.length > 0) {
+    await expectNoSupabaseError(
+      supabase.from("plaid_webhook_events").delete().in("source_sync_job_id", syncJobIds),
+    );
+  }
+
+  await expectNoSupabaseError(
+    supabase.from("plaid_webhook_events").delete().eq("user_id", userId),
+  );
+
+  for (const tableName of accountDeletionUserTables) {
+    await expectNoSupabaseError(supabase.from(tableName).delete().eq("user_id", userId));
+  }
+}
+
+async function expectNoSupabaseError(resultPromise: PromiseLike<{ error: unknown }>) {
+  const { error } = await resultPromise;
 
   if (error) {
     throw error;

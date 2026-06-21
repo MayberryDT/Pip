@@ -71,7 +71,7 @@ export function ReviewerLoginForm() {
         />
       </label>
       <button
-        className="focus-ring inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-ink px-5 text-sm font-bold text-paper transition disabled:bg-ink/35"
+        className="focus-ring ui-pressable inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-full bg-ink px-5 text-sm font-bold text-paper disabled:bg-ink/35"
         disabled={isSubmitting}
         type="submit"
       >

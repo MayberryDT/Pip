@@ -1,4 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { PromptChip } from "@/lib/agent/card-types";
 import { PromptChips } from "@/components/PromptChips";
@@ -18,6 +20,7 @@ describe("PromptChips", () => {
     expect(markup).toContain("pip-prompt-grid");
     expect(markup).toContain("grid-cols-2");
     expect(markup).toContain("min-w-full");
+    expect(markup).toContain("min-h-11");
     expect(markup).toContain("min-w-0");
     expect(markup).not.toContain("overflow-x-auto");
     expect(markup).not.toContain("whitespace-nowrap");
@@ -31,9 +34,20 @@ describe("PromptChips", () => {
 
     expect(markup.match(/<button/g)).toHaveLength(3);
     expect(markup).toContain("is-compact");
+    expect(markup).toContain("min-h-11");
     expect(markup).not.toContain("overflow-x-auto");
     expect(markup).not.toContain("whitespace-nowrap");
     expect(markup).toContain("What would a $25 purchase do?");
+  });
+
+  it("keeps compact chip CSS at a 44px target minimum", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const compactCss = css.slice(
+      css.indexOf(".pip-prompt-tray.is-compact .pip-prompt-chip {"),
+      css.indexOf(".pip-prompt-chip:nth-child(3):last-child"),
+    );
+
+    expect(compactCss).toContain("min-height: 2.75rem;");
   });
 });
 

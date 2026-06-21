@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm test
+
+      - run: npm run build
+
+      - run: npm run check:deployment
+        env:
+          NEXT_PUBLIC_SITE_URL: https://spendwithpip.com
+          NEXT_PUBLIC_SUPABASE_URL: https://ci.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder
+          PIP_OPERATOR_TOKEN: ci-placeholder
+          PIP_PROVIDER_TOKEN_KEY_BASE64: ci-placeholder
+          PIP_RATE_LIMIT_SALT: ci-placeholder-rate-limit-salt
+          PLAID_CLIENT_ID: ci-placeholder
+          PLAID_SECRET: ci-placeholder
+          PLAID_ENV: production
+          OPENAI_BASE_URL: https://api.openai.com/v1
+
+      - run: npm run check:db-schema-names
+
+      - run: npm run play:android-copy:verify

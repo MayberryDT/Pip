@@ -19,7 +19,7 @@ export function PromptChips({
     .filter(Boolean)
     .join(" ");
   const chipClassName = [
-    "focus-ring pip-prompt-chip min-h-[1.85rem] min-w-0 rounded-full border border-line bg-porcelain/50 px-2.5 py-1 text-[0.7rem] font-medium leading-[0.9rem] text-ink/90 shadow-[0_8px_22px_rgba(60,50,40,0.04)] transition hover:-translate-y-0.5 hover:bg-porcelain max-[380px]:text-[0.68rem] max-[380px]:leading-[0.84rem]",
+    "focus-ring ui-pressable pip-prompt-chip min-h-11 min-w-0 rounded-full border border-line bg-porcelain/50 px-2.5 py-1 text-[0.7rem] font-medium leading-[0.9rem] text-ink/90 shadow-[0_8px_22px_rgba(60,50,40,0.04)] hover:-translate-y-0.5 hover:bg-porcelain max-[380px]:text-[0.68rem] max-[380px]:leading-[0.84rem]",
   ]
     .filter(Boolean)
     .join(" ");

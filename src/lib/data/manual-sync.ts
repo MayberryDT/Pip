@@ -117,6 +117,7 @@ export async function runManualSync(
     provider: FinancialProviderName;
     now?: Date;
     bypassRateLimit?: boolean;
+    writeSupabase?: SupabaseClient<Database>;
   },
 ): Promise<ManualSyncResult> {
   const now = input.now ?? new Date();
@@ -134,6 +135,7 @@ export async function runManualSync(
     provider: input.provider,
     reason: "manual",
     now,
+    writeSupabase: input.writeSupabase,
   });
 }
 
@@ -145,11 +147,13 @@ export async function runProviderSync(
     reason: PipSyncReason;
     institutionId?: string;
     now?: Date;
+    writeSupabase?: SupabaseClient<Database>;
   },
 ): Promise<ProviderSyncResult> {
   const now = input.now ?? new Date();
+  const writeSupabase = input.writeSupabase ?? supabase;
   const provider = getFinancialDataProvider(input.provider);
-  const syncRun = await createSyncRun(supabase, {
+  const syncRun = await createSyncRun(writeSupabase, {
     userId: input.userId,
     provider: input.provider,
     institutionId: input.institutionId,
@@ -178,7 +182,7 @@ export async function runProviderSync(
     let balanceCount = 0;
 
     for (const success of successes) {
-      const institution = await upsertInstitution(supabase, {
+      const institution = await upsertInstitution(writeSupabase, {
         userId: input.userId,
         provider: input.provider,
         institutionId: success.connection.institutionId,
@@ -187,18 +191,18 @@ export async function runProviderSync(
         status: success.connection.status,
         now,
       });
-      const accountIdByProviderId = await upsertAccounts(supabase, {
+      const accountIdByProviderId = await upsertAccounts(writeSupabase, {
         userId: input.userId,
         institutionId: institution.id,
         accounts: success.accounts,
       });
 
-      await upsertTransactions(supabase, {
+      await upsertTransactions(writeSupabase, {
         userId: input.userId,
         transactions: success.transactions,
         accountIdByProviderId,
       });
-      await deleteRemovedProviderTransactions(supabase, {
+      await deleteRemovedProviderTransactions(writeSupabase, {
         userId: input.userId,
         providerTransactionIds: success.removedTransactionProviderIds ?? [],
       });
@@ -226,7 +230,7 @@ export async function runProviderSync(
     const v2Metric = result.spendableCashToday;
     const syncFailures = await Promise.all(
       failures.map((failure) =>
-        recordProviderFailure(supabase, {
+        recordProviderFailure(writeSupabase, {
           userId: input.userId,
           provider: input.provider,
           reason: input.reason,
@@ -239,7 +243,7 @@ export async function runProviderSync(
     );
     const status = syncFailures.length > 0 ? "partial" : "succeeded";
 
-    await storePipCashSnapshot(supabase, {
+    await storePipCashSnapshot(writeSupabase, {
       userId: input.userId,
       syncRunId: syncRun.id,
       result,
@@ -257,7 +261,8 @@ export async function runProviderSync(
     const sameDayNewTransactions = getSameDayNewTransactions(previousPipCashResult, result);
     const sameDayNewSpendCents = getSameDayNewSpendCents(sameDayNewTransactions);
 
-    await finishSyncRun(supabase, {
+    await finishSyncRun(writeSupabase, {
+      userId: input.userId,
       syncRunId: syncRun.id,
       institutionId: input.institutionId ?? institutionIds[0],
       status,
@@ -323,7 +328,8 @@ export async function runProviderSync(
   } catch (error) {
     const failure = getProviderFailure(input.provider, error);
 
-    await finishSyncRun(supabase, {
+    await finishSyncRun(writeSupabase, {
+      userId: input.userId,
       syncRunId: syncRun.id,
       institutionId: failure.institutionId,
       status: "failed",
@@ -335,7 +341,7 @@ export async function runProviderSync(
       errorCode: failure.code,
       errorMessage: failure.message,
     });
-    await markInstitutionSyncFailure(supabase, {
+    await markInstitutionSyncFailure(writeSupabase, {
       userId: input.userId,
       now,
       failure,
@@ -624,6 +630,7 @@ async function upsertInstitution(
       .from("connected_institutions")
       .update(payload)
       .eq("id", existing.id)
+      .eq("user_id", input.userId)
       .select("*")
       .single();
 
@@ -635,12 +642,12 @@ async function upsertInstitution(
   }
 
   const { data, error } = await supabase
-      .from("connected_institutions")
-      .insert({
-        user_id: input.userId,
-        provider: input.provider,
-        ...payload,
-      })
+    .from("connected_institutions")
+    .insert({
+      user_id: input.userId,
+      provider: input.provider,
+      ...payload,
+    })
     .select("*")
     .single();
 
@@ -896,6 +903,7 @@ async function storePipCashSnapshot(
 async function finishSyncRun(
   supabase: SupabaseClient<Database>,
   input: {
+    userId: string;
     syncRunId: string;
     institutionId?: string;
     status: "succeeded" | "failed" | "partial";
@@ -921,6 +929,7 @@ async function finishSyncRun(
       error_code: input.errorCode ?? null,
       error_message: input.errorMessage ?? null,
     })
+    .eq("user_id", input.userId)
     .eq("id", input.syncRunId);
 
   if (error) {

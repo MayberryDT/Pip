@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
 import { deleteCurrentUserFinancialData } from "@/lib/data/financial-repository";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST() {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json(
+    return sensitiveJson(
       {
         error: "Supabase is not configured.",
       },
@@ -22,12 +22,12 @@ export async function POST() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     await deleteCurrentUserFinancialData(supabase);
 
-    return NextResponse.json({
+    return sensitiveJson({
       status: "deleted",
     });
   } catch (error) {
@@ -35,7 +35,7 @@ export async function POST() {
       console.error("[delete-data] deletion failed", getSafeErrorMessage(error, "Delete-data request failed."));
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

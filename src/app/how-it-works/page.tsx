@@ -94,7 +94,7 @@ export default function HowItWorksPage() {
               screen because the default screen should shape the next spending decision.
             </SwissText>
             <Link
-              className="focus-ring mt-6 inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink"
+              className="focus-ring pip-text-action-link mt-6 gap-2 text-sm font-bold text-moss hover:text-ink"
               href={pipTrustPolicy.publicLinks.howNumberWorks}
             >
               Read how the number works

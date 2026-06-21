@@ -15,7 +15,7 @@ export function PipSays({
       ].join(" ")}
     >
       <img
-        src="/brand/pip-profile-clean.png"
+        src="/brand/pip-character/v001/avatar/normal.png"
         alt=""
         aria-hidden="true"
         width={64}

@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import type { FinancialProviderName } from "@/lib/providers/FinancialDataProvider";
@@ -7,6 +6,7 @@ import {
   ProviderUnavailableError,
 } from "@/lib/providers/provider-registry";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -18,7 +18,7 @@ const requestSchema = z.object({
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   try {
@@ -29,14 +29,14 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const body = await request.json().catch(() => ({}));
     const parsed = requestSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid provider request." }, { status: 400 });
+      return sensitiveJson({ error: "Invalid provider request." }, { status: 400 });
     }
 
     const providerName = parsed.data.provider as FinancialProviderName;
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
       },
     );
 
-    const response = NextResponse.json(session);
+    const response = sensitiveJson(session);
 
     if (session.connect?.kind === "teller" && session.connect.nonce) {
       response.cookies.set("pip_teller_nonce", session.connect.nonce, {
@@ -72,10 +72,10 @@ export async function POST(request: Request) {
     return response;
   } catch (error) {
     if (error instanceof ProviderUnavailableError) {
-      return NextResponse.json({ error: error.message }, { status: 501 });
+      return sensitiveJson({ error: error.message }, { status: 501 });
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

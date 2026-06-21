@@ -19,7 +19,7 @@ import {
   SwissText,
   SwissTitle,
 } from "@/components/marketing/SwissGrid";
-import { marketingAssets } from "@/lib/marketing/assets";
+import { getArticleVisual } from "@/lib/marketing/article-visuals";
 import { getArticleBySlug, getPublishedArticles, getRelatedArticles } from "@/lib/marketing/content";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
 import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
@@ -81,7 +81,7 @@ export default async function ArticlePage({ params }: PageProps) {
           <SwissSection folio="01 / Article">
             <div className="col-span-12 lg:col-span-7">
               <Link
-                className="focus-ring inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink"
+                className="focus-ring pip-text-action-link gap-2 text-sm font-bold text-moss hover:text-ink"
                 href="/blog"
               >
                 <ArrowLeft aria-hidden="true" size={16} />
@@ -99,7 +99,7 @@ export default async function ArticlePage({ params }: PageProps) {
                   </span>
                 ))}
               </div>
-              <SwissTitle className="mt-6 max-w-5xl" level={1} size="page">
+              <SwissTitle className="article-hero-title mt-6 max-w-5xl" level={1} size="page">
                 {article.title}
               </SwissTitle>
               <SwissText className="mt-6 text-lg leading-8">{article.description}</SwissText>
@@ -110,8 +110,13 @@ export default async function ArticlePage({ params }: PageProps) {
                 <span>{article.readingTimeMinutes} min read</span>
               </div>
             </div>
-            <div className="col-span-12 lg:col-span-4 lg:col-start-9">
-              <SwissFigure asset={marketingAssets.articleCoverTemplate} variant="poster" />
+            <div className="article-hero-media col-span-12 lg:col-span-5 lg:col-start-8">
+              <SwissFigure
+                asset={getArticleVisual(article)}
+                className="article-hero-figure"
+                priority
+                variant="wide"
+              />
             </div>
             <div className="col-span-12 lg:col-span-3">
               <ArticleTableOfContents article={article} />
@@ -134,7 +139,7 @@ export default async function ArticlePage({ params }: PageProps) {
           </div>
           <div className="col-span-12 lg:col-span-4 lg:col-start-9">
             <MarketingCtaLink
-              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-ink px-6 text-sm font-bold text-porcelain transition hover:bg-moss"
+              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-ink px-6 text-sm font-bold text-porcelain hover:bg-moss"
               eventLabel="article_page_get_pip"
               eventProperties={{ intent: "get_pip", slug: article.slug }}
               href={getProductAccessHref()}

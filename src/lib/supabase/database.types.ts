@@ -64,6 +64,12 @@ export type Database = {
       connection_status: "connected" | "mocked" | "stale" | "failed" | "revoked";
       recurring_obligation_rule_source: "user_confirmed" | "user_correction" | "auto_detected";
       recurring_obligation_rule_status: "active" | "ignored";
+      account_deletion_request_status:
+        | "requested"
+        | "data_deleted"
+        | "auth_deleted"
+        | "completed"
+        | "failed";
       sync_status: "started" | "succeeded" | "failed" | "partial";
       plaid_webhook_verification_status: "verified" | "bypassed_dev" | "failed";
       plaid_webhook_processing_status: "received" | "ignored" | "enqueued" | "failed";
@@ -124,6 +130,68 @@ export type Database = {
           manual_refresh_only?: boolean;
           invite_accepted_at?: string | null;
           privacy_consent_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_model_gate_windows: {
+        Row: {
+          id: string;
+          scope_hash: string;
+          request_kind: string;
+          window_kind: string;
+          window_start: string;
+          request_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          scope_hash: string;
+          request_kind: string;
+          window_kind: string;
+          window_start: string;
+          request_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          scope_hash?: string;
+          request_kind?: string;
+          window_kind?: string;
+          window_start?: string;
+          request_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_model_gate_leases: {
+        Row: {
+          id: string;
+          scope_hash: string;
+          request_kind: string;
+          acquired_at: string;
+          expires_at: string;
+          released_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          scope_hash: string;
+          request_kind: string;
+          acquired_at?: string;
+          expires_at: string;
+          released_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          scope_hash?: string;
+          request_kind?: string;
+          acquired_at?: string;
+          expires_at?: string;
+          released_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
@@ -647,6 +715,44 @@ export type Database = {
         };
         Relationships: [];
       };
+      account_deletion_requests: {
+        Row: {
+          id: string;
+          user_id: string;
+          status: Database["public"]["Enums"]["account_deletion_request_status"];
+          last_error_code: string | null;
+          requested_at: string;
+          data_deleted_at: string | null;
+          auth_deleted_at: string | null;
+          completed_at: string | null;
+          failed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          status?: Database["public"]["Enums"]["account_deletion_request_status"];
+          last_error_code?: string | null;
+          requested_at?: string;
+          data_deleted_at?: string | null;
+          auth_deleted_at?: string | null;
+          completed_at?: string | null;
+          failed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          status?: Database["public"]["Enums"]["account_deletion_request_status"];
+          last_error_code?: string | null;
+          data_deleted_at?: string | null;
+          auth_deleted_at?: string | null;
+          completed_at?: string | null;
+          failed_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       missing_card_preferences: {
         Row: {
           id: string;
@@ -894,6 +1000,23 @@ export type Database = {
         Args: never;
         Returns: void;
       };
+      claim_agent_model_gate: {
+        Args: {
+          p_scope_hash: string;
+          p_request_kind: string;
+          p_minute_limit: number;
+          p_day_limit: number;
+          p_global_concurrency_limit: number;
+          p_lease_ttl_seconds: number;
+          p_now?: string;
+        };
+        Returns: {
+          allowed: boolean;
+          denial_reason: string | null;
+          retry_after_seconds: number | null;
+          lease_id: string | null;
+        }[];
+      };
       delete_current_user_financial_data: {
         Args: never;
         Returns: void;
@@ -903,6 +1026,19 @@ export type Database = {
           input_email: string;
         };
         Returns: boolean;
+      };
+      release_agent_model_gate: {
+        Args: {
+          p_lease_id: string;
+          p_now?: string;
+        };
+        Returns: boolean;
+      };
+      purge_agent_chat_turns: {
+        Args: {
+          p_retention_days?: number;
+        };
+        Returns: number;
       };
     };
   };

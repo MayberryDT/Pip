@@ -19,7 +19,6 @@ describe("PipCharacter", () => {
   it("falls back gracefully for unsupported size and expression pairs", () => {
     expect(getPipCharacterAssetSources("medium", "happy")).toEqual([
       "/brand/pip-character/v001/avatar/normal.png",
-      "/brand/pip-profile-clean.png",
     ]);
 
     const markup = renderToStaticMarkup(

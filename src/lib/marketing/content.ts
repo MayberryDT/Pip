@@ -67,6 +67,7 @@ export type ArticleBodyBlock =
   | { type: "comparison"; title?: string; items: ArticleKeyValueRow[] }
   | { type: "inline-cta"; body: string; href: string; label: string }
   | { type: "pull-quote"; body: string }
+  | { type: "table"; headers: string[]; alignments: Array<"left" | "center" | "right">; rows: string[][] }
   | { type: "figure"; src: string; alt: string; caption?: string; width?: number; height?: number };
 
 export type Article = ArticleFrontmatter & {
@@ -227,6 +228,12 @@ export function parseArticleBody(body: string): ArticleBodyBlock[] {
       continue;
     }
 
+    if (trimmed.startsWith("# ")) {
+      flushParagraph();
+      index += 1;
+      continue;
+    }
+
     if (trimmed.startsWith("## ")) {
       flushParagraph();
       const text = trimmed.slice(3).trim();
@@ -257,6 +264,27 @@ export function parseArticleBody(body: string): ArticleBodyBlock[] {
       continue;
     }
 
+    if (trimmed.startsWith(">")) {
+      flushParagraph();
+      const quoteLines: string[] = [];
+
+      while (index < lines.length && lines[index].trim().startsWith(">")) {
+        quoteLines.push(lines[index].trim().replace(/^>\s?/, ""));
+        index += 1;
+      }
+
+      blocks.push({ type: "pull-quote", body: quoteLines.join(" ").trim() });
+      continue;
+    }
+
+    if (isMarkdownTableStart(lines, index)) {
+      flushParagraph();
+      const parsed = parseMarkdownTable(lines, index);
+      blocks.push(parsed.block);
+      index = parsed.nextIndex;
+      continue;
+    }
+
     paragraphLines.push(line);
     index += 1;
   }
@@ -275,10 +303,13 @@ export function getArticleQualityIssues(article: Article): string[] {
   }
 
   const issues: string[] = [];
-  const minimumWordCount = pillarArticleSlugs.has(article.slug) ? 900 : 700;
 
-  if (article.bodyWordCount < minimumWordCount) {
-    issues.push(`Expected at least ${minimumWordCount} body words, received ${article.bodyWordCount}.`);
+  if (article.bodyWordCount < 900) {
+    issues.push(`Expected at least 900 body words, received ${article.bodyWordCount}.`);
+  }
+
+  if (article.bodyWordCount > 1200) {
+    issues.push(`Expected at most 1200 body words, received ${article.bodyWordCount}.`);
   }
 
   if (article.readingTimeMinutes < 3) {
@@ -461,6 +492,63 @@ function setFrontmatterValue(target: Record<string, unknown>, key: string, value
   }
 
   cursor[path[path.length - 1]] = value;
+}
+
+function isMarkdownTableStart(lines: string[], index: number): boolean {
+  return isTableRow(lines[index]) && isTableSeparator(lines[index + 1] ?? "");
+}
+
+function isTableRow(line: string): boolean {
+  const trimmed = line.trim();
+  return trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.split("|").length >= 4;
+}
+
+function isTableSeparator(line: string): boolean {
+  return isTableRow(line) && line
+    .trim()
+    .slice(1, -1)
+    .split("|")
+    .every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
+}
+
+function parseMarkdownTable(lines: string[], startIndex: number): { block: ArticleBodyBlock; nextIndex: number } {
+  const headers = splitTableRow(lines[startIndex]);
+  const alignments = splitTableRow(lines[startIndex + 1]).map(parseTableAlignment);
+  let index = startIndex + 2;
+  const rows: string[][] = [];
+
+  while (index < lines.length && isTableRow(lines[index])) {
+    const row = splitTableRow(lines[index]);
+    rows.push(headers.map((_header, columnIndex) => row[columnIndex] ?? ""));
+    index += 1;
+  }
+
+  return {
+    block: { type: "table", headers, alignments, rows },
+    nextIndex: index,
+  };
+}
+
+function splitTableRow(line: string): string[] {
+  return line
+    .trim()
+    .slice(1, -1)
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function parseTableAlignment(value: string): "left" | "center" | "right" {
+  const trimmed = value.trim();
+
+  if (trimmed.startsWith(":") && trimmed.endsWith(":")) {
+    return "center";
+  }
+
+  if (trimmed.endsWith(":")) {
+    return "right";
+  }
+
+  return "left";
 }
 
 function parseCustomBlock(lines: string[], startIndex: number): { block: ArticleBodyBlock; nextIndex: number } {

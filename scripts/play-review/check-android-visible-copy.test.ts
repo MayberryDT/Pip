@@ -39,4 +39,14 @@ describe("check-android-visible-copy", () => {
       stderr: () => undefined,
     })).toBe(0);
   });
+
+  it("marks the old Android TWA shell as deprecated", () => {
+    const deprecated = readFileSync("mobile/android-twa/DEPRECATED.md", "utf8");
+    const readme = readFileSync("mobile/android-twa/README.md", "utf8");
+
+    expect(deprecated).toContain("Trusted Web Activity shell is not the release Android target");
+    expect(deprecated).toContain("mobile/android-webview");
+    expect(readme).toContain("DEPRECATED.md");
+    expect(readme).toContain("mobile/android-webview");
+  });
 });
