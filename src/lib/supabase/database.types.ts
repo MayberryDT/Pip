@@ -990,6 +990,12 @@ export type Database = {
         };
         Returns: boolean;
       };
+      purge_agent_chat_turns: {
+        Args: {
+          p_retention_days?: number;
+        };
+        Returns: number;
+      };
     };
   };
 };

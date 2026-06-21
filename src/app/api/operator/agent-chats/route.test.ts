@@ -27,6 +27,7 @@ describe("GET /api/operator/agent-chats", () => {
     const response = await GET(jsonRequest("anything"));
 
     expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     await expect(response.json()).resolves.toEqual({
       error: "Operator access is not configured.",
     });

@@ -222,6 +222,30 @@ describe("Supabase financial-data schema", () => {
     );
   });
 
+  it("keeps the agent chat purge function service-role only", () => {
+    expect(allMigrations).toContain("create or replace function public.purge_agent_chat_turns");
+    expect(normalizeSql(allMigrations)).toContain(
+      normalizeSql(`
+        create or replace function public.purge_agent_chat_turns(p_retention_days integer default 30)
+        returns integer
+        language plpgsql
+        security definer
+      `),
+    );
+    expect(allMigrations).toContain(
+      "revoke all on function public.purge_agent_chat_turns(integer) from public, anon, authenticated;",
+    );
+    expect(allMigrations).toContain(
+      "grant execute on function public.purge_agent_chat_turns(integer) to service_role;",
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.purge_agent_chat_turns(integer) to authenticated"),
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.purge_agent_chat_turns(integer) to anon"),
+    );
+  });
+
   it("indexes foreign keys that beta sync and account joins use", () => {
     [
       "create index if not exists accounts_institution_id_idx on public.accounts(institution_id);",
