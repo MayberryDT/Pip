@@ -7,6 +7,15 @@ import {
 } from "@/components/AgentThread";
 
 describe("AgentThread", () => {
+  it("keeps the live region mounted before the first response arrives", () => {
+    const markup = renderToStaticMarkup(<AgentThread thread={[]} />);
+
+    expect(markup).toContain('data-testid="agent-thread"');
+    expect(markup).toContain("role=\"log\"");
+    expect(markup).toContain("aria-live=\"polite\"");
+    expect(markup).toContain("aria-relevant=\"additions text\"");
+  });
+
   it("shows Pip beside the thinking state before the response arrives", () => {
     const markup = renderToStaticMarkup(
       <AgentThread
@@ -105,6 +114,9 @@ describe("AgentThread", () => {
     expect(markup).toContain("Report");
     expect(markup).not.toContain("Report response");
     expect(markup).toContain("aria-hidden=\"true\"");
+    expect(markup).toContain("role=\"log\"");
+    expect(markup).toContain("aria-live=\"polite\"");
+    expect(markup).toContain("aria-relevant=\"additions text\"");
   });
 
   it("uses chips rather than a select menu for report reasons", () => {
@@ -125,6 +137,16 @@ describe("AgentThread", () => {
     expect(markup).toContain("Other");
     expect(markup).toContain("Send");
     expect(markup).toContain("Cancel");
+    expect(markup).toContain("min-h-11");
+  });
+
+  it("uses non-smooth thread scrolling when reduced motion is requested", () => {
+    expect(
+      __agentThreadTestHooks.getThreadScrollBehavior(
+        matchMediaFor(["(prefers-reduced-motion: reduce)"]),
+      ),
+    ).toBe("auto");
+    expect(__agentThreadTestHooks.getThreadScrollBehavior(matchMediaFor([]))).toBe("smooth");
   });
 
   it("keeps report error text specific when the API returns a safe message", () => {
@@ -166,4 +188,10 @@ describe("AgentThread", () => {
 
 function countOccurrences(value: string, search: string): number {
   return value.split(search).length - 1;
+}
+
+function matchMediaFor(matches: string[]) {
+  return (query: string) => ({
+    matches: matches.includes(query),
+  });
 }
