@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { buildAppUrl, getAppOrigin } from "@/lib/url/app-origin";
+import { getSafeAuthNextPath } from "@/lib/url/safe-next-path";
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
@@ -12,7 +13,7 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createSupabaseServerClient();
-  const next = getSafeNextPath(requestUrl.searchParams.get("next"));
+  const next = getSafeAuthNextPath(requestUrl.searchParams.get("next"), origin);
   const redirectTo = new URL("/auth/callback", origin);
 
   if (next !== "/app") {
@@ -32,12 +33,4 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.redirect(data.url);
-}
-
-function getSafeNextPath(next: string | null): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) {
-    return "/app";
-  }
-
-  return next;
 }

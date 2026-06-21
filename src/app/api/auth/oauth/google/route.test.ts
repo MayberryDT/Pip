@@ -16,13 +16,13 @@ afterEach(() => {
 });
 
 describe("GET /api/auth/oauth/google", () => {
-  it("starts Google OAuth with a canonical same-origin callback URL", async () => {
+  it("starts Google OAuth with a canonical app callback URL", async () => {
     enableSupabaseEnv();
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://spendwithpip.com");
     const supabase = createSupabaseClient("https://supabase.example/auth/v1/authorize?provider=google");
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
-    const response = await GET(new Request("http://localhost/api/auth/oauth/google?next=/welcome"));
+    const response = await GET(new Request("http://localhost/api/auth/oauth/google?next=/app"));
 
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe(
@@ -31,7 +31,7 @@ describe("GET /api/auth/oauth/google", () => {
     expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider: "google",
       options: {
-        redirectTo: "https://spendwithpip.com/auth/callback?next=%2Fwelcome",
+        redirectTo: "https://spendwithpip.com/auth/callback",
         skipBrowserRedirect: true,
       },
     });
@@ -86,13 +86,52 @@ describe("GET /api/auth/oauth/google", () => {
     });
   });
 
-  it("keeps next redirects inside the app", async () => {
+  it("keeps next redirects inside the app allowlist", async () => {
     enableSupabaseEnv();
     vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://spendwithpip.com");
     const supabase = createSupabaseClient("https://supabase.example/auth/v1/authorize?provider=google");
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
-    await GET(new Request("http://localhost/api/auth/oauth/google?next=https://evil.example"));
+    await GET(new Request("http://localhost/api/auth/oauth/google?next=/welcome"));
+
+    expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo: "https://spendwithpip.com/auth/callback",
+        skipBrowserRedirect: true,
+      },
+    });
+  });
+
+  it("preserves allowed app next paths in the OAuth callback URL", async () => {
+    enableSupabaseEnv();
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://spendwithpip.com");
+    const supabase = createSupabaseClient("https://supabase.example/auth/v1/authorize?provider=google");
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    await GET(
+      new Request(
+        "http://localhost/api/auth/oauth/google?next=/app/settings?tab=accounts",
+      ),
+    );
+
+    expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: "google",
+      options: {
+        redirectTo:
+          "https://spendwithpip.com/auth/callback?next=%2Fapp%2Fsettings%3Ftab%3Daccounts",
+        skipBrowserRedirect: true,
+      },
+    });
+  });
+
+  it("rejects decoded backslash next redirects before building the OAuth callback URL", async () => {
+    enableSupabaseEnv();
+    vi.stubEnv("NEXT_PUBLIC_SITE_URL", "https://spendwithpip.com");
+    const supabase = createSupabaseClient("https://supabase.example/auth/v1/authorize?provider=google");
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    await GET(new Request("http://localhost/api/auth/oauth/google?next=/%5Cevil.example"));
 
     expect(supabase.auth.signInWithOAuth).toHaveBeenCalledWith({
       provider: "google",

@@ -37,17 +37,17 @@ describe("GET /auth/callback", () => {
     expect(response.headers.get("location")).toBe("http://localhost/app");
   });
 
-  it("exchanges the code and respects a same-origin next path", async () => {
+  it("exchanges the code and respects an app next path", async () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ error: null });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
     const response = await GET(
-      new Request("http://localhost/auth/callback?code=abc123&next=/welcome"),
+      new Request("http://localhost/auth/callback?code=abc123&next=/app?plaid=connected"),
     );
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/welcome");
+    expect(response.headers.get("location")).toBe("http://localhost/app?plaid=connected");
     expect(supabase.auth.exchangeCodeForSession).toHaveBeenCalledWith("abc123");
     expect(supabase.auth.signOut).not.toHaveBeenCalled();
   });
@@ -60,12 +60,12 @@ describe("GET /auth/callback", () => {
 
     const response = await GET(
       new Request(
-        "https://main--spendwithpip.netlify.app/auth/callback?code=abc123&next=/welcome",
+        "https://main--spendwithpip.netlify.app/auth/callback?code=abc123&next=/app/settings",
       ),
     );
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("https://spendwithpip.com/welcome");
+    expect(response.headers.get("location")).toBe("https://spendwithpip.com/app/settings");
     expect(supabase.auth.exchangeCodeForSession).toHaveBeenCalledWith("abc123");
   });
 
@@ -92,12 +92,12 @@ describe("GET /auth/callback", () => {
 
     const response = await GET(
       new Request(
-        "http://localhost/auth/callback?email=test.user%40example.com&token=123456&type=magiclink&next=/welcome",
+        "http://localhost/auth/callback?email=test.user%40example.com&token=123456&type=magiclink&next=/app",
       ),
     );
 
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe("http://localhost/welcome");
+    expect(response.headers.get("location")).toBe("http://localhost/app");
     expect(supabase.auth.verifyOtp).toHaveBeenCalledWith({
       email: "test.user@example.com",
       token: "123456",
@@ -128,15 +128,18 @@ describe("GET /auth/callback", () => {
     const supabase = createSupabaseClient({ error: null });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
 
-    const absoluteResponse = await GET(
-      new Request("http://localhost/auth/callback?code=abc123&next=https://evil.example"),
-    );
-    const protocolRelativeResponse = await GET(
-      new Request("http://localhost/auth/callback?code=abc123&next=//evil.example"),
-    );
+    const unsafeUrls = [
+      "http://localhost/auth/callback?code=abc123&next=https://evil.example",
+      "http://localhost/auth/callback?code=abc123&next=//evil.example",
+      "http://localhost/auth/callback?code=abc123&next=/welcome",
+      "http://localhost/auth/callback?code=abc123&next=/%5Cevil.example",
+      "http://localhost/auth/callback?code=abc123&next=/%2F%5Cevil.example",
+    ];
 
-    expect(absoluteResponse.headers.get("location")).toBe("http://localhost/app");
-    expect(protocolRelativeResponse.headers.get("location")).toBe("http://localhost/app");
+    for (const url of unsafeUrls) {
+      const response = await GET(new Request(url));
+      expect(response.headers.get("location")).toBe("http://localhost/app");
+    }
   });
 
   it("redirects to an auth error if code exchange fails", async () => {
