@@ -26,19 +26,34 @@ describe("CI release gate", () => {
     });
   });
 
-  it("exposes the required non-secret release checks as package scripts", () => {
-    const packageJson = readJson("package.json") as {
-      scripts?: Record<string, string>;
-    };
+  it("runs the required non-secret CI checks on Node 24", () => {
+    const workflow = readFileSync(join(process.cwd(), ".github/workflows/ci.yml"), "utf8");
+
+    expect(workflow).toContain("node-version: \"24\"");
+    expect(workflow).toContain("cache: npm");
+    [
+      "npm ci",
+      "npm test",
+      "npm run build",
+      "npm run check:deployment",
+      "npm run check:db-schema-names",
+      "npm run play:android-copy:verify",
+    ].forEach((command) => {
+      expect(workflow).toContain(`run: ${command}`);
+    });
+    expect(workflow).toContain("PIP_RATE_LIMIT_SALT: ci-placeholder-rate-limit-salt");
 
     [
-      "test",
-      "build",
-      "check:deployment",
-      "check:db-schema-names",
-      "play:android-copy:verify",
-    ].forEach((scriptName) => {
-      expect(packageJson.scripts?.[scriptName]).toBeTruthy();
+      "test:e2e:live",
+      "test:e2e:live:final",
+      "prove:prd",
+      "check:prd-complete",
+      "eval:agent",
+      "dogfood:",
+      "secrets.",
+      "${{ secrets",
+    ].forEach((forbiddenCommand) => {
+      expect(workflow).not.toContain(forbiddenCommand);
     });
   });
 });
