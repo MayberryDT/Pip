@@ -40,7 +40,7 @@ ship at the cost of blocking beta app access.
 The project is linked to `spendwithpip` on Netlify.
 
 - Site URL: https://spendwithpip.com/app
-- Latest verified production deploy: https://6a30e72e299667efdc84efcf--spendwithpip.netlify.app
+- Latest verified production deploy: https://6a37265034af39c993db28dc--spendwithpip.netlify.app
 - Latest verified draft deploy: https://6a2a780edf4805a6c39e47e5--spendwithpip.netlify.app
 - Netlify is configured for real beta mode with Supabase, Netlify AI Gateway/OpenAI, and Plaid production env. Fake-data preview deploys remain available with `PIP_DEPLOY_MODE=fake npm run deploy:netlify`.
 - `npm run deploy:netlify` hides local `.env*` files during the local Netlify build, deploys the verified generated Netlify artifacts, and checks generated function bundles for accidental env-file inclusion and required Next static assets.

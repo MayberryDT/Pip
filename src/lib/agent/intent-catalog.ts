@@ -10,6 +10,7 @@ export type DeterministicAgentToolName =
   | "start_new_account_connection"
   | "repair_account_connection"
   | "start_account_selection_update"
+  | "preview_savings_goal"
   | "create_savings_goal"
   | "list_savings_goals"
   | "update_savings_goal"

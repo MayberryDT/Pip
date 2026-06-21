@@ -64,6 +64,7 @@ describe("POST /api/auth/consent", () => {
     }
     expect(upsertPayload).toMatchObject({
       user_id: "user-1",
+      manual_refresh_only: false,
     });
     expect(typeof upsertPayload.privacy_consent_at).toBe("string");
     expect(upsertPayload.protected_savings_monthly_cents).toBe(20000);

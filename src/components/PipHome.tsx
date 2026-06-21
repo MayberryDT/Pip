@@ -193,8 +193,10 @@ export function PipHome({
     }),
   );
   const promptChipRequestKeyRef = useRef<string | null>(null);
+  const openingBubbleRequestKeyRef = useRef<string | null>(null);
   const lastNonEmptyChipsRef = useRef<PromptChip[]>(chips);
   const [promptChipRefreshSequence, setPromptChipRefreshSequence] = useState(0);
+  const [openingBubbleMessage, setOpeningBubbleMessage] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [chatOnlyPendingFlow, setChatOnlyPendingFlow] = useState<ChatOnlyPendingFlow>(null);
@@ -482,6 +484,67 @@ export function PipHome({
     result,
     scenario,
     thread,
+  ]);
+
+  useEffect(() => {
+    if (isOnboarding || hasConversation || !result || !conversationId || isSending) {
+      return;
+    }
+
+    const openingBubblePlan = getReadyOpeningBubblePlan({ result, appOpenSyncMessage });
+    const requestKey = [
+      activeAuthState?.status ?? "demo",
+      scenario,
+      result.window.endDate,
+      getDisplayedSpendableCashTodayCents(result),
+      openingBubblePlan.priority,
+      openingBubblePlan.message,
+    ].join("|");
+
+    if (openingBubbleRequestKeyRef.current === requestKey) {
+      return;
+    }
+
+    let ignore = false;
+    openingBubbleRequestKeyRef.current = requestKey;
+    setOpeningBubbleMessage(null);
+
+    void fetchAgentResponse(
+      [
+        "Write the opening speech bubble for the current Pip screen.",
+        `Planner priority: ${openingBubblePlan.priority}.`,
+        `Fallback bubble: ${openingBubblePlan.message}`,
+        "Keep it warm, specific, and concise.",
+      ].join(" "),
+      scenario,
+      [],
+      chips,
+      chipHistory,
+      conversationId,
+      undefined,
+      "opening_bubble",
+    )
+      .then((response) => {
+        if (!ignore && response.message.trim()) {
+          setOpeningBubbleMessage(response.message.trim());
+        }
+      })
+      .catch(() => undefined);
+
+    return () => {
+      ignore = true;
+    };
+  }, [
+    activeAuthState?.status,
+    appOpenSyncMessage,
+    chipHistory,
+    chips,
+    conversationId,
+    hasConversation,
+    isOnboarding,
+    isSending,
+    result,
+    scenario,
   ]);
 
   async function submitPrompt(message: string, selectedPromptChipId?: string) {
@@ -980,6 +1043,7 @@ export function PipHome({
             <DefaultAssistantIntro
               appOpenSyncMessage={appOpenSyncMessage}
               connectionNotice={connectionNotice}
+              modelOpeningBubbleMessage={openingBubbleMessage}
               result={result}
             />
           ) : (
@@ -1485,10 +1549,12 @@ function ReadyIntro({
 function DefaultAssistantIntro({
   appOpenSyncMessage,
   connectionNotice,
+  modelOpeningBubbleMessage,
   result,
 }: {
   appOpenSyncMessage?: string;
   connectionNotice?: "plaid-connected";
+  modelOpeningBubbleMessage?: string | null;
   result: PipCashResult | null;
 }) {
   if (result) {
@@ -1507,7 +1573,7 @@ function DefaultAssistantIntro({
         {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
         <PipIntroScene
           priority
-          title={openingBubblePlan.message}
+          title={modelOpeningBubbleMessage ?? openingBubblePlan.message}
         >
           {showAppOpenSyncMessage ? <p>{appOpenSyncMessage}</p> : null}
         </PipIntroScene>

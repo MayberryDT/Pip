@@ -20,7 +20,7 @@ export type AgentRouteEventContext = {
 
 export type AgentRouteTelemetryRequest = {
   scenario?: string;
-  requestKind?: "chat" | "prompt_chips";
+  requestKind?: "chat" | "prompt_chips" | "opening_bubble";
   selectedPromptChipId?: string;
   history?: AgentHistoryItem[];
   conversationState?: {
@@ -64,7 +64,7 @@ export async function recordAgentEvents(
   input: {
     conversationId: string;
     message: string;
-    requestKind?: "chat" | "prompt_chips";
+    requestKind?: "chat" | "prompt_chips" | "opening_bubble";
     scenario?: string;
     selectedPromptChipId?: string;
     historyLength: number;

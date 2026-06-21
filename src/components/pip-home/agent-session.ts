@@ -9,7 +9,7 @@ export type AgentThreadItem = {
   isPending?: boolean;
 };
 
-export type AgentRequestKind = "chat" | "prompt_chips";
+export type AgentRequestKind = "chat" | "prompt_chips" | "opening_bubble";
 
 export class AgentRequestError extends Error {
   code?: string;

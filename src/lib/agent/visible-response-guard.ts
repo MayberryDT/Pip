@@ -9,7 +9,7 @@ export type VisibleResponseLimits = {
 };
 
 export const visibleResponseSurfaceLimits: Record<VisibleResponseSurface, VisibleResponseLimits> = {
-  bridge: { maxWords: 45, maxChars: 260 },
+  bridge: { maxWords: 95, maxChars: 520 },
   companion: { maxWords: 85, maxChars: 520 },
   openingBubble: { maxWords: 38, maxChars: 220 },
   correction: { maxWords: 70, maxChars: 420 },
@@ -27,6 +27,11 @@ export function guardVisibleFinalMessage(
   options: { surface?: VisibleResponseSurface } = {},
 ): string {
   const limits = getVisibleResponseSurfaceLimits(options.surface);
+  const possessionRepairedMessage = repairUserMoneyPossessives(message);
+
+  if (possessionRepairedMessage !== message) {
+    message = possessionRepairedMessage;
+  }
 
   if (!fitsVisibleLimits(message, limits)) {
     throw new AgentUnavailableError({
@@ -102,6 +107,14 @@ export function guardVisibleFinalMessage(
   }
 
   return message;
+}
+
+function repairUserMoneyPossessives(message: string): string {
+  return message
+    .replace(/\bmy Spendable Cash Today\b/g, "your Spendable Cash Today")
+    .replace(/\bMy Spendable Cash Today\b/g, "Your Spendable Cash Today")
+    .replace(/\bmy spendable cash today\b/g, "your Spendable Cash Today")
+    .replace(/\bMy spendable cash today\b/g, "Your Spendable Cash Today");
 }
 
 export function repairUnsupportedCardPromises(message: string, cards: AgentCard[]): string | null {
@@ -254,6 +267,8 @@ function repairUnsupportedCardPromiseText(message: string, detail: string): stri
 
   if (detail === "transactions promised without transaction card") {
     const repaired = message
+      .replace(/\bwith\s+\d+\s+transactions?\b/gi, "with connected activity")
+      .replace(/\b\d+\s+transactions?\b/gi, "connected activity")
       .replace(/\bshow how (?:a )?purchases? would affect it\b/gi, "talk through how spending would affect it")
       .replace(/\b(show|showing|shown|showed|see|list|listed|pull|pulled|view)( me)?\b.{0,28}\b(transactions?|charges?|purchases?|activity)\b/gi, "talk through recent activity")
       .replace(/\btransactions?\b/gi, "activity")
@@ -309,6 +324,13 @@ export function getUnsupportedCardPromise(message: string, cards: AgentCard[]): 
   }
 
   if (cards.length === 0 && /\bshow how (?:a )?purchases? would affect it\b/.test(normalized)) {
+    return "transactions promised without transaction card";
+  }
+
+  if (
+    /\b\d+\s+(?:transactions?|charges?|purchases?)\b/.test(normalized) &&
+    !hasAnyCard(cards, ["recent_transactions", "spending_breakdown"])
+  ) {
     return "transactions promised without transaction card";
   }
 

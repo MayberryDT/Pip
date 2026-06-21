@@ -82,6 +82,7 @@ function isAgentOutputError(error: AgentUnavailableError): boolean {
       "model-promised-unsupported-card",
       "model-returned-no-prompt-chips",
       "model-returned-too-long-final-message",
+      "agent-output-rejected",
     ].includes(error.code) ||
     isModelOutputValidationDetail(error.message + " " + (error.detail ?? ""))
   );

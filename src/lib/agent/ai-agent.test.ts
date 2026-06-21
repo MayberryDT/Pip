@@ -17,6 +17,11 @@ import {
   getPipAiTransport,
 } from "@/lib/agent/openai-config";
 import type { AgentCard } from "@/lib/agent/card-types";
+import {
+  buildSavingsGoalDraft,
+  createOrdinaryPendingAction,
+  getSavingsGoalPreviewMissingFields,
+} from "@/lib/agent/pending-actions";
 import { createMockModelClient } from "../../../tests/helpers/mock-agent-runtime";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { buildFinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
@@ -34,7 +39,7 @@ describe("runAIAgent", () => {
         createMockModelClient(),
       );
 
-      expect(response.audit.usedModel).toBe(false);
+      expect(response.audit.usedModel).toBe(true);
       expect(response.usedTools).toEqual([]);
       expect(response.audit.toolNames).toEqual([]);
       expect(response.responseMode).toBe("chat_only");
@@ -192,11 +197,12 @@ describe("runAIAgent", () => {
     expect(selection.guidanceSource).toBe("deterministic_fallback");
   });
 
-  it("uses deterministic visible guidance text when the guidance card falls back", () => {
+  it("preserves model visible guidance text when the guidance card falls back", () => {
+    const message =
+      "I found $104 today. Your normal room is $69.27, driven by normal spending and recent lighter spending. Watch data quality; I'd stay cautious about big purchases.";
     const visibleOutput = __agentTestHooks.selectVisibleModelOutput(
       {
-        message:
-          "I found $104 today. Your normal room is $69.27, driven by normal spending and recent lighter spending. Watch data quality; I'd stay cautious about big purchases.",
+        message,
         responseMode: "guidance",
         promptChips: [],
       },
@@ -204,9 +210,7 @@ describe("runAIAgent", () => {
       { guidanceSource: "deterministic_fallback" },
     );
 
-    expect(visibleOutput.message).toMatch(/^My read:/);
-    expect(visibleOutput.message).not.toContain("big purchases");
-    expect(visibleOutput.message).not.toContain("driven by");
+    expect(visibleOutput.message).toBe(message);
   });
 
   it("combines purchase simulation with guidance context for bank-balance assumption prompts", async () => {
@@ -723,12 +727,12 @@ describe("runAIAgent", () => {
         message: "I want to save for a trip that costs $5,000",
       }),
     ).toMatchObject({
-      toolName: "create_savings_goal",
+      toolName: "preview_savings_goal",
       args: {
         name: "Trip",
         target_amount_cents: 500000,
       },
-      requireCard: true,
+      requireCard: false,
     });
 
     expect(
@@ -798,1186 +802,201 @@ describe("runAIAgent", () => {
     expect(instructionSource).not.toContain("tracked only");
   });
 
-  it("starts a savings goal draft for a big purchase without turning it into cutback advice", async () => {
-    const response = await runAIAgent({
-      message: "I want to save money for a big purchase",
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
+  it("forces generic savings goal setup into a stateful preview turn", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "I want to set a savings goal",
+      }),
+    ).toMatchObject({
+      toolName: "preview_savings_goal",
+      args: {
+        name: "Savings goal",
+        include_in_spendable_cash: true,
       },
-      actions: createSavingsGoalActions(),
+      requireCard: false,
     });
+  });
 
+  it("asks for missing savings goal details with model-written copy", async () => {
+    const response = await runAIAgent(
+      {
+        message: "I want to save money for a big purchase",
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        actions: createSavingsGoalActions(),
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.audit.usedModel).toBe(true);
     expect(response.usedTools).toEqual([]);
     expect(response.responseMode).toBe("clarify");
     expect(response.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      name: "Big purchase",
-      missing: ["target_amount"],
+      type: "preview_savings_goal",
+      name: "Big Purchase",
+      missing: ["target_amount", "target_date_or_monthly_contribution"],
     });
-    expect(response.message).toContain("How much");
   });
 
-  it("stages monthly savings goal contribution wording instead of using retired protection tools", async () => {
-    const response = await runAIAgent({
-      message: "Put $300/month toward my trip goal",
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions: createSavingsGoalActions(),
-    });
-
-    expect(response.audit.usedModel).toBe(false);
-    expect(response.usedTools).toEqual([]);
-    expect(response.responseMode).toBe("clarify");
-    expect(response.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      name: "Trip",
-      monthlyContributionCents: 30000,
-      missing: ["target_amount"],
-    });
-    expect(response.message).toContain("How much");
-  });
-
-  it("keeps savings goal setup deterministic when no savings action is available", async () => {
-    vi.stubEnv("OPENAI_API_KEY", "");
-    vi.stubEnv("OPENAI_BASE_URL", "");
-
-    const response = await runAIAgent({
-      message: "I want to save for a trip that costs $5,000",
-      onboardingState: {
-        status: "guest",
-        hasFinancialData: false,
-      },
-    });
-
-    expect(response.usedTools).toEqual(["create_savings_goal"]);
-    expect(response.audit.usedModel).toBe(false);
-    expect(response.responseMode).toBe("chat_only");
-    expect(response.cards).toEqual([]);
-    expect(response.message.toLowerCase()).toContain("sign in");
-  });
-
-  it("does not ask guests to confirm staged savings goals it cannot create", async () => {
-    const response = await runAIAgent({
-      message: "5000 in six months",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "guest",
-        hasFinancialData: false,
-      },
-    });
-
-    expect(response.usedTools).toEqual(["create_savings_goal"]);
-    expect(response.responseMode).toBe("chat_only");
-    expect(response.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      missing: [],
-    });
-    expect(response.message.toLowerCase()).toContain("sign in");
-    expect(response.message).not.toContain("Create it now");
-
-    const unsupported = await runAIAgent({
-      message: "5000 in six months",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-    });
-
-    expect(unsupported.usedTools).toEqual(["create_savings_goal"]);
-    expect(unsupported.responseMode).toBe("chat_only");
-    expect(unsupported.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      missing: [],
-    });
-    expect(unsupported.message).toContain("not available");
-    expect(unsupported.message).not.toContain("Create it now");
-  });
-
-  it("keeps the Japan savings goal setup deterministic through creation and progress", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-    let pendingAction;
-
-    const first = await runAIAgent(
-      {
-        message: "I need to save for a trip to Japan",
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      },
-    );
-
-    expect(first.usedTools).toEqual([]);
-    expect(first.responseMode).toBe("clarify");
-    expect(first.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      name: expect.stringMatching(/japan/i),
-      missing: ["target_amount"],
-    });
-    pendingAction = first.pendingAction;
-
-    const second = await runAIAgent(
-      {
-        message: "Yes",
-        conversationState: { pendingAction },
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      },
-    );
-
-    expect(second.usedTools).toEqual([]);
-    expect(second.responseMode).toBe("clarify");
-    expect(second.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      name: expect.stringMatching(/japan/i),
-      missing: ["target_amount"],
-    });
-    pendingAction = second.pendingAction;
-
-    const third = await runAIAgent(
-      {
-        message: "Set the savings goal",
-        conversationState: { pendingAction },
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      },
-    );
-
-    expect(third.usedTools).toEqual([]);
-    expect(third.responseMode).toBe("clarify");
-    expect(third.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      name: expect.stringMatching(/japan/i),
-      missing: ["target_amount"],
-    });
-    pendingAction = third.pendingAction;
-
-    const fourth = await runAIAgent(
-      {
-        message: "$3000 by December 1st",
-        conversationState: { pendingAction },
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      },
-    );
-
-    expect(fourth.usedTools).toEqual([]);
-    expect(fourth.responseMode).toBe("clarify");
-    expect(fourth.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      name: expect.stringMatching(/japan/i),
-      targetAmountCents: 300000,
-      targetDate: "2026-12-01",
-      missing: [],
-    });
-    expect(fourth.cards).toEqual([]);
-    expect(fourth.message).toMatch(/create/i);
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    pendingAction = fourth.pendingAction;
-
-    const fifth = await runAIAgent(
-      {
-        message: "yes",
-        conversationState: { pendingAction },
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      },
-    );
-
-    expect(fifth.usedTools).toEqual(["create_savings_goal"]);
-    expect(fifth.responseMode).toBe("show_card");
-    expect(fifth.pendingAction).toBeUndefined();
-    expect(fifth.cards).toEqual([
-      expect.objectContaining({
-        type: "savings_goal_plan",
-        name: expect.stringMatching(/japan/i),
-        targetAmountCents: 300000,
-        targetDate: "2026-12-01",
-      }),
-    ]);
-    expect(fifth.message).not.toContain("That same answer still applies");
-    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
-
-    const sixth = await runAIAgent(
-      {
-        message: "How much do I need to hit that goal?",
-        conversationState: {
-          shownCards: fifth.cards.map((card) => ({
-            type: card.type,
-            title: card.title,
-          })),
-          lastToolNames: fifth.usedTools,
-        },
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      },
-    );
-
-    expect(sixth.usedTools).toEqual(["list_savings_goals"]);
-    expect(sixth.responseMode).toBe("show_card");
-    expect(sixth.cards).toEqual([
-      expect.objectContaining({
-        type: "savings_goals_summary",
-        goals: [
-          expect.objectContaining({
-            name: expect.stringMatching(/japan/i),
-            targetAmountCents: 300000,
-            remainingCents: 300000,
-            targetDate: "2026-12-01",
-          }),
-        ],
-      }),
-    ]);
-  });
-
-  it("confirms a staged savings goal draft from the short app transcript before creation", async () => {
+  it("previews complete savings goal requests before creation", async () => {
     const actions = createSavingsGoalActions();
     const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
 
-    const first = await runAIAgent({
-      message: "Set a savings goal",
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
+    const response = await runAIAgent(
+      {
+        message: "Emergency fund $5000 in 6 months",
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        actions,
       },
-      actions,
-    });
+      createMockModelClient(),
+    );
 
-    expect(first.usedTools).toEqual([]);
-    expect(first.responseMode).toBe("clarify");
-    expect(first.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      missing: ["target_amount"],
+    expect(response.audit.usedModel).toBe(true);
+    expect(response.usedTools).toEqual(["preview_savings_goal"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.pendingAction).toMatchObject({
+      type: "ordinary_write",
+      action: "create_savings_goal",
+      confirmationKind: "contextual",
     });
-
-    const second = await runAIAgent({
-      message: "5000 in six months",
-      conversationState: { pendingAction: first.pendingAction },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(second.usedTools).toEqual([]);
-    expect(second.responseMode).toBe("clarify");
-    expect(second.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      missing: [],
-    });
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-
-    const third = await runAIAgent({
-      message: "yes",
-      conversationState: { pendingAction: second.pendingAction },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
-    expect(third.usedTools).toEqual(["create_savings_goal"]);
-    expect(third.responseMode).toBe("show_card");
-    expect(third.cards).toEqual([
+    expect(response.cards).toEqual([
       expect.objectContaining({
-        type: "savings_goal_plan",
+        type: "savings_goal_preview",
+        name: "Emergency Fund",
         targetAmountCents: 500000,
+        includeInSpendableCash: true,
       }),
     ]);
-    expect(third.pendingAction).toBeUndefined();
-    expect(third.message).not.toContain("That same answer still applies");
+    expect(createSavingsGoal).not.toHaveBeenCalled();
   });
 
-  it("lets a user cancel a complete staged savings goal draft before creation", async () => {
+  it("keeps one-turn savings requests preview-first even when the amount is present", async () => {
     const actions = createSavingsGoalActions();
     const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
 
-    for (const message of ["cancel", "no thanks", "no, don't create it"]) {
-      const response = await runAIAgent({
-        message,
-        conversationState: {
-          pendingAction: {
-            type: "create_savings_goal",
-            name: "Trip",
-            targetAmountCents: 500000,
-            targetDate: "2026-12-20",
-            missing: [],
-          },
-        },
+    const response = await runAIAgent(
+      {
+        message: "Create a savings goal for $5000 in six months",
         onboardingState: {
           status: "ready",
           hasFinancialData: true,
         },
         actions,
-      });
+      },
+      createMockModelClient(),
+    );
 
-      expect(response.usedTools).toEqual([]);
-      expect(response.responseMode).toBe("chat_only");
-      expect(response.pendingAction).toBeUndefined();
-      expect(response.message).toContain("uncreated");
-    }
+    expect(response.usedTools).toEqual(["preview_savings_goal"]);
+    expect(response.cards[0]).toMatchObject({
+      type: "savings_goal_preview",
+      targetAmountCents: 500000,
+    });
+    expect(response.pendingAction).toMatchObject({
+      type: "ordinary_write",
+      action: "create_savings_goal",
+    });
     expect(createSavingsGoal).not.toHaveBeenCalled();
   });
 
-  it("lets a user cancel an incomplete staged savings goal draft", async () => {
+  it("routes bare-month savings details to a complete preview", () => {
+    const forcedTool = __agentTestHooks.getForcedAgentTool({
+      message: "$5,000 for a new computer in December",
+    });
+
+    expect(forcedTool).toMatchObject({
+      toolName: "preview_savings_goal",
+      args: {
+        name: "Computer",
+        target_amount_cents: 500000,
+        include_in_spendable_cash: true,
+      },
+      requireCard: true,
+    });
+    expect((forcedTool?.args as { target_date?: string }).target_date).toMatch(/-12-31$/);
+  });
+
+  it("does not create a savings goal when target date or monthly contribution is missing", async () => {
     const actions = createSavingsGoalActions();
     const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
 
-    const response = await runAIAgent({
-      message: "cancel",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
+    const response = await runAIAgent(
+      {
+        message: "I want to save for a computer that costs $5000",
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
         },
+        actions,
       },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
+      createMockModelClient(),
+    );
 
-    expect(createSavingsGoal).not.toHaveBeenCalled();
     expect(response.usedTools).toEqual([]);
-    expect(response.responseMode).toBe("chat_only");
-    expect(response.pendingAction).toBeUndefined();
-    expect(response.message).toContain("uncreated");
-  });
-
-  it("does not treat target-date years as bare savings goal amounts", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const staged = await runAIAgent({
-      message: "100 by 12/20/2026",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(staged.usedTools).toEqual([]);
-    expect(staged.responseMode).toBe("clarify");
-    expect(staged.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 10000,
-      targetDate: "2026-12-20",
-      missing: [],
+    expect(response.responseMode).toBe("clarify");
+    expect(response.pendingAction).toMatchObject({
+      type: "preview_savings_goal",
+      name: "Computer",
+      targetAmountCents: 500000,
+      missing: ["target_date_or_monthly_contribution"],
     });
     expect(createSavingsGoal).not.toHaveBeenCalled();
+  });
 
-    const created = await runAIAgent({
-      message: "yes please",
-      conversationState: { pendingAction: staged.pendingAction },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
+  it("creates a savings goal only after a current preview confirmation", async () => {
+    const preview = await runAIAgent(
+      {
+        message: "Emergency fund $5000 in 6 months",
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        actions: createSavingsGoalActions(),
       },
-      actions,
-    });
+      createMockModelClient(),
+    );
 
-    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
+    const created = await runAIAgent(
+      {
+        message: "yes, create it",
+        conversationState: { pendingAction: preview.pendingAction },
+        onboardingState: {
+          status: "ready",
+          hasFinancialData: true,
+        },
+        actions: createSavingsGoalActions(),
+      },
+      createMockModelClient(),
+    );
+
+    expect(created.audit.usedModel).toBe(true);
     expect(created.usedTools).toEqual(["create_savings_goal"]);
     expect(created.responseMode).toBe("show_card");
     expect(created.cards).toEqual([
       expect.objectContaining({
         type: "savings_goal_plan",
-        targetAmountCents: 10000,
-        targetDate: "2026-12-20",
-      }),
-    ]);
-  });
-
-  it("keeps asking for the savings amount when a staged reply only gives a date", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const response = await runAIAgent({
-      message: "by 12/20/2026",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(response.usedTools).toEqual([]);
-    expect(response.responseMode).toBe("clarify");
-    expect(response.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetDate: "2026-12-20",
-      missing: ["target_amount"],
-    });
-    expect(response.pendingAction).not.toHaveProperty("targetAmountCents");
-  });
-
-  it("does not treat natural-language target years as staged savings amounts", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const staged = await runAIAgent({
-      message: "100 by December 2026",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(staged.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 10000,
-      missing: [],
-    });
-
-    for (const message of ["by December 2026", "by 2026", "in 2026", "end of 2026"]) {
-      const dateOnly = await runAIAgent({
-        message,
-        conversationState: {
-          pendingAction: {
-            type: "create_savings_goal",
-            name: "Trip",
-            missing: ["target_amount"],
-          },
-        },
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      });
-
-      expect(dateOnly.usedTools).toEqual([]);
-      expect(dateOnly.responseMode).toBe("clarify");
-      expect(dateOnly.pendingAction).toMatchObject({
-        type: "create_savings_goal",
-        missing: ["target_amount"],
-      });
-      expect(dateOnly.pendingAction).not.toHaveProperty("targetAmountCents");
-    }
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-  });
-
-  it("keeps year-shaped bare savings targets when they are not dates", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const staged = await runAIAgent({
-      message: "2000 in six months",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(staged.usedTools).toEqual([]);
-    expect(staged.responseMode).toBe("clarify");
-    expect(staged.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 200000,
-      missing: [],
-    });
-
-    const updated = await runAIAgent({
-      message: "actually 2000",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          targetAmountCents: 500000,
-          missing: [],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(updated.usedTools).toEqual([]);
-    expect(updated.responseMode).toBe("clarify");
-    expect(updated.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 200000,
-      missing: [],
-    });
-  });
-
-  it("ignores duration numbers when parsing staged bare savings targets", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const response = await runAIAgent({
-      message: "1000 in 365 days",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(response.usedTools).toEqual([]);
-    expect(response.responseMode).toBe("clarify");
-    expect(response.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 100000,
-      missing: [],
-    });
-  });
-
-  it("does not use saved progress amounts as staged savings targets", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const response = await runAIAgent({
-      message: "5,000 target, I already have 1,000 saved",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(response.usedTools).toEqual([]);
-    expect(response.responseMode).toBe("clarify");
-    expect(response.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      missing: [],
-    });
-
-    const explicit = await runAIAgent({
-      message: "$5,000 target, I already have $1,000 saved",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(explicit.usedTools).toEqual([]);
-    expect(explicit.responseMode).toBe("clarify");
-    expect(explicit.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      missing: [],
-    });
-
-    const savedForTarget = await runAIAgent({
-      message: "I need $5,000 saved for Japan",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(savedForTarget.usedTools).toEqual([]);
-    expect(savedForTarget.responseMode).toBe("clarify");
-    expect(savedForTarget.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      missing: [],
-    });
-  });
-
-  it("ignores saved-progress-only replies when staging savings targets", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const incomplete = await runAIAgent({
-      message: "I already have 1,000 saved",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(incomplete.usedTools).toEqual([]);
-    expect(incomplete.responseMode).toBe("clarify");
-    expect(incomplete.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      missing: ["target_amount"],
-    });
-    expect(incomplete.pendingAction).not.toHaveProperty("targetAmountCents");
-
-    const explicitIncomplete = await runAIAgent({
-      message: "I already have $1,000 saved",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(explicitIncomplete.usedTools).toEqual([]);
-    expect(explicitIncomplete.responseMode).toBe("clarify");
-    expect(explicitIncomplete.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      missing: ["target_amount"],
-    });
-    expect(explicitIncomplete.pendingAction).not.toHaveProperty("targetAmountCents");
-
-    const complete = await runAIAgent({
-      message: "I already have 1,000 saved",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          targetAmountCents: 500000,
-          missing: [],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(complete.usedTools).toEqual([]);
-    expect(complete.responseMode).toBe("clarify");
-    expect(complete.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      missing: [],
-    });
-
-    const explicitComplete = await runAIAgent({
-      message: "I already have $1,000 saved",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          targetAmountCents: 500000,
-          missing: [],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(explicitComplete.usedTools).toEqual([]);
-    expect(explicitComplete.responseMode).toBe("clarify");
-    expect(explicitComplete.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      missing: [],
-    });
-  });
-
-  it("does not let date-only follow-ups overwrite complete staged savings targets", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const response = await runAIAgent({
-      message: "Dec 20 2026",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          targetAmountCents: 500000,
-          missing: [],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(response.usedTools).toEqual([]);
-    expect(response.responseMode).toBe("clarify");
-    expect(response.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      targetDate: "2026-12-20",
-      missing: [],
-    });
-  });
-
-  it("lets bare amount edits update complete staged savings targets before creation", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const updated = await runAIAgent({
-      message: "actually 6000",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          targetAmountCents: 500000,
-          missing: [],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(updated.usedTools).toEqual([]);
-    expect(updated.responseMode).toBe("clarify");
-    expect(updated.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 600000,
-      missing: [],
-    });
-
-    const commaFormatted = await runAIAgent({
-      message: "make it 7,500",
-      conversationState: { pendingAction: updated.pendingAction },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(commaFormatted.usedTools).toEqual([]);
-    expect(commaFormatted.responseMode).toBe("clarify");
-    expect(commaFormatted.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 750000,
-      missing: [],
-    });
-
-    const replacement = await runAIAgent({
-      message: "change it from 6,000 to 5,000",
-      conversationState: { pendingAction: commaFormatted.pendingAction },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(replacement.usedTools).toEqual([]);
-    expect(replacement.responseMode).toBe("clarify");
-    expect(replacement.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      missing: [],
-    });
-  });
-
-  it("does not treat monthly savings amounts as staged goal targets", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const response = await runAIAgent({
-      message: "500/month",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(response.usedTools).toEqual([]);
-    expect(response.responseMode).toBe("clarify");
-    expect(response.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      monthlyContributionCents: 50000,
-      missing: ["target_amount"],
-    });
-    expect(response.pendingAction).not.toHaveProperty("targetAmountCents");
-
-    const dollarResponse = await runAIAgent({
-      message: "$500/month",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).not.toHaveBeenCalled();
-    expect(dollarResponse.usedTools).toEqual([]);
-    expect(dollarResponse.responseMode).toBe("clarify");
-    expect(dollarResponse.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      monthlyContributionCents: 50000,
-      missing: ["target_amount"],
-    });
-    expect(dollarResponse.pendingAction).not.toHaveProperty("targetAmountCents");
-
-    for (const message of ["500/mo", "500 / month", "500 monthly", "monthly 500", "per month 500", "monthly $500", "per month $500"]) {
-      const shorthandResponse = await runAIAgent({
-        message,
-        conversationState: {
-          pendingAction: {
-            type: "create_savings_goal",
-            name: "Trip",
-            missing: ["target_amount"],
-          },
-        },
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      });
-
-      expect(createSavingsGoal).not.toHaveBeenCalled();
-      expect(shorthandResponse.usedTools).toEqual([]);
-      expect(shorthandResponse.responseMode).toBe("clarify");
-      expect(shorthandResponse.pendingAction).toMatchObject({
-        type: "create_savings_goal",
-        monthlyContributionCents: 50000,
-        missing: ["target_amount"],
-      });
-      expect(shorthandResponse.pendingAction).not.toHaveProperty("targetAmountCents");
-    }
-  });
-
-  it("parses comma-formatted bare savings targets in staged replies", async () => {
-    const actions = createSavingsGoalActions();
-
-    const staged = await runAIAgent({
-      message: "5,000 in six months",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(staged.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 500000,
-      missing: [],
-    });
-
-    const precise = await runAIAgent({
-      message: "12,345 by 12/20/2026",
-      conversationState: {
-        pendingAction: {
-          type: "create_savings_goal",
-          name: "Trip",
-          missing: ["target_amount"],
-        },
-      },
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(precise.pendingAction).toMatchObject({
-      type: "create_savings_goal",
-      targetAmountCents: 1234500,
-      targetDate: "2026-12-20",
-      missing: [],
-    });
-  });
-
-  it("does not choose target-year tokens over staged savings amounts", async () => {
-    const actions = createSavingsGoalActions();
-
-    for (const message of ["100 in 2026", "100 by end of 2026", "100 by December 20, 2026"]) {
-      const response = await runAIAgent({
-        message,
-        conversationState: {
-          pendingAction: {
-            type: "create_savings_goal",
-            name: "Trip",
-            missing: ["target_amount"],
-          },
-        },
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      });
-
-      expect(response.pendingAction).toMatchObject({
-        type: "create_savings_goal",
-        targetAmountCents: 10000,
-        missing: [],
-      });
-    }
-  });
-
-  it("keeps year-style deadlines with staged bare savings targets", async () => {
-    const actions = createSavingsGoalActions();
-
-    for (const [message, targetDate] of [
-      ["100 by end of 2026", "2026-12-31"],
-      ["100 by 2026", "2026-12-31"],
-      ["100 by December 2026", "2026-12-31"],
-      ["100 by December 20, 2026", "2026-12-20"],
-    ] as const) {
-      const response = await runAIAgent({
-        message,
-        conversationState: {
-          pendingAction: {
-            type: "create_savings_goal",
-            name: "Trip",
-            missing: ["target_amount"],
-          },
-        },
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      });
-
-      expect(response.pendingAction).toMatchObject({
-        type: "create_savings_goal",
-        targetAmountCents: 10000,
-        targetDate,
-        missing: [],
-      });
-    }
-  });
-
-  it("accepts common staged savings goal confirmations", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    for (const message of ["yes, please.", "yes, create it please", "go ahead and create it", "sounds good", "create it now", "yes, create it now"]) {
-      const response = await runAIAgent({
-        message,
-        conversationState: {
-          pendingAction: {
-            type: "create_savings_goal",
-            name: "Trip",
-            targetAmountCents: 500000,
-            targetDate: "2026-12-20",
-            missing: [],
-          },
-        },
-        onboardingState: {
-          status: "ready",
-          hasFinancialData: true,
-        },
-        actions,
-      });
-
-      expect(response.usedTools).toEqual(["create_savings_goal"]);
-      expect(response.responseMode).toBe("show_card");
-      expect(response.pendingAction).toBeUndefined();
-    }
-    expect(createSavingsGoal).toHaveBeenCalledTimes(6);
-  });
-
-  it("keeps one-turn complete savings goal requests immediate", async () => {
-    const actions = createSavingsGoalActions();
-    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
-
-    const response = await runAIAgent({
-      message: "Create a savings goal for $5000 in six months",
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
-    expect(response.usedTools).toEqual(["create_savings_goal"]);
-    expect(response.responseMode).toBe("show_card");
-    expect(response.pendingAction).toBeUndefined();
-    expect(response.cards).toEqual([
-      expect.objectContaining({
-        type: "savings_goal_plan",
         targetAmountCents: 500000,
       }),
     ]);
   });
 
-  it("updates savings goal progress deterministically from saved-toward wording", async () => {
-    const actions = createSavingsGoalActions();
+  it("requires model configuration for normal visible savings turns without a runtime", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
 
-    await runAIAgent({
+    await expect(runAIAgent({
       message: "I want to save for a trip that costs $5,000",
       onboardingState: {
         status: "ready",
         hasFinancialData: true,
       },
-      actions,
+    })).rejects.toMatchObject({
+      code: "missing-openai-config",
     });
-
-    const response = await runAIAgent({
-      message: "I saved $300 toward my trip goal",
-      onboardingState: {
-        status: "ready",
-        hasFinancialData: true,
-      },
-      actions,
-    });
-
-    expect(response.usedTools).toEqual(["update_savings_goal"]);
-    expect(response.responseMode).toBe("show_card");
-    expect(response.cards).toEqual([
-      expect.objectContaining({
-        type: "savings_goal_plan",
-        name: "Trip",
-        currentAmountCents: 30000,
-        remainingCents: 470000,
-      }),
-    ]);
   });
 
   it("does not expose savings goal protection from spendable-cash wording", () => {
@@ -2083,7 +1102,7 @@ describe("runAIAgent", () => {
     });
   });
 
-  it("saves bill corrections through the deterministic action boundary", async () => {
+  it("requires model configuration before saving bill corrections from chat", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("OPENAI_BASE_URL", "");
     const correctRecurringObligation = vi.fn(async () => ({
@@ -2094,32 +1113,23 @@ describe("runAIAgent", () => {
       },
     }));
 
-    const response = await runAIAgent({
+    await expect(runAIAgent({
       message: "Treat City Power as a monthly bill",
       actions: {
         correctRecurringObligation,
       } satisfies Partial<PipAgentActions>,
+    })).rejects.toMatchObject({
+      code: "missing-openai-config",
     });
 
-    expect(correctRecurringObligation).toHaveBeenCalledWith({
-      merchantName: "City Power",
-      treatment: "bill",
-      expectedAmountCents: undefined,
-      expectedDay: undefined,
-    });
-    expect(response.audit.usedModel).toBe(false);
-    expect(response.usedTools).toEqual(["correct_recurring_obligation"]);
-    expect(response.clientAction).toMatchObject({
-      type: "reload",
-    });
-    expect(response.message).toMatch(/City Power|refresh/i);
+    expect(correctRecurringObligation).not.toHaveBeenCalled();
   });
 
-  it("shows connected accounts deterministically without model configuration", async () => {
+  it("requires model configuration before showing connected accounts from chat", async () => {
     vi.stubEnv("OPENAI_API_KEY", "");
     vi.stubEnv("OPENAI_BASE_URL", "");
 
-    const response = await runAIAgent({
+    await expect(runAIAgent({
       message: "Show my bank accounts",
       actions: {
         getConnectedAccounts: async () => ({
@@ -2128,15 +1138,10 @@ describe("runAIAgent", () => {
           cards: [accountConnectionsCard()],
         }),
       } satisfies Partial<PipAgentActions>,
+    })).rejects.toMatchObject({
+      code: "missing-openai-config",
     });
 
-    expect(response.audit.usedModel).toBe(false);
-    expect(response.usedTools).toEqual(["get_connected_accounts"]);
-    expect(response.responseMode).toBe("show_card");
-    expect(response.cards[0]).toMatchObject({
-      type: "account_connections",
-      title: "Connected accounts",
-    });
   });
 
   it("routes delete-data requests to confirmation before policy fallback", () => {
@@ -2210,12 +1215,13 @@ describe("runAIAgent", () => {
     expect(response.message).not.toMatch(/\$2\.99|\$7\.99|pricing/i);
   });
 
-  it("answers Android cost prompts even when the user asks from web", async () => {
-    const response = await runAIAgent({ message: "What does Android cost?" });
+  it("requires model configuration before answering Android cost prompts from web chat", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
 
-    expect(response.usedTools).toEqual(["get_trust_policy"]);
-    expect(response.message).toBe("Purchases and subscriptions are not available in this Android build.");
-    expect(response.message).not.toMatch(/\$2\.99|\$7\.99|pricing/i);
+    await expect(runAIAgent({ message: "What does Android cost?" })).rejects.toMatchObject({
+      code: "missing-openai-config",
+    });
   });
 
   it("routes AI calculation prompts to trust policy", () => {
@@ -2422,9 +1428,8 @@ describe("runAIAgent", () => {
     });
   });
 
-  it("rejects oversized model guidance drafts at the final output boundary", () => {
-    expect(() =>
-      agentFinalOutputSchema.parse({
+  it("drops oversized optional guidance drafts at the final output boundary", () => {
+    const parsed = agentFinalOutputSchema.parse({
         message: "My read: the rows need trimming.",
         responseMode: "guidance",
         guidanceCardDraft: {
@@ -2439,8 +1444,9 @@ describe("runAIAgent", () => {
           })),
         },
         promptChips: [],
-      }),
-    ).toThrow();
+      });
+
+    expect(__agentTestHooks.normalizeAgentFinalOutput(parsed).guidanceCardDraft).toBeUndefined();
   });
 
   it("allows model-authored guidance card drafts only through the typed draft field", () => {
@@ -2612,23 +1618,26 @@ describe("runAIAgent", () => {
     expect(plan.chips[1]?.prompt).toBe("What can I cut back on from my recent spending?");
   });
 
-  it("returns deterministic silent prompt-chip refresh responses", async () => {
-    const response = await runAIAgent({
-      message: "Create prompt chips for the current Pip screen.",
-      requestKind: "prompt_chips",
-      snapshot: fakeSnapshot,
-      conversationState: {
-        shownCards: [],
-        lastToolNames: [],
-        promptChips: [],
+  it("returns model-written silent prompt-chip refresh responses", async () => {
+    const response = await runAIAgent(
+      {
+        message: "Create prompt chips for the current Pip screen.",
+        requestKind: "prompt_chips",
+        snapshot: fakeSnapshot,
+        conversationState: {
+          shownCards: [],
+          lastToolNames: [],
+          promptChips: [],
+        },
       },
-    });
+      createMockModelClient(),
+    );
 
     expect(response.responseMode).toBe("chat_only");
     expect(response.cards).toEqual([]);
     expect(response.usedTools).toEqual([]);
     expect(response.promptChips).toHaveLength(3);
-    expect(response.audit.usedModel).toBe(false);
+    expect(response.audit.usedModel).toBe(true);
   });
 
   it("keeps prompt-chip refreshes populated when every generated chip repeats recent history", () => {
@@ -2723,6 +1732,23 @@ describe("runAIAgent", () => {
     ).toBe("I found Spendable Cash Today below zero right now.");
   });
 
+  it("repairs Pip claiming the user's Spendable Cash Today as its own", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "I set up the goal, and it will be included in my Spendable Cash Today.",
+      ),
+    ).toBe("I set up the goal, and it will be included in your Spendable Cash Today.");
+  });
+
+  it("repairs transaction counts when no transaction card is returned", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "The rest seems present, with 3 accounts and 22 transactions.",
+        [{ type: "missing_card_nudge", title: "Possible missing card", detail: "Missing card." }],
+      ),
+    ).toBe("The rest seems present, with 3 accounts and connected activity.");
+  });
+
   it("allows suggestion-menu replies that mention possible future card topics", () => {
     expect(
       __agentTestHooks.guardVisibleFinalMessage(
@@ -2769,6 +1795,29 @@ describe("runAIAgent", () => {
         },
       }),
     ).toThrow();
+  });
+
+  it("drops invalid optional guidance card drafts instead of rejecting the whole final output", () => {
+    const parsed = agentFinalOutputSchema.parse({
+      message: "I found the biggest drivers behind today's number.",
+      responseMode: "show_card",
+      guidanceCardDraft: {
+        title: "My read",
+        stance: "watch",
+        summary: "Recent spending is moving the number.",
+        rows: [
+          {
+            label: "Recent spending",
+            detail: "Shopping is up this period.",
+            tone: "warning",
+            evidenceIds: [],
+          },
+        ],
+      },
+      promptChips: [],
+    });
+
+    expect(__agentTestHooks.normalizeAgentFinalOutput(parsed).guidanceCardDraft).toBeUndefined();
   });
 
   it("maps model output validation failures to a 502 agent-output error", () => {
@@ -3155,7 +2204,7 @@ function createSavingsGoalActions(): PipAgentActions {
         remainingCents: input.targetAmountCents - (input.currentAmountCents ?? 0),
         targetDate: input.targetDate,
         monthlyContributionCents: input.monthlyContributionCents ?? 0,
-        includeInSpendableCash: input.includeInSpendableCash ?? false,
+        includeInSpendableCash: input.includeInSpendableCash ?? true,
       };
 
       return {

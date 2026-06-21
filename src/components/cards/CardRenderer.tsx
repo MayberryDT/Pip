@@ -355,6 +355,35 @@ export function CardRenderer({
         </CardShell>
       );
 
+    case "savings_goal_preview":
+      return (
+        <CardShell icon={<TrendingUp aria-hidden="true" size={18} />} title={card.title}>
+          <p className="pip-wrap-anywhere text-sm leading-6 text-ink/[0.68]">{card.summary}</p>
+          <div className="mt-3 space-y-2 text-sm">
+            <FormulaRow label="Target" value={card.targetAmountCents} />
+            <FormulaRow label="Monthly Savings" value={card.monthlyContributionCents} />
+            <FormulaRow
+              label="Spendable Cash Today"
+              value={card.currentSpendableCashTodayCents}
+            />
+            <FormulaRow
+              label="After this goal"
+              value={card.spendableCashTodayAfterGoalCents}
+              strong
+            />
+          </div>
+          {card.usualDailySpendCents !== undefined ? (
+            <p className="pip-wrap-anywhere mt-3 text-xs leading-5 text-ink/[0.56]">
+              Usual daily spending is around {formatMoney(card.usualDailySpendCents)}. This is a preview only; Pip does not move money.
+            </p>
+          ) : (
+            <p className="pip-wrap-anywhere mt-3 text-xs leading-5 text-ink/[0.56]">
+              Preview only. Pip does not move money.
+            </p>
+          )}
+        </CardShell>
+      );
+
     case "savings_goals_summary":
       return (
         <CardShell icon={<TrendingUp aria-hidden="true" size={18} />} title={card.title}>

@@ -64,7 +64,7 @@ describe("/api/settings", () => {
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({
       protectedSavingsMonthlyCents: 20000,
-      manualRefreshOnly: true,
+      manualRefreshOnly: false,
       privacyConsentAt: null,
     });
   });

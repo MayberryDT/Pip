@@ -35,6 +35,7 @@ export async function POST(request: Request) {
     const { error } = await supabase.from("user_settings").upsert({
       user_id: user.id,
       protected_savings_monthly_cents: parsed.data.protectedSavingsMonthlyCents,
+      manual_refresh_only: false,
       privacy_consent_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });

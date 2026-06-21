@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-export const agentMessageMaxChars = 260;
-export const agentModelMessageMaxChars = 1000;
+export const agentMessageMaxChars = 520;
+export const agentModelMessageMaxChars = 1400;
 
 const moneyToneSchema = z.enum(["positive", "negative", "neutral", "warning"]);
 const accountKindSchema = z.enum(["checking", "savings", "credit_card", "loan", "other"]);
@@ -336,6 +336,25 @@ export const cardSchema = z.discriminatedUnion("type", [
     summary: z.string().min(1).max(260),
   }),
   z.object({
+    type: z.literal("savings_goal_preview"),
+    title: z.string().min(1).max(80),
+    name: z.string().min(1).max(80),
+    targetAmountCents: z.number().int(),
+    currentAmountCents: z.number().int(),
+    remainingCents: z.number().int(),
+    targetDate: z.string().optional(),
+    monthlyContributionCents: z.number().int(),
+    includeInSpendableCash: z.boolean(),
+    currentSpendableCashTodayCents: z.number().int(),
+    spendableCashTodayAfterGoalCents: z.number().int(),
+    currentBaselineDailyAllowanceCents: z.number().int(),
+    baselineDailyAllowanceAfterGoalCents: z.number().int(),
+    usualDailySpendCents: z.number().int().optional(),
+    dailyRoomDeltaCents: z.number().int(),
+    warningLevel: z.enum(["ok", "watch", "tight", "too_tight"]),
+    summary: z.string().min(1).max(320),
+  }),
+  z.object({
     type: z.literal("savings_goals_summary"),
     title: z.string().min(1).max(80),
     summary: z.string().min(1).max(260),
@@ -399,11 +418,23 @@ export const rawPromptChipOutputSchema = z.union([promptChipSchema, z.string().m
 const savingsGoalPendingFieldSchema = z.enum([
   "target_amount",
   "target_date",
+  "target_date_or_monthly_contribution",
   "monthly_contribution",
   "protection_choice",
   "confirmation",
 ]);
 export const pendingActionSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("preview_savings_goal"),
+    name: z.string().trim().min(1).max(80),
+    targetAmountCents: z.number().int().positive().max(100_000_000).optional(),
+    targetDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    startingAmountCents: z.number().int().min(0).max(100_000_000).optional(),
+    currentAmountCents: z.number().int().min(0).max(100_000_000).optional(),
+    monthlyContributionCents: z.number().int().min(0).max(100_000_000).optional(),
+    includeInSpendableCash: z.boolean().optional(),
+    missing: z.array(savingsGoalPendingFieldSchema).optional(),
+  }),
   z.object({
     type: z.literal("create_savings_goal"),
     name: z.string().trim().min(1).max(80),
@@ -423,6 +454,25 @@ export const pendingActionSchema = z.discriminatedUnion("type", [
     monthlyContributionCents: z.number().int().min(0).max(100_000_000).optional(),
     missing: z.array(z.enum(["goal", "confirmation"])).optional(),
   }),
+  z.object({
+    type: z.literal("ordinary_write"),
+    action: z.string().min(1).max(120),
+    createdAt: z.string().min(1).max(80),
+    expiresAt: z.string().min(1).max(80).optional(),
+    confirmationKind: z.literal("contextual"),
+    summary: z.string().min(1).max(220),
+    payload: z.record(z.string(), z.unknown()).optional(),
+  }),
+  z.object({
+    type: z.literal("sensitive_confirmation"),
+    action: z.string().min(1).max(120),
+    createdAt: z.string().min(1).max(80),
+    expiresAt: z.string().min(1).max(80).optional(),
+    confirmationKind: z.literal("exact"),
+    exactConfirmation: z.string().min(1).max(160),
+    summary: z.string().min(1).max(220),
+    payload: z.record(z.string(), z.unknown()).optional(),
+  }),
 ]);
 const rawSupportOutputSchema = z.union([
   z.string().max(1000),
@@ -432,12 +482,16 @@ const rawSupportOutputSchema = z.union([
   z.array(z.unknown()).max(8),
   z.record(z.string(), z.unknown()),
 ]).optional();
+const rawGuidanceCardDraftOutputSchema = z.union([
+  guidanceCardDraftOutputSchema,
+  z.record(z.string(), z.unknown()),
+]).nullable().optional();
 
 export const agentFinalOutputSchema = z.object({
   message: z.string().min(1).max(agentModelMessageMaxChars),
   support: rawSupportOutputSchema,
   responseMode: responseModeSchema,
-  guidanceCardDraft: guidanceCardDraftOutputSchema.nullable().optional(),
+  guidanceCardDraft: rawGuidanceCardDraftOutputSchema,
   promptChips: z.array(rawPromptChipOutputSchema).max(8).nullable().optional(),
 });
 

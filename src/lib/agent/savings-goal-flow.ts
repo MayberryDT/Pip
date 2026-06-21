@@ -19,6 +19,7 @@ import type { RunAiAgentInput } from "@/lib/agent/ai-agent";
 
 export type SavingsGoalToolName = Extract<
   DeterministicAgentToolName,
+  | "preview_savings_goal"
   | "create_savings_goal"
   | "list_savings_goals"
   | "update_savings_goal"
@@ -410,7 +411,7 @@ function mergeSavingsGoalDraft(
     ...(pendingAction?.startingAmountCents === undefined ? {} : { startingAmountCents: pendingAction.startingAmountCents }),
     ...(pendingAction?.currentAmountCents === undefined ? {} : { currentAmountCents: pendingAction.currentAmountCents }),
     ...(monthlyContributionCents === undefined || monthlyContributionCents === null ? {} : { monthlyContributionCents }),
-    ...(pendingAction?.includeInSpendableCash === undefined ? {} : { includeInSpendableCash: pendingAction.includeInSpendableCash }),
+    includeInSpendableCash: pendingAction?.includeInSpendableCash ?? true,
   };
 }
 
@@ -441,7 +442,7 @@ function getSavingsGoalListMessage(cards: AgentCard[]): string {
   );
 
   if (!summaryCard) {
-    return "I pulled your savings goals.";
+    return "I checked your savings goals.";
   }
 
   if (summaryCard.activeGoalCount === 0) {
@@ -451,7 +452,7 @@ function getSavingsGoalListMessage(cards: AgentCard[]): string {
   const goal = summaryCard.goals[0];
 
   if (!goal) {
-    return "I pulled your savings goals.";
+    return "I checked your savings goals.";
   }
 
   return `${goal.name}: ${formatMoney(goal.remainingCents)} left to track in Pip.`;
@@ -501,10 +502,23 @@ function parseSavingsGoalTargetDate(message: string, asOfDate: string): string |
     return buildMonthEndDate(Number(monthNameToMonthNumber(monthYearMatch[1])), Number(monthYearMatch[2]), asOfDate);
   }
 
+  const bareMonthMatch =
+    /\b(?:by|in|before|around)?\s*(january|jan|february|feb|march|mar|april|apr|may|june|jun|july|jul|august|aug|september|sep|sept|october|oct|november|nov|december|dec)\b(?!\s+\d)/i.exec(message);
+
+  if (bareMonthMatch) {
+    return buildFutureMonthEndDate(monthNameToMonthNumber(bareMonthMatch[1]), asOfDate);
+  }
+
   const yearEndMatch = /\b(?:by\s+)?end of\s+(\d{4})\b/i.exec(message) ?? /\bby\s+(\d{4})\b/i.exec(message);
 
   if (yearEndMatch) {
     return buildYearEndDate(Number(yearEndMatch[1]), asOfDate);
+  }
+
+  const relativeMatch = /\bin\s+(\d{1,2})\s+(days?|weeks?|months?|years?)\b/i.exec(message);
+
+  if (relativeMatch) {
+    return buildRelativeFutureDate(Number(relativeMatch[1]), relativeMatch[2], asOfDate);
   }
 
   return null;
@@ -556,12 +570,57 @@ function buildMonthEndDate(month: number, year: number, asOfDate: string): strin
   return buildFutureDate(month, lastDay, asOfDate, year);
 }
 
+function buildFutureMonthEndDate(month: number, asOfDate: string): string | null {
+  const asOf = parseDateParts(asOfDate);
+  const currentYearEnd = buildMonthEndDate(month, asOf.year, asOfDate);
+
+  if (!currentYearEnd) {
+    return null;
+  }
+
+  return Date.parse(`${currentYearEnd}T00:00:00.000Z`) < Date.UTC(asOf.year, asOf.month - 1, asOf.day)
+    ? buildMonthEndDate(month, asOf.year + 1, asOfDate)
+    : currentYearEnd;
+}
+
 function buildYearEndDate(year: number, asOfDate: string): string | null {
   if (year < 1900 || year > 2100) {
     return null;
   }
 
   return buildFutureDate(12, 31, asOfDate, year);
+}
+
+function buildRelativeFutureDate(amount: number, unit: string, asOfDate: string): string | null {
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return null;
+  }
+
+  const asOf = parseDateParts(asOfDate);
+  const date = new Date(Date.UTC(asOf.year, asOf.month - 1, asOf.day));
+  const normalizedUnit = unit.toLowerCase();
+
+  if (normalizedUnit.startsWith("day")) {
+    date.setUTCDate(date.getUTCDate() + amount);
+  } else if (normalizedUnit.startsWith("week")) {
+    date.setUTCDate(date.getUTCDate() + amount * 7);
+  } else if (normalizedUnit.startsWith("month")) {
+    const originalDay = date.getUTCDate();
+    date.setUTCDate(1);
+    date.setUTCMonth(date.getUTCMonth() + amount);
+    const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCDate(Math.min(originalDay, lastDay));
+  } else if (normalizedUnit.startsWith("year")) {
+    date.setUTCFullYear(date.getUTCFullYear() + amount);
+  } else {
+    return null;
+  }
+
+  return [
+    date.getUTCFullYear(),
+    String(date.getUTCMonth() + 1).padStart(2, "0"),
+    String(date.getUTCDate()).padStart(2, "0"),
+  ].join("-");
 }
 
 function parseDateParts(value: string) {
@@ -585,6 +644,7 @@ function isSavingsGoalContextProgressPrompt(normalized: string): boolean {
 
 export function isSavingsGoalToolName(toolName: DeterministicAgentToolName): boolean {
   return [
+    "preview_savings_goal",
     "create_savings_goal",
     "list_savings_goals",
     "update_savings_goal",
@@ -594,6 +654,8 @@ export function isSavingsGoalToolName(toolName: DeterministicAgentToolName): boo
 
 export function hasSavingsGoalAction(input: RunAiAgentInput, toolName: DeterministicAgentToolName): boolean {
   switch (toolName) {
+    case "preview_savings_goal":
+      return true;
     case "create_savings_goal":
       return Boolean(input.actions?.createSavingsGoal);
     case "list_savings_goals":
@@ -633,6 +695,7 @@ export function getSavingsGoalForcedTool(
     ? extractSavingsGoalProgressAmountCents(message)
     : null;
   const monthlyContributionCents = extractMonthlyContributionCents(message);
+  const targetDate = parseSavingsGoalTargetDate(message, getAgentAsOfDate());
   const name = inferSavingsGoalName(message, normalized);
 
   if (isSavingsGoalListPrompt(normalized)) {
@@ -666,18 +729,28 @@ export function getSavingsGoalForcedTool(
     };
   }
 
-  if (targetAmountCents !== null && isSavingsGoalCreatePrompt(normalized)) {
+  if (isSavingsGoalTargetUpdatePrompt(normalized) && targetAmountCents !== null) {
     return {
-      toolName: "create_savings_goal",
+      toolName: "update_savings_goal",
       args: {
         name,
         target_amount_cents: targetAmountCents,
-        ...(monthlyContributionCents === null ? {} : { monthly_contribution_cents: monthlyContributionCents }),
-        include_in_spendable_cash:
-          monthlyContributionCents !== null &&
-          /\b(keep|hold|reserve|protect|out of spendable|spendable cash|monthly plan)\b/.test(normalized),
       },
       requireCard: true,
+    };
+  }
+
+  if (isSavingsGoalCreatePrompt(normalized)) {
+    return {
+      toolName: "preview_savings_goal",
+      args: {
+        name,
+        ...(targetAmountCents === null ? {} : { target_amount_cents: targetAmountCents }),
+        ...(targetDate ? { target_date: targetDate } : {}),
+        ...(monthlyContributionCents === null ? {} : { monthly_contribution_cents: monthlyContributionCents }),
+        include_in_spendable_cash: true,
+      },
+      requireCard: targetAmountCents !== null && Boolean(targetDate || monthlyContributionCents),
     };
   }
 
@@ -685,19 +758,36 @@ export function getSavingsGoalForcedTool(
 }
 
 export function isSavingsGoalPrompt(normalized: string): boolean {
+  if (/\bbill\b/.test(normalized) && !/\bsavings? goals?\b/.test(normalized)) {
+    return false;
+  }
+
   return /\bsavings? goals?\b/.test(normalized) ||
     /\bwhat goals am i tracking\b/.test(normalized) ||
     /\bgoal progress\b/.test(normalized) ||
     /\btrip fund\b.{0,32}\bdoing\b/.test(normalized) ||
     /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
+    /\b(emergency fund|computer|laptop|phone|car|trip|vacation|travel|big purchase)\b.{0,48}(?:\$|usd\b|\d+(?:,\d{3})*(?:\.\d{1,2})?\s*(?:dollars?|bucks?))/.test(normalized) ||
+    /(?:\$|usd\b|\b\d+(?:,\d{3})*(?:\.\d{1,2})?\s*(?:dollars?|bucks?)).{0,48}\b(emergency fund|computer|laptop|phone|car|trip|vacation|travel|big purchase)\b/.test(normalized) ||
     /\b(for|toward|towards)\b.{0,32}\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b/.test(normalized) ||
     /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized);
 }
 
 function isSavingsGoalCreatePrompt(normalized: string): boolean {
+  if (isSavingsGoalTargetUpdatePrompt(normalized)) {
+    return false;
+  }
+
   return /\b(create|start|set up|make|add|track|want|need|help|put|contribute)\b/.test(normalized) ||
     /\bset (?:a|an|new) savings? goals?\b/.test(normalized) ||
-    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized);
+    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
+    /\b(emergency fund|computer|laptop|phone|car|trip|vacation|travel|big purchase)\b.{0,48}(?:\$|usd\b|\d+(?:,\d{3})*(?:\.\d{1,2})?\s*(?:dollars?|bucks?))/.test(normalized) ||
+    /(?:\$|usd\b|\b\d+(?:,\d{3})*(?:\.\d{1,2})?\s*(?:dollars?|bucks?)).{0,48}\b(emergency fund|computer|laptop|phone|car|trip|vacation|travel|big purchase)\b/.test(normalized);
+}
+
+function isSavingsGoalTargetUpdatePrompt(normalized: string): boolean {
+  return /\b(set|change|update|make)\b.{0,32}\b(goal|savings? goal)\b.{0,32}\btarget\b/.test(normalized) ||
+    /\b(goal|savings? goal)\b.{0,32}\btarget\b.{0,32}\b(to|at)\b/.test(normalized);
 }
 
 function isSavingsGoalListPrompt(normalized: string): boolean {
@@ -941,11 +1031,11 @@ function scoreSavingsGoalAmountCandidate(message: string, index: number): number
   const after = message.slice(index, index + 64);
   let score = 0;
 
-  if (/\b(goal|target|cost|costs|save|saving|trip|vacation|travel|car|home|house|wedding|emergency fund|big purchase)\b/.test(before)) {
+  if (/\b(goal|target|cost|costs|save|saving|trip|vacation|travel|car|computer|laptop|phone|home|house|wedding|emergency fund|big purchase)\b/.test(before)) {
     score += 8;
   }
 
-  if (/\b(goal|target|cost|costs|save|saving|trip|vacation|travel|car|home|house|wedding|emergency fund|big purchase)\b/.test(after)) {
+  if (/\b(goal|target|cost|costs|save|saving|trip|vacation|travel|car|computer|laptop|phone|home|house|wedding|emergency fund|big purchase)\b/.test(after)) {
     score += 6;
   }
 
@@ -973,6 +1063,14 @@ function inferSavingsGoalName(message: string, normalized: string): string {
 
   if (/\b(car)\b/.test(normalized)) {
     return "Car";
+  }
+
+  if (/\b(computer|laptop)\b/.test(normalized)) {
+    return "Computer";
+  }
+
+  if (/\b(phone)\b/.test(normalized)) {
+    return "Phone";
   }
 
   if (/\b(wedding)\b/.test(normalized)) {

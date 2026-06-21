@@ -26,6 +26,7 @@ import {
   loadSavingsGoalForUser,
   updateSavingsGoalForUser,
 } from "@/lib/data/savings-goals-repository";
+import { loadManualRefreshOnlyForUser } from "@/lib/data/user-settings";
 import {
   ignoreRecurringObligationForUser,
   normalizeMerchantKey,
@@ -91,7 +92,7 @@ import {
 
 const requestSchema = z.object({
   message: z.string().min(1).max(500),
-  requestKind: z.enum(["chat", "prompt_chips"]).optional(),
+  requestKind: z.enum(["chat", "prompt_chips", "opening_bubble"]).optional(),
   conversationId: z
     .string()
     .min(1)
@@ -203,7 +204,7 @@ export async function POST(request: Request) {
       },
     );
 
-    if (parsed.data.requestKind !== "prompt_chips") {
+    if ((parsed.data.requestKind ?? "chat") === "chat") {
       const routeResult = routeContext.snapshot ? calculatePipCash(routeContext.snapshot) : null;
 
       await Promise.all([
@@ -235,7 +236,7 @@ export async function POST(request: Request) {
     const payload = toAgentErrorPayload(error);
     const { status, ...body } = payload;
 
-    if (parsed.data.requestKind !== "prompt_chips") {
+    if ((parsed.data.requestKind ?? "chat") === "chat") {
       await recordAgentChatTurnSafely(routeContext?.eventContext?.supabase ?? null, {
         userId: routeContext?.eventContext?.userId ?? null,
         conversationId,
@@ -566,7 +567,7 @@ function createLocalDevSavingsGoal(input: SavingsGoalInput): SavingsGoal {
     startingAmountCents: input.startingAmountCents ?? 0,
     currentAmountCents: input.currentAmountCents ?? input.startingAmountCents ?? 0,
     monthlyContributionCents: input.monthlyContributionCents ?? 0,
-    includeInSpendableCash: input.includeInSpendableCash ?? false,
+    includeInSpendableCash: input.includeInSpendableCash ?? true,
     status: "active",
     createdAt: now,
     updatedAt: now,
@@ -586,6 +587,7 @@ function createAgentActions(input: {
         const { error } = await supabase.from("user_settings").upsert({
           user_id: userId,
           protected_savings_monthly_cents: amountCents,
+          manual_refresh_only: false,
           privacy_consent_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         });
@@ -1157,6 +1159,16 @@ function createAgentActions(input: {
       }
 
       try {
+        const isManualRefreshOnly = await loadManualRefreshOnlyForUser(supabase, userId);
+
+        if (isManualRefreshOnly) {
+          return {
+            ok: false,
+            status: "skipped_manual_only",
+            message: "Automatic refresh is disabled for this account.",
+          };
+        }
+
         const result = await runManualSync(supabase, {
           userId,
           provider,

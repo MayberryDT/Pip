@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { AgentUnavailableError } from "@/lib/agent/agent-errors";
-import { guardVisibleFinalMessage } from "@/lib/agent/visible-response-guard";
+import {
+  guardVisibleFinalMessage,
+  visibleResponseSurfaceLimits,
+  type VisibleResponseSurface,
+} from "@/lib/agent/visible-response-guard";
 
-const surfaceLimits = [
-  ["bridge", 45, 260],
-  ["companion", 85, 520],
-  ["openingBubble", 38, 220],
-  ["correction", 70, 420],
-] as const;
+const surfaceLimits = Object.entries(visibleResponseSurfaceLimits).map(
+  ([surface, limits]) => [
+    surface as VisibleResponseSurface,
+    limits.maxWords,
+    limits.maxChars,
+  ] as const,
+);
 
 function words(count: number): string {
   return Array.from({ length: count }, () => "w").join(" ");

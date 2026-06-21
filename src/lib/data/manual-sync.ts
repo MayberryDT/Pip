@@ -850,7 +850,7 @@ async function upsertDefaultSettings(
     .insert({
       user_id: userId,
       protected_savings_monthly_cents: 20000,
-      manual_refresh_only: true,
+      manual_refresh_only: false,
       updated_at: now.toISOString(),
     })
     .select("*")

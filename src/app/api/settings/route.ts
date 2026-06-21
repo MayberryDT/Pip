@@ -46,7 +46,7 @@ export async function GET() {
 
     return NextResponse.json({
       protectedSavingsMonthlyCents: data?.protected_savings_monthly_cents ?? 20000,
-      manualRefreshOnly: data?.manual_refresh_only ?? true,
+      manualRefreshOnly: data?.manual_refresh_only ?? false,
       privacyConsentAt: data?.privacy_consent_at ?? null,
     });
   } catch (error) {

@@ -49,11 +49,23 @@ export type AgentClientAction =
 export type SavingsGoalPendingField =
   | "target_amount"
   | "target_date"
+  | "target_date_or_monthly_contribution"
   | "monthly_contribution"
   | "protection_choice"
   | "confirmation";
 
 export type AgentPendingAction =
+  | {
+      type: "preview_savings_goal";
+      name: string;
+      targetAmountCents?: number;
+      targetDate?: string;
+      startingAmountCents?: number;
+      currentAmountCents?: number;
+      monthlyContributionCents?: number;
+      includeInSpendableCash?: boolean;
+      missing?: SavingsGoalPendingField[];
+    }
   | {
       type: "create_savings_goal";
       name: string;
@@ -72,6 +84,25 @@ export type AgentPendingAction =
       includeInSpendableCash: boolean;
       monthlyContributionCents?: number;
       missing?: Array<"goal" | "confirmation">;
+    }
+  | {
+      type: "ordinary_write";
+      action: string;
+      createdAt: string;
+      expiresAt?: string;
+      confirmationKind: "contextual";
+      summary: string;
+      payload?: Record<string, unknown>;
+    }
+  | {
+      type: "sensitive_confirmation";
+      action: string;
+      createdAt: string;
+      expiresAt?: string;
+      confirmationKind: "exact";
+      exactConfirmation: string;
+      summary: string;
+      payload?: Record<string, unknown>;
     };
 
 export type AgentCard =
@@ -169,6 +200,25 @@ export type AgentCard =
       monthlyContributionCents: number;
       includeInSpendableCash: boolean;
       onTrack?: boolean;
+      summary: string;
+    }
+  | {
+      type: "savings_goal_preview";
+      title: string;
+      name: string;
+      targetAmountCents: number;
+      currentAmountCents: number;
+      remainingCents: number;
+      targetDate?: string;
+      monthlyContributionCents: number;
+      includeInSpendableCash: boolean;
+      currentSpendableCashTodayCents: number;
+      spendableCashTodayAfterGoalCents: number;
+      currentBaselineDailyAllowanceCents: number;
+      baselineDailyAllowanceAfterGoalCents: number;
+      usualDailySpendCents?: number;
+      dailyRoomDeltaCents: number;
+      warningLevel: "ok" | "watch" | "tight" | "too_tight";
       summary: string;
     }
   | {

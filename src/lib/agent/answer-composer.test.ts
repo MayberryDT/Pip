@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { composeAgentVisibleAnswer } from "@/lib/agent/answer-composer";
 
 describe("answer composer", () => {
-  it("uses purchase simulation card facts for purchase answers", () => {
+  it("preserves model output for purchase cards instead of deterministic simulation copy", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
-        message: "Model bridge.",
+        message: "The purchase would put today in the red, so I would pause before buying it.",
       },
       userMessage: "Can I spend $50?",
       cards: [
@@ -26,16 +26,17 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "That would put Spendable Cash Today at -$7.",
-      answerPatternId: "purchase-simulation",
+      message: "The purchase would put today in the red, so I would pause before buying it.",
+      answerPatternId: "model",
       repetitionAdjusted: false,
     });
+    expect(answer.answerPatternId).not.toBe("purchase-simulation");
   });
 
-  it("separates immediate room left from unchanged Spendable Cash after purchase", () => {
+  it("preserves model output when purchase card cash fields differ", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
-        message: "Model bridge.",
+        message: "That amount still fits today, but keep the rest of the day quiet.",
       },
       userMessage: "Can I spend $25?",
       cards: [
@@ -57,15 +58,16 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "That would leave $79 in Spendable Cash Today.",
-      answerPatternId: "purchase-simulation",
+      message: "That amount still fits today, but keep the rest of the day quiet.",
+      answerPatternId: "model",
     });
+    expect(answer.answerPatternId).not.toBe("purchase-simulation");
   });
 
-  it("puts the biggest explanation driver in the short answer", () => {
+  it("uses the model bridge for explanation cards instead of a canned driver sentence", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
-        message: "Model bridge.",
+        message: "Recent spending is the main reason today feels tighter.",
       },
       userMessage: "Why this number?",
       cards: [
@@ -91,16 +93,14 @@ describe("answer composer", () => {
       maxWords: 45,
     });
 
-    expect(answer.message).toBe(
-      "I found the main drivers behind today's number. The largest one is Recent spending.",
-    );
-    expect(answer.answerPatternId).toBe("explain-number");
+    expect(answer.message).toBe("Recent spending is the main reason today feels tighter.");
+    expect(answer.answerPatternId).toBe("model");
   });
 
-  it("keeps forecast answers compact with the required caveat", () => {
+  it("uses the model bridge for forecast cards instead of a canned forecast sentence", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
-        message: "Model bridge.",
+        message: "I mapped the next week so you can see the pressure ahead.",
       },
       userMessage: "Show forecast",
       cards: [
@@ -122,8 +122,8 @@ describe("answer composer", () => {
       maxWords: 45,
     });
 
-    expect(answer.message).toBe("I mapped the next 7 days. Forecast only; not guaranteed.");
-    expect(answer.answerPatternId).toBe("forecast");
+    expect(answer.message).toBe("I mapped the next week so you can see the pressure ahead.");
+    expect(answer.answerPatternId).toBe("model");
   });
 
   it("uses the model bridge for bill cards instead of a canned recurring answer", () => {
@@ -164,7 +164,7 @@ describe("answer composer", () => {
     });
   });
 
-  it("uses deterministic bridge copy for empty recurring cards without freshness language", () => {
+  it("uses the model bridge for empty recurring cards instead of a canned empty-state sentence", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
         message: "I don’t see any upcoming subscriptions in my current view.",
@@ -185,8 +185,8 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "I checked likely repeats and don’t see upcoming subscriptions.",
-      answerPatternId: "recurring-activity-empty",
+      message: "I don’t see any upcoming subscriptions in my current view.",
+      answerPatternId: "model",
     });
   });
 
@@ -221,7 +221,7 @@ describe("answer composer", () => {
     });
   });
 
-  it("uses cutback insight card facts instead of a generic insight bridge", () => {
+  it("uses the model bridge for cutback insight cards instead of a canned opportunity sentence", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
         message: "Generic spending advice.",
@@ -249,11 +249,44 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "I found a cutback opportunity: Dining is up $72 over the last 14 days.",
-      answerPatternId: "cutback-opportunity",
+      message: "Generic spending advice.",
+      answerPatternId: "model",
       repetitionAdjusted: false,
     });
     expect(answer.message).not.toContain("short summary");
+  });
+
+  it("uses guidance-model for guidance cards while preserving the model read", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "You are stable today, but dining is the area to watch next.",
+      },
+      userMessage: "Am I spending too much?",
+      cards: [
+        {
+          type: "guidance_card",
+          title: "Pip read",
+          stance: "watch",
+          summary: "Recent spending is worth watching.",
+          rows: [
+            {
+              label: "Dining",
+              detail: "Dining is running above your recent baseline.",
+              tone: "warning",
+              evidenceIds: ["txn-dining"],
+            },
+          ],
+        },
+      ],
+      usedTools: ["get_financial_guidance_context"],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "You are stable today, but dining is the area to watch next.",
+      answerPatternId: "guidance-model",
+    });
   });
 
   it("uses model support for non-card answers when it fits", () => {
@@ -275,7 +308,7 @@ describe("answer composer", () => {
     expect(answer.answerPatternId).toBe("model");
   });
 
-  it("keeps bare greetings free of display promises", () => {
+  it("preserves model output for bare greetings", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
         message: "Want me to show a forecast?",
@@ -288,12 +321,12 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "I can help with your Spendable Cash Today. Ask what changed or whether a specific purchase fits.",
-      answerPatternId: "greeting",
+      message: "Want me to show a forecast?",
+      answerPatternId: "model",
     });
   });
 
-  it("keeps friendly small talk free of display promises", () => {
+  it("preserves model output for friendly small talk", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
         message: "I love you back. Want me to show your spending breakdown?",
@@ -306,12 +339,12 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "I’m here with you. Ask me a money question or test a specific purchase amount.",
-      answerPatternId: "friendly-small-talk",
+      message: "I love you back. Want me to show your spending breakdown?",
+      answerPatternId: "model",
     });
   });
 
-  it("keeps broad money basics general and off user data", () => {
+  it("preserves model output for broad money basics", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
         message: "I see your cushion and bills.",
@@ -324,12 +357,12 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "One useful money basic: separate bills, needs, and fun money before you spend. A small planned amount beats guessing.",
-      answerPatternId: "money-basic",
+      message: "I see your cushion and bills.",
+      answerPatternId: "model",
     });
   });
 
-  it("keeps general spending advice conversational and card-free", () => {
+  it("preserves model output for general spending advice", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
         message: "I can show a spending breakdown.",
@@ -342,12 +375,12 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "Start with one small spending rule: choose one category, set a weekly cap, and keep one low-cost thing you still enjoy.",
-      answerPatternId: "spending-advice",
+      message: "I can show a spending breakdown.",
+      answerPatternId: "model",
     });
   });
 
-  it("replaces unsupported no-card view references on broad prompts", () => {
+  it("preserves model output for unsupported no-card prompts", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
         message: "I found it is $104 today. A missing card warning could tweak things.",
@@ -360,8 +393,8 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "I’m not sure what you mean yet. Ask about today’s number or test a specific purchase amount.",
-      answerPatternId: "clarify",
+      message: "I found it is $104 today. A missing card warning could tweak things.",
+      answerPatternId: "model",
     });
   });
 
@@ -380,10 +413,10 @@ describe("answer composer", () => {
     expect(answer.message.length).toBeLessThanOrEqual(260);
   });
 
-  it("adjusts repeated vague follow-ups instead of repeating the same answer", () => {
+  it("does not replace repeated card follow-ups with a fixed duplicate message", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
-        message: "I found recent charges in the current window.",
+        message: "The same recent charges are still what I have to work from.",
       },
       userMessage: "why?",
       history: [
@@ -417,17 +450,17 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "That same answer still applies. I can take it from another angle.",
-      answerPatternId: "duplicate-follow-up",
-      repeatedMessage: true,
-      repetitionAdjusted: true,
+      message: "The same recent charges are still what I have to work from.",
+      answerPatternId: "model",
+      repeatedMessage: false,
+      repetitionAdjusted: false,
     });
   });
 
-  it("does not let duplicate no-card follow-ups describe a hidden card", () => {
+  it("does not replace duplicate no-card follow-ups with a fixed duplicate message", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
-        message: "I found the main drivers behind today's number.",
+        message: "I can say it another way: recent spending is still the main driver.",
       },
       userMessage: "why?",
       history: [
@@ -455,13 +488,13 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "That same answer still applies. I can take it from another angle.",
-      answerPatternId: "duplicate-follow-up",
-      repetitionAdjusted: true,
+      message: "I can say it another way: recent spending is still the main driver.",
+      answerPatternId: "model",
+      repetitionAdjusted: false,
     });
   });
 
-  it("keeps Android trust-policy pricing bridges free of web prices", () => {
+  it("preserves model output for Android trust-policy pricing prompts", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {
         message: "Pip lists $2.99/week.",
@@ -475,8 +508,8 @@ describe("answer composer", () => {
     });
 
     expect(answer).toMatchObject({
-      message: "Purchases and subscriptions are not available in this Android build.",
-      answerPatternId: "trust-policy",
+      message: "Pip lists $2.99/week.",
+      answerPatternId: "model",
     });
   });
 });

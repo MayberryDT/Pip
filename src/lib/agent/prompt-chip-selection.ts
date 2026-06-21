@@ -18,7 +18,7 @@ export type PromptChipSelectionOnboardingState = {
 };
 
 export type PromptChipSelectionContext = {
-  requestKind: "chat" | "prompt_chips";
+  requestKind: "chat" | "prompt_chips" | "opening_bubble";
   snapshot?: FinancialSnapshot;
   syncStatus?: SyncStatus | null;
   onboardingState: PromptChipSelectionOnboardingState;
@@ -42,7 +42,7 @@ export type PromptChipSelectionOutput = {
 export type PromptChipSelectionOptions = {
   input: {
     message: string;
-    requestKind?: "chat" | "prompt_chips";
+    requestKind?: "chat" | "prompt_chips" | "opening_bubble";
     history?: Array<{
       role: "user" | "assistant";
       content: string;

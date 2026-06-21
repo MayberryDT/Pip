@@ -7,10 +7,18 @@ import {
 } from "@/lib/agent/ai-agent";
 import { getOnboardingPromptChips } from "@/lib/agent/suggested-prompts";
 import { buildFinancialGuidanceToolResult, runAgentTool } from "@/lib/agent/tool-runner";
+import {
+  buildSavingsGoalDraft,
+  createOrdinaryPendingAction,
+  getSavingsGoalPreviewMissingFields,
+  isCancellationPrompt,
+  isContextualConfirmation,
+} from "@/lib/agent/pending-actions";
 import { fakeSnapshot } from "@/lib/fake-data";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { formatMoney } from "@/lib/money";
 import { composeTrustPolicyAnswer } from "@/lib/trust/pip-trust-policy";
+import { buildSavingsGoalPreview } from "@/lib/savings-goals/preview";
 
 export function createMockModelClient(): AgentRuntime {
   return {
@@ -123,8 +131,27 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return savingsGoalSummaryResponse(input);
   }
 
+  if (
+    input.conversationState?.pendingAction?.type === "ordinary_write" &&
+    input.conversationState.pendingAction.action === "create_savings_goal" &&
+    isContextualConfirmation(input.message)
+  ) {
+    const payload = input.conversationState.pendingAction.payload ?? {};
+    const targetAmountCents =
+      typeof payload.targetAmountCents === "number" ? payload.targetAmountCents : amountCents ?? 500000;
+
+    return savingsGoalPlanResponse(input, targetAmountCents);
+  }
+
+  if (isCancellationPrompt(input.message)) {
+    return baseResponse(input, {
+      message: "No problem. I will leave that savings goal alone.",
+      responseMode: "chat_only",
+    });
+  }
+
   if (isSavingsGoalPrompt(normalized)) {
-    return savingsGoalPlanResponse(input, amountCents ?? 500000);
+    return savingsGoalPreviewResponse(input);
   }
 
   if (isTrustReceiptPrompt(normalized)) {
@@ -272,15 +299,77 @@ function savingsGoalPlanResponse(input: RunAiAgentInput, targetAmountCents: numb
     currentAmountCents: 0,
     remainingCents: targetAmountCents,
     monthlyContributionCents: 0,
-    includeInSpendableCash: false,
-    summary: `${formatMoney(targetAmountCents)} left for Trip. Tracked only for now.`,
+    includeInSpendableCash: true,
+    summary: `${formatMoney(targetAmountCents)} left for Trip. Its monthly plan counts in Spendable Cash Today.`,
   };
 
   return baseResponse(input, {
-    message: "I set up the savings goal plan.",
+    message: "Trip is tracked now, and its monthly plan counts in Spendable Cash Today.",
     cards: [card],
     usedTools: ["create_savings_goal"],
     responseMode: "show_card",
+  });
+}
+
+function savingsGoalPreviewResponse(input: RunAiAgentInput): AgentResponse {
+  const snapshot = input.snapshot ?? fakeSnapshot;
+  const draft = buildSavingsGoalDraft({
+    message: input.message,
+    pendingAction: input.conversationState?.pendingAction?.type === "preview_savings_goal"
+      ? input.conversationState.pendingAction
+      : undefined,
+    asOfDate: snapshot.settings.asOfDate,
+  });
+  const missing = getSavingsGoalPreviewMissingFields(draft);
+
+  if (missing.length > 0) {
+    return baseResponse(input, {
+      message: missing.includes("target_amount")
+        ? `How much do you want to save for ${draft.name}?`
+        : `When do you want ${draft.name}, or how much do you want to save each month?`,
+      responseMode: "clarify",
+      pendingAction: {
+        ...draft,
+        missing,
+      },
+    });
+  }
+
+  const preview = buildSavingsGoalPreview({
+    snapshot,
+    draft,
+  });
+
+  if (!preview.card) {
+    return baseResponse(input, {
+      message: "Tell me the date or monthly amount so I can preview that goal.",
+      responseMode: "clarify",
+      pendingAction: {
+        ...draft,
+        missing: preview.missing,
+      },
+    });
+  }
+
+  return baseResponse(input, {
+    message: `${draft.name} would need ${formatMoney(preview.card.monthlyContributionCents)}/month. Want me to create it?`,
+    cards: [preview.card],
+    usedTools: ["preview_savings_goal"],
+    responseMode: "show_card",
+    pendingAction: createOrdinaryPendingAction({
+      action: "create_savings_goal",
+      summary: `Create ${draft.name} savings goal`,
+      payload: {
+        name: draft.name,
+        targetAmountCents: draft.targetAmountCents,
+        targetDate: draft.targetDate,
+        startingAmountCents: draft.startingAmountCents,
+        currentAmountCents: draft.currentAmountCents,
+        monthlyContributionCents: preview.card.monthlyContributionCents,
+        includeInSpendableCash: true,
+      },
+      now: new Date("2026-06-20T12:00:00.000Z"),
+    }),
   });
 }
 
@@ -299,13 +388,13 @@ function savingsGoalSummaryResponse(input: RunAiAgentInput): AgentResponse {
         currentAmountCents: 0,
         remainingCents: 500000,
         monthlyContributionCents: 0,
-        includeInSpendableCash: false,
+        includeInSpendableCash: true,
       },
     ],
   };
 
   return baseResponse(input, {
-    message: "I pulled your savings goals.",
+    message: "Trip is the savings goal I see right now.",
     cards: [card],
     usedTools: ["list_savings_goals"],
     responseMode: "show_card",
@@ -508,11 +597,13 @@ function createToolMessage(response: AgentResponse): string {
   }
 
   if (card?.type === "savings_goal_plan") {
-    return "I set up the savings goal plan.";
+    return `${card.name} is tracked now, and its monthly plan counts in Spendable Cash Today.`;
   }
 
   if (card?.type === "savings_goals_summary") {
-    return "I pulled your savings goals.";
+    return card.goals[0]
+      ? `${card.goals[0].name} is the savings goal I see right now.`
+      : "I do not see an active savings goal yet.";
   }
 
   if (card?.type === "insight_card") {
@@ -579,7 +670,7 @@ function isSavingsSetupOrSettingsPrompt(normalized: string): boolean {
 function isSavingsGoalPrompt(normalized: string): boolean {
   return /\bsavings? goals?\b/.test(normalized) ||
     /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized) ||
-    /\b(trip|vacation|travel|car|house|home|wedding|emergency fund|big purchase)\b.{0,40}\b(cost|costs|goal|save|saving|target)\b/.test(normalized);
+    /\b(trip|vacation|travel|car|house|home|wedding|computer|emergency fund|big purchase)\b.{0,80}\b(cost|costs|goal|save|saving|target|\$|\d)\b/.test(normalized);
 }
 
 function isSavingsGoalListPrompt(normalized: string): boolean {

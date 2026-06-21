@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentResponse } from "@/lib/agent/card-types";
 import { fakeSnapshot } from "@/lib/fake-data";
 
@@ -9,6 +9,8 @@ const routeMocks = vi.hoisted(() => ({
   recordAgentChatTurnSafely: vi.fn(),
   recordProductEventSafely: vi.fn(),
   runAIAgent: vi.fn(),
+  loadManualRefreshOnlyForUser: vi.fn(),
+  runManualSync: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -30,6 +32,19 @@ vi.mock("@/lib/data/product-events", async (importOriginal) => {
   return {
     ...actual,
     recordProductEventSafely: routeMocks.recordProductEventSafely,
+  };
+});
+
+vi.mock("@/lib/data/user-settings", () => ({
+  loadManualRefreshOnlyForUser: routeMocks.loadManualRefreshOnlyForUser,
+}));
+
+vi.mock("@/lib/data/manual-sync", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/data/manual-sync")>();
+
+  return {
+    ...actual,
+    runManualSync: routeMocks.runManualSync,
   };
 });
 
@@ -70,6 +85,10 @@ afterEach(() => {
 });
 
 describe("POST /api/agent", () => {
+  beforeEach(() => {
+    routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(false);
+  });
+
   it("rejects invalid request bodies with a structured 400 response", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
@@ -697,6 +716,55 @@ describe("POST /api/agent", () => {
         mode: "connect",
       }),
     );
+  });
+
+  it("returns an explicit manual-only result when chat asks to refresh disabled data", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient(
+      { id: "user-1" },
+      {
+        privacy_consent_at: "2026-06-07T00:00:00.000Z",
+      },
+      {
+        connectedInstitutions: [
+          {
+            id: "inst-1",
+            user_id: "user-1",
+            provider: "plaid",
+            institution_name: "Capital One",
+            status: "connected",
+            last_successful_sync_at: "2026-06-20T21:53:25.485Z",
+            stale_after: "2026-06-21T21:53:25.485Z",
+            error_code: null,
+            error_message: null,
+            updated_at: "2026-06-20T21:53:25.485Z",
+          },
+        ],
+      },
+    );
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(true);
+    routeMocks.runAIAgent.mockImplementation(async (input) => {
+      const result = await input.actions?.refreshFinancialData?.();
+
+      return createAgentResponse({
+        message: result?.message,
+        usedTools: ["refresh_financial_data"],
+        responseMode: "update_context",
+      });
+    });
+
+    const response = await POST(jsonRequest({ message: "Refresh my connected data" }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload).toMatchObject({
+      message: "Automatic refresh is disabled for this account.",
+      usedTools: ["refresh_financial_data"],
+    });
+    expect(routeMocks.loadManualRefreshOnlyForUser).toHaveBeenCalledWith(supabase, "user-1");
+    expect(routeMocks.runManualSync).not.toHaveBeenCalled();
   });
 
   it("uses a fresh Plaid connect session when the only stale institution has an undecryptable token", async () => {

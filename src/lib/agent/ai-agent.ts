@@ -20,6 +20,7 @@ import {
 import {
   agentFinalOutputSchema,
   agentResponseSchema,
+  guidanceCardDraftOutputSchema,
 } from "@/lib/agent/response-schema";
 import {
   getOnboardingPromptChips,
@@ -60,6 +61,17 @@ import {
   isSavingsGoalPrompt,
   updateSavingsGoalParameters,
 } from "@/lib/agent/savings-goal-flow";
+import {
+  getModelFirstViolation,
+} from "@/lib/agent/model-first-policy";
+import {
+  buildSavingsGoalDraft,
+  createOrdinaryPendingAction,
+  getSavingsGoalPreviewMissingFields,
+  isCancellationPrompt,
+  resolvePendingActionConfirmation,
+} from "@/lib/agent/pending-actions";
+import { buildSavingsGoalPreview } from "@/lib/savings-goals/preview";
 import type { PipPlatform } from "@/lib/platform/android-shell";
 import type { PlaidLinkMode } from "@/lib/providers/FinancialDataProvider";
 import {
@@ -102,7 +114,7 @@ type AgentFinalOutput = Omit<
   "support" | "guidanceCardDraft" | "promptChips"
 > & {
   support?: string;
-  guidanceCardDraft?: NonNullable<RawAgentFinalOutput["guidanceCardDraft"]>;
+  guidanceCardDraft?: GuidanceCardDraft;
   promptChips: PromptChip[];
 };
 
@@ -199,7 +211,7 @@ export type PipAgentActions = {
 
 export type RunAiAgentInput = {
   message: string;
-  requestKind?: "chat" | "prompt_chips";
+  requestKind?: "chat" | "prompt_chips" | "opening_bubble";
   snapshot?: FinancialSnapshot;
   history?: AgentHistoryItem[];
   conversationState?: AgentConversationState;
@@ -221,7 +233,7 @@ export type OpenAIResponsesClient = AgentRuntime;
 
 type PipAgentContext = {
   inputMessage: string;
-  requestKind: "chat" | "prompt_chips";
+  requestKind: "chat" | "prompt_chips" | "opening_bubble";
   snapshot?: FinancialSnapshot;
   syncStatus?: SyncStatus | null;
   platform: PipPlatform;
@@ -238,6 +250,7 @@ type PipAgentContext = {
   guidanceCardRejectionReason?: string;
   fallbackFinalOutput?: boolean;
   clientAction?: AgentClientAction;
+  pendingAction?: AgentPendingAction;
 };
 
 type ForcedAgentTool = {
@@ -280,60 +293,38 @@ const recurringObligationCorrectionParameters = z.object({
   expected_amount_cents: z.number().int().positive().max(1_000_000).optional(),
   expected_day: z.number().int().min(1).max(31).optional(),
 });
+const previewSavingsGoalParameters = z.object({
+  name: z.string().trim().min(1).max(80),
+  target_amount_cents: z.number().int().positive().max(100_000_000).optional(),
+  target_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  starting_amount_cents: z.number().int().min(0).max(100_000_000).optional(),
+  current_amount_cents: z.number().int().min(0).max(100_000_000).optional(),
+  monthly_contribution_cents: z.number().int().min(0).max(100_000_000).optional(),
+});
 const bridgeVisibleLimits = getVisibleResponseSurfaceLimits("bridge");
 
 export async function runAIAgent(
   input: RunAiAgentInput,
   runtime?: AgentRuntime,
 ): Promise<AgentResponse> {
-  const deterministicNoToolResponse = createDeterministicNoToolResponse(input);
-
-  if (deterministicNoToolResponse) {
-    return deterministicNoToolResponse;
-  }
-
-  const deterministicPromptChipRefreshResponse = createDeterministicPromptChipRefreshResponse(input);
-
-  if (deterministicPromptChipRefreshResponse) {
-    return deterministicPromptChipRefreshResponse;
-  }
-
   if (runtime) {
-    return runtime.run(input);
-  }
+    const response = await runtime.run(input);
+    const violation = getModelFirstViolation({
+      requestKind: input.requestKind ?? "chat",
+      userMessage: input.message,
+      response,
+    });
 
-  const deterministicTrustResponse = createDeterministicTrustResponse(input);
+    if (violation) {
+      throw new AgentUnavailableError({
+        code: "agent-output-rejected",
+        message: "AI response failed Pip's model-first policy.",
+        status: 502,
+        detail: `${violation.code}: ${violation.message}`,
+      });
+    }
 
-  if (deterministicTrustResponse) {
-    return deterministicTrustResponse;
-  }
-
-  const deterministicSavingsGoalResponse = isRetiredSavingsGoalProtectionPrompt(input)
-    ? null
-    : await createDeterministicSavingsGoalResponse(input);
-
-  if (deterministicSavingsGoalResponse) {
-    return deterministicSavingsGoalResponse;
-  }
-
-  const deterministicBillCorrectionResponse = await createDeterministicBillCorrectionResponse(input);
-
-  if (deterministicBillCorrectionResponse) {
-    return deterministicBillCorrectionResponse;
-  }
-
-  const deterministicConnectedAccountsResponse = await createDeterministicConnectedAccountsResponse(input);
-
-  if (deterministicConnectedAccountsResponse) {
-    return deterministicConnectedAccountsResponse;
-  }
-
-  const deterministicUnavailableActionResponse = isRetiredSavingsGoalProtectionPrompt(input)
-    ? null
-    : createDeterministicUnavailableActionResponse(input);
-
-  if (deterministicUnavailableActionResponse) {
-    return deterministicUnavailableActionResponse;
+    return response;
   }
 
   if (!shouldUseModel()) {
@@ -358,33 +349,29 @@ export async function runAIAgent(
         maxTurns: 5,
       });
 
-      return buildAgentResponse(result.finalOutput, context, input, {
+      const response = buildAgentResponse(result.finalOutput, context, input, {
         usedModel: true,
         model: getPipAiModel(),
         transport: getOpenAIClientConfig().transport,
       });
+      const violation = getModelFirstViolation({
+        requestKind: input.requestKind ?? "chat",
+        userMessage: input.message,
+        response,
+      });
+
+      if (violation) {
+        throw new AgentUnavailableError({
+          code: "agent-output-rejected",
+          message: "AI response failed Pip's model-first policy.",
+          status: 502,
+          detail: `${violation.code}: ${violation.message}`,
+        });
+      }
+
+      return response;
     } catch (error) {
       const agentError = toAgentUnavailableError(error);
-      const fallbackFinalOutput = createFallbackFinalOutput(context);
-
-      if (
-        fallbackFinalOutput &&
-        (shouldRetryFinalOutput(agentError) || shouldUseDeterministicFallbackAfterModelFailure(agentError, context))
-      ) {
-        return buildAgentResponse(fallbackFinalOutput, context, input, {
-          usedModel: true,
-          model: getPipAiModel(),
-          transport: getOpenAIClientConfig().transport,
-        });
-      }
-
-      if (shouldRecoverBroadChatFinalOutput(agentError, context)) {
-        return buildAgentResponse(createBroadChatFallbackFinalOutput(input), context, input, {
-          usedModel: true,
-          model: getPipAiModel(),
-          transport: getOpenAIClientConfig().transport,
-        });
-      }
 
       if (!repair && shouldRetryFinalOutput(agentError)) {
         repair = createAgentResponseRepair(agentError);
@@ -511,6 +498,22 @@ function createDeterministicTrustResponse(input: RunAiAgentInput): AgentResponse
   }
 
   return null;
+}
+
+function shouldLetModelHandleSavingsGoal(input: RunAiAgentInput): boolean {
+  if (!shouldUseModel()) {
+    return false;
+  }
+
+  if (input.conversationState?.pendingAction?.type === "create_savings_goal") {
+    return false;
+  }
+
+  const forcedTool = getSavingsGoalForcedTool(input.message.trim(), normalizePrompt(input.message.trim()));
+
+  return forcedTool?.toolName === "create_savings_goal" ||
+    forcedTool?.toolName === "list_savings_goals" ||
+    forcedTool?.toolName === "update_savings_goal";
 }
 
 async function createDeterministicConnectedAccountsResponse(input: RunAiAgentInput): Promise<AgentResponse | null> {
@@ -1245,16 +1248,147 @@ function createPipTools() {
         }));
       },
     }),
+    tool<typeof previewSavingsGoalParameters, PipAgentContext>({
+      name: "preview_savings_goal",
+      description:
+        "Preview a savings goal before saving it. Use when the user wants to save for a trip, big purchase, emergency fund, or named goal. This shows monthly contribution and Spendable Cash Today impact, but does not create the goal.",
+      parameters: previewSavingsGoalParameters,
+      strict: true,
+      execute(input, runContext) {
+        const context = getToolContext(runContext);
+        const toolInput = getToolInput(context, "preview_savings_goal", input, previewSavingsGoalParameters);
+        recordTool(context, "preview_savings_goal");
+        const draft = {
+          type: "preview_savings_goal" as const,
+          name: toolInput.name,
+          ...(toolInput.target_amount_cents === undefined ? {} : { targetAmountCents: toolInput.target_amount_cents }),
+          ...(toolInput.target_date ? { targetDate: toolInput.target_date } : {}),
+          ...(toolInput.starting_amount_cents === undefined ? {} : { startingAmountCents: toolInput.starting_amount_cents }),
+          ...(toolInput.current_amount_cents === undefined ? {} : { currentAmountCents: toolInput.current_amount_cents }),
+          ...(toolInput.monthly_contribution_cents === undefined ? {} : { monthlyContributionCents: toolInput.monthly_contribution_cents }),
+          includeInSpendableCash: true,
+        };
+        const missing = getSavingsGoalPreviewMissingFields(draft);
+
+        if (missing.length > 0) {
+          context.pendingAction = {
+            ...draft,
+            missing,
+          };
+
+          return {
+            ok: false,
+            status: "savings_goal_preview_missing_fields",
+            missing,
+            pendingAction: context.pendingAction,
+          };
+        }
+
+        if (!context.snapshot) {
+          context.pendingAction = {
+            ...draft,
+            missing,
+          };
+
+          return noFinancialDataToolResult(context);
+        }
+
+        const preview = buildSavingsGoalPreview({
+          snapshot: context.snapshot,
+          draft,
+        });
+
+        if (!preview.card) {
+          context.pendingAction = {
+            ...draft,
+            missing: preview.missing,
+          };
+
+          return {
+            ok: false,
+            status: "savings_goal_preview_missing_fields",
+            missing: preview.missing,
+            pendingAction: context.pendingAction,
+          };
+        }
+
+        addAvailableCards(context, [preview.card]);
+        context.pendingAction = createOrdinaryPendingAction({
+          action: "create_savings_goal",
+          summary: `Create ${draft.name} savings goal`,
+          payload: {
+            name: draft.name,
+            targetAmountCents: draft.targetAmountCents,
+            targetDate: draft.targetDate,
+            startingAmountCents: draft.startingAmountCents,
+            currentAmountCents: draft.currentAmountCents,
+            monthlyContributionCents: preview.card.monthlyContributionCents,
+            includeInSpendableCash: true,
+          },
+        });
+
+        return {
+          ok: true,
+          status: "savings_goal_previewed",
+          cardType: preview.card.type,
+          warningLevel: preview.card.warningLevel,
+          monthlyContributionCents: preview.card.monthlyContributionCents,
+          spendableCashTodayAfterGoalCents: preview.card.spendableCashTodayAfterGoalCents,
+          pendingAction: context.pendingAction,
+        };
+      },
+    }),
     tool<typeof createSavingsGoalParameters, PipAgentContext>({
       name: "create_savings_goal",
       description:
-        "Create a savings goal for a future purchase, trip, emergency fund, or other target amount. Use when the user says they want to save for something or create a goal.",
+        "Create a savings goal only after preview_savings_goal returned a pending create action and the user clearly confirmed that current pending action.",
       parameters: createSavingsGoalParameters,
       strict: true,
       async execute(input, runContext) {
         const context = getToolContext(runContext);
-        const toolInput = getToolInput(context, "create_savings_goal", input, createSavingsGoalParameters);
         recordTool(context, "create_savings_goal");
+        const pendingAction = context.conversationState.pendingAction;
+        const confirmedPendingAction = pendingAction?.type === "ordinary_write" && pendingAction.action === "create_savings_goal"
+          ? pendingAction
+          : null;
+        const confirmation = confirmedPendingAction
+          ? resolvePendingActionConfirmation({
+              message: context.inputMessage,
+              pendingAction: confirmedPendingAction,
+            })
+          : { ok: false as const, reason: "not_confirmation" as const };
+
+        if (!confirmation.ok || !confirmedPendingAction) {
+          const toolInput = getToolInput(context, "create_savings_goal", input, createSavingsGoalParameters);
+          context.pendingAction = {
+            type: "preview_savings_goal",
+            name: toolInput.name,
+            targetAmountCents: toolInput.target_amount_cents,
+            ...(toolInput.target_date ? { targetDate: toolInput.target_date } : {}),
+            ...(toolInput.starting_amount_cents === undefined ? {} : { startingAmountCents: toolInput.starting_amount_cents }),
+            ...(toolInput.current_amount_cents === undefined ? {} : { currentAmountCents: toolInput.current_amount_cents }),
+            ...(toolInput.monthly_contribution_cents === undefined ? {} : { monthlyContributionCents: toolInput.monthly_contribution_cents }),
+            includeInSpendableCash: true,
+            missing: ["confirmation"],
+          };
+
+          return {
+            ok: false,
+            status: "savings_goal_preview_required",
+            pendingAction: context.pendingAction,
+          };
+        }
+
+        const payload = confirmedPendingAction.payload ?? {};
+        const toolInput = createSavingsGoalParameters.parse({
+          name: typeof payload.name === "string" ? payload.name : input.name,
+          target_amount_cents: typeof payload.targetAmountCents === "number" ? payload.targetAmountCents : input.target_amount_cents,
+          target_date: typeof payload.targetDate === "string" ? payload.targetDate : input.target_date,
+          starting_amount_cents: typeof payload.startingAmountCents === "number" ? payload.startingAmountCents : input.starting_amount_cents,
+          current_amount_cents: typeof payload.currentAmountCents === "number" ? payload.currentAmountCents : input.current_amount_cents,
+          monthly_contribution_cents: typeof payload.monthlyContributionCents === "number" ? payload.monthlyContributionCents : input.monthly_contribution_cents,
+          include_in_spendable_cash: true,
+        });
 
         if (!context.actions?.createSavingsGoal) {
           return {
@@ -2123,11 +2257,21 @@ function createPipInstructions(runContext: {
         "This turn is a silent prompt-chip refresh for the current screen.",
         "Do not call tools. Do not create cards. Do not answer the user.",
         "Return message exactly: Ready.",
-        "The app will plan deterministic prompt chips. You may add up to 3 specific supplemental promptChips if they fit the current state.",
+        "Return three specific promptChips if they fit the current state.",
         "Use concrete, varied next-step ideas. Avoid generic repeats.",
         "For chip labels, prefer clear short questions like What bills are coming up? or What is cash flow?",
         "Do not use chip labels that start with Discuss. Do not suggest snapshot or view chips.",
         "For chip prompts, write a direct user request. Do not start with Let's discuss unless there is no matching Pip card.",
+      ].join("\n")
+    : "";
+  const openingBubbleInstruction = runContext.context.requestKind === "opening_bubble"
+    ? [
+        "This turn writes the opening speech bubble on the Pip home screen before the user types.",
+        "Use the provided planner priority and current financial context to write one warm, specific bubble.",
+        "Do not mention planner priority, JSON, tools, dashboards, pages, or setup internals.",
+        "If data is refreshing, say that you are checking for new transactions and the number may move.",
+        "If a same-day spend, tight state, missing data, or savings opportunity is present, make that the main point.",
+        "Keep it short enough for a speech bubble.",
       ].join("\n")
     : "";
   const qualityVariantInstruction = getPipAgentQualityVariantInstructions(
@@ -2137,6 +2281,7 @@ function createPipInstructions(runContext: {
   return [
     "You are Pip, a warm daily money companion for the Pip app.",
     "You speak as Pip in first person. Say I, me, and my when you describe what you do.",
+    "Use your for the user's money, accounts, goals, and Spendable Cash Today. Never say my Spendable Cash Today.",
     "Never describe yourself in third person in visible replies. Do not say Pip does, Pip can, Pip will, Pip helps, or Pip shows.",
     "For financial answers, prefer first-person verbs like I found, I see, I counted, or I can.",
     "Do not start financial answers with 'Spendable Cash Today is'. Start from what you found or see.",
@@ -2164,7 +2309,11 @@ function createPipInstructions(runContext: {
     "Use get_connected_accounts when the user asks what is connected, when an account/institution target is unclear, or when more than one target could match.",
     "Use start_new_account_connection for adding a new bank or card. Use repair_account_connection for reconnecting one stale or broken institution. Use start_account_selection_update for changing which accounts Pip can see at an existing institution.",
     "Use savings goal tools when the user wants to save for a trip, big purchase, emergency fund, or named goal.",
-    "Use create_savings_goal when the user gives a target amount for a new goal. Use list_savings_goals when they ask what goals are tracked or want an update.",
+    "Use preview_savings_goal before creating any new savings goal. Do not call create_savings_goal on the first savings setup turn.",
+    "A savings goal preview needs a goal name, target amount, and either a target date or monthly contribution. If one is missing, ask one warm clarifying question.",
+    "When preview_savings_goal returns a card, explain the Spendable Cash Today impact in your own words and ask whether to create it.",
+    "If the preview makes Spendable Cash Today too tight, softly suggest lowering the goal or pushing the date out.",
+    "Only call create_savings_goal after the latest user message confirms the current pending preview. Use list_savings_goals when they ask what goals are tracked or want an update.",
     "Use update_savings_goal when the user changes progress, target amount, target date, monthly contribution, or status.",
     "Every active savings goal affects Spendable Cash Today. Do not offer a separate protection toggle for savings goals.",
     "Savings goals are tracking and planning only. Pip does not move money, open a savings account, or transfer funds for a goal.",
@@ -2202,7 +2351,7 @@ function createPipInstructions(runContext: {
     "If a trust receipt card is returned, write one short bridge sentence. Do not repeat every receipt row in chat.",
     "Only call get_recent_transactions when the user plainly asks to show, list, or identify transactions, charges, purchases, or recent activity.",
     "Do not call get_recent_transactions for general why, math, negative Spendable Cash Today, or can-I-spend questions.",
-    "Prefer a short answer plus a structured card. For card answers, keep your sentence short and let the card carry the detail.",
+    "Prefer a short answer plus a structured card. For simple card answers, keep the chat concise and let the card carry the detail.",
     "When a utility card is returned, write one short bridge sentence. For guidance_card, write the read itself. Do not duplicate card rows in chat.",
     "Cards are optional. Prefer conversational explanation after the first card.",
     "Do not repeat a card whose type is listed in recent_card_types unless the user clearly asks to see that card, details, or breakdown again.",
@@ -2223,7 +2372,7 @@ function createPipInstructions(runContext: {
     "Do not use emojis by default.",
     "Do not use stock template phrasing like 'Here is...' as the whole reply. Respond to the user's exact wording and current conversation.",
     "Write at a fifth-grade reading level.",
-    "Keep visible replies to one short sentence when possible, two short sentences max.",
+    "Keep visible replies concise. Simple bridge replies can be one or two short sentences; complex savings, guidance, or correction replies may be four to six short sentences.",
     `For this bridge response, the visible message must be ${bridgeVisibleLimits.maxWords} words or fewer and ${bridgeVisibleLimits.maxChars} characters or fewer.`,
     "Use message for the direct lead sentence. Use support only when one short extra sentence adds useful context.",
     "Use common words. Avoid formal phrases like deterministic, rolling-window pattern, liquidity, optimal, analyze, or sufficient.",
@@ -2240,6 +2389,7 @@ function createPipInstructions(runContext: {
     "Return only structured output matching the schema, including promptChips.",
     qualityVariantInstruction,
     promptChipRefreshInstruction,
+    openingBubbleInstruction,
     repairInstruction,
     `forced_tool_name: ${runContext.context.forcedTool?.toolName ?? "none"}`,
     `onboarding_status: ${runContext.context.onboardingState.status}`,
@@ -2274,6 +2424,7 @@ function createAgentInput(
               .slice(-8),
             last_tool_names: context.conversationState.lastToolNames.slice(-8),
             recent_prompt_chips: context.conversationState.promptChips.slice(-18),
+            pending_action: context.conversationState.pendingAction ?? null,
             forced_tool_name: context.forcedTool?.toolName ?? null,
             forced_tool_args: context.forcedTool?.args ?? null,
             onboarding_state: context.onboardingState,
@@ -2336,6 +2487,9 @@ function createPipContext(
       shownCards: (input.conversationState?.shownCards ?? []).slice(-8),
       lastToolNames: (input.conversationState?.lastToolNames ?? []).slice(-8),
       promptChips: (input.conversationState?.promptChips ?? []).slice(-24),
+      ...(input.conversationState?.pendingAction
+        ? { pendingAction: input.conversationState.pendingAction }
+        : {}),
     },
     forcedTool: getForcedAgentTool(input),
     repair,
@@ -2550,6 +2704,7 @@ function buildAgentResponse(
     promptChips,
     usedTools,
     responseMode,
+    ...(context.pendingAction ? { pendingAction: context.pendingAction } : {}),
     ...(context.clientAction && context.clientAction.type !== "none"
       ? { clientAction: context.clientAction }
       : {}),
@@ -2581,18 +2736,6 @@ function selectVisibleModelOutput(
     guidanceSource: "model_draft" | "deterministic_fallback" | "none";
   },
 ): AgentFinalOutput {
-  if (
-    guidanceSelection.guidanceSource === "deterministic_fallback" &&
-    context.guidanceContext &&
-    shouldReturnGuidanceCard(context)
-  ) {
-    return {
-      ...parsed,
-      message: createDeterministicGuidanceMessage(context.guidanceContext),
-      responseMode: "guidance",
-    };
-  }
-
   return parsed;
 }
 
@@ -2646,12 +2789,6 @@ function parseAgentFinalOutput(
   try {
     return normalizeAgentFinalOutput(agentFinalOutputSchema.parse(finalOutput));
   } catch (error) {
-    const fallback = context ? createFallbackFinalOutput(context) : null;
-
-    if (fallback) {
-      return fallback;
-    }
-
     throw new AgentUnavailableError({
       code: "model-returned-invalid-final-output",
       message: "AI returned an invalid final response.",
@@ -2829,10 +2966,10 @@ function createFallbackFinalMessage(context: PipAgentContext): string {
     case "trust_receipt":
       return "I pulled the receipt behind today's number.";
     case "savings_goal_plan":
-      return "I set up the savings goal plan.";
+      return `${latestCard.name} is tracked now, and its monthly plan counts in Spendable Cash Today.`;
     case "savings_goals_summary":
       return latestCard.activeGoalCount > 0
-        ? "I pulled your savings goals."
+        ? `${latestCard.goals[0]?.name ?? "Your savings goal"} is the first goal I see right now.`
         : "You do not have active savings goals yet.";
     case "recent_transactions":
       return "I found recent charges in the current window.";
@@ -2853,12 +2990,13 @@ function createFallbackFinalMessage(context: PipAgentContext): string {
 
 function normalizeAgentFinalOutput(parsed: RawAgentFinalOutput): AgentFinalOutput {
   const support = normalizeRawSupport(parsed.support);
+  const guidanceCardDraft = normalizeRawGuidanceCardDraft(parsed.guidanceCardDraft);
 
   return {
     message: parsed.message,
     ...(support ? { support } : {}),
     responseMode: parsed.responseMode,
-    ...(parsed.guidanceCardDraft ? { guidanceCardDraft: parsed.guidanceCardDraft } : {}),
+    ...(guidanceCardDraft ? { guidanceCardDraft } : {}),
     promptChips: normalizeRawPromptChips(parsed.promptChips),
   };
 }
@@ -2883,6 +3021,14 @@ function normalizeRawPromptChips(
     "label" in chip &&
     "prompt" in chip,
   );
+}
+
+function normalizeRawGuidanceCardDraft(
+  draft: RawAgentFinalOutput["guidanceCardDraft"],
+): GuidanceCardDraft | undefined {
+  const parsed = guidanceCardDraftOutputSchema.safeParse(draft);
+
+  return parsed.success ? parsed.data : undefined;
 }
 
 type GuidanceCardSelection = {
@@ -3313,7 +3459,8 @@ function shouldRetryFinalOutput(error: AgentUnavailableError): boolean {
     error.code === "model-returned-disallowed-final-message" ||
     error.code === "model-promised-unsupported-card" ||
     error.code === "model-returned-no-prompt-chips" ||
-    error.code === "model-returned-too-long-final-message"
+    error.code === "model-returned-too-long-final-message" ||
+    error.code === "agent-output-rejected"
   ) {
     return true;
   }

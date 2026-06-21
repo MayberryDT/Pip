@@ -1,7 +1,6 @@
 import type { AgentCard, PromptChip } from "@/lib/agent/card-types";
 import {
   isVisibleMessageRepetitive,
-  summarizeConversationState,
   type ConversationHistoryItem,
 } from "@/lib/agent/conversation-state";
 import type { SyncStatus } from "@/lib/data/sync-status";
@@ -61,91 +60,11 @@ export function composeAgentVisibleAnswer(
     candidate: modelMessage,
     history: input.history,
   });
-  const conversationSummary = summarizeConversationState({
-    message: input.userMessage,
-    history: input.history,
-    shownCards: input.conversationState?.shownCards ?? [],
-    lastToolNames: input.conversationState?.lastToolNames ?? [],
-    promptChips: input.conversationState?.promptChips ?? [],
-    responseCards: input.cards,
-    responseToolNames: input.usedTools,
-    selectedPromptChipId: input.selectedPromptChipId,
-    result: input.conversationState?.result,
-    syncStatus: input.conversationState?.syncStatus,
-    onboardingState: input.conversationState?.onboardingState,
-  });
-
-  if (conversationSummary.duplicateFollowUp && input.cards.length === 0) {
-    return {
-      message: "That same answer still applies. I can take it from another angle.",
-      answerPatternId: "duplicate-follow-up",
-      repeatedMessage: modelRepeated,
-      repetitionAdjusted: true,
-    };
-  }
-
-  if (isGreetingPrompt(input.userMessage) && input.cards.length === 0 && input.usedTools.length === 0) {
-    return {
-      message: "I can help with your Spendable Cash Today. Ask what changed or whether a specific purchase fits.",
-      answerPatternId: "greeting",
-      repeatedMessage: modelRepeated,
-      repetitionAdjusted: false,
-    };
-  }
-
-  if (isFriendlySmallTalkPrompt(input.userMessage) && input.cards.length === 0 && input.usedTools.length === 0) {
-    return {
-      message: "I’m here with you. Ask me a money question or test a specific purchase amount.",
-      answerPatternId: "friendly-small-talk",
-      repeatedMessage: modelRepeated,
-      repetitionAdjusted: false,
-    };
-  }
-
-  const deterministicNoCardAnswer = composeDeterministicNoCardAnswer(input);
-
-  if (deterministicNoCardAnswer) {
-    return {
-      message: deterministicNoCardAnswer.message,
-      answerPatternId: deterministicNoCardAnswer.answerPatternId,
-      repeatedMessage: modelRepeated,
-      repetitionAdjusted: false,
-    };
-  }
-
-  if (input.cards[0]?.type === "guidance_card") {
-    return {
-      message: modelMessage,
-      answerPatternId: "guidance-model",
-      repeatedMessage: modelRepeated,
-      repetitionAdjusted: false,
-    };
-  }
-
-  const cardAnswer = composeCardBackedAnswer(input.cards[0], conversationSummary.duplicateFollowUp);
-  const candidate = cardAnswer ?? {
-    message: modelMessage,
-    answerPatternId: "model",
-  };
-  const candidateRepeated = isVisibleMessageRepetitive({
-    candidate: candidate.message,
-    history: input.history,
-  });
-
-  if (candidateRepeated && input.cards[0]?.type !== "purchase_simulation") {
-    return {
-      message: getRepetitionAdjustedMessage(input.cards[0], conversationSummary.duplicateFollowUp),
-      answerPatternId: "repetition-adjusted",
-      repeatedMessage: true,
-      repetitionAdjusted: true,
-    };
-  }
-
   return {
-    message: candidate.message,
-    answerPatternId: candidate.answerPatternId,
-    repeatedMessage: modelRepeated || candidateRepeated,
-    repetitionAdjusted: candidate.answerPatternId === "duplicate-follow-up",
+    message: modelMessage,
+    answerPatternId: input.cards[0]?.type === "guidance_card" ? "guidance-model" : "model",
+    repeatedMessage: modelRepeated,
+    repetitionAdjusted: false,
   };
 }
 
@@ -174,30 +93,14 @@ function composeModelMessage(
 
 function composeCardBackedAnswer(
   card: AgentCard | undefined,
-  duplicateFollowUp: boolean,
 ): { message: string; answerPatternId: string } | null {
   if (!card) {
     return null;
   }
 
-  if (duplicateFollowUp && card.type !== "purchase_simulation") {
-    return {
-      message: "That same answer still applies. I can take it from another angle.",
-      answerPatternId: "duplicate-follow-up",
-    };
-  }
-
   switch (card.type) {
-    case "pip_cash_explanation": {
-      const biggestDriver = card.drivers[0]?.label;
-
-      return {
-        message: biggestDriver
-          ? `I found the main drivers behind today's number. The largest one is ${biggestDriver}.`
-          : "I found the main drivers behind today's number.",
-        answerPatternId: "explain-number",
-      };
-    }
+    case "pip_cash_explanation":
+      return null;
     case "purchase_simulation":
       if (card.shortfallCents && card.shortfallCents > 0) {
         return {
@@ -218,87 +121,39 @@ function composeCardBackedAnswer(
         answerPatternId: "purchase-simulation",
       };
     case "true_balances":
-      return {
-        message: "I pulled the actual balances.",
-        answerPatternId: "true-balances",
-      };
+      return null;
     case "recent_transactions":
-      return {
-        message: "I found recent charges in the current window.",
-        answerPatternId: "recent-transactions",
-      };
+      return null;
     case "spending_breakdown":
-      return {
-        message: "I grouped the main money flows.",
-        answerPatternId: "spending-breakdown",
-      };
+      return null;
     case "recurring_activity":
-      if (card.items.length === 0) {
-        return {
-          message: "I checked likely repeats and don’t see upcoming subscriptions.",
-          answerPatternId: "recurring-activity-empty",
-        };
-      }
-
       return null;
     case "spendable_cash_forecast":
-      return {
-        message: `I mapped the next ${card.horizonDays} days. Forecast only; not guaranteed.`,
-        answerPatternId: "forecast",
-      };
+      return null;
     case "missing_card_nudge":
-      return {
-        message: "I see a possible missing card affecting today's number.",
-        answerPatternId: "missing-card",
-      };
+      return null;
     case "math_breakdown":
-      return {
-        message: "I pulled the math behind today's number.",
-        answerPatternId: "math-breakdown",
-      };
+      return null;
     case "trust_receipt":
-      return {
-        message: "I pulled the receipt behind today's number.",
-        answerPatternId: "trust-receipt",
-      };
+      return null;
     case "savings_goal_plan":
+      return null;
+    case "savings_goal_preview":
       return null;
     case "savings_goals_summary":
       return null;
     case "insight_card":
-      if (isCutbackInsightCard(card)) {
-        return {
-          message: composeCutbackInsightBridge(card),
-          answerPatternId: "cutback-opportunity",
-        };
-      }
-
-      return {
-        message: `I built a short summary for ${card.title.toLowerCase()}.`,
-        answerPatternId: "insight-card",
-      };
+      return null;
     case "guidance_card":
       return null;
     case "connect_account":
-      return {
-        message: "I checked the connection state.",
-        answerPatternId: "connect-account",
-      };
+      return null;
     case "settings_panel":
-      return {
-        message: "Settings are here.",
-        answerPatternId: "settings-panel",
-      };
+      return null;
     case "settings_detail":
-      return {
-        message: `${card.title} is here.`,
-        answerPatternId: "settings-detail",
-      };
+      return null;
     case "account_connections":
-      return {
-        message: "I found the accounts connected to Pip.",
-        answerPatternId: "account-connections",
-      };
+      return null;
   }
 }
 
@@ -418,22 +273,6 @@ function getSpendableCents(result: PipCashResult): number {
   return result.spendableCashToday?.spendableCashTodayCents ?? Math.max(0, result.pipCashTodayCents);
 }
 
-function isCutbackInsightCard(card: Extract<AgentCard, { type: "insight_card" }>): boolean {
-  return /\b(cutback|cut back|spending opportunity)\b/i.test(`${card.title} ${card.summary}`);
-}
-
-function composeCutbackInsightBridge(card: Extract<AgentCard, { type: "insight_card" }>): string {
-  const summary = card.summary.replace(/\s+/g, " ").trim();
-  const message = summary
-    ? `I found a cutback opportunity: ${summary}`
-    : "I found a cutback opportunity in your recent spending.";
-
-  return fitVisibleMessage(message, {
-    maxChars: 260,
-    maxWords: 45,
-  });
-}
-
 function isCreditCardDiscussion(message: string): boolean {
   return /\bcredit cards?\b|\bcards?\b/.test(message.toLowerCase()) &&
     !/\b(show|list|pull|view|transactions?|charges?|payments?|breakdown)\b/.test(message.toLowerCase());
@@ -464,36 +303,6 @@ function isGeneralSpendingAdvicePrompt(message: string): boolean {
 
   return /\b(lower|reduce|cut|spend less|control|slow down|curb)\b/.test(normalized) &&
     /\b(spending|spend|expenses?|budget|money)\b/.test(normalized);
-}
-
-function getRepetitionAdjustedMessage(
-  card: AgentCard | undefined,
-  duplicateFollowUp: boolean,
-): string {
-  if (duplicateFollowUp) {
-    return "That same answer still applies. I can take it from another angle.";
-  }
-
-  switch (card?.type) {
-    case "pip_cash_explanation":
-      return "I checked the drivers again, and the next chips can take it deeper.";
-    case "spendable_cash_forecast":
-      return "I refreshed the near-term view, and the next chips can narrow it down.";
-    case "recurring_activity":
-      return "I checked likely repeat items again, and the next chips can branch out.";
-    case "recent_transactions":
-      return "I checked recent charges again, and the next chips can summarize them.";
-    case "spending_breakdown":
-      return "I grouped the flows again, and the next chips can narrow the view.";
-    case "math_breakdown":
-      return "I checked the math again, and the next chips can explain the drivers.";
-    case "trust_receipt":
-      return "I checked the receipt again, and the next chips can take it deeper.";
-    case "guidance_card":
-      return "I checked the read again and kept it tied to the same evidence.";
-    default:
-      return "I checked that again and kept the next steps focused on a different angle.";
-  }
 }
 
 function countWords(message: string): number {
