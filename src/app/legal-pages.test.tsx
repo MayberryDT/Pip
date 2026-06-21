@@ -39,6 +39,7 @@ describe("public legal and support pages", () => {
     expect(support).not.toContain('href="/pricing"');
     expect(deletion).toContain("To delete your Pip account");
     expect(deletion).toContain("typing DELETE");
+    expect(deletion).toContain("If account deletion cannot complete, Pip keeps the request retryable");
     expect([privacy, terms, support, deletion].join("\n")).not.toMatch(/\b(?:beta|waitlist)\b|join-beta/i);
     expect([privacy, terms, support, deletion].join("\n")).not.toMatch(/\$2\.99|\$7\.99|href="\/pricing"|View pricing|Pricing details/);
   });

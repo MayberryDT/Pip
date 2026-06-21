@@ -53,7 +53,8 @@ export default function DeleteAccountPage() {
       <section>
         <h2 className="text-lg font-bold text-ink">Timing and privacy</h2>
         <p className="mt-3">
-          In-app account deletion starts immediately. Email deletion requests are reviewed as soon
+          In-app account deletion starts immediately. If account deletion cannot complete, Pip keeps the request retryable
+          instead of signing you out before the account is removed. Email deletion requests are reviewed as soon
           as practical. Read the <Link className="font-bold text-moss hover:text-ink" href="/privacy">privacy policy</Link>{" "}
           and <Link className="font-bold text-moss hover:text-ink" href={pipTrustPolicy.publicLinks.howNumberWorks}>how the number works</Link>{" "}
           for more detail about Pip data handling.

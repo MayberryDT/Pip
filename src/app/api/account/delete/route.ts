@@ -1,14 +1,19 @@
 import { z } from "zod";
-import { deleteCurrentUserFinancialData } from "@/lib/data/financial-repository";
+import { deleteUserFinancialDataByUserId } from "@/lib/data/financial-repository";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { sensitiveJson } from "@/lib/security/http-cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import type { Database } from "@/lib/supabase/database.types";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const accountDeletionSchema = z.object({
   confirmation: z.literal("DELETE"),
 });
+
+type AccountDeletionRequestRow = Database["public"]["Tables"]["account_deletion_requests"]["Row"];
+type AccountDeletionStatus = Database["public"]["Enums"]["account_deletion_request_status"];
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
@@ -40,19 +45,37 @@ export async function POST(request: Request) {
       return sensitiveJson({ error: "Type DELETE to confirm account deletion." }, { status: 400 });
     }
 
-    await deleteCurrentUserFinancialData(supabase);
+    const admin = createSupabaseAdminClient();
+    const deletionRequest = await ensureAccountDeletionRequest(admin, user.id);
+
+    if (!hasDeletedData(deletionRequest)) {
+      try {
+        await deleteUserFinancialDataByUserId(admin, user.id);
+        await markAccountDeletionStatus(admin, user.id, "data_deleted");
+      } catch (error) {
+        await markAccountDeletionStatus(admin, user.id, "failed", "DATA_DELETE_FAILED");
+        throw error;
+      }
+    }
+
+    if (!hasDeletedAuth(deletionRequest)) {
+      await markAccountDeletionStatus(admin, user.id, "data_deleted", "AUTH_DELETE_STARTED");
+      const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
+
+      if (deleteError && !isAlreadyDeletedError(deleteError)) {
+        await markAccountDeletionStatus(admin, user.id, "failed", "AUTH_DELETE_FAILED");
+        throw deleteError;
+      }
+
+      await markAccountDeletionStatus(admin, user.id, "auth_deleted");
+    }
+
+    await markAccountDeletionStatus(admin, user.id, "completed");
 
     const signOutResult = await supabase.auth.signOut();
 
     if (signOutResult.error) {
       throw signOutResult.error;
-    }
-
-    const admin = createSupabaseAdminClient();
-    const { error: deleteError } = await admin.auth.admin.deleteUser(user.id);
-
-    if (deleteError && !isAlreadyDeletedError(deleteError)) {
-      throw deleteError;
     }
 
     return sensitiveJson({ status: "deleted" });
@@ -68,10 +91,144 @@ export async function POST(request: Request) {
   }
 }
 
+async function ensureAccountDeletionRequest(
+  admin: SupabaseClient<Database>,
+  userId: string,
+): Promise<AccountDeletionRequestRow> {
+  const { data: existingRequest, error: loadError } = await admin
+    .from("account_deletion_requests")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (loadError) {
+    throw loadError;
+  }
+
+  if (existingRequest) {
+    return existingRequest;
+  }
+
+  const now = new Date().toISOString();
+  const { data, error } = await admin
+    .from("account_deletion_requests")
+    .insert({
+      user_id: userId,
+      status: "requested",
+      requested_at: now,
+      updated_at: now,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    if (isDuplicateKeyError(error)) {
+      return loadAccountDeletionRequest(admin, userId);
+    }
+
+    throw error;
+  }
+
+  return data;
+}
+
+async function loadAccountDeletionRequest(
+  admin: SupabaseClient<Database>,
+  userId: string,
+): Promise<AccountDeletionRequestRow> {
+  const { data, error } = await admin
+    .from("account_deletion_requests")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data) {
+    throw new Error("Account deletion request was not created.");
+  }
+
+  return data;
+}
+
+async function markAccountDeletionStatus(
+  admin: SupabaseClient<Database>,
+  userId: string,
+  status: AccountDeletionStatus,
+  lastErrorCode: string | null = null,
+) {
+  const now = new Date().toISOString();
+  const payload: Database["public"]["Tables"]["account_deletion_requests"]["Update"] = {
+    status,
+    updated_at: now,
+    last_error_code: lastErrorCode,
+  };
+
+  if (status === "data_deleted") {
+    payload.data_deleted_at = now;
+    payload.failed_at = null;
+  }
+
+  if (status === "auth_deleted") {
+    payload.auth_deleted_at = now;
+    payload.failed_at = null;
+  }
+
+  if (status === "completed") {
+    payload.completed_at = now;
+    payload.failed_at = null;
+  }
+
+  if (status === "failed") {
+    payload.failed_at = now;
+
+    if (lastErrorCode === "AUTH_DELETE_FAILED") {
+      payload.auth_deleted_at = null;
+      payload.completed_at = null;
+    }
+
+    if (lastErrorCode === "DATA_DELETE_FAILED") {
+      payload.data_deleted_at = null;
+      payload.auth_deleted_at = null;
+      payload.completed_at = null;
+    }
+  }
+
+  const { error } = await admin
+    .from("account_deletion_requests")
+    .update(payload)
+    .eq("user_id", userId);
+
+  if (error) {
+    throw error;
+  }
+}
+
+function hasDeletedData(request: AccountDeletionRequestRow): boolean {
+  return Boolean(request.data_deleted_at) ||
+    request.status === "data_deleted" ||
+    request.status === "auth_deleted" ||
+    request.status === "completed";
+}
+
+function hasDeletedAuth(request: AccountDeletionRequestRow): boolean {
+  return Boolean(request.auth_deleted_at) ||
+    request.status === "auth_deleted" ||
+    request.status === "completed";
+}
+
 function isAlreadyDeletedError(error: { message?: string; status?: number }): boolean {
   const message = error.message?.toLowerCase() ?? "";
 
   return error.status === 404 || message.includes("not found") || message.includes("does not exist");
+}
+
+function isDuplicateKeyError(error: { code?: string; message?: string }): boolean {
+  const message = error.message?.toLowerCase() ?? "";
+
+  return error.code === "23505" || message.includes("duplicate key");
 }
 
 function toErrorBody(error: unknown) {

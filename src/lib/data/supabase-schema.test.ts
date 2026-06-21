@@ -246,6 +246,28 @@ describe("Supabase financial-data schema", () => {
     );
   });
 
+  it("keeps account deletion saga records service-role only", () => {
+    expect(allMigrations).toContain("create type public.account_deletion_request_status as enum");
+    expect(allMigrations).toContain("create table if not exists public.account_deletion_requests");
+    expect(allMigrations).toContain("user_id uuid not null");
+    expect(allMigrations).toContain("status public.account_deletion_request_status not null default 'requested'");
+    expect(allMigrations).toContain("last_error_code text");
+    expect(allMigrations).toContain("data_deleted_at timestamptz");
+    expect(allMigrations).toContain("auth_deleted_at timestamptz");
+    expect(allMigrations).toContain("completed_at timestamptz");
+    expect(allMigrations).toContain("unique (user_id)");
+    expect(allMigrations).toContain("alter table public.account_deletion_requests enable row level security;");
+    expect(allMigrations).toContain(
+      "revoke all on table public.account_deletion_requests from public, anon, authenticated;",
+    );
+    expect(allMigrations).toContain(
+      "grant select, insert, update, delete on public.account_deletion_requests to service_role;",
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("on public.account_deletion_requests for select to authenticated"),
+    );
+  });
+
   it("indexes foreign keys that beta sync and account joins use", () => {
     [
       "create index if not exists accounts_institution_id_idx on public.accounts(institution_id);",
