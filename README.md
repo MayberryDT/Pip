@@ -91,7 +91,9 @@ PIP_OPERATOR_TOKEN=
 PIP_RATE_LIMIT_SALT=
 ```
 
-`PIP_RATE_LIMIT_SALT` is required in production. Set a long random value in Netlify environment variables; do not commit the real salt.
+`PIP_RATE_LIMIT_SALT` is required in production and fake Netlify preview checks. Set a long random value in Netlify environment variables; do not commit the real salt. Public fake previews without Supabase fail closed for AI requests instead of using process-local rate-limit counters.
+
+If account deletion finalization logs show a post-auth saga write failure, run `npm run privacy:reconcile-account-deletions` to dry-run rows where the Auth user is already gone, then `npm run privacy:reconcile-account-deletions -- --dry-run=false` to mark those rows completed.
 
 The first database migration lives at `supabase/migrations/20260605000000_free_cash_foundation.sql`. It creates user-scoped financial tables, RLS policies, a private provider-credentials table, sync/event tables, and the authenticated delete-data function. Its snapshot table uses a historical name that is renamed to `pip_cash_snapshots` by a later rebrand migration.
 
@@ -211,6 +213,6 @@ The Plaid automation defaults to the official Sandbox credentials `user_good` / 
 
 For the shortest final proof path, run `npm run prove:prd`. It opens the auth capture browser, then runs live-smoke preflight, `npm run test:e2e:live:final`, and `npm run check:prd-complete` in order. If `/tmp/pip-live-auth.json` already exists, use `npm run prove:prd -- --skip-capture`.
 
-`npm run check:deployment` validates the required non-public and public environment variable names for a real beta deploy without printing secret values. Use `npm run check:deployment -- --mode=fake` only for fake-data preview deploys.
+`npm run check:deployment` validates the required non-public and public environment variable names for a real beta deploy without printing secret values. Use `npm run check:deployment -- --mode=fake` only for fake-data preview deploys, and still set `PIP_RATE_LIMIT_SALT` for those previews.
 
 `supabase/rls_smoke_test.sql` is a rollback-only live database smoke test for private-beta RLS. Run it after migrations are applied to verify that an authenticated user can see one own row per financial table, cannot see another user's rows, and cannot update or delete another user's financial data.

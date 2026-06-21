@@ -67,17 +67,24 @@ export async function POST(request: Request) {
         throw deleteError;
       }
 
-      await markAccountDeletionStatus(admin, user.id, "auth_deleted");
+      await markAccountDeletionStatusBestEffort(admin, user.id, "auth_deleted");
     }
 
-    await markAccountDeletionStatus(admin, user.id, "completed");
+    await markAccountDeletionStatusBestEffort(admin, user.id, "completed");
 
-    const signOutResult = await supabase.auth.signOut();
+    try {
+      const signOutResult = await supabase.auth.signOut();
 
-    if (signOutResult.error) {
+      if (signOutResult.error) {
+        console.warn(
+          "[account-delete] post-deletion sign-out failed",
+          getSafeErrorMessage(signOutResult.error, "Sign-out failed."),
+        );
+      }
+    } catch (error) {
       console.warn(
         "[account-delete] post-deletion sign-out failed",
-        getSafeErrorMessage(signOutResult.error, "Sign-out failed."),
+        getSafeErrorMessage(error, "Sign-out failed."),
       );
     }
 
@@ -202,11 +209,54 @@ async function markAccountDeletionStatus(
   const { error } = await admin
     .from("account_deletion_requests")
     .update(payload)
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .in("status", getAllowedCurrentStatusesForTransition(status, lastErrorCode));
 
   if (error) {
     throw error;
   }
+}
+
+async function markAccountDeletionStatusBestEffort(
+  admin: SupabaseClient<Database>,
+  userId: string,
+  status: AccountDeletionStatus,
+) {
+  try {
+    await markAccountDeletionStatus(admin, userId, status);
+  } catch (error) {
+    console.warn(
+      "[account-delete] final deletion status update failed",
+      getSafeErrorMessage(error, "Account deletion finalization failed."),
+    );
+  }
+}
+
+function getAllowedCurrentStatusesForTransition(
+  status: AccountDeletionStatus,
+  lastErrorCode: string | null,
+): AccountDeletionStatus[] {
+  if (status === "completed") {
+    return ["requested", "data_deleted", "auth_deleted", "completed", "failed"];
+  }
+
+  if (status === "auth_deleted") {
+    return ["requested", "data_deleted", "auth_deleted", "failed"];
+  }
+
+  if (status === "data_deleted") {
+    return ["requested", "data_deleted", "failed"];
+  }
+
+  if (status === "failed" && lastErrorCode === "DATA_DELETE_FAILED") {
+    return ["requested", "data_deleted", "failed"];
+  }
+
+  if (status === "failed") {
+    return ["requested", "data_deleted", "failed"];
+  }
+
+  return [status];
 }
 
 function hasDeletedData(request: AccountDeletionRequestRow): boolean {

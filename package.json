@@ -46,6 +46,7 @@
     "play:android-copy:verify": "node scripts/play-review/check-android-visible-copy.mjs",
     "privacy:audit-user": "node scripts/privacy/audit-user-data.mjs",
     "privacy:delete-user-data": "node scripts/privacy/delete-user-data.mjs",
+    "privacy:reconcile-account-deletions": "node scripts/privacy/reconcile-account-deletions.mjs",
     "privacy:purge-agent-chats": "node scripts/privacy/purge-agent-chat-turns.mjs",
     "pip:character:import": "node scripts/pip-character/import-local-pip-assets.mjs",
     "pip:character:normalize": "node scripts/pip-character/normalize-pip-assets.mjs",

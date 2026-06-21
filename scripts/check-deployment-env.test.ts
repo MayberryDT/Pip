@@ -10,12 +10,26 @@ describe("check-deployment-env", () => {
   it("passes fake mode only when fake-data mode is explicit", async () => {
     const cwd = createTempProject(`
 PIP_SUPABASE_MODE=off
+PIP_RATE_LIMIT_SALT=rate-limit-salt
 `);
 
     const result = await runCheck(cwd, "--mode=fake");
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain("Deployment env check passed for fake mode.");
+  });
+
+  it("fails fake mode without the production rate-limit salt", async () => {
+    const cwd = createTempProject(`
+PIP_SUPABASE_MODE=off
+`);
+
+    const result = await runCheck(cwd, "--mode=fake");
+    const output = result.stderr + result.stdout + result.warnings;
+
+    expect(result.status).toBe(1);
+    expect(output).toContain("Deployment env check failed for fake mode.");
+    expect(output).toContain("- PIP_RATE_LIMIT_SALT");
   });
 
   it("fails beta mode with exact missing server-side requirements", async () => {

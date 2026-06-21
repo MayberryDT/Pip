@@ -100,6 +100,25 @@ describe("agent model gate", () => {
     });
   });
 
+  it("does not use the in-memory limiter in production when Supabase is unavailable", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(claimAgentModelGate({
+      scopeHash: "production-fake-scope",
+      requestKind: "chat",
+      plan: buildAgentModelGatePlan({ onboardingStatus: "guest", requestKind: "chat" }),
+    })).resolves.toEqual({
+      outcome: "unavailable",
+      retryAfterSeconds: 30,
+    });
+    expect(warn).toHaveBeenCalledWith(
+      "Agent model gate claim failed.",
+      "Supabase is not configured.",
+    );
+  });
+
   it("requires an explicit salt in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     expect(() =>

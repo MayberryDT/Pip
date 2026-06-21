@@ -88,7 +88,7 @@ export function runDeploymentEnvCheck({
 }
 
 const requiredByMode = {
-  fake: ["PIP_SUPABASE_MODE"],
+  fake: ["PIP_SUPABASE_MODE", "PIP_RATE_LIMIT_SALT"],
   beta: [
     "NEXT_PUBLIC_SITE_URL",
     "NEXT_PUBLIC_SUPABASE_URL",

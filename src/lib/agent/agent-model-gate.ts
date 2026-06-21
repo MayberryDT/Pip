@@ -111,6 +111,11 @@ export async function claimAgentModelGate(input: {
     return claimLocalModelGate(input);
   }
 
+  if (!input.supabase && !isSupabaseConfigured()) {
+    console.warn("Agent model gate claim failed.", "Supabase is not configured.");
+    return { outcome: "unavailable", retryAfterSeconds: 30 };
+  }
+
   try {
     const supabase = input.supabase ?? (createSupabaseAdminClient() as unknown as AgentModelGateRpcClient);
     const { data, error } = await supabase.rpc("claim_agent_model_gate", {
@@ -186,7 +191,7 @@ export async function releaseAgentModelGate(
 }
 
 function shouldUseLocalModelGate(): boolean {
-  return process.env.NODE_ENV !== "production" || !isSupabaseConfigured();
+  return process.env.NODE_ENV !== "production";
 }
 
 function claimLocalModelGate(input: {

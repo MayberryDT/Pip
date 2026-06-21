@@ -187,6 +187,105 @@ describe("POST /api/account/delete", () => {
     }
   });
 
+  it("treats thrown browser sign-out failure as nonfatal after deletion completes", async () => {
+    enableSupabaseEnv();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const supabase = createServerSupabase(
+      { id: "user-1" },
+      {
+        signOutRejects: new Error("sign-out rejected"),
+      },
+    );
+    const admin = createAdminSupabase({ deleteUserError: null });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
+    routeMocks.deleteUserFinancialDataByUserId.mockResolvedValue(undefined);
+
+    try {
+      const response = await POST(jsonRequest({ confirmation: "DELETE" }));
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        status: "deleted",
+      });
+      expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith("user-1");
+      expect(supabase.auth.signOut).toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith("[account-delete] post-deletion sign-out failed", "sign-out rejected");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it.each([
+    "auth_deleted",
+    "completed",
+  ])("treats %s saga write failure as nonfatal after auth deletion succeeds", async (status) => {
+    enableSupabaseEnv();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const supabase = createServerSupabase({ id: "user-1" });
+    const admin = createAdminSupabase({
+      deleteUserError: null,
+      updateRequestErrorsByStatus: {
+        [status]: new Error(`${status} write failed`),
+      },
+    });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
+    routeMocks.deleteUserFinancialDataByUserId.mockResolvedValue(undefined);
+
+    try {
+      const response = await POST(jsonRequest({ confirmation: "DELETE" }));
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        status: "deleted",
+      });
+      expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith("user-1");
+      expect(supabase.auth.signOut).toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        "[account-delete] final deletion status update failed",
+        `${status} write failed`,
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("treats final saga write failure as nonfatal when auth user is already deleted", async () => {
+    enableSupabaseEnv();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const supabase = createServerSupabase({ id: "user-1" });
+    const admin = createAdminSupabase({
+      deleteUserError: {
+        status: 404,
+        message: "User not found",
+      },
+      updateRequestErrorsByStatus: {
+        completed: new Error("completed write failed"),
+      },
+    });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
+    routeMocks.deleteUserFinancialDataByUserId.mockResolvedValue(undefined);
+
+    try {
+      const response = await POST(jsonRequest({ confirmation: "DELETE" }));
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        status: "deleted",
+      });
+      expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith("user-1");
+      expect(supabase.auth.signOut).toHaveBeenCalled();
+      expect(warn).toHaveBeenCalledWith(
+        "[account-delete] final deletion status update failed",
+        "completed write failed",
+      );
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("does not delete auth or sign out when app-data deletion fails", async () => {
     enableSupabaseEnv();
     const supabase = createServerSupabase({ id: "user-1" });
@@ -297,6 +396,7 @@ function createServerSupabase(
   user: { id: string } | null,
   input: {
     signOutError?: Error;
+    signOutRejects?: Error;
   } = {},
 ) {
   return {
@@ -307,9 +407,11 @@ function createServerSupabase(
         },
         error: null,
       }),
-      signOut: vi.fn().mockResolvedValue({
-        error: input.signOutError ?? null,
-      }),
+      signOut: input.signOutRejects
+        ? vi.fn().mockRejectedValue(input.signOutRejects)
+        : vi.fn().mockResolvedValue({
+            error: input.signOutError ?? null,
+          }),
     },
   };
 }
@@ -319,6 +421,7 @@ function createAdminSupabase(input: {
   existingRequest?: Partial<AccountDeletionRequest> | null;
   insertRequestError?: { code?: string; message?: string } | null;
   duplicateReloadRequest?: Partial<AccountDeletionRequest> | null;
+  updateRequestErrorsByStatus?: Partial<Record<string, Error>>;
 }) {
   const operations: unknown[][] = [];
   const existingRequest = input.existingRequest ?? null;
@@ -337,6 +440,7 @@ function createAdminSupabase(input: {
         existingRequest,
         insertRequestError: input.insertRequestError ?? null,
         duplicateReloadRequest: input.duplicateReloadRequest ?? null,
+        updateRequestErrorsByStatus: input.updateRequestErrorsByStatus ?? {},
       });
     },
   };
@@ -356,6 +460,7 @@ function createAccountDeletionRequestQuery(
     existingRequest: Partial<AccountDeletionRequest> | null;
     insertRequestError: { code?: string; message?: string } | null;
     duplicateReloadRequest: Partial<AccountDeletionRequest> | null;
+    updateRequestErrorsByStatus: Partial<Record<string, Error>>;
   },
 ) {
   let selectCount = 0;
@@ -409,12 +514,16 @@ function createAccountDeletionRequestQuery(
     update(payload: Record<string, unknown>) {
       return {
         eq(_column: string, userId: string) {
-          operations.push(["updateRequest", userId, payload]);
+          return {
+            in(_statusColumn: string, _allowedStatuses: string[]) {
+              operations.push(["updateRequest", userId, payload]);
 
-          return Promise.resolve({
-            data: null,
-            error: null,
-          });
+              return Promise.resolve({
+                data: null,
+                error: input.updateRequestErrorsByStatus[String(payload.status)] ?? null,
+              });
+            },
+          };
         },
       };
     },
