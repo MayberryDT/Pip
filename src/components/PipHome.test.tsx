@@ -71,6 +71,47 @@ describe("PipHome", () => {
     expect(visibleText).not.toContain("I’m checking your connected data.");
   });
 
+  it("does not immediately fetch Pip Cash again when a live initial result is present", () => {
+    expect(
+      __pipHomeTestHooks.getInitialBackendLoadPlan({
+        liveAccountControlsEnabled: true,
+        hasInitialResult: true,
+        backendReloadKey: 0,
+      }),
+    ).toEqual({
+      fetchPipCash: false,
+      fetchSyncStatus: true,
+      useInitialResult: true,
+    });
+  });
+
+  it("fetches Pip Cash again for explicit backend reloads", () => {
+    expect(
+      __pipHomeTestHooks.getInitialBackendLoadPlan({
+        liveAccountControlsEnabled: true,
+        hasInitialResult: true,
+        backendReloadKey: 1,
+      }),
+    ).toMatchObject({
+      fetchPipCash: true,
+      useInitialResult: false,
+    });
+  });
+
+  it("skips sync status only when the server payload already has it", () => {
+    expect(
+      __pipHomeTestHooks.getInitialBackendLoadPlan({
+        liveAccountControlsEnabled: true,
+        hasInitialResult: true,
+        backendReloadKey: 0,
+        hasServerSyncStatus: true,
+      }),
+    ).toMatchObject({
+      fetchPipCash: false,
+      fetchSyncStatus: false,
+    });
+  });
+
   it("keeps settings out of app chrome while bottom chips stay conversational", () => {
     const markup = renderToStaticMarkup(
       <PipHome

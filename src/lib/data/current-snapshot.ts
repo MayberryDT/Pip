@@ -89,6 +89,7 @@ export async function getCurrentPipCashResult(input: {
 
 export async function getCurrentPipCashState(input: {
   scenario?: FakeDataScenario;
+  recordFreshnessViewed?: boolean;
 }): Promise<PipCashApiState> {
   if (!isSupabaseConfigured()) {
     return calculatePipCash(getFakeSnapshot(input.scenario));
@@ -125,13 +126,15 @@ export async function getCurrentPipCashState(input: {
     hasStaleInstitution: syncStatus.hasStaleInstitution,
   } satisfies PipCashFreshness;
 
-  await recordProductEventSafely(supabase, user.id, "pip_freshness_viewed", {
-    state: freshness.state,
-    lastSuccessfulSyncAt: freshness.lastSuccessfulSyncAt,
-    latestSyncRunStatus: freshness.latestSyncRunStatus,
-    hasPendingSyncJob: freshness.hasPendingSyncJob,
-    hasStaleInstitution: freshness.hasStaleInstitution,
-  });
+  if (input.recordFreshnessViewed) {
+    await recordProductEventSafely(supabase, user.id, "pip_freshness_viewed", {
+      state: freshness.state,
+      lastSuccessfulSyncAt: freshness.lastSuccessfulSyncAt,
+      latestSyncRunStatus: freshness.latestSyncRunStatus,
+      hasPendingSyncJob: freshness.hasPendingSyncJob,
+      hasStaleInstitution: freshness.hasStaleInstitution,
+    });
+  }
 
   return {
     ...result,

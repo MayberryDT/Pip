@@ -261,7 +261,19 @@ export function PipHome({
     }
 
     let ignore = false;
-    setHasLoadedServerState(false);
+    const loadPlan = getInitialBackendLoadPlan({
+      liveAccountControlsEnabled,
+      hasInitialResult: Boolean(initialResult),
+      backendReloadKey,
+    });
+
+    if (loadPlan.useInitialResult) {
+      setServerResult(initialResult ?? null);
+      setServerErrorText("");
+      setHasLoadedServerState(true);
+    } else {
+      setHasLoadedServerState(false);
+    }
 
     async function loadBackendResult() {
       const response = await fetch(`/api/pip-cash?scenario=${scenario}`);
@@ -300,13 +312,18 @@ export function PipHome({
       setSyncStatus(await response.json());
     }
 
-    void loadBackendResult();
-    void loadSyncStatus();
+    if (loadPlan.fetchPipCash) {
+      void loadBackendResult();
+    }
+
+    if (loadPlan.fetchSyncStatus) {
+      void loadSyncStatus();
+    }
 
     return () => {
       ignore = true;
     };
-  }, [backendReloadKey, liveAccountControlsEnabled, scenario]);
+  }, [backendReloadKey, initialResult, liveAccountControlsEnabled, scenario]);
 
   useEffect(() => {
     if (
@@ -2318,6 +2335,33 @@ function getAppOpenRefreshProvider(input: {
   return provider;
 }
 
+function getInitialBackendLoadPlan(input: {
+  liveAccountControlsEnabled: boolean;
+  hasInitialResult: boolean;
+  backendReloadKey: number;
+  hasServerSyncStatus?: boolean;
+}): {
+  fetchPipCash: boolean;
+  fetchSyncStatus: boolean;
+  useInitialResult: boolean;
+} {
+  if (!input.liveAccountControlsEnabled) {
+    return {
+      fetchPipCash: false,
+      fetchSyncStatus: false,
+      useInitialResult: false,
+    };
+  }
+
+  const useInitialResult = input.hasInitialResult && input.backendReloadKey === 0;
+
+  return {
+    fetchPipCash: !useInitialResult,
+    fetchSyncStatus: !input.hasServerSyncStatus,
+    useInitialResult,
+  };
+}
+
 function getAppOpenSyncMessage(input: {
   ok: boolean;
   resultStatus?: unknown;
@@ -2396,6 +2440,7 @@ export const __pipHomeTestHooks = {
   getAppOpenRefreshProvider,
   getClientActionErrorText,
   getConversationState,
+  getInitialBackendLoadPlan,
   getOpeningBubblePromptChips,
   getReadyOpeningBubblePlan,
   getReadyPromptChips,

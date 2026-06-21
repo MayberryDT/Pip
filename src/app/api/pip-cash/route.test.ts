@@ -39,6 +39,14 @@ describe("GET /api/pip-cash", () => {
     expect(routeMocks.getCurrentPipCashState).toHaveBeenCalledWith({ scenario: undefined });
   });
 
+  it("does not opt client reads into freshness-view telemetry", async () => {
+    routeMocks.getCurrentPipCashState.mockResolvedValue(calculatePipCash(fakeSnapshot));
+
+    await GET(new Request("http://localhost/api/pip-cash"));
+
+    expect(routeMocks.getCurrentPipCashState).toHaveBeenCalledWith({ scenario: undefined });
+  });
+
   it("returns 401 instead of fake data when live beta auth is missing", async () => {
     routeMocks.getCurrentPipCashState.mockRejectedValue(new AuthenticationRequiredError());
 

@@ -71,7 +71,7 @@ export default async function AppPage({
   let initialResult: PipCashApiState | null = null;
 
   try {
-    initialResult = await getCurrentPipCashState({});
+    initialResult = await getCurrentPipCashState({ recordFreshnessViewed: true });
   } catch (error) {
     if (!(error instanceof NoFinancialDataError)) {
       throw error;
