@@ -84,6 +84,10 @@ describe("marketing website pages", () => {
     expect(html).toContain(marketingAssets.homepageHeroProduct.src);
     expect(html).toContain(marketingAssets.homepageBalanceRoom.src);
     expect(html).toContain(marketingAssets.homepageAskPip.src);
+    expect(html).not.toContain("Yes. You still have $84 for today.");
+    expect(html).toContain(
+      "After a $50 purchase, today&#x27;s estimate would be about $84, assuming no missing or pending activity.",
+    );
     expect(html).toContain(marketingAssets.blogMeetPipCard.src);
     expect(html).toContain("editorial-mobile-menu");
     expect(html).not.toContain("editorial-mobile-nav");

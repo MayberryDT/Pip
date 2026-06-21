@@ -68,7 +68,7 @@ const askPipConversation = [
   },
   {
     speaker: "Pip",
-    body: "Yes. You still have $84 for today.",
+    body: "After a $50 purchase, today's estimate would be about $84, assuming no missing or pending activity.",
     tone: "pip",
   },
   {
