@@ -8,8 +8,8 @@ describe("blog article hero image framing", () => {
     const globalCss = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
 
     expect(pageSource).toContain('className="article-hero-figure"');
-    expect(globalCss).toMatch(new RegExp("\\.article-hero-figure\\s*\\{[\\s\\S]*aspect-ratio:\\s*16\\s*/\\s*9"));
-    expect(globalCss).toMatch(new RegExp("\\.article-hero-figure\\s+img\\s*\\{[\\s\\S]*object-fit:\\s*contain"));
+    expect(globalCss).toMatch(new RegExp("\\.editorial-site\\s+\\.article-hero-figure\\s*\\{[\\s\\S]*aspect-ratio:\\s*16\\s*/\\s*9"));
+    expect(globalCss).toMatch(new RegExp("\\.editorial-site\\s+\\.article-hero-figure\\s+img\\s*\\{[\\s\\S]*object-fit:\\s*contain"));
   });
 
   it("gives the desktop article hero image enough grid width", () => {
@@ -27,7 +27,7 @@ describe("blog article hero image framing", () => {
 
     expect(pageSource).toContain('className="article-hero-title mt-6 max-w-5xl"');
     expect(globalCss).toMatch(
-      new RegExp("@media \\(max-width:\\s*767px\\)\\s*\\{[\\s\\S]*\\.article-hero-title\\s*\\{[\\s\\S]*max-width:\\s*none")
+      new RegExp("@media \\(max-width:\\s*767px\\)\\s*\\{[\\s\\S]*\\.editorial-site\\s+\\.article-hero-title\\s*\\{[\\s\\S]*max-width:\\s*none")
     );
   });
 });
