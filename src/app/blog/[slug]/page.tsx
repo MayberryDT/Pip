@@ -19,7 +19,7 @@ import {
   SwissText,
   SwissTitle,
 } from "@/components/marketing/SwissGrid";
-import { marketingAssets } from "@/lib/marketing/assets";
+import { getArticleVisual } from "@/lib/marketing/article-visuals";
 import { getArticleBySlug, getPublishedArticles, getRelatedArticles } from "@/lib/marketing/content";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
 import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
@@ -111,7 +111,7 @@ export default async function ArticlePage({ params }: PageProps) {
               </div>
             </div>
             <div className="col-span-12 lg:col-span-4 lg:col-start-9">
-              <SwissFigure asset={marketingAssets.articleCoverTemplate} variant="poster" />
+              <SwissFigure asset={getArticleVisual(article)} priority variant="poster" />
             </div>
             <div className="col-span-12 lg:col-span-3">
               <ArticleTableOfContents article={article} />

@@ -17,9 +17,10 @@ describe("marketing content loader", () => {
   it("publishes the product article batch and excludes drafts", () => {
     const articles = getPublishedArticles();
 
-    expect(articles).toHaveLength(4);
+    expect(articles).toHaveLength(5);
     expect(articles.map((article) => article.slug)).toContain("meet-pip-cute-money-companion");
     expect(articles.map((article) => article.slug)).toContain("how-much-can-i-spend-today");
+    expect(articles.map((article) => article.slug)).toContain("budgeting-app-alternative");
     expect(articles.map((article) => article.slug)).not.toContain("why-pip-is-paid");
     expect(articles.map((article) => article.slug)).not.toContain(
       "how-to-stop-overspending-without-tracking-every-purchase",
@@ -81,7 +82,8 @@ Body`),
 
     for (const article of articles) {
       expect(getArticleQualityIssues(article), article.slug).toEqual([]);
-      expect(article.bodyWordCount).toBeGreaterThanOrEqual(pillarArticleSlugs.has(article.slug) ? 900 : 700);
+      expect(article.bodyWordCount).toBeGreaterThanOrEqual(900);
+      expect(article.bodyWordCount).toBeLessThanOrEqual(1200);
       expect(article.hasInlineCta).toBe(true);
       expect(article.headings.some((heading) => heading.level === 2 && heading.text !== "Quick answer")).toBe(true);
       expect(article.headings.some((heading) => heading.level === 2 && heading.text === "Source notes")).toBe(true);
@@ -149,6 +151,45 @@ Pip waving.
       "pull-quote",
       "figure",
     ]);
+  });
+
+  it("parses generated article markdown without leaking raw syntax", () => {
+    const parsed = parseArticleSource(`---
+title: "Budgeting App Alternative"
+description: "One daily spending number instead of category budgets."
+slug: "budgeting-app-alternative"
+publishedAt: "2026-06-21"
+updatedAt: "2026-06-21"
+author: "Pip"
+status: "published"
+tags:
+  - spendable cash
+seo:
+  title: "Budgeting App Alternative"
+  description: "One daily spending number instead of category budgets."
+ogImage: "/marketing/blog/articles/budgeting-app-alternative.svg"
+---
+# budgeting app alternative
+
+## Quick answer
+
+Pip is a budgeting app alternative that uses **Spendable Cash Today** as a read-only daily signal. It is not financial advice.
+
+> Estimated spendable today = usable cash - near-term bills - protected savings.
+
+## Realistic dollar example
+
+| What's in play | Amount | Why it matters |
+| --- | ---: | --- |
+| Checking account balance | $4,500 | Raw bank balance looks big |
+| Rent due in 3 days | -$2,000 | Must stay in the account |
+`);
+
+    const blocks = parseArticleBody(parsed.body);
+
+    expect(blocks.some((block) => block.type === "heading" && block.heading.text === "budgeting app alternative")).toBe(false);
+    expect(blocks.some((block) => block.type === "pull-quote")).toBe(true);
+    expect(blocks.some((block) => block.type === "table")).toBe(true);
   });
 
   it("rejects malformed or unsafe article bodies", () => {

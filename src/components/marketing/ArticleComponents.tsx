@@ -1,21 +1,12 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { ArrowRight, Clock3, Quote } from "lucide-react";
 import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { PipSays } from "@/components/marketing/PipSays";
-import { marketingAssets } from "@/lib/marketing/assets";
+import { getArticleVisual } from "@/lib/marketing/article-visuals";
 import type { Article, ArticleBodyBlock } from "@/lib/marketing/content";
 import { parseArticleBody } from "@/lib/marketing/content";
 import { getProductAccessHref, productAccess } from "@/lib/marketing/product-access";
-
-const homeArticleAssets = {
-  "meet-pip-cute-money-companion": marketingAssets.blogMeetPipCard,
-  "why-your-bank-balance-is-misleading": marketingAssets.blogBankBalanceCard,
-  "what-is-spendable-cash-today": marketingAssets.blogSpendableCashCard,
-} as const;
-
-function getHomeArticleAsset(article: Article) {
-  return homeArticleAssets[article.slug as keyof typeof homeArticleAssets] ?? marketingAssets.articleCoverTemplate;
-}
 
 export function ArticleCard({
   article,
@@ -29,7 +20,7 @@ export function ArticleCard({
   const resolvedVariant = variant ?? (featured ? "featured" : "default");
 
   if (resolvedVariant === "homeFeatured") {
-    const asset = getHomeArticleAsset(article);
+    const asset = getArticleVisual(article);
 
     return (
       <article className="pip-blog-card pip-blog-card-feature">
@@ -64,7 +55,7 @@ export function ArticleCard({
   }
 
   if (resolvedVariant === "homeCompact") {
-    const asset = getHomeArticleAsset(article);
+    const asset = getArticleVisual(article);
 
     return (
       <article className="pip-blog-card pip-blog-card-compact">
@@ -103,7 +94,7 @@ export function ArticleCard({
   }
 
   if (resolvedVariant === "featured") {
-    const asset = getHomeArticleAsset(article);
+    const asset = getArticleVisual(article);
 
     return (
       <article className="pip-blog-card pip-blog-card-feature pip-blog-card-index-feature">
@@ -153,7 +144,7 @@ export function ArticleCard({
     );
   }
 
-  const asset = getHomeArticleAsset(article);
+  const asset = getArticleVisual(article);
 
   return (
     <article className="pip-blog-card pip-blog-card-default">
@@ -307,9 +298,51 @@ function renderBlock(block: ArticleBodyBlock) {
       return <InlineCtaCard body={block.body} href={block.href} label={block.label} />;
     case "pull-quote":
       return <PullQuote body={block.body} />;
+    case "table":
+      return <ArticleTable alignments={block.alignments} headers={block.headers} rows={block.rows} />;
     case "figure":
       return <ArticleFigure alt={block.alt} caption={block.caption} height={block.height} src={block.src} width={block.width} />;
   }
+}
+
+function ArticleTable({
+  alignments,
+  headers,
+  rows,
+}: {
+  alignments: Array<"left" | "center" | "right">;
+  headers: string[];
+  rows: string[][];
+}) {
+  const alignmentClass = (alignment: "left" | "center" | "right" | undefined) =>
+    alignment === "right" ? "text-right" : alignment === "center" ? "text-center" : "text-left";
+
+  return (
+    <div className="max-w-3xl overflow-x-auto rounded-3xl border border-line bg-paper shadow-[0_18px_44px_rgba(28,27,27,0.045)]">
+      <table className="min-w-full border-collapse text-sm">
+        <thead className="bg-moss/10 text-xs font-extrabold uppercase tracking-normal text-moss">
+          <tr>
+            {headers.map((header, index) => (
+              <th className={["border-b border-line px-4 py-3", alignmentClass(alignments[index])].join(" ")} key={`${header}-${index}`}>
+                {renderInlineText(header)}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-line text-ink/72">
+          {rows.map((row, rowIndex) => (
+            <tr key={`${row.join("-")}-${rowIndex}`}>
+              {headers.map((header, columnIndex) => (
+                <td className={["px-4 py-3 align-top", alignmentClass(alignments[columnIndex])].join(" ")} key={`${header}-${columnIndex}`}>
+                  {renderInlineText(row[columnIndex] ?? "")}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function ArticleCallout({ body, title }: { body: string; title?: string }) {
@@ -429,30 +462,37 @@ function ArticleFigure({
 }
 
 function renderInlineText(text: string) {
-  const nodes: Array<string | JSX.Element> = [];
-  const linkPattern = /\[([^\]]+)\]\(([^)]+)\)/g;
+  const nodes: ReactNode[] = [];
+  const pattern = /(\[([^\]]+)\]\(([^)]+)\)|\*\*([^*]+)\*\*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = linkPattern.exec(text))) {
+  while ((match = pattern.exec(text))) {
     if (match.index > lastIndex) {
       nodes.push(text.slice(lastIndex, match.index));
     }
 
-    const [, label, href] = match;
-    const className = "focus-ring rounded font-bold text-moss underline-offset-4 hover:text-ink hover:underline";
+    if (match[2] && match[3]) {
+      const label = match[2];
+      const href = match[3];
+      const className = "focus-ring rounded font-bold text-moss underline-offset-4 hover:text-ink hover:underline";
 
-    if (href.startsWith("/")) {
       nodes.push(
-        <Link className={className} href={href} key={`${href}-${match.index}`}>
-          {label}
-        </Link>,
+        href.startsWith("/") ? (
+          <Link className={className} href={href} key={`${href}-${match.index}`}>
+            {label}
+          </Link>
+        ) : (
+          <a className={className} href={href} key={`${href}-${match.index}`} rel="noreferrer" target="_blank">
+            {label}
+          </a>
+        ),
       );
-    } else {
+    } else if (match[4]) {
       nodes.push(
-        <a className={className} href={href} key={`${href}-${match.index}`} rel="noreferrer" target="_blank">
-          {label}
-        </a>,
+        <strong className="font-extrabold text-ink" key={`strong-${match.index}`}>
+          {match[4]}
+        </strong>,
       );
     }
 

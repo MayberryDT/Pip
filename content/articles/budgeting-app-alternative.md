@@ -20,80 +20,111 @@ author: "Pip"
 tags:
   - "spendable cash"
   - "daily money habits"
+related:
+  - "what-is-spendable-cash-today"
+  - "why-your-bank-balance-is-misleading"
 ---
-# budgeting app alternative
+## Quick answer
 
-## Quick answer  
+Pip is a budgeting app alternative for people who do not want to manage a full budget every day.
 
-Pip is a budgeting app alternative that replaces complex category tracking with one daily number: [Spendable Cash Today](/blog/what-is-spendable-cash-today). It’s a low-pressure signal of what’s safe to spend after accounting for upcoming bills, savings, and committed card spending. There’s no manual transaction logging, no guilt, and no need to build a budget. Pip uses read‑only banking connections and is **not financial advice**. The core formula:  
+A traditional budgeting app usually asks you to sort spending into categories, set monthly limits, review charts, and keep the system tidy. That can be useful, but it can also become another chore. Pip is narrower. It helps answer one practical question before you spend:
 
-> Estimated spendable today = usable cash − near‑term bills − protected savings − already‑committed spending − other obligations.
+**How much can I safely use today?**
 
-:::figure src="/marketing/blog/articles/budgeting-app-alternative.svg" alt="Editorial Pip article cover for budgeting app alternative." width="1672" height="941"
-Generated article cover image for this Pip guide.
+Pip centers that answer around [Spendable Cash Today](/blog/what-is-spendable-cash-today). Instead of treating your bank balance as the number you can spend, Pip looks at money that needs to be protected for bills, near-term obligations, and the normal timing gaps that make a checking account feel misleading.
+
+The goal is not to shame spending or build a perfect financial plan. The goal is to make the next decision calmer. If your bank says you have $1,240, that number may include rent, subscriptions, groceries, gas, and money you already mentally promised to something else. Pip helps turn that vague balance into a more useful daily number.
+
+Pip uses a **read-only** connection. It **does not move money**, and it **does not store bank usernames or passwords**. Pip is also **not financial advice**. It is a practical spending companion, not a financial planner, lender, investment tool, or replacement for judgment.
+
+## Realistic dollar example
+
+Here is a simple example of why a raw bank balance can feel too optimistic.
+
+| Item | Amount | What it means |
+| --- | ---: | --- |
+| Checking account balance | $1,240 | The number your bank shows today |
+| Rent due soon | -$850 | Money that should not be treated as free to spend |
+| Phone bill | -$65 | Upcoming fixed bill |
+| Car insurance | -$110 | Upcoming fixed bill |
+| Groceries before payday | -$120 | Normal near-term spending need |
+| Gas before payday | -$45 | Normal near-term spending need |
+| Small cushion | -$50 | Room for ordinary surprises |
+| Spendable Cash Today | **$0** | The daily spending answer is much tighter than the bank balance |
+
+This does not mean you are broke in a dramatic way. It means the bank balance alone is not telling the whole story.
+
+A budgeting app might show that you are over or under in several categories. Pip tries to make the immediate decision simpler: if Spendable Cash Today is $0, this is probably not the day to casually spend $38 on takeout without changing something else.
+
+:::cta href="/app" label="Check Spendable Cash Today"
+Use Pip when a raw bank balance feels too vague. One daily number gives you a calmer way to decide before spending.
 :::
 
-## Realistic dollar example  
+## What Pip does differently
 
-Imagine a couple shares a checking account with a balance of $4,500. Without thinking about what’s already spoken for, that number feels like permission to spend. Pip shows a very different picture.  
+Pip is not trying to be a full personal finance dashboard. It is built around a smaller daily habit: check the number before spending.
 
-| What’s in play | Amount | Why it matters |
-|----------------|--------|----------------|
-| Checking account balance | $4,500 | Raw bank balance – looks big |
-| Rent due in 3 days | −$2,000 | Must stay in the account until it clears |
-| Car payment next week | −$350 | A known upcoming obligation |
-| Cushion I want to keep hidden | −$500 | Untouchable savings I set aside |
-| Credit card payment already made | −$400 | Already left the account but hasn’t posted |
-| Subscription renewals this month | −$50 | Netflix, cloud storage, etc. |
-| **Spendable Cash Today** | **$1,200** | What’s actually okay to use right now |
+That difference matters. Many people do not fail at budgeting because they cannot understand categories. They fail because the system requires too much upkeep. A budget can be accurate on the first day of the month and still feel useless on the seventeenth, when bills are pending, income timing is uneven, and several small purchases have blurred together.
 
-If the couple glances at the raw bank balance, they might think $4,500 is free. Pip’s daily number tells them $1,200 is safe—**without requiring them to categorize a single purchase or build a spreadsheet.**  
+Instead of asking, "How did my restaurant category perform this month?" Pip asks, "Given what is coming up, does this spending decision still fit today?"
 
-## How to estimate it  
+Some people love category budgeting, and for them a detailed budget may be the right tool. Pip is for the person who wants less daily administration and more immediate clarity.
 
-You don’t need to do the math yourself. Pip looks at the cash you can access in connected checking and savings accounts, then subtracts:  
+Pip also avoids the false comfort of a single raw balance. A checking account balance is real, but it is incomplete. Some of that money may already be spoken for. Pip's job is to make that visible in plain language.
 
-- **Near‑term bills**: recurring payments and predicted bills based on your transaction history.  
-- **Protected savings**: a cushion you choose to set aside—like a hidden emergency fund. Pip holds this back so it never shows up in your spendable number. (Read more about the [savings cushion](/blog/what-is-a-savings-cushion).)  
-- **Already‑committed card/debit spending**: transactions that have cleared or are pending but haven’t fully settled.  
-- **Other known obligations**: subscriptions, scheduled transfers, or bills your bank connection picks up.  
+## When this helps
 
-The result is **Spendable Cash Today**—an estimate that updates every time your bank connection refreshes. No manual logging, no categories, and no future‑budget wizard.  
+Pip can be useful if payday timing makes your money feel uneven. You may have enough income across the month, but still feel uncertain in the days before the next deposit. Spendable Cash Today gives you a way to handle that gap without checking five mental notes at once.
 
-## What can make this estimate wrong  
+It can also help if you are tired of maintaining a budget that keeps falling out of date. A detailed budget only works if it stays current. Pip is designed for a lighter habit: open it, read the daily number, and decide with more context.
 
-- **Missing accounts**: if you didn’t connect a bill‑pay account or a spouse’s card, Pip can’t see those obligations.  
-- **Stale connections**: bank‑side delays mean a recent refund or a surprise bill might not appear for a few hours.  
-- **Unexpected charges**: refunds, disputes, or one‑off bills can appear without warning.  
-- **Not financial advice**: Pip’s number is a decision‑support signal, not a guarantee. It **does not move money**, and it **does not store bank usernames or passwords**. It is a **read‑only** glance at what’s likely safe to spend today.  
+Pip is especially practical when the question is simple: "Can I spend this today and still be okay?"
 
-These limits are why Pip works best as a quick‑check companion, not a strict allowance. If something looks off, you still need to use your own judgment.  
+## What Pip will not do
 
-## How Pip handles it  
+Pip will not create a perfect financial life for you. It will not guarantee that every bill is handled, every goal is funded, or every transaction is categorized exactly the way you would do it manually.
 
-Pip connects to your bank through a partnership with Plaid, using credentials you authenticate once. It **does not store your bank username or password** and remains entirely **read‑only**. It cannot move money, send a payment, or change your accounts. You can read more about that on our [Security page](/security).  
+Pip will not move money for you. It **does not move money** between accounts, pay bills, or initiate transfers. The connection is designed to be **read-only**.
 
-Each day, Pip recalculates Spendable Cash Today from the latest transaction data. It hides the noise: no pie charts, no “groceries” vs “dining out” guilt, just a single number that tells you if it’s a normal day or a tight one. When the number is low, Pip nudges gently, not with shame, but as a friendly heads‑up that your obligations are taking up more of your cash right now.  
+Pip will not ask for or keep your bank login details. It **does not store bank usernames or passwords**.
 
-For people who find traditional budgeting too heavy, this daily ritual is enough to stop overspending without turning money into a part‑time job.  
+Pip will not replace professional guidance. Pip is **not financial advice**, and it should not be treated as tax, legal, investment, credit, or retirement planning advice.
 
-## FAQ  
+Pip also may not be the right fit if you want a highly detailed envelope budget, advanced reports, net worth tracking, investment analysis, or business accounting. Those are valid needs, but they are not the center of Pip.
 
-### How is Pip different from a budgeting app like Mint or YNAB?  
+The center of Pip is much simpler: before spending, check Spendable Cash Today.
 
-Pip doesn’t ask you to categorize transactions, build a forward‑looking budget, or assign every dollar to a job. Instead, it shows one daily number (Spendable Cash Today) that already subtracts bills, savings, and committed spending. It’s a low‑effort alternative for people who want a spending guardrail, not a financial dashboard.  
+## FAQ
 
-### Can Pip help couples stay aligned on spending?  
+### Is Pip a budgeting app?
 
-Yes. Both partners can connect their primary spending accounts to the same Pip profile. They see the same Spendable Cash Today before making purchase decisions, which replaces the need for interrogation or “budget meetings.” Because Pip is **read‑only**, neither partner can move money or spy on individual transactions. The shared number stays visible and transparent.  
+Pip overlaps with budgeting apps, but it is more focused. It is a budgeting app alternative for people who want a practical daily spending number instead of a full category-management system.
 
-### What if my bank transactions are delayed or a bill hasn’t shown up yet?  
+### What is Spendable Cash Today?
 
-Pip’s estimate will be slightly off until the connection catches up. That’s why the daily number is a signal, not an exact ledger. If you know a big bill is coming, you can still use common sense to spend less. As soon as the transaction posts, Pip will automatically adjust your Spendable Cash Today.  
+Spendable Cash Today is Pip's daily answer to how much money appears available after accounting for near-term obligations and practical constraints. It is meant to be more useful than a raw bank balance when you are deciding whether to spend.
 
-## Source notes  
+### Why not just look at my bank balance?
 
-- Pip uses a read-only account connection, does not move money, does not store bank usernames or passwords, and is not financial advice.
-- The formula for Spendable Cash Today is derived from [Pip’s breakdown of how the number works](/how-the-number-works).  
-- This article is based on Pip’s product truth: read‑only account connections, no money movement, no storage of bank credentials, and **not financial advice**.  
-- The money example is illustrative; actual numbers depend on your linked accounts, upcoming bills, and personal savings cushion settings.
+Your bank balance can include money that is already needed for rent, bills, groceries, gas, or other upcoming expenses. Pip helps separate "money in the account" from "money that feels safe to spend today."
+
+### Does Pip move money?
+
+No. Pip **does not move money**. It is meant to help you understand spending room, not control your accounts.
+
+### Does Pip store bank usernames or passwords?
+
+No. Pip **does not store bank usernames or passwords**.
+
+### Is Pip financial advice?
+
+No. Pip is **not financial advice**. It is a spending clarity tool. You are still responsible for your financial decisions.
+
+## Source notes
+
+This article uses plain-language product framing for Pip: a practical alternative to dashboard-heavy budgeting apps, centered on Spendable Cash Today.
+
+The trust language is intentional: Pip is **read-only**, **does not move money**, **does not store bank usernames or passwords**, and is **not financial advice**.
+
+The dollar example is illustrative, not a promise about how every user's finances will look. Real results depend on account activity, income timing, bills, recurring expenses, and the information available to Pip.
