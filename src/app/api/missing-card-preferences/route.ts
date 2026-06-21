@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { markPipCashSnapshotsStaleForUser } from "@/lib/data/financial-repository";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -12,7 +13,7 @@ const preferenceSchema = z.object({
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   try {
@@ -23,14 +24,14 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const body = await request.json().catch(() => null);
     const parsed = preferenceSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Issuer name is required." }, { status: 400 });
+      return sensitiveJson({ error: "Issuer name is required." }, { status: 400 });
     }
 
     const issuerName = parsed.data.issuerName;
@@ -55,14 +56,14 @@ export async function POST(request: Request) {
         throw insertError;
       }
 
-      await markPipCashSnapshotsStaleForUser(supabase, user.id);
+      await markPipCashSnapshotsStaleForUser(supabase, user.id, createSupabaseAdminClient());
     }
 
     await recordProductEventSafely(supabase, user.id, "missing_card_nudge_suppressed", {
       issuerName,
     });
 
-    return NextResponse.json({
+    return sensitiveJson({
       status: "suppressed",
       issuerName,
     });
@@ -74,7 +75,7 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

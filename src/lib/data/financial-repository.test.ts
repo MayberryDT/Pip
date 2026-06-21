@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   getCurrentAppDate,
+  deleteUserFinancialDataByUserId,
   loadFinancialSnapshotForUser,
   loadCachedPipCashResultForUser,
   markPipCashSnapshotsStaleForUser,
@@ -266,7 +267,62 @@ describe("financial repository row mapping", () => {
       recurringObligationRules: [],
     });
   });
+
+  it("deletes account data through admin paths scoped by explicit user id", async () => {
+    const calls: unknown[][] = [];
+    const supabase = createDeleteByUserIdClient({
+      calls,
+      syncJobs: [{ id: "job-1" }],
+    });
+
+    await deleteUserFinancialDataByUserId(supabase, "user-1");
+
+    expect(calls).toContainEqual(["schema", "private"]);
+    expect(calls).toContainEqual(["from", "provider_credentials"]);
+    expect(calls).toContainEqual(["eq", "user_id", "user-1"]);
+    expect(calls).toContainEqual(["from", "plaid_webhook_events"]);
+    expect(calls).toContainEqual(["in", "source_sync_job_id", ["job-1"]]);
+    [
+      "ai_response_reports",
+      "tester_feedback",
+      "pip_reaction_events",
+      "pip_sync_jobs",
+      "agent_chat_turns",
+      "product_events",
+      "recurring_obligation_rules",
+      "savings_goals",
+      "pip_cash_snapshots",
+      "sync_runs",
+      "missing_card_preferences",
+      "account_preferences",
+      "transactions",
+      "accounts",
+      "connected_institutions",
+      "user_settings",
+      "data_deletion_requests",
+    ].forEach((tableName) => {
+      expect(calls).toContainEqual(["deleteUserRows", tableName, "user-1"]);
+    });
+    expect(indexOfCall(calls, ["from", "provider_credentials"])).toBeLessThan(
+      indexOfCall(calls, ["deleteUserRows", "connected_institutions", "user-1"]),
+    );
+    expect(indexOfCall(calls, ["in", "source_sync_job_id", ["job-1"]])).toBeLessThan(
+      indexOfCall(calls, ["deleteUserRows", "pip_sync_jobs", "user-1"]),
+    );
+    expect(indexOfCall(calls, ["deleteUserRows", "transactions", "user-1"])).toBeLessThan(
+      indexOfCall(calls, ["deleteUserRows", "accounts", "user-1"]),
+    );
+    expect(calls).not.toContainEqual(["deleteUserRows", "account_deletion_requests", "user-1"]);
+  });
 });
+
+function indexOfCall(calls: unknown[][], expected: unknown[]): number {
+  const index = calls.findIndex((call) => JSON.stringify(call) === JSON.stringify(expected));
+
+  expect(index).toBeGreaterThanOrEqual(0);
+
+  return index;
+}
 
 function createPipCashSnapshotsClient(input: {
   resultRows?: Array<{ result: unknown }>;
@@ -356,6 +412,72 @@ function createFinancialSnapshotClient(input: {
       };
 
       return query;
+    },
+  } as unknown as SupabaseClient<Database>;
+}
+
+function createDeleteByUserIdClient(input: {
+  calls: unknown[][];
+  syncJobs: Array<{ id: string }>;
+}): SupabaseClient<Database> {
+  function createTableQuery(tableName: string) {
+    const query = {
+      select(columns?: string) {
+        input.calls.push(["select", tableName, columns ?? "*"]);
+
+        return {
+          eq(column: string, value: unknown) {
+            input.calls.push(["eq", column, value]);
+
+            return Promise.resolve({
+              data: tableName === "pip_sync_jobs" ? input.syncJobs : [],
+              error: null,
+            });
+          },
+        };
+      },
+      delete() {
+        return {
+          eq(column: string, value: unknown) {
+            input.calls.push(["eq", column, value]);
+            input.calls.push(["deleteUserRows", tableName, value]);
+
+            return Promise.resolve({
+              data: null,
+              error: null,
+            });
+          },
+          in(column: string, value: unknown[]) {
+            input.calls.push(["in", column, value]);
+
+            return Promise.resolve({
+              data: null,
+              error: null,
+            });
+          },
+        };
+      },
+    };
+
+    return query;
+  }
+
+  return {
+    schema(schemaName: string) {
+      input.calls.push(["schema", schemaName]);
+
+      return {
+        from(tableName: string) {
+          input.calls.push(["from", tableName]);
+
+          return createTableQuery(tableName);
+        },
+      };
+    },
+    from(tableName: string) {
+      input.calls.push(["from", tableName]);
+
+      return createTableQuery(tableName);
     },
   } as unknown as SupabaseClient<Database>;
 }

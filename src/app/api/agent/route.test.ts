@@ -3,18 +3,26 @@ import type { AgentResponse } from "@/lib/agent/card-types";
 import { fakeSnapshot } from "@/lib/fake-data";
 
 const routeMocks = vi.hoisted(() => ({
+  createSupabaseAdminClient: vi.fn(),
   createSupabaseServerClient: vi.fn(),
   getFinancialDataProvider: vi.fn(),
   getCurrentFinancialSnapshot: vi.fn(),
   recordAgentChatTurnSafely: vi.fn(),
   recordProductEventSafely: vi.fn(),
   runAIAgent: vi.fn(),
+  claimAgentModelGate: vi.fn(),
+  getAgentModelGateScope: vi.fn(),
+  releaseAgentModelGate: vi.fn(),
   loadManualRefreshOnlyForUser: vi.fn(),
   runManualSync: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: routeMocks.createSupabaseServerClient,
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: routeMocks.createSupabaseAdminClient,
 }));
 
 vi.mock("@/lib/data/current-snapshot", async (importOriginal) => {
@@ -72,6 +80,17 @@ vi.mock("@/lib/agent/ai-agent", async (importOriginal) => {
   };
 });
 
+vi.mock("@/lib/agent/agent-model-gate", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/agent/agent-model-gate")>();
+
+  return {
+    ...actual,
+    claimAgentModelGate: routeMocks.claimAgentModelGate,
+    getAgentModelGateScope: routeMocks.getAgentModelGateScope,
+    releaseAgentModelGate: routeMocks.releaseAgentModelGate,
+  };
+});
+
 import { POST } from "@/app/api/agent/route";
 import { AgentUnavailableError } from "@/lib/agent/ai-agent";
 import {
@@ -87,6 +106,12 @@ afterEach(() => {
 describe("POST /api/agent", () => {
   beforeEach(() => {
     routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(false);
+    routeMocks.getAgentModelGateScope.mockReturnValue("scope-hash");
+    routeMocks.claimAgentModelGate.mockResolvedValue({
+      outcome: "allowed",
+      leaseId: "lease-1",
+    });
+    routeMocks.releaseAgentModelGate.mockResolvedValue(undefined);
   });
 
   it("rejects invalid request bodies with a structured 400 response", async () => {
@@ -116,6 +141,7 @@ describe("POST /api/agent", () => {
     const response = await POST(jsonRequest({ message: "Can I spend $50?" }));
 
     expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     await expect(response.json()).resolves.toMatchObject({
       code: "missing-openai-config",
       error: "AI is not configured.",
@@ -128,6 +154,7 @@ describe("POST /api/agent", () => {
         errorMessage: expect.stringContaining("AI is not configured."),
       }),
     );
+    expect(routeMocks.releaseAgentModelGate).toHaveBeenCalledWith("lease-1");
   });
 
   it("calls the real agent route path without runtime injection", async () => {
@@ -171,6 +198,10 @@ describe("POST /api/agent", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(routeMocks.claimAgentModelGate.mock.invocationCallOrder[0]).toBeLessThan(
+      routeMocks.runAIAgent.mock.invocationCallOrder[0],
+    );
     expect(payload).toMatchObject({
       cards: [
         {
@@ -207,6 +238,71 @@ describe("POST /api/agent", () => {
         }),
       }),
     );
+    expect(routeMocks.releaseAgentModelGate).toHaveBeenCalledWith("lease-1");
+  });
+
+  it("rate limits guest agent calls before running the model", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    routeMocks.getCurrentFinancialSnapshot.mockRejectedValue(new AuthenticationRequiredError());
+    routeMocks.claimAgentModelGate.mockResolvedValue({
+      outcome: "denied",
+      retryAfterSeconds: 30,
+      reason: "minute_limit",
+    });
+
+    const response = await POST(jsonRequest({ message: "hello" }));
+
+    expect(response.status).toBe(429);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    expect(response.headers.get("Retry-After")).toBe("30");
+    await expect(response.json()).resolves.toMatchObject({
+      code: "agent-rate-limited",
+      retryAfterSeconds: 30,
+    });
+    expect(routeMocks.runAIAgent).not.toHaveBeenCalled();
+    expect(routeMocks.releaseAgentModelGate).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when the agent model gate is unavailable", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    routeMocks.getCurrentFinancialSnapshot.mockRejectedValue(new AuthenticationRequiredError());
+    routeMocks.claimAgentModelGate.mockResolvedValue({
+      outcome: "unavailable",
+      retryAfterSeconds: 30,
+    });
+
+    const response = await POST(jsonRequest({ message: "hello" }));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("30");
+    await expect(response.json()).resolves.toMatchObject({
+      code: "agent-model-gate-unavailable",
+    });
+    expect(routeMocks.runAIAgent).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when scope hashing is not configured", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    routeMocks.getCurrentFinancialSnapshot.mockRejectedValue(new AuthenticationRequiredError());
+    routeMocks.getAgentModelGateScope.mockImplementation(() => {
+      throw new Error("PIP_RATE_LIMIT_SALT is required in production.");
+    });
+
+    const response = await POST(jsonRequest({ message: "hello" }));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Retry-After")).toBe("30");
+    await expect(response.json()).resolves.toMatchObject({
+      code: "agent-model-gate-unavailable",
+    });
+    expect(routeMocks.claimAgentModelGate).not.toHaveBeenCalled();
+    expect(routeMocks.runAIAgent).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      "Agent model gate claim failed.",
+      "PIP_RATE_LIMIT_SALT is required in production.",
+    );
+    warn.mockRestore();
   });
 
   it("returns silent prompt chip refreshes without recording a chat turn", async () => {

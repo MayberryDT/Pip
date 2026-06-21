@@ -64,7 +64,24 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
+  // Session/auth routes need Supabase cookie refresh. Android shell routes stay
+  // here because this proxy also enforces the native WebView app restrictions.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/app/:path*",
+    "/auth/:path*",
+    "/api/:path*",
+    "/plaid/oauth",
+    "/reviewer-login",
+    "/",
+    "/pricing/:path*",
+    "/checkout/:path*",
+    "/billing/:path*",
+    "/subscribe/:path*",
+    "/subscription/:path*",
+    "/upgrade/:path*",
+    "/how-it-works/:path*",
+    "/how-the-number-works/:path*",
+    "/blog/:path*",
+    "/llms.txt",
   ],
 };

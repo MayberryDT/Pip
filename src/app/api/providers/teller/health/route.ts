@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
 import { getTellerConfig, getTellerReadiness } from "@/lib/providers/teller/config";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET() {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   try {
@@ -16,20 +16,20 @@ export async function GET() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const config = getTellerConfig();
     const readiness = getTellerReadiness(config);
 
-    return NextResponse.json({
+    return sensitiveJson({
       ...readiness,
       products: config.products,
       apiBaseUrl: config.apiBaseUrl,
       message: getReadinessMessage(readiness),
     });
   } catch (error) {
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

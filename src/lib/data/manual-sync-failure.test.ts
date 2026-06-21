@@ -272,6 +272,10 @@ describe("manual sync provider failures", () => {
       error_code: "item-login-required",
       error_message: "Plaid needs this bank connection repaired.",
     });
+    expect(captures.syncRunUpdates[0]?.conditions).toEqual([
+      ["user_id", "user-1"],
+      ["id", "sync-run-1"],
+    ]);
     expect(captures.institutionUpdates[0]).toMatchObject({
       payload: {
         status: "failed",
@@ -494,6 +498,10 @@ describe("manual sync provider failures", () => {
       balance_count: 1,
       error_code: "partial-provider-sync-failure",
     });
+    expect(captures.syncRunUpdates[0]?.conditions).toEqual([
+      ["user_id", "user-1"],
+      ["id", "sync-run-1"],
+    ]);
     expect(captures.institutionUpdates).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

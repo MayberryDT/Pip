@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { createPlaidClient, getPlaidConfig } from "@/lib/providers/plaid/config";
 import { storePlaidCredential } from "@/lib/providers/plaid/credential-store";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -24,7 +24,7 @@ const exchangeSchema = z.object({
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   let userId: string | null = null;
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     userId = user.id;
@@ -46,7 +46,7 @@ export async function POST(request: Request) {
     const parsed = exchangeSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid Plaid exchange request." }, { status: 400 });
+      return sensitiveJson({ error: "Invalid Plaid exchange request." }, { status: 400 });
     }
 
     const config = getPlaidConfig();
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       providerInstitutionId,
     });
 
-    return NextResponse.json({
+    return sensitiveJson({
       status: "connected",
       institutionId: institution.id,
       institutionName,
@@ -100,7 +100,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 
@@ -127,6 +127,7 @@ async function upsertPlaidInstitution(
     const { data, error } = await supabase
       .from("connected_institutions")
       .update(payload)
+      .eq("user_id", input.userId)
       .eq("id", existing.id)
       .select("*")
       .single();

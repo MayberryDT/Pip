@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { buildAppUrl } from "@/lib/url/app-origin";
+import { buildAppUrl, getAppOrigin } from "@/lib/url/app-origin";
+import { getSafeAuthNextPath } from "@/lib/url/safe-next-path";
 
 type EmailOtpCallbackType = "signup" | "invite" | "magiclink" | "recovery" | "email_change" | "email";
 
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
-  const next = getSafeNextPath(requestUrl.searchParams.get("next"));
+  const next = getSafeAuthNextPath(requestUrl.searchParams.get("next"), getAppOrigin(request));
 
   if (!isSupabaseConfigured()) {
     return NextResponse.redirect(buildAppUrl("/app", request));
@@ -38,14 +39,6 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.redirect(buildAppUrl(next, request));
-}
-
-function getSafeNextPath(next: string | null): string {
-  if (!next || !next.startsWith("/") || next.startsWith("//")) {
-    return "/app";
-  }
-
-  return next;
 }
 
 function getAuthCallbackParams(searchParams: URLSearchParams):

@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import {
   markPipCashSnapshotsStaleForUser,
 } from "@/lib/data/financial-repository";
@@ -9,6 +8,8 @@ import {
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { isSavingsGoalsEnabled } from "@/lib/savings-goals/feature-flags";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -20,11 +21,11 @@ import {
 
 export async function GET() {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   if (!isSavingsGoalsEnabled()) {
-    return NextResponse.json({ error: "Savings goals are not enabled." }, { status: 404 });
+    return sensitiveJson({ error: "Savings goals are not enabled." }, { status: 404 });
   }
 
   try {
@@ -35,28 +36,28 @@ export async function GET() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const goals = await listSavingsGoalsForUser(supabase, user.id);
 
-    return NextResponse.json({
+    return sensitiveJson({
       goals: goals
         .filter((goal) => goal.status === "active" || goal.status === "paused")
         .map(toSavingsGoalPlanResponse),
     });
   } catch (error) {
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   if (!isSavingsGoalsEnabled()) {
-    return NextResponse.json({ error: "Savings goals are not enabled." }, { status: 404 });
+    return sensitiveJson({ error: "Savings goals are not enabled." }, { status: 404 });
   }
 
   try {
@@ -67,24 +68,24 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const body = await request.json().catch(() => null);
     const parsed = savingsGoalCreateSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid savings goal." }, { status: 400 });
+      return sensitiveJson({ error: "Invalid savings goal." }, { status: 400 });
     }
 
     const validationError = validateSavingsGoalInput(parsed.data);
     if (validationError) {
-      return NextResponse.json({ error: validationError }, { status: 400 });
+      return sensitiveJson({ error: validationError }, { status: 400 });
     }
 
     const goal = await createSavingsGoalForUser(supabase, user.id, parsed.data);
     if (shouldStalePipCashForGoalChange(null, goal)) {
-      await markPipCashSnapshotsStaleForUser(supabase, user.id);
+      await markPipCashSnapshotsStaleForUser(supabase, user.id, createSupabaseAdminClient());
     }
 
     await recordProductEventSafely(supabase, user.id, "savings_goal_created", {
@@ -105,13 +106,13 @@ export async function POST(request: Request) {
       );
     }
 
-    return NextResponse.json(toSavingsGoalPlanResponse(goal), { status: 201 });
+    return sensitiveJson(toSavingsGoalPlanResponse(goal), { status: 201 });
   } catch (error) {
     if (!(error instanceof SupabaseConfigError)) {
       console.error("[savings-goals] request failed", getSafeErrorMessage(error, "Savings goals request failed."));
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

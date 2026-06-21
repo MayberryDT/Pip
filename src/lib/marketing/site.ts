@@ -13,51 +13,61 @@ export const publicMarketingPages = [
     path: "/",
     label: "Home",
     description: "Meet Pip and learn the daily number your bank will not show you.",
+    updatedAt: "2026-06-11",
   },
   {
     path: "/how-it-works",
     label: "How it works",
     description: "See how Pip turns account data into Spendable Cash Today.",
+    updatedAt: "2026-06-11",
   },
   {
     path: "/how-the-number-works",
     label: "How the number works",
     description: "See the inputs, limits, and receipt behind Spendable Cash Today.",
+    updatedAt: "2026-06-11",
   },
   {
     path: "/pricing",
     label: "Pricing",
     description: "See Pip weekly and monthly pricing.",
+    updatedAt: "2026-06-11",
   },
   {
     path: "/security",
     label: "Security",
     description: "Read the trust boundaries for account connection, data, and money movement.",
+    updatedAt: "2026-06-11",
   },
   {
     path: "/blog",
     label: "Blog",
     description: "Product-led articles about bank balances, no-budget spending, and daily money habits.",
+    updatedAt: "2026-06-11",
   },
   {
     path: "/support",
     label: "Support",
     description: "Get support for connection, app access, account data, and deletion questions.",
+    updatedAt: "2026-06-11",
   },
   {
     path: "/privacy",
     label: "Privacy",
     description: "Review what Pip stores and how data deletion works.",
+    updatedAt: "2026-06-11",
   },
   {
     path: "/terms",
     label: "Terms",
     description: "Review Pip terms, product boundaries, subscription context, and no-money-movement limits.",
+    updatedAt: "2026-06-11",
   },
   {
     path: "/delete-account",
     label: "Delete account",
     description: "Request deletion of your Pip account and associated app data.",
+    updatedAt: "2026-06-11",
   },
 ] as const;
 

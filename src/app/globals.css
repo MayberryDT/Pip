@@ -4067,7 +4067,7 @@ button {
 
 .pip-prompt-tray.is-compact .pip-prompt-chip {
   width: 100%;
-  min-height: 2rem;
+  min-height: 2.75rem;
   overflow: visible;
   padding: 0.38rem 0.35rem;
   font-size: 0.64rem;
@@ -4116,7 +4116,7 @@ button {
   min-height: 3.08rem;
   border-radius: 1.18rem;
   border-color: rgba(121, 102, 70, 0.16);
-  padding: 0.72rem 3.1rem 0.72rem 1rem;
+  padding: 0.72rem 3.75rem 0.72rem 1rem;
   background:
     linear-gradient(180deg, rgba(255, 251, 245, 0.98), rgba(255, 248, 239, 0.88)),
     rgba(255, 250, 242, 0.84);
@@ -4137,8 +4137,8 @@ button {
 .pip-composer-submit {
   right: 0.38rem;
   bottom: 0.38rem;
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 2.75rem;
+  height: 2.75rem;
   background: var(--pip-app-sage-deep);
   box-shadow:
     0 13px 26px rgba(49, 70, 44, 0.22),

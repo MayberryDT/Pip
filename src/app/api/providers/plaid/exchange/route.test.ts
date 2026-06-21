@@ -226,6 +226,15 @@ describe("POST /api/providers/plaid/exchange", () => {
         provider_institution_id: "ins_132616",
       }),
     ]);
+    expect(admin.__updates).toEqual([
+      expect.objectContaining({
+        tableName: "connected_institutions",
+        conditions: [
+          ["user_id", "user-1"],
+          ["id", "failed-wise"],
+        ],
+      }),
+    ]);
   });
 
   it("redacts secret-shaped internal errors before returning them", async () => {
@@ -299,11 +308,17 @@ function createAdminSupabase(input: {
 } = {}) {
   const connectedInstitutions = [...(input.institutions ?? [])];
   const credentials = [...(input.credentials ?? [])];
+  const updates: Array<{
+    tableName: string;
+    payload: Record<string, unknown>;
+    conditions: Array<[string, unknown]>;
+  }> = [];
   const admin = {
     __tables: {
       connectedInstitutions,
       credentials,
     },
+    __updates: updates,
     schema: vi.fn((schemaName: string) => {
       expect(schemaName).toBe("private");
 
@@ -311,6 +326,8 @@ function createAdminSupabase(input: {
         from: vi.fn((tableName: string) => {
           expect(tableName).toBe("provider_credentials");
           return createTable(credentials, {
+            tableName,
+            updates,
             insertId: () => "",
           });
         }),
@@ -319,6 +336,8 @@ function createAdminSupabase(input: {
     from: vi.fn((tableName: string) => {
       expect(tableName).toBe("connected_institutions");
       return createTable(connectedInstitutions, {
+        tableName,
+        updates,
         insertId: () => "institution-1",
       });
     }),
@@ -330,6 +349,12 @@ function createAdminSupabase(input: {
 function createTable(
   rows: Record<string, unknown>[],
   options: {
+    tableName: string;
+    updates: Array<{
+      tableName: string;
+      payload: Record<string, unknown>;
+      conditions: Array<[string, unknown]>;
+    }>;
     insertId: () => string;
   },
 ) {
@@ -347,7 +372,7 @@ function createTable(
       return createMutationResult(row);
     },
     update(payload: Record<string, unknown>) {
-      return createUpdateQuery(rows, payload);
+      return createUpdateQuery(rows, payload, options);
     },
     delete() {
       return createDeleteQuery(rows);
@@ -424,16 +449,34 @@ function createMutationResult(row: Record<string, unknown>) {
   };
 }
 
-function createUpdateQuery(rows: Record<string, unknown>[], payload: Record<string, unknown>) {
+function createUpdateQuery(
+  rows: Record<string, unknown>[],
+  payload: Record<string, unknown>,
+  options: {
+    tableName: string;
+    updates: Array<{
+      tableName: string;
+      payload: Record<string, unknown>;
+      conditions: Array<[string, unknown]>;
+    }>;
+  },
+) {
   const filters: Array<(row: Record<string, unknown>) => boolean> = [];
+  const conditions: Array<[string, unknown]> = [];
   const query = {
     eq(column: string, value: unknown) {
+      conditions.push([column, value]);
       filters.push((row) => row[column] === value);
       return query;
     },
     select() {
       return {
         single: vi.fn().mockImplementation(async () => {
+          options.updates.push({
+            tableName: options.tableName,
+            payload,
+            conditions: [...conditions],
+          });
           const row = rows.find((candidate) => filters.every((filter) => filter(candidate)));
 
           if (!row) {

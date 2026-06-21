@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
-import { __agentInputTestHooks } from "@/components/AgentInput";
+import { AgentInput, __agentInputTestHooks } from "@/components/AgentInput";
 
 describe("AgentInput", () => {
   it("resizes and blurs after mobile submit without forcing focus", () => {
@@ -103,6 +104,23 @@ describe("AgentInput", () => {
     expect(Number(paddingRight?.[1])).toBeGreaterThanOrEqual(0.5);
     expect(Number(paddingBottom?.[1])).toBeGreaterThanOrEqual(0.375);
     expect(Number(paddingLeft?.[1])).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it("keeps the composer submit button at a tappable 44px target", () => {
+    const markup = renderToStaticMarkup(<AgentInput onSubmit={() => undefined} />);
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const inputCss = css.slice(css.indexOf(".pip-composer-input {"), css.indexOf(".pip-composer-input:focus"));
+    const submitCss = css.slice(css.indexOf(".pip-composer-submit {"), css.indexOf(".pip-composer-submit:hover"));
+    const inputPadding = inputCss.match(/padding:\s*[\d.]+rem\s+([\d.]+)rem\s+[\d.]+rem\s+[\d.]+rem;/);
+    const rightOffset = submitCss.match(/right:\s*([\d.]+)rem;/);
+    const width = submitCss.match(/width:\s*([\d.]+)rem;/);
+    const height = submitCss.match(/height:\s*([\d.]+)rem;/);
+
+    expect(markup).toContain("h-11 w-11");
+    expect(markup).not.toContain("max-[380px]:h-10");
+    expect(Number(width?.[1])).toBeGreaterThanOrEqual(2.75);
+    expect(Number(height?.[1])).toBeGreaterThanOrEqual(2.75);
+    expect(Number(inputPadding?.[1])).toBeGreaterThanOrEqual(Number(width?.[1]) + Number(rightOffset?.[1]) + 0.5);
   });
 });
 

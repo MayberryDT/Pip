@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { AgentResponse } from "@/lib/agent/card-types";
@@ -74,7 +73,9 @@ import {
   ProviderUnavailableError,
 } from "@/lib/providers/provider-registry";
 import { getSafeErrorMessage, sanitizeSensitiveText } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { getClientPipPlatform } from "@/lib/platform/android-shell";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
@@ -83,6 +84,14 @@ import {
   createChatTurnRequestMetadata,
   recordAgentEvents,
 } from "@/lib/agent/route-telemetry";
+import {
+  buildAgentModelGatePlan,
+  claimAgentModelGate,
+  getAgentModelGateScope,
+  getClientIp,
+  releaseAgentModelGate,
+  toAgentModelGateResponse,
+} from "@/lib/agent/agent-model-gate";
 import {
   buildAccountConnectionsCard,
   createLocalDevConnectedAccounts,
@@ -171,7 +180,7 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json(
+    return sensitiveJson(
       {
         error: "Message is required.",
       },
@@ -181,11 +190,37 @@ export async function POST(request: Request) {
 
   const conversationId = parsed.data.conversationId ?? createServerConversationId();
   let routeContext: RouteAgentContext | undefined;
+  let modelGateLeaseId: string | undefined;
 
   try {
     routeContext = await createRouteAgentContext({
       scenario: parsed.data.scenario,
     });
+    const requestKind = parsed.data.requestKind ?? "chat";
+    const modelGatePlan = buildAgentModelGatePlan({
+      onboardingStatus: routeContext.onboardingState.status,
+      requestKind,
+    });
+    const modelGateClaim = await claimRouteAgentModelGate({
+      routeContext,
+      request,
+      requestKind,
+      modelGatePlan,
+    });
+
+    if (modelGateClaim.outcome !== "allowed") {
+      const payload = toAgentModelGateResponse(modelGateClaim);
+      const { status, ...body } = payload;
+
+      return sensitiveJson(body, {
+        status,
+        headers: {
+          "Retry-After": String(payload.retryAfterSeconds),
+        },
+      });
+    }
+
+    modelGateLeaseId = modelGateClaim.leaseId;
     const response = await runAIAgent(
       {
         message: parsed.data.message,
@@ -231,7 +266,7 @@ export async function POST(request: Request) {
       ]);
     }
 
-    return NextResponse.json(response);
+    return sensitiveJson(response);
   } catch (error) {
     const payload = toAgentErrorPayload(error);
     const { status, ...body } = payload;
@@ -250,7 +285,40 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(body, { status });
+    return sensitiveJson(body, { status });
+  } finally {
+    if (modelGateLeaseId) {
+      await releaseAgentModelGate(modelGateLeaseId);
+    }
+  }
+}
+
+async function claimRouteAgentModelGate(input: {
+  routeContext: RouteAgentContext;
+  request: Request;
+  requestKind: "chat" | "prompt_chips" | "opening_bubble";
+  modelGatePlan: ReturnType<typeof buildAgentModelGatePlan>;
+}) {
+  try {
+    return await claimAgentModelGate({
+      scopeHash: getAgentModelGateScope({
+        userId: input.routeContext.eventContext?.userId,
+        clientIp: getClientIp(input.request),
+        userAgent: input.request.headers.get("user-agent"),
+        salt: process.env.PIP_RATE_LIMIT_SALT,
+      }),
+      requestKind: input.requestKind,
+      plan: input.modelGatePlan,
+    });
+  } catch (error) {
+    console.warn(
+      "Agent model gate claim failed.",
+      getSafeErrorMessage(error, "Agent model gate unavailable."),
+    );
+    return {
+      outcome: "unavailable" as const,
+      retryAfterSeconds: 30,
+    };
   }
 }
 
@@ -579,6 +647,12 @@ function createAgentActions(input: {
   onboardingStatus: PipAgentOnboardingState["status"];
   syncStatus: SyncStatus | null;
 }): PipAgentActions {
+  let writeSupabase: SupabaseClient<Database> | null = null;
+  const getWriteSupabase = () => {
+    writeSupabase ??= createSupabaseAdminClient();
+    return writeSupabase;
+  };
+
   return {
     async saveProtectedSavings({ amountCents }) {
       const { supabase, userId } = input.eventContext;
@@ -599,7 +673,7 @@ function createAgentActions(input: {
         await upsertUserSettings(supabase, userId, {
           protectedSavingsMonthlyCents: amountCents,
         });
-        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       }
 
       await recordProductEventSafely(supabase, userId, "settings_updated", {
@@ -737,7 +811,7 @@ function createAgentActions(input: {
         accountId: resolved.accountId,
         includeInPipCash,
       });
-      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       await recordProductEventSafely(supabase, userId, "account_inclusion_updated", {
         accountId: resolved.accountId,
         accountKind: account.kind,
@@ -775,7 +849,7 @@ function createAgentActions(input: {
         accountId: resolved.accountId,
         isProtectedSavings,
       });
-      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       await recordProductEventSafely(supabase, userId, "account_protected_savings_updated", {
         accountId: resolved.accountId,
         accountKind: account.kind,
@@ -815,7 +889,7 @@ function createAgentActions(input: {
       const shouldStale = shouldStalePipCashForGoalChange(null, goal);
 
       if (shouldStale) {
-        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       }
 
       await recordProductEventSafely(supabase, userId, "savings_goal_created", {
@@ -906,7 +980,7 @@ function createAgentActions(input: {
       const shouldStale = shouldStalePipCashForGoalChange(existing, goal);
 
       if (shouldStale) {
-        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       }
 
       await recordProductEventSafely(supabase, userId, "savings_goal_updated", {
@@ -971,7 +1045,7 @@ function createAgentActions(input: {
       const shouldStale = shouldStalePipCashForGoalChange(existing, goal);
 
       if (shouldStale) {
-        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       }
 
       await recordProductEventSafely(
@@ -1006,7 +1080,7 @@ function createAgentActions(input: {
 
       if (treatment === "not_bill") {
         await ignoreRecurringObligationForUser(supabase, userId, merchantName);
-        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
         await recordProductEventSafely(supabase, userId, "recurring_obligation_corrected", {
           merchantName,
           treatment,
@@ -1042,7 +1116,7 @@ function createAgentActions(input: {
         expectedAmountCents: inferred.expectedAmountCents,
         expectedDay: inferred.expectedDay,
       });
-      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       await recordProductEventSafely(supabase, userId, "recurring_obligation_corrected", {
         merchantName,
         treatment,
@@ -1130,8 +1204,9 @@ function createAgentActions(input: {
       const removed = await removeInstitutionForUser(supabase, {
         userId,
         institutionId: institution.id,
+        writeSupabase: getWriteSupabase(),
       });
-      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       await recordProductEventSafely(supabase, userId, "institution_removed", {
         institutionId: removed.id,
         institutionName: removed.institution_name,
@@ -1172,6 +1247,7 @@ function createAgentActions(input: {
         const result = await runManualSync(supabase, {
           userId,
           provider,
+          writeSupabase: getWriteSupabase(),
         });
 
         return {

@@ -16,6 +16,10 @@ const restrictBetaRpcMigration = readFileSync(
   join(migrationDir, "20260606003800_restrict_beta_invite_rpcs.sql"),
   "utf8",
 );
+const restrictFinancialWritesMigration = readFileSync(
+  join(migrationDir, "20260621123000_restrict_financial_table_writes.sql"),
+  "utf8",
+);
 const rlsSmokeTest = readFileSync(join(process.cwd(), "supabase/rls_smoke_test.sql"), "utf8");
 
 describe("Supabase financial-data schema", () => {
@@ -42,14 +46,14 @@ describe("Supabase financial-data schema", () => {
   it("defines owner-scoped policies for every user-owned financial table operation used by the app", () => {
     const policyMatrix = {
       user_settings: ["select", "insert", "update", "delete"],
-      connected_institutions: ["select", "insert", "update", "delete"],
-      accounts: ["select", "insert", "update", "delete"],
+      connected_institutions: ["select"],
+      accounts: ["select"],
       account_preferences: ["select", "insert", "update", "delete"],
       savings_goals: ["select", "insert", "update", "delete"],
       recurring_obligation_rules: ["select", "insert", "update", "delete"],
-      transactions: ["select", "insert", "update", "delete"],
-      pip_cash_snapshots: ["select", "insert", "update", "delete"],
-      sync_runs: ["select", "insert", "update", "delete"],
+      transactions: ["select"],
+      pip_cash_snapshots: ["select"],
+      sync_runs: ["select"],
       missing_card_preferences: ["select", "insert", "delete"],
       product_events: ["select", "insert", "delete"],
       data_deletion_requests: ["select", "insert"],
@@ -66,6 +70,25 @@ describe("Supabase financial-data schema", () => {
         );
       });
     });
+  });
+
+  it("removes authenticated browser writes from provider-derived financial tables", () => {
+    const readOnlyTables = [
+      "connected_institutions",
+      "accounts",
+      "transactions",
+      "sync_runs",
+      "pip_cash_snapshots",
+    ];
+
+    readOnlyTables.forEach((tableName) => {
+      ["insert", "update", "delete"].forEach((operation) => {
+        expect(normalizeSql(allMigrations)).toContain(
+          normalizeSql(`revoke ${operation} on public.${tableName} from authenticated`),
+        );
+      });
+    });
+    expect(restrictFinancialWritesMigration).not.toContain("public.free_cash_snapshots");
   });
 
   it("keeps provider credentials in a private service-role-only schema", () => {
@@ -101,6 +124,20 @@ describe("Supabase financial-data schema", () => {
     expect(allMigrations).toContain("delete from public.account_preferences where user_id = current_user_id;");
     expect(allMigrations).toContain("delete from public.transactions where user_id = current_user_id;");
     expect(allMigrations).toContain("delete from public.connected_institutions where user_id = current_user_id;");
+    expect(normalizeSql(restrictFinancialWritesMigration)).toContain(
+      normalizeSql(`
+        create or replace function public.delete_current_user_financial_data()
+        returns void
+        language plpgsql
+        security definer
+      `),
+    );
+    expect(restrictFinancialWritesMigration).toContain(
+      "revoke all on function public.delete_current_user_financial_data() from public, anon;",
+    );
+    expect(restrictFinancialWritesMigration).toContain(
+      "grant execute on function public.delete_current_user_financial_data() to authenticated;",
+    );
     expect(migration).toContain(
       "institution_id uuid primary key references public.connected_institutions(id) on delete cascade",
     );
@@ -152,6 +189,83 @@ describe("Supabase financial-data schema", () => {
     expect(migration).toContain("transaction_count integer not null default 0");
     expect(migration).toContain("last_successful_sync_at timestamptz");
     expect(migration).toContain("stale_after timestamptz");
+  });
+
+  it("keeps the agent model gate service-role only", () => {
+    expect(allMigrations).toContain("create table if not exists public.agent_model_gate_windows");
+    expect(allMigrations).toContain("create table if not exists public.agent_model_gate_leases");
+    expect(allMigrations).toContain("alter table public.agent_model_gate_windows enable row level security;");
+    expect(allMigrations).toContain("alter table public.agent_model_gate_leases enable row level security;");
+    expect(allMigrations).toContain(
+      "revoke all on table public.agent_model_gate_windows from public, anon, authenticated;",
+    );
+    expect(allMigrations).toContain(
+      "revoke all on table public.agent_model_gate_leases from public, anon, authenticated;",
+    );
+    expect(allMigrations).toContain(
+      "grant execute on function public.claim_agent_model_gate(text, text, integer, integer, integer, integer, timestamptz)\nto service_role;",
+    );
+    expect(allMigrations).toContain(
+      "grant execute on function public.release_agent_model_gate(uuid, timestamptz)\nto service_role;",
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.claim_agent_model_gate(text, text, integer, integer, integer, integer, timestamptz) to authenticated"),
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.claim_agent_model_gate(text, text, integer, integer, integer, integer, timestamptz) to anon"),
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.release_agent_model_gate(uuid, timestamptz) to authenticated"),
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.release_agent_model_gate(uuid, timestamptz) to anon"),
+    );
+  });
+
+  it("keeps the agent chat purge function service-role only", () => {
+    expect(allMigrations).toContain("create or replace function public.purge_agent_chat_turns");
+    expect(normalizeSql(allMigrations)).toContain(
+      normalizeSql(`
+        create or replace function public.purge_agent_chat_turns(p_retention_days integer default 30)
+        returns integer
+        language plpgsql
+        security definer
+      `),
+    );
+    expect(allMigrations).toContain(
+      "revoke all on function public.purge_agent_chat_turns(integer) from public, anon, authenticated;",
+    );
+    expect(allMigrations).toContain(
+      "grant execute on function public.purge_agent_chat_turns(integer) to service_role;",
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.purge_agent_chat_turns(integer) to authenticated"),
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.purge_agent_chat_turns(integer) to anon"),
+    );
+  });
+
+  it("keeps account deletion saga records service-role only", () => {
+    expect(allMigrations).toContain("create type public.account_deletion_request_status as enum");
+    expect(allMigrations).toContain("create table if not exists public.account_deletion_requests");
+    expect(allMigrations).toContain("user_id uuid not null");
+    expect(allMigrations).toContain("status public.account_deletion_request_status not null default 'requested'");
+    expect(allMigrations).toContain("last_error_code text");
+    expect(allMigrations).toContain("data_deleted_at timestamptz");
+    expect(allMigrations).toContain("auth_deleted_at timestamptz");
+    expect(allMigrations).toContain("completed_at timestamptz");
+    expect(allMigrations).toContain("unique (user_id)");
+    expect(allMigrations).toContain("alter table public.account_deletion_requests enable row level security;");
+    expect(allMigrations).toContain(
+      "revoke all on table public.account_deletion_requests from public, anon, authenticated;",
+    );
+    expect(allMigrations).toContain(
+      "grant select, insert, update, delete on public.account_deletion_requests to service_role;",
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("on public.account_deletion_requests for select to authenticated"),
+    );
   });
 
   it("indexes foreign keys that beta sync and account joins use", () => {

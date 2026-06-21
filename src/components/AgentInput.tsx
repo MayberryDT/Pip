@@ -95,7 +95,7 @@ export function AgentInput({
       />
       <button
         type="submit"
-        className="focus-ring pip-composer-submit absolute bottom-2 right-2 grid h-11 w-11 place-items-center rounded-full bg-ink text-paper shadow-[0_12px_28px_rgba(43,42,39,0.16)] transition hover:bg-ink/[0.82] disabled:pointer-events-none disabled:opacity-0 max-[380px]:h-10 max-[380px]:w-10"
+        className="focus-ring pip-composer-submit absolute bottom-2 right-2 grid h-11 w-11 place-items-center rounded-full bg-ink text-paper shadow-[0_12px_28px_rgba(43,42,39,0.16)] transition hover:bg-ink/[0.82] disabled:pointer-events-none disabled:opacity-0"
         disabled={disabled || busy || !message.trim()}
         aria-label="Send"
         title="Send"

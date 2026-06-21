@@ -1,9 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
 import {
   loadLocalOperatorAgentChats,
   loadOperatorAgentChats,
 } from "@/lib/data/agent-chat-turns";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 
@@ -11,18 +11,18 @@ export async function GET(request: Request) {
   const expectedToken = process.env.PIP_OPERATOR_TOKEN;
 
   if (!expectedToken) {
-    return NextResponse.json({ error: "Operator access is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Operator access is not configured." }, { status: 503 });
   }
 
   if (!isValidOperatorRequest(request, expectedToken)) {
-    return NextResponse.json({ error: "Operator authentication required." }, { status: 401 });
+    return sensitiveJson({ error: "Operator authentication required." }, { status: 401 });
   }
 
   const filters = getAgentChatFilters(request);
 
   try {
     if (!isSupabaseConfigured()) {
-      return NextResponse.json({
+      return sensitiveJson({
         generatedAt: new Date().toISOString(),
         source: "local-dev",
         turns: await loadLocalOperatorAgentChats(filters),
@@ -31,13 +31,13 @@ export async function GET(request: Request) {
 
     const supabase = createSupabaseAdminClient();
 
-    return NextResponse.json({
+    return sensitiveJson({
       generatedAt: new Date().toISOString(),
       source: "supabase",
       turns: await loadOperatorAgentChats(supabase, filters),
     });
   } catch (error) {
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

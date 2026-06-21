@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { isPlayReviewerEmail } from "@/lib/play/reviewer";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -15,15 +15,15 @@ export async function POST(request: Request) {
   const parsed = reviewerLoginSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Enter reviewer email and password." }, { status: 400 });
+    return sensitiveJson({ error: "Enter reviewer email and password." }, { status: 400 });
   }
 
   if (!isPlayReviewerEmail(parsed.data.email)) {
-    return NextResponse.json({ error: "Reviewer access is not enabled for this account." }, { status: 403 });
+    return sensitiveJson({ error: "Reviewer access is not enabled for this account." }, { status: 403 });
   }
 
   if (!isSupabaseConfigured()) {
-    return NextResponse.json(reviewerAccessUnavailableBody(), { status: 503 });
+    return sensitiveJson(reviewerAccessUnavailableBody(), { status: 503 });
   }
 
   try {
@@ -34,17 +34,17 @@ export async function POST(request: Request) {
     });
 
     if (error) {
-      return NextResponse.json({ error: "Reviewer sign-in failed." }, { status: 401 });
+      return sensitiveJson({ error: "Reviewer sign-in failed." }, { status: 401 });
     }
 
-    return NextResponse.json({ status: "signed-in" });
+    return sensitiveJson({ status: "signed-in" });
   } catch (error) {
     if (error instanceof SupabaseConfigError) {
-      return NextResponse.json(reviewerAccessUnavailableBody(), { status: 503 });
+      return sensitiveJson(reviewerAccessUnavailableBody(), { status: 503 });
     }
 
     console.error("[reviewer-login] sign-in failed", getSafeErrorMessage(error, "Reviewer sign-in failed."));
-    return NextResponse.json(toErrorBody(), { status: 500 });
+    return sensitiveJson(toErrorBody(), { status: 500 });
   }
 }
 
