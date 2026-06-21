@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -36,6 +36,7 @@ PLAID_ENV=sandbox
     expect(output).toContain("Deployment env check failed for beta mode.");
     expect(output).toContain("- NEXT_PUBLIC_SITE_URL");
     expect(output).toContain("- SUPABASE_SERVICE_ROLE_KEY");
+    expect(output).toContain("- PIP_RATE_LIMIT_SALT");
     expect(output).toContain(
       "- OPENAI_API_KEY, OPENAI_BASE_URL, or NETLIFY_AI_GATEWAY_BASE_URL plus NETLIFY_AI_GATEWAY_KEY",
     );
@@ -52,6 +53,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
 PIP_OPERATOR_TOKEN=operator-token
 PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_RATE_LIMIT_SALT=rate-limit-salt
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=production
@@ -72,6 +74,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
 PIP_OPERATOR_TOKEN=operator-token
 PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_RATE_LIMIT_SALT=rate-limit-salt
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=production
@@ -93,6 +96,7 @@ NEXT_PUBLIC_SITE_URL=http://localhost:3000
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
 PIP_OPERATOR_TOKEN=operator-token
 PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_RATE_LIMIT_SALT=rate-limit-salt
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=production
@@ -118,6 +122,7 @@ NEXT_PUBLIC_SITE_URL=https://spendwithpip.com
 SUPABASE_SERVICE_ROLE_KEY=service-role-key
 PIP_OPERATOR_TOKEN=operator-token
 PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_RATE_LIMIT_SALT=rate-limit-salt
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=production
@@ -131,6 +136,12 @@ OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
     expect(result.warnings).toContain(
       "PLAID_REDIRECT_URI does not share the NEXT_PUBLIC_SITE_URL origin.",
     );
+  });
+
+  it("documents the production rate-limit salt in local and Netlify setup files", () => {
+    expect(readFileSync(".env.example", "utf8")).toContain("PIP_RATE_LIMIT_SALT=");
+    expect(readFileSync("README.md", "utf8")).toContain("PIP_RATE_LIMIT_SALT");
+    expect(readFileSync("netlify.toml", "utf8")).toContain("PIP_RATE_LIMIT_SALT");
   });
 });
 

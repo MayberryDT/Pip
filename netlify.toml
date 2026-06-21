@@ -4,6 +4,7 @@
 
 [build.environment]
   NODE_VERSION = "24"
+  # Set PIP_RATE_LIMIT_SALT in Netlify environment variables; do not commit the real salt.
 
 [[headers]]
   for = "/*"

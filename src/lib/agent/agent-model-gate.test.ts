@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  __agentModelGateTestHooks,
   buildAgentModelGatePlan,
   claimAgentModelGate,
   getAgentModelGateScope,
@@ -7,6 +8,7 @@ import {
 } from "@/lib/agent/agent-model-gate";
 
 afterEach(() => {
+  __agentModelGateTestHooks.resetLocalModelGate();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
@@ -44,7 +46,7 @@ describe("agent model gate", () => {
     expect(scope).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  it("uses client IP and user agent for guest scope hashes", () => {
+  it("uses client IP but ignores user agent for guest scope hashes", () => {
     const base = {
       userId: null,
       salt: "unit-test-salt",
@@ -67,7 +69,35 @@ describe("agent model gate", () => {
     });
 
     expect(first).not.toBe(second);
-    expect(first).not.toBe(third);
+    expect(first).toBe(third);
+  });
+
+  it("uses an in-memory limiter outside production when no Supabase RPC client is provided", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    const plan = {
+      minuteLimit: 1,
+      dayLimit: 10,
+      globalConcurrencyLimit: 1,
+      leaseTtlSeconds: 60,
+    };
+
+    await expect(claimAgentModelGate({
+      scopeHash: "local-scope",
+      requestKind: "chat",
+      plan,
+    })).resolves.toMatchObject({
+      outcome: "allowed",
+    });
+
+    await expect(claimAgentModelGate({
+      scopeHash: "local-scope",
+      requestKind: "chat",
+      plan,
+    })).resolves.toEqual({
+      outcome: "denied",
+      reason: "minute_limit",
+      retryAfterSeconds: expect.any(Number),
+    });
   });
 
   it("requires an explicit salt in production", () => {

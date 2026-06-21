@@ -151,8 +151,9 @@ describe("POST /api/account/delete", () => {
     ]);
   });
 
-  it("returns a failure when browser sign-out fails after deletion completes", async () => {
+  it("treats browser sign-out failure as nonfatal after deletion completes", async () => {
     enableSupabaseEnv();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const supabase = createServerSupabase(
       { id: "user-1" },
       {
@@ -164,18 +165,26 @@ describe("POST /api/account/delete", () => {
     routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
     routeMocks.deleteUserFinancialDataByUserId.mockResolvedValue(undefined);
 
-    const response = await POST(jsonRequest({ confirmation: "DELETE" }));
+    try {
+      const response = await POST(jsonRequest({ confirmation: "DELETE" }));
 
-    expect(response.status).toBe(500);
-    expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith("user-1");
-    expect(supabase.auth.signOut).toHaveBeenCalled();
-    expect(admin._operations).toContainEqual([
-      "updateRequest",
-      "user-1",
-      expect.objectContaining({
-        status: "completed",
-      }),
-    ]);
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({
+        status: "deleted",
+      });
+      expect(admin.auth.admin.deleteUser).toHaveBeenCalledWith("user-1");
+      expect(supabase.auth.signOut).toHaveBeenCalled();
+      expect(admin._operations).toContainEqual([
+        "updateRequest",
+        "user-1",
+        expect.objectContaining({
+          status: "completed",
+        }),
+      ]);
+      expect(warn).toHaveBeenCalledWith("[account-delete] post-deletion sign-out failed", "sign-out failed");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("does not delete auth or sign out when app-data deletion fails", async () => {

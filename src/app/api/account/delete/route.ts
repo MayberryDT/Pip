@@ -75,7 +75,10 @@ export async function POST(request: Request) {
     const signOutResult = await supabase.auth.signOut();
 
     if (signOutResult.error) {
-      throw signOutResult.error;
+      console.warn(
+        "[account-delete] post-deletion sign-out failed",
+        getSafeErrorMessage(signOutResult.error, "Sign-out failed."),
+      );
     }
 
     return sensitiveJson({ status: "deleted" });

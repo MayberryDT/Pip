@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 export type AgentModelGateRequestKind = "chat" | "prompt_chips" | "opening_bubble";
 export type AgentModelGateOnboardingStatus = "guest" | "needs-consent" | "ready";
@@ -42,6 +43,22 @@ type AgentModelGateRpcRow = {
   retry_after_seconds: number | null;
   lease_id: string | null;
 };
+type LocalWindow = {
+  minuteStart: number;
+  minuteCount: number;
+  dayStart: number;
+  dayCount: number;
+};
+type LocalLease = {
+  expiresAt: number;
+};
+
+const localWindowMs = 60_000;
+const localDayMs = 86_400_000;
+const localLeasePrefix = "local-agent-model-gate-";
+const localWindows = new Map<string, LocalWindow>();
+const localLeases = new Map<string, LocalLease>();
+let localLeaseCounter = 0;
 
 export function buildAgentModelGatePlan(input: {
   onboardingStatus: AgentModelGateOnboardingStatus;
@@ -72,9 +89,7 @@ export function getAgentModelGateScope(input: {
     throw new Error("PIP_RATE_LIMIT_SALT is required in production.");
   }
 
-  const rawScope = input.userId
-    ? `user:${input.userId}`
-    : `guest:${input.clientIp ?? "unknown"}:${input.userAgent ?? "unknown"}`;
+  const rawScope = input.userId ? `user:${input.userId}` : `guest:${input.clientIp ?? "unknown"}`;
   const salt = input.salt || "pip-agent-model-gate";
 
   return createHash("sha256").update(`${salt}:${rawScope}`).digest("hex");
@@ -92,6 +107,10 @@ export async function claimAgentModelGate(input: {
   requestKind: AgentModelGateRequestKind;
   plan: AgentModelGatePlan;
 }): Promise<AgentModelGateClaim> {
+  if (!input.supabase && shouldUseLocalModelGate()) {
+    return claimLocalModelGate(input);
+  }
+
   try {
     const supabase = input.supabase ?? (createSupabaseAdminClient() as unknown as AgentModelGateRpcClient);
     const { data, error } = await supabase.rpc("claim_agent_model_gate", {
@@ -143,6 +162,15 @@ export async function releaseAgentModelGate(
     return;
   }
 
+  if (leaseId.startsWith(localLeasePrefix)) {
+    localLeases.delete(leaseId);
+    return;
+  }
+
+  if (!supabase && shouldUseLocalModelGate()) {
+    return;
+  }
+
   try {
     const client = supabase ?? (createSupabaseAdminClient() as unknown as AgentModelGateRpcClient);
     const { error } = await client.rpc("release_agent_model_gate", {
@@ -155,6 +183,100 @@ export async function releaseAgentModelGate(
   } catch (error) {
     console.warn("Agent model gate lease release failed.", error);
   }
+}
+
+function shouldUseLocalModelGate(): boolean {
+  return process.env.NODE_ENV !== "production" || !isSupabaseConfigured();
+}
+
+function claimLocalModelGate(input: {
+  scopeHash: string;
+  requestKind: AgentModelGateRequestKind;
+  plan: AgentModelGatePlan;
+}): AgentModelGateClaim {
+  const now = Date.now();
+  pruneLocalLeases(now);
+  const windowKey = `${input.requestKind}:${input.scopeHash}`;
+  const window = getLocalWindow(windowKey, now);
+
+  if (window.minuteCount >= input.plan.minuteLimit) {
+    return {
+      outcome: "denied",
+      reason: "minute_limit",
+      retryAfterSeconds: Math.max(1, Math.ceil((window.minuteStart + localWindowMs - now) / 1000)),
+    };
+  }
+
+  if (window.dayCount >= input.plan.dayLimit) {
+    return {
+      outcome: "denied",
+      reason: "day_limit",
+      retryAfterSeconds: Math.max(1, Math.ceil((window.dayStart + localDayMs - now) / 1000)),
+    };
+  }
+
+  if (localLeases.size >= input.plan.globalConcurrencyLimit) {
+    return {
+      outcome: "denied",
+      reason: "global_concurrency",
+      retryAfterSeconds: input.plan.leaseTtlSeconds,
+    };
+  }
+
+  window.minuteCount += 1;
+  window.dayCount += 1;
+  const leaseId = `${localLeasePrefix}${++localLeaseCounter}`;
+  localLeases.set(leaseId, {
+    expiresAt: now + input.plan.leaseTtlSeconds * 1000,
+  });
+
+  return {
+    outcome: "allowed",
+    leaseId,
+  };
+}
+
+function getLocalWindow(key: string, now: number): LocalWindow {
+  const minuteStart = Math.floor(now / localWindowMs) * localWindowMs;
+  const dayStart = Math.floor(now / localDayMs) * localDayMs;
+  const existing = localWindows.get(key);
+
+  if (!existing) {
+    const created = {
+      minuteStart,
+      minuteCount: 0,
+      dayStart,
+      dayCount: 0,
+    };
+    localWindows.set(key, created);
+    return created;
+  }
+
+  if (existing.minuteStart !== minuteStart) {
+    existing.minuteStart = minuteStart;
+    existing.minuteCount = 0;
+  }
+
+  if (existing.dayStart !== dayStart) {
+    existing.dayStart = dayStart;
+    existing.dayCount = 0;
+  }
+
+  return existing;
+}
+
+function pruneLocalLeases(now: number) {
+  for (const [leaseId, lease] of localLeases) {
+    if (lease.expiresAt <= now) {
+      localLeases.delete(leaseId);
+    }
+  }
+}
+
+function resetLocalModelGate() {
+  localWindows.clear();
+  localLeases.clear();
+  localLeaseCounter = 0;
 }
 
 export function toAgentModelGateResponse(claim: Exclude<AgentModelGateClaim, { outcome: "allowed" }>) {
@@ -178,3 +300,7 @@ export function toAgentModelGateResponse(claim: Exclude<AgentModelGateClaim, { o
 function getSafeGateErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown model gate error.";
 }
+
+export const __agentModelGateTestHooks = {
+  resetLocalModelGate,
+};

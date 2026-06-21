@@ -88,7 +88,10 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 PIP_OPERATOR_TOKEN=
+PIP_RATE_LIMIT_SALT=
 ```
+
+`PIP_RATE_LIMIT_SALT` is required in production. Set a long random value in Netlify environment variables; do not commit the real salt.
 
 The first database migration lives at `supabase/migrations/20260605000000_free_cash_foundation.sql`. It creates user-scoped financial tables, RLS policies, a private provider-credentials table, sync/event tables, and the authenticated delete-data function. Its snapshot table uses a historical name that is renamed to `pip_cash_snapshots` by a later rebrand migration.
 
