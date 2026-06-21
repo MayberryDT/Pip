@@ -99,7 +99,7 @@ export default async function ArticlePage({ params }: PageProps) {
                   </span>
                 ))}
               </div>
-              <SwissTitle className="mt-6 max-w-5xl" level={1} size="page">
+              <SwissTitle className="article-hero-title mt-6 max-w-5xl" level={1} size="page">
                 {article.title}
               </SwissTitle>
               <SwissText className="mt-6 text-lg leading-8">{article.description}</SwissText>
@@ -110,12 +110,12 @@ export default async function ArticlePage({ params }: PageProps) {
                 <span>{article.readingTimeMinutes} min read</span>
               </div>
             </div>
-            <div className="col-span-12 lg:col-span-4 lg:col-start-9">
+            <div className="article-hero-media col-span-12 lg:col-span-5 lg:col-start-8">
               <SwissFigure
                 asset={getArticleVisual(article)}
                 className="article-hero-figure"
                 priority
-                variant="poster"
+                variant="wide"
               />
             </div>
             <div className="col-span-12 lg:col-span-3">

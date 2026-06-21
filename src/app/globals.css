@@ -3508,6 +3508,7 @@ button {
 }
 
 .article-hero-figure {
+  width: 100%;
   min-height: auto;
   aspect-ratio: 16 / 9;
   background: #fffdf8;
@@ -3516,6 +3517,24 @@ button {
 .article-hero-figure img {
   height: 100%;
   object-fit: contain;
+}
+
+.article-hero-media {
+  align-self: center;
+}
+
+@media (max-width: 767px) {
+  .article-hero-title {
+    max-width: none;
+    font-size: 3rem;
+    line-height: 0.98;
+  }
+}
+
+@media (max-width: 380px) {
+  .article-hero-title {
+    font-size: 2.75rem;
+  }
 }
 
 @media (max-width: 340px) {
