@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import manifest from "@/app/manifest";
 
@@ -50,11 +51,37 @@ describe("PWA manifest", () => {
   });
 
   it("ships generated PNG app icons at install-required sizes", () => {
-    expect(readPngInfo("public/icon-192.png")).toEqual({ width: 192, height: 192, colorType: 2 });
-    expect(readPngInfo("public/icon-512.png")).toEqual({ width: 512, height: 512, colorType: 2 });
-    expect(readPngInfo("public/icon-maskable-192.png")).toEqual({ width: 192, height: 192, colorType: 2 });
-    expect(readPngInfo("public/icon-maskable-512.png")).toEqual({ width: 512, height: 512, colorType: 2 });
-    expect(readPngInfo("public/apple-touch-icon.png")).toEqual({ width: 180, height: 180, colorType: 2 });
+    expect(readPngInfo("public/icon-192.png")).toEqual({ width: 192, height: 192, colorType: 6 });
+    expect(readPngInfo("public/icon-512.png")).toEqual({ width: 512, height: 512, colorType: 6 });
+    expect(readPngInfo("public/icon-maskable-192.png")).toEqual({ width: 192, height: 192, colorType: 6 });
+    expect(readPngInfo("public/icon-maskable-512.png")).toEqual({ width: 512, height: 512, colorType: 6 });
+    expect(readPngInfo("public/apple-touch-icon.png")).toEqual({ width: 180, height: 180, colorType: 6 });
+  });
+
+  it("keeps icon corners transparent so favicons and phone shortcuts render softly", async () => {
+    await expectTransparentCorners("public/icon.png");
+    await expectTransparentCorners("public/icon-192.png");
+    await expectTransparentCorners("public/icon-512.png");
+    await expectTransparentCorners("public/apple-touch-icon.png");
+  });
+
+  it("keeps native Android launcher corners transparent", async () => {
+    const adaptiveIconSource = readFileSync(
+      join(process.cwd(), "mobile/android-webview/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml"),
+      "utf8",
+    );
+
+    expect(adaptiveIconSource).not.toContain("@android:color/white");
+    await expectTransparentCorners("mobile/android-webview/app/src/main/res/mipmap-mdpi/ic_launcher.png");
+    await expectTransparentCorners("mobile/android-webview/app/src/main/res/mipmap-hdpi/ic_launcher.png");
+    await expectTransparentCorners("mobile/android-webview/app/src/main/res/mipmap-xhdpi/ic_launcher.png");
+    await expectTransparentCorners("mobile/android-webview/app/src/main/res/mipmap-xxhdpi/ic_launcher.png");
+    await expectTransparentCorners("mobile/android-webview/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png");
+    await expectTransparentCorners("mobile/android-webview/app/src/main/res/mipmap-mdpi/ic_maskable.png");
+    await expectTransparentCorners("mobile/android-webview/app/src/main/res/mipmap-hdpi/ic_maskable.png");
+    await expectTransparentCorners("mobile/android-webview/app/src/main/res/mipmap-xhdpi/ic_maskable.png");
+    await expectTransparentCorners("mobile/android-webview/app/src/main/res/mipmap-xxhdpi/ic_maskable.png");
+    await expectTransparentCorners("mobile/android-webview/app/src/main/res/mipmap-xxxhdpi/ic_maskable.png");
   });
 
   it("points layout metadata at the generated PNG icons", () => {
@@ -76,7 +103,7 @@ describe("PWA manifest", () => {
 
     const source = readFileSync(serviceWorkerPath, "utf8");
 
-    expect(source).toContain('const STATIC_CACHE_NAME = "pip-static-v7"');
+    expect(source).toContain('const STATIC_CACHE_NAME = "pip-static-v8"');
     expect(source).toContain("/offline.html");
     expect(source).toContain("/brand/pip-logo.png");
     expect(source).toContain("/brand/pip-character/v001/avatar/normal.png");
@@ -106,4 +133,22 @@ function readPngInfo(path: string): { width: number; height: number; colorType: 
     height: buffer.readUInt32BE(20),
     colorType: buffer[25],
   };
+}
+
+async function expectTransparentCorners(path: string): Promise<void> {
+  const { data, info } = await sharp(join(process.cwd(), path))
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const cornerIndexes = [
+    0,
+    (info.width - 1) * 4,
+    (info.height - 1) * info.width * 4,
+    (info.height * info.width - 1) * 4,
+  ];
+
+  for (const index of cornerIndexes) {
+    expect(data[index + 3]).toBe(0);
+  }
 }

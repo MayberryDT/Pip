@@ -1,4 +1,4 @@
-const STATIC_CACHE_NAME = "pip-static-v7";
+const STATIC_CACHE_NAME = "pip-static-v8";
 
 const APP_SHELL_ASSETS = [
   "/offline.html",
