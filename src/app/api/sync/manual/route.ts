@@ -13,6 +13,7 @@ import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { ProviderUnavailableError } from "@/lib/providers/provider-registry";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 const requestSchema = z.object({
@@ -53,6 +54,7 @@ export async function POST(request: Request) {
     }
 
     const provider = parsed.data.provider as FinancialProviderName;
+    const writeSupabase = createSupabaseAdminClient();
     const bypassRateLimit = await shouldBypassRateLimitForRepair(supabase, {
       userId: user.id,
       provider,
@@ -63,6 +65,7 @@ export async function POST(request: Request) {
         ? await runManualSync(supabase, {
             userId: user.id,
             provider,
+            writeSupabase,
             ...(bypassRateLimit ? { bypassRateLimit: true } : {}),
           })
         : await runNonManualSync(supabase, {
@@ -70,6 +73,7 @@ export async function POST(request: Request) {
             provider,
             reason: parsed.data.reason,
             bypassRateLimit,
+            writeSupabase,
           });
 
     return NextResponse.json(result);
@@ -140,6 +144,7 @@ async function runNonManualSync(
     provider: FinancialProviderName;
     reason: "repair" | "account_selection" | "app_open";
     bypassRateLimit: boolean;
+    writeSupabase: Awaited<ReturnType<typeof createSupabaseServerClient>>;
   },
 ) {
   if (!input.bypassRateLimit) {
@@ -154,6 +159,7 @@ async function runNonManualSync(
     userId: input.userId,
     provider: input.provider,
     reason: input.reason,
+    writeSupabase: input.writeSupabase,
   });
 }
 

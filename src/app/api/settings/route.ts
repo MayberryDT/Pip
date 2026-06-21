@@ -6,6 +6,7 @@ import {
 } from "@/lib/data/financial-repository";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -87,7 +88,7 @@ export async function PUT(request: Request) {
     }
 
     const settings = await upsertUserSettings(supabase, user.id, parsed.data);
-    await markPipCashSnapshotsStaleForUser(supabase, user.id);
+    await markPipCashSnapshotsStaleForUser(supabase, user.id, createSupabaseAdminClient());
     await recordProductEventSafely(supabase, user.id, "settings_updated", {
       protectedSavingsMonthlyCents: parsed.data.protectedSavingsMonthlyCents,
     });

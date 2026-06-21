@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SavingsGoal } from "@/lib/savings-goals/types";
 
 const routeMocks = vi.hoisted(() => ({
+  createSupabaseAdminClient: vi.fn(),
   createSupabaseServerClient: vi.fn(),
   isSavingsGoalsEnabled: vi.fn(),
   loadSavingsGoalForUser: vi.fn(),
@@ -13,6 +14,10 @@ const routeMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: routeMocks.createSupabaseServerClient,
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: routeMocks.createSupabaseAdminClient,
 }));
 
 vi.mock("@/lib/savings-goals/feature-flags", () => ({
@@ -81,7 +86,9 @@ describe("/api/savings-goals/[goalId]", () => {
     enableSupabaseEnv();
     routeMocks.isSavingsGoalsEnabled.mockReturnValue(true);
     const supabase = createSupabaseClient({ id: "user-1" });
+    const admin = { from: vi.fn() };
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
     routeMocks.loadSavingsGoalForUser.mockResolvedValue(goal({
       includeInSpendableCash: false,
       monthlyContributionCents: 30000,
@@ -96,7 +103,7 @@ describe("/api/savings-goals/[goalId]", () => {
     }), routeContext());
 
     expect(response.status).toBe(200);
-    expect(routeMocks.markPipCashSnapshotsStaleForUser).toHaveBeenCalledWith(supabase, "user-1");
+    expect(routeMocks.markPipCashSnapshotsStaleForUser).toHaveBeenCalledWith(supabase, "user-1", admin);
     expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,
       "user-1",
@@ -109,7 +116,9 @@ describe("/api/savings-goals/[goalId]", () => {
     enableSupabaseEnv();
     routeMocks.isSavingsGoalsEnabled.mockReturnValue(true);
     const supabase = createSupabaseClient({ id: "user-1" });
+    const admin = { from: vi.fn() };
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
     routeMocks.loadSavingsGoalForUser.mockResolvedValue(goal({
       includeInSpendableCash: false,
       monthlyContributionCents: 40000,
@@ -122,7 +131,7 @@ describe("/api/savings-goals/[goalId]", () => {
     const response = await DELETE(new Request("http://localhost/api/savings-goals/goal-1"), routeContext());
 
     expect(response.status).toBe(200);
-    expect(routeMocks.markPipCashSnapshotsStaleForUser).toHaveBeenCalledWith(supabase, "user-1");
+    expect(routeMocks.markPipCashSnapshotsStaleForUser).toHaveBeenCalledWith(supabase, "user-1", admin);
     expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,
       "user-1",

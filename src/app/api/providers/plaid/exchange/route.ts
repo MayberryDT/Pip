@@ -127,6 +127,7 @@ async function upsertPlaidInstitution(
     const { data, error } = await supabase
       .from("connected_institutions")
       .update(payload)
+      .eq("user_id", input.userId)
       .eq("id", existing.id)
       .select("*")
       .single();

@@ -9,6 +9,7 @@ import {
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { isSavingsGoalsEnabled } from "@/lib/savings-goals/feature-flags";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -84,7 +85,7 @@ export async function POST(request: Request) {
 
     const goal = await createSavingsGoalForUser(supabase, user.id, parsed.data);
     if (shouldStalePipCashForGoalChange(null, goal)) {
-      await markPipCashSnapshotsStaleForUser(supabase, user.id);
+      await markPipCashSnapshotsStaleForUser(supabase, user.id, createSupabaseAdminClient());
     }
 
     await recordProductEventSafely(supabase, user.id, "savings_goal_created", {

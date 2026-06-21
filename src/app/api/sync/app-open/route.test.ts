@@ -5,6 +5,7 @@ import { POST } from "@/app/api/sync/app-open/route";
 import type { SyncStatus } from "@/lib/data/sync-status";
 
 const routeMocks = vi.hoisted(() => ({
+  createSupabaseAdminClient: vi.fn(),
   createSupabaseServerClient: vi.fn(),
   loadPendingPipSyncJobsForUser: vi.fn(),
   loadSyncStatusForUser: vi.fn(),
@@ -15,6 +16,10 @@ const routeMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: routeMocks.createSupabaseServerClient,
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: routeMocks.createSupabaseAdminClient,
 }));
 
 vi.mock("@/lib/data/sync-jobs", () => ({
@@ -39,6 +44,7 @@ vi.mock("@/lib/data/manual-sync", () => ({
 
 beforeEach(() => {
   routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(false);
+  routeMocks.createSupabaseAdminClient.mockReturnValue(createSupabaseAdminClient());
 });
 
 afterEach(() => {
@@ -160,6 +166,9 @@ describe("POST /api/sync/app-open", () => {
       provider: "plaid",
       reason: "app_open",
       now: expect.any(Date),
+      writeSupabase: expect.objectContaining({
+        kind: "admin",
+      }),
     });
   });
 
@@ -378,6 +387,7 @@ function enableSupabaseEnv() {
 
 function createSupabaseClient(user: { id: string } | null) {
   return {
+    kind: "session",
     auth: {
       getUser: vi.fn().mockResolvedValue({
         data: {
@@ -386,6 +396,12 @@ function createSupabaseClient(user: { id: string } | null) {
         error: null,
       }),
     },
+  };
+}
+
+function createSupabaseAdminClient() {
+  return {
+    kind: "admin",
   };
 }
 

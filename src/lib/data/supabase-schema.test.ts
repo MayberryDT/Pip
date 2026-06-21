@@ -16,6 +16,10 @@ const restrictBetaRpcMigration = readFileSync(
   join(migrationDir, "20260606003800_restrict_beta_invite_rpcs.sql"),
   "utf8",
 );
+const restrictFinancialWritesMigration = readFileSync(
+  join(migrationDir, "20260621123000_restrict_financial_table_writes.sql"),
+  "utf8",
+);
 const rlsSmokeTest = readFileSync(join(process.cwd(), "supabase/rls_smoke_test.sql"), "utf8");
 
 describe("Supabase financial-data schema", () => {
@@ -42,14 +46,14 @@ describe("Supabase financial-data schema", () => {
   it("defines owner-scoped policies for every user-owned financial table operation used by the app", () => {
     const policyMatrix = {
       user_settings: ["select", "insert", "update", "delete"],
-      connected_institutions: ["select", "insert", "update", "delete"],
-      accounts: ["select", "insert", "update", "delete"],
+      connected_institutions: ["select"],
+      accounts: ["select"],
       account_preferences: ["select", "insert", "update", "delete"],
       savings_goals: ["select", "insert", "update", "delete"],
       recurring_obligation_rules: ["select", "insert", "update", "delete"],
-      transactions: ["select", "insert", "update", "delete"],
-      pip_cash_snapshots: ["select", "insert", "update", "delete"],
-      sync_runs: ["select", "insert", "update", "delete"],
+      transactions: ["select"],
+      pip_cash_snapshots: ["select"],
+      sync_runs: ["select"],
       missing_card_preferences: ["select", "insert", "delete"],
       product_events: ["select", "insert", "delete"],
       data_deletion_requests: ["select", "insert"],
@@ -66,6 +70,25 @@ describe("Supabase financial-data schema", () => {
         );
       });
     });
+  });
+
+  it("removes authenticated browser writes from provider-derived financial tables", () => {
+    const readOnlyTables = [
+      "connected_institutions",
+      "accounts",
+      "transactions",
+      "sync_runs",
+      "pip_cash_snapshots",
+    ];
+
+    readOnlyTables.forEach((tableName) => {
+      ["insert", "update", "delete"].forEach((operation) => {
+        expect(normalizeSql(allMigrations)).toContain(
+          normalizeSql(`revoke ${operation} on public.${tableName} from authenticated`),
+        );
+      });
+    });
+    expect(restrictFinancialWritesMigration).not.toContain("public.free_cash_snapshots");
   });
 
   it("keeps provider credentials in a private service-role-only schema", () => {
@@ -101,6 +124,20 @@ describe("Supabase financial-data schema", () => {
     expect(allMigrations).toContain("delete from public.account_preferences where user_id = current_user_id;");
     expect(allMigrations).toContain("delete from public.transactions where user_id = current_user_id;");
     expect(allMigrations).toContain("delete from public.connected_institutions where user_id = current_user_id;");
+    expect(normalizeSql(restrictFinancialWritesMigration)).toContain(
+      normalizeSql(`
+        create or replace function public.delete_current_user_financial_data()
+        returns void
+        language plpgsql
+        security definer
+      `),
+    );
+    expect(restrictFinancialWritesMigration).toContain(
+      "revoke all on function public.delete_current_user_financial_data() from public, anon;",
+    );
+    expect(restrictFinancialWritesMigration).toContain(
+      "grant execute on function public.delete_current_user_financial_data() to authenticated;",
+    );
     expect(migration).toContain(
       "institution_id uuid primary key references public.connected_institutions(id) on delete cascade",
     );

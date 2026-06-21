@@ -75,6 +75,7 @@ import {
 } from "@/lib/providers/provider-registry";
 import { getSafeErrorMessage, sanitizeSensitiveText } from "@/lib/security/error-messages";
 import { getClientPipPlatform } from "@/lib/platform/android-shell";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
@@ -656,6 +657,12 @@ function createAgentActions(input: {
   onboardingStatus: PipAgentOnboardingState["status"];
   syncStatus: SyncStatus | null;
 }): PipAgentActions {
+  let writeSupabase: SupabaseClient<Database> | null = null;
+  const getWriteSupabase = () => {
+    writeSupabase ??= createSupabaseAdminClient();
+    return writeSupabase;
+  };
+
   return {
     async saveProtectedSavings({ amountCents }) {
       const { supabase, userId } = input.eventContext;
@@ -676,7 +683,7 @@ function createAgentActions(input: {
         await upsertUserSettings(supabase, userId, {
           protectedSavingsMonthlyCents: amountCents,
         });
-        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       }
 
       await recordProductEventSafely(supabase, userId, "settings_updated", {
@@ -814,7 +821,7 @@ function createAgentActions(input: {
         accountId: resolved.accountId,
         includeInPipCash,
       });
-      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       await recordProductEventSafely(supabase, userId, "account_inclusion_updated", {
         accountId: resolved.accountId,
         accountKind: account.kind,
@@ -852,7 +859,7 @@ function createAgentActions(input: {
         accountId: resolved.accountId,
         isProtectedSavings,
       });
-      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       await recordProductEventSafely(supabase, userId, "account_protected_savings_updated", {
         accountId: resolved.accountId,
         accountKind: account.kind,
@@ -892,7 +899,7 @@ function createAgentActions(input: {
       const shouldStale = shouldStalePipCashForGoalChange(null, goal);
 
       if (shouldStale) {
-        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       }
 
       await recordProductEventSafely(supabase, userId, "savings_goal_created", {
@@ -983,7 +990,7 @@ function createAgentActions(input: {
       const shouldStale = shouldStalePipCashForGoalChange(existing, goal);
 
       if (shouldStale) {
-        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       }
 
       await recordProductEventSafely(supabase, userId, "savings_goal_updated", {
@@ -1048,7 +1055,7 @@ function createAgentActions(input: {
       const shouldStale = shouldStalePipCashForGoalChange(existing, goal);
 
       if (shouldStale) {
-        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       }
 
       await recordProductEventSafely(
@@ -1083,7 +1090,7 @@ function createAgentActions(input: {
 
       if (treatment === "not_bill") {
         await ignoreRecurringObligationForUser(supabase, userId, merchantName);
-        await markPipCashSnapshotsStaleForUser(supabase, userId);
+        await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
         await recordProductEventSafely(supabase, userId, "recurring_obligation_corrected", {
           merchantName,
           treatment,
@@ -1119,7 +1126,7 @@ function createAgentActions(input: {
         expectedAmountCents: inferred.expectedAmountCents,
         expectedDay: inferred.expectedDay,
       });
-      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       await recordProductEventSafely(supabase, userId, "recurring_obligation_corrected", {
         merchantName,
         treatment,
@@ -1207,8 +1214,9 @@ function createAgentActions(input: {
       const removed = await removeInstitutionForUser(supabase, {
         userId,
         institutionId: institution.id,
+        writeSupabase: getWriteSupabase(),
       });
-      await markPipCashSnapshotsStaleForUser(supabase, userId);
+      await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       await recordProductEventSafely(supabase, userId, "institution_removed", {
         institutionId: removed.id,
         institutionName: removed.institution_name,
@@ -1249,6 +1257,7 @@ function createAgentActions(input: {
         const result = await runManualSync(supabase, {
           userId,
           provider,
+          writeSupabase: getWriteSupabase(),
         });
 
         return {

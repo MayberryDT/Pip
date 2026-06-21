@@ -9,6 +9,7 @@ import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { ProviderUnavailableError } from "@/lib/providers/provider-registry";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST() {
@@ -62,11 +63,13 @@ export async function POST() {
     }
 
     try {
+      const writeSupabase = createSupabaseAdminClient();
       const result = await runProviderSync(supabase, {
         userId: user.id,
         provider: decision.provider,
         reason: "app_open",
         now,
+        writeSupabase,
       });
 
       return NextResponse.json({

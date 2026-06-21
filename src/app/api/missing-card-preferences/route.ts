@@ -3,6 +3,7 @@ import { z } from "zod";
 import { markPipCashSnapshotsStaleForUser } from "@/lib/data/financial-repository";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -55,7 +56,7 @@ export async function POST(request: Request) {
         throw insertError;
       }
 
-      await markPipCashSnapshotsStaleForUser(supabase, user.id);
+      await markPipCashSnapshotsStaleForUser(supabase, user.id, createSupabaseAdminClient());
     }
 
     await recordProductEventSafely(supabase, user.id, "missing_card_nudge_suppressed", {

@@ -3,6 +3,7 @@ import type { AgentResponse } from "@/lib/agent/card-types";
 import { fakeSnapshot } from "@/lib/fake-data";
 
 const routeMocks = vi.hoisted(() => ({
+  createSupabaseAdminClient: vi.fn(),
   createSupabaseServerClient: vi.fn(),
   getFinancialDataProvider: vi.fn(),
   getCurrentFinancialSnapshot: vi.fn(),
@@ -18,6 +19,10 @@ const routeMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: routeMocks.createSupabaseServerClient,
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: routeMocks.createSupabaseAdminClient,
 }));
 
 vi.mock("@/lib/data/current-snapshot", async (importOriginal) => {

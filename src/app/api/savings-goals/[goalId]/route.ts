@@ -10,6 +10,7 @@ import {
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { isSavingsGoalsEnabled } from "@/lib/savings-goals/feature-flags";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import {
@@ -64,7 +65,7 @@ export async function PATCH(request: Request, context: RouteContext) {
 
     const goal = await updateSavingsGoalForUser(supabase, user.id, goalId, parsed.data);
     if (shouldStalePipCashForGoalChange(existing, goal)) {
-      await markPipCashSnapshotsStaleForUser(supabase, user.id);
+      await markPipCashSnapshotsStaleForUser(supabase, user.id, createSupabaseAdminClient());
     }
 
     await recordProductEventSafely(supabase, user.id, "savings_goal_updated", {
@@ -132,7 +133,7 @@ export async function DELETE(_request: Request, context: RouteContext) {
 
     const goal = await archiveSavingsGoalForUser(supabase, user.id, goalId);
     if (shouldStalePipCashForGoalArchive(existing)) {
-      await markPipCashSnapshotsStaleForUser(supabase, user.id);
+      await markPipCashSnapshotsStaleForUser(supabase, user.id, createSupabaseAdminClient());
     }
 
     await recordProductEventSafely(supabase, user.id, "savings_goal_archived", {

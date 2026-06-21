@@ -154,6 +154,44 @@ describe("POST /api/providers/teller/enrollment", () => {
     expect(response.headers.get("set-cookie")).toContain("pip_teller_nonce=");
   });
 
+  it("scopes existing Teller institution admin updates by user id", async () => {
+    enableSupabaseEnv();
+    const admin = createAdminSupabase({
+      existingInstitution: {
+        id: "institution-1",
+        user_id: "user-1",
+        provider: "teller",
+        institution_name: "Northstar Bank",
+        status: "failed",
+        error_code: "provider-token-decrypt-failed",
+        error_message: "Reconnect required.",
+      },
+    });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createServerSupabase({ id: "user-1" }));
+    routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
+    routeMocks.getTellerConfig.mockReturnValue({
+      environment: "sandbox",
+    });
+    routeMocks.storeTellerCredential.mockResolvedValue(undefined);
+    routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
+
+    const response = await POST(
+      jsonRequest(validEnrollmentBody({ nonce: "nonce-123" }), {
+        cookie: "pip_teller_nonce=nonce-123",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(admin.__updates).toEqual([
+      expect.objectContaining({
+        conditions: [
+          ["user_id", "user-1"],
+          ["id", "institution-1"],
+        ],
+      }),
+    ]);
+  });
+
   it("records a failed Teller connection event when credential storage fails", async () => {
     enableSupabaseEnv();
     const admin = createAdminSupabase();
@@ -249,8 +287,15 @@ function createServerSupabase(user: { id: string } | null) {
   };
 }
 
-function createAdminSupabase() {
+function createAdminSupabase(input: {
+  existingInstitution?: Record<string, unknown>;
+} = {}) {
+  const updates: Array<{
+    payload: Record<string, unknown>;
+    conditions: Array<[string, unknown]>;
+  }> = [];
   const admin = {
+    __updates: updates,
     from: vi.fn((tableName: string) => {
       expect(tableName).toBe("connected_institutions");
 
@@ -260,7 +305,7 @@ function createAdminSupabase() {
             eq: vi.fn(() => ({
               eq: vi.fn(() => ({
                 maybeSingle: vi.fn().mockResolvedValue({
-                  data: null,
+                  data: input.existingInstitution ?? null,
                   error: null,
                 }),
               })),
@@ -286,6 +331,32 @@ function createAdminSupabase() {
               }),
             })),
           };
+        }),
+        update: vi.fn((payload: Record<string, unknown>) => {
+          const conditions: Array<[string, unknown]> = [];
+          const query = {
+            eq: vi.fn((column: string, value: unknown) => {
+              conditions.push([column, value]);
+              return query;
+            }),
+            select: vi.fn(() => ({
+              single: vi.fn().mockResolvedValue({
+                data: {
+                  ...(input.existingInstitution ?? {
+                    id: "institution-1",
+                    user_id: "user-1",
+                    provider: "teller",
+                    institution_name: "Northstar Bank",
+                  }),
+                  ...payload,
+                },
+                error: null,
+              }),
+            })),
+          };
+          updates.push({ payload, conditions });
+
+          return query;
         }),
       };
     }),

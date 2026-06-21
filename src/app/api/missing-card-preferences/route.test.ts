@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const routeMocks = vi.hoisted(() => ({
+  createSupabaseAdminClient: vi.fn(),
   createSupabaseServerClient: vi.fn(),
   markPipCashSnapshotsStaleForUser: vi.fn(),
   recordProductEventSafely: vi.fn(),
@@ -8,6 +9,10 @@ const routeMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: routeMocks.createSupabaseServerClient,
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: routeMocks.createSupabaseAdminClient,
 }));
 
 vi.mock("@/lib/data/financial-repository", () => ({
@@ -84,7 +89,9 @@ describe("POST /api/missing-card-preferences", () => {
   it("inserts a trimmed missing-card preference when none exists", async () => {
     enableSupabaseEnv();
     const supabase = createSupabaseClient({ id: "user-1" }, null);
+    const admin = { from: vi.fn() };
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.createSupabaseAdminClient.mockReturnValue(admin);
     routeMocks.markPipCashSnapshotsStaleForUser.mockResolvedValue(undefined);
     routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
 
@@ -102,6 +109,7 @@ describe("POST /api/missing-card-preferences", () => {
     expect(routeMocks.markPipCashSnapshotsStaleForUser).toHaveBeenCalledWith(
       supabase,
       "user-1",
+      admin,
     );
     expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
       supabase,

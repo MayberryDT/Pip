@@ -268,10 +268,12 @@ export async function removeInstitutionForUser(
   input: {
     userId: string;
     institutionId: string;
+    writeSupabase?: SupabaseClient<Database>;
   },
 ): Promise<ConnectedInstitutionRow> {
   const institution = await loadInstitutionForUser(supabase, input);
-  const { error } = await supabase
+  const writeSupabase = input.writeSupabase ?? supabase;
+  const { error } = await writeSupabase
     .from("connected_institutions")
     .delete()
     .eq("user_id", input.userId)
@@ -336,8 +338,9 @@ export async function upsertUserSettings(
 export async function markPipCashSnapshotsStaleForUser(
   supabase: SupabaseClient<Database>,
   userId: string,
+  writeSupabase: SupabaseClient<Database> = supabase,
 ) {
-  const { error } = await supabase
+  const { error } = await writeSupabase
     .from("pip_cash_snapshots")
     .update({
       stale: true,

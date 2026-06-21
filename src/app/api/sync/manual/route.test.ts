@@ -15,6 +15,7 @@ const routeMocks = vi.hoisted(() => {
   }
 
   return {
+    createSupabaseAdminClient: vi.fn(),
     createSupabaseServerClient: vi.fn(),
     loadSyncStatusForUser: vi.fn(),
     loadManualRefreshOnlyForUser: vi.fn(),
@@ -27,6 +28,10 @@ const routeMocks = vi.hoisted(() => {
 
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: routeMocks.createSupabaseServerClient,
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  createSupabaseAdminClient: routeMocks.createSupabaseAdminClient,
 }));
 
 vi.mock("@/lib/data/manual-sync", () => ({
@@ -46,6 +51,7 @@ vi.mock("@/lib/data/user-settings", () => ({
 
 beforeEach(() => {
   routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(false);
+  routeMocks.createSupabaseAdminClient.mockReturnValue(createSupabaseAdminClient());
 });
 
 afterEach(() => {
@@ -183,6 +189,9 @@ describe("POST /api/sync/manual", () => {
     expect(routeMocks.runManualSync).toHaveBeenCalledWith(supabase, {
       userId: "user-1",
       provider: "mock",
+      writeSupabase: expect.objectContaining({
+        kind: "admin",
+      }),
     });
     expect(routeMocks.loadSyncStatusForUser).not.toHaveBeenCalled();
   });
@@ -226,6 +235,9 @@ describe("POST /api/sync/manual", () => {
       userId: "user-1",
       provider: "plaid",
       reason: "repair",
+      writeSupabase: expect.objectContaining({
+        kind: "admin",
+      }),
     });
   });
 
@@ -270,6 +282,9 @@ describe("POST /api/sync/manual", () => {
       userId: "user-1",
       provider: "plaid",
       reason: "repair",
+      writeSupabase: expect.objectContaining({
+        kind: "admin",
+      }),
     });
     expect(routeMocks.runManualSync).not.toHaveBeenCalled();
   });
@@ -304,6 +319,9 @@ describe("POST /api/sync/manual", () => {
       userId: "user-1",
       provider: "plaid",
       reason: "app_open",
+      writeSupabase: expect.objectContaining({
+        kind: "admin",
+      }),
     });
   });
 
@@ -394,6 +412,7 @@ function enableSupabaseEnv() {
 
 function createSupabaseClient(user: { id: string } | null) {
   return {
+    kind: "session",
     auth: {
       getUser: vi.fn().mockResolvedValue({
         data: {
@@ -402,6 +421,12 @@ function createSupabaseClient(user: { id: string } | null) {
         error: null,
       }),
     },
+  };
+}
+
+function createSupabaseAdminClient() {
+  return {
+    kind: "admin",
   };
 }
 
