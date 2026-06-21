@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   markPipCashSnapshotsStaleForUser,
@@ -6,6 +5,7 @@ import {
 } from "@/lib/data/financial-repository";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -16,7 +16,7 @@ const settingsSchema = z.object({
 
 export async function GET() {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json(
+    return sensitiveJson(
       {
         error: "Supabase is not configured.",
       },
@@ -32,7 +32,7 @@ export async function GET() {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const { data, error } = await supabase
@@ -45,7 +45,7 @@ export async function GET() {
       throw error;
     }
 
-    return NextResponse.json({
+    return sensitiveJson({
       protectedSavingsMonthlyCents: data?.protected_savings_monthly_cents ?? 20000,
       manualRefreshOnly: data?.manual_refresh_only ?? false,
       privacyConsentAt: data?.privacy_consent_at ?? null,
@@ -55,13 +55,13 @@ export async function GET() {
       console.error("[settings] settings request failed", getSafeErrorMessage(error, "Settings request failed."));
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 
 export async function PUT(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json(
+    return sensitiveJson(
       {
         error: "Supabase is not configured.",
       },
@@ -77,14 +77,14 @@ export async function PUT(request: Request) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const body = await request.json().catch(() => null);
     const parsed = settingsSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid settings." }, { status: 400 });
+      return sensitiveJson({ error: "Invalid settings." }, { status: 400 });
     }
 
     const settings = await upsertUserSettings(supabase, user.id, parsed.data);
@@ -93,13 +93,13 @@ export async function PUT(request: Request) {
       protectedSavingsMonthlyCents: parsed.data.protectedSavingsMonthlyCents,
     });
 
-    return NextResponse.json(settings);
+    return sensitiveJson(settings);
   } catch (error) {
     if (!(error instanceof SupabaseConfigError)) {
       console.error("[settings] settings request failed", getSafeErrorMessage(error, "Settings request failed."));
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

@@ -33,6 +33,7 @@ describe("GET /api/pip-cash", () => {
     const payload = await response.json();
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     expect(payload.pipCashTodayCents).toBe(4300);
     expect(payload.trueBalances).toEqual(expect.any(Array));
     expect(routeMocks.getCurrentPipCashState).toHaveBeenCalledWith({ scenario: undefined });
@@ -44,6 +45,7 @@ describe("GET /api/pip-cash", () => {
     const response = await GET(new Request("http://localhost/api/pip-cash"));
 
     expect(response.status).toBe(401);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     await expect(response.json()).resolves.toEqual({
       error: "Authentication required.",
     });

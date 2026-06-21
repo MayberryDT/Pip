@@ -39,6 +39,7 @@ describe("GET /api/operator/agent-chats", () => {
     const response = await GET(jsonRequest("wrong-token"));
 
     expect(response.status).toBe(401);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     await expect(response.json()).resolves.toEqual({
       error: "Operator authentication required.",
     });
@@ -59,6 +60,7 @@ describe("GET /api/operator/agent-chats", () => {
     const response = await GET(jsonRequest("operator-secret", "?limit=10&conversationId=web-1"));
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     await expect(response.json()).resolves.toMatchObject({
       source: "local-dev",
       turns: [

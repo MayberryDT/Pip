@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import {
   assertManualSyncAllowed,
@@ -12,6 +11,7 @@ import type { FinancialProviderName } from "@/lib/providers/FinancialDataProvide
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { ProviderUnavailableError } from "@/lib/providers/provider-registry";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -23,7 +23,7 @@ const requestSchema = z.object({
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   try {
@@ -34,20 +34,20 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const body = await request.json().catch(() => ({}));
     const parsed = requestSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid sync request." }, { status: 400 });
+      return sensitiveJson({ error: "Invalid sync request." }, { status: 400 });
     }
 
     const isManualRefreshOnly = await loadManualRefreshOnlyForUser(supabase, user.id);
 
     if (isManualRefreshOnly) {
-      return NextResponse.json({
+      return sensitiveJson({
         status: "skipped_manual_only",
         message: "Automatic refresh is disabled for this account.",
       });
@@ -76,10 +76,10 @@ export async function POST(request: Request) {
             writeSupabase,
           });
 
-    return NextResponse.json(result);
+    return sensitiveJson(result);
   } catch (error) {
     if (error instanceof ManualSyncRateLimitError) {
-      return NextResponse.json(
+      return sensitiveJson(
         {
           error: error.message,
           retryAfterSeconds: error.retryAfterSeconds,
@@ -89,11 +89,11 @@ export async function POST(request: Request) {
     }
 
     if (error instanceof ProviderUnavailableError) {
-      return NextResponse.json({ error: error.message }, { status: 501 });
+      return sensitiveJson({ error: error.message }, { status: 501 });
     }
 
     if (error instanceof ProviderSyncError) {
-      return NextResponse.json(
+      return sensitiveJson(
         {
           error: error.message,
           code: error.code,
@@ -110,7 +110,7 @@ export async function POST(request: Request) {
       console.error("[sync/manual] sync failed", getSafeErrorMessage(error, "Manual sync failed."));
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

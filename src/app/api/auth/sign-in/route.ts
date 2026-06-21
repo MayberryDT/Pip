@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getAppOrigin } from "@/lib/url/app-origin";
@@ -14,11 +14,11 @@ export async function POST(request: Request) {
   const parsed = signInSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Enter a valid email." }, { status: 400 });
+    return sensitiveJson({ error: "Enter a valid email." }, { status: 400 });
   }
 
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   try {
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    return NextResponse.json({
+    return sensitiveJson({
       status: "sent",
     });
   } catch (error) {
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       console.error("[sign-in] sign-in failed", getSafeErrorMessage(error, "Sign-in failed."));
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

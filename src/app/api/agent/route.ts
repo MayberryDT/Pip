@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import type { AgentResponse } from "@/lib/agent/card-types";
@@ -74,6 +73,7 @@ import {
   ProviderUnavailableError,
 } from "@/lib/providers/provider-registry";
 import { getSafeErrorMessage, sanitizeSensitiveText } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { getClientPipPlatform } from "@/lib/platform/android-shell";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
@@ -180,7 +180,7 @@ export async function POST(request: Request) {
   const parsed = requestSchema.safeParse(body);
 
   if (!parsed.success) {
-    return NextResponse.json(
+    return sensitiveJson(
       {
         error: "Message is required.",
       },
@@ -212,10 +212,9 @@ export async function POST(request: Request) {
       const payload = toAgentModelGateResponse(modelGateClaim);
       const { status, ...body } = payload;
 
-      return NextResponse.json(body, {
+      return sensitiveJson(body, {
         status,
         headers: {
-          "Cache-Control": "private, no-store",
           "Retry-After": String(payload.retryAfterSeconds),
         },
       });
@@ -267,11 +266,7 @@ export async function POST(request: Request) {
       ]);
     }
 
-    return NextResponse.json(response, {
-      headers: {
-        "Cache-Control": "private, no-store",
-      },
-    });
+    return sensitiveJson(response);
   } catch (error) {
     const payload = toAgentErrorPayload(error);
     const { status, ...body } = payload;
@@ -290,12 +285,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(body, {
-      status,
-      headers: {
-        "Cache-Control": "private, no-store",
-      },
-    });
+    return sensitiveJson(body, { status });
   } finally {
     if (modelGateLeaseId) {
       await releaseAgentModelGate(modelGateLeaseId);

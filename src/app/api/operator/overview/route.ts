@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
 import { loadOperatorOverview } from "@/lib/operator/overview";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -8,23 +8,23 @@ export async function GET(request: Request) {
   const expectedToken = process.env.PIP_OPERATOR_TOKEN;
 
   if (!expectedToken) {
-    return NextResponse.json({ error: "Operator access is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Operator access is not configured." }, { status: 503 });
   }
 
   if (!isValidOperatorRequest(request, expectedToken)) {
-    return NextResponse.json({ error: "Operator authentication required." }, { status: 401 });
+    return sensitiveJson({ error: "Operator authentication required." }, { status: 401 });
   }
 
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   try {
     const supabase = createSupabaseAdminClient();
 
-    return NextResponse.json(await loadOperatorOverview(supabase));
+    return sensitiveJson(await loadOperatorOverview(supabase));
   } catch (error) {
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

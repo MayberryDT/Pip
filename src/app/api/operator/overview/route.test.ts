@@ -40,6 +40,7 @@ describe("GET /api/operator/overview", () => {
     const response = await GET(jsonRequest("wrong-token"));
 
     expect(response.status).toBe(401);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     await expect(response.json()).resolves.toEqual({
       error: "Operator authentication required.",
     });
@@ -68,6 +69,7 @@ describe("GET /api/operator/overview", () => {
     const response = await GET(jsonRequest("operator-secret"));
 
     expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     await expect(response.json()).resolves.toMatchObject({
       activeUserCount: 1,
       staleConnections: [],

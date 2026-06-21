@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { getTellerConfig } from "@/lib/providers/teller/config";
 import { storeTellerCredential } from "@/lib/providers/teller/credential-store";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -28,7 +28,7 @@ const enrollmentSchema = z.object({
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   let userId: string | null = null;
@@ -43,7 +43,7 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     userId = user.id;
@@ -51,13 +51,13 @@ export async function POST(request: Request) {
     const parsed = enrollmentSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid Teller enrollment." }, { status: 400 });
+      return sensitiveJson({ error: "Invalid Teller enrollment." }, { status: 400 });
     }
 
     const cookieNonce = getCookie(request, "pip_teller_nonce");
 
     if (!cookieNonce || cookieNonce !== parsed.data.nonce) {
-      return NextResponse.json({ error: "Teller connect session expired." }, { status: 403 });
+      return sensitiveJson({ error: "Teller connect session expired." }, { status: 403 });
     }
 
     const config = getTellerConfig();
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
       institutionName,
     });
 
-    const response = NextResponse.json({
+    const response = sensitiveJson({
       status: "connected",
       institutionId: institution.id,
       institutionName,
@@ -101,7 +101,7 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 

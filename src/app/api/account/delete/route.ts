@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { deleteCurrentUserFinancialData } from "@/lib/data/financial-repository";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
@@ -12,11 +12,11 @@ const accountDeletionSchema = z.object({
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json(accountDeletionUnavailableBody(), { status: 503 });
+    return sensitiveJson(accountDeletionUnavailableBody(), { status: 503 });
   }
 
   if (!request.headers.get("content-type")?.includes("application/json")) {
-    return NextResponse.json({ error: "Invalid deletion request." }, { status: 400 });
+    return sensitiveJson({ error: "Invalid deletion request." }, { status: 400 });
   }
 
   try {
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({
+      return sensitiveJson({
         code: "AUTH_REQUIRED",
         error: "Sign in before deleting an account.",
       }, { status: 401 });
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     const parsed = accountDeletionSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Type DELETE to confirm account deletion." }, { status: 400 });
+      return sensitiveJson({ error: "Type DELETE to confirm account deletion." }, { status: 400 });
     }
 
     await deleteCurrentUserFinancialData(supabase);
@@ -55,16 +55,16 @@ export async function POST(request: Request) {
       throw deleteError;
     }
 
-    return NextResponse.json({ status: "deleted" });
+    return sensitiveJson({ status: "deleted" });
   } catch (error) {
     const body = toErrorBody(error);
 
     if (body.code === "ACCOUNT_DELETION_UNAVAILABLE") {
-      return NextResponse.json(body, { status: 503 });
+      return sensitiveJson(body, { status: 503 });
     }
 
     console.error("[account-delete] account deletion failed", getSafeErrorMessage(error, "Account deletion failed."));
-    return NextResponse.json(body, { status: 500 });
+    return sensitiveJson(body, { status: 500 });
   }
 }
 

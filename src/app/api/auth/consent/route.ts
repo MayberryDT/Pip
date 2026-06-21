@@ -1,7 +1,7 @@
-import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -11,7 +11,7 @@ const consentSchema = z.object({
 
 export async function POST(request: Request) {
   if (!isSupabaseConfigured()) {
-    return NextResponse.json({ error: "Supabase is not configured." }, { status: 503 });
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
   }
 
   try {
@@ -22,14 +22,14 @@ export async function POST(request: Request) {
     } = await supabase.auth.getUser();
 
     if (userError || !user) {
-      return NextResponse.json({ error: "Authentication required." }, { status: 401 });
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
     }
 
     const body = await request.json().catch(() => ({}));
     const parsed = consentSchema.safeParse(body);
 
     if (!parsed.success) {
-      return NextResponse.json({ error: "Invalid consent settings." }, { status: 400 });
+      return sensitiveJson({ error: "Invalid consent settings." }, { status: 400 });
     }
 
     const { error } = await supabase.from("user_settings").upsert({
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
       protectedSavingsMonthlyCents: parsed.data.protectedSavingsMonthlyCents,
     });
 
-    return NextResponse.json({
+    return sensitiveJson({
       status: "accepted",
     });
   } catch (error) {
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
       console.error("[consent] consent save failed", getSafeErrorMessage(error, "Consent request failed."));
     }
 
-    return NextResponse.json(toErrorBody(error), { status: 500 });
+    return sensitiveJson(toErrorBody(error), { status: 500 });
   }
 }
 
