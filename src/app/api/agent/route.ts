@@ -84,6 +84,14 @@ import {
   recordAgentEvents,
 } from "@/lib/agent/route-telemetry";
 import {
+  buildAgentModelGatePlan,
+  claimAgentModelGate,
+  getAgentModelGateScope,
+  getClientIp,
+  releaseAgentModelGate,
+  toAgentModelGateResponse,
+} from "@/lib/agent/agent-model-gate";
+import {
   buildAccountConnectionsCard,
   createLocalDevConnectedAccounts,
   resolveAccountTarget,
@@ -181,11 +189,38 @@ export async function POST(request: Request) {
 
   const conversationId = parsed.data.conversationId ?? createServerConversationId();
   let routeContext: RouteAgentContext | undefined;
+  let modelGateLeaseId: string | undefined;
 
   try {
     routeContext = await createRouteAgentContext({
       scenario: parsed.data.scenario,
     });
+    const requestKind = parsed.data.requestKind ?? "chat";
+    const modelGatePlan = buildAgentModelGatePlan({
+      onboardingStatus: routeContext.onboardingState.status,
+      requestKind,
+    });
+    const modelGateClaim = await claimRouteAgentModelGate({
+      routeContext,
+      request,
+      requestKind,
+      modelGatePlan,
+    });
+
+    if (modelGateClaim.outcome !== "allowed") {
+      const payload = toAgentModelGateResponse(modelGateClaim);
+      const { status, ...body } = payload;
+
+      return NextResponse.json(body, {
+        status,
+        headers: {
+          "Cache-Control": "private, no-store",
+          "Retry-After": String(payload.retryAfterSeconds),
+        },
+      });
+    }
+
+    modelGateLeaseId = modelGateClaim.leaseId;
     const response = await runAIAgent(
       {
         message: parsed.data.message,
@@ -231,7 +266,11 @@ export async function POST(request: Request) {
       ]);
     }
 
-    return NextResponse.json(response);
+    return NextResponse.json(response, {
+      headers: {
+        "Cache-Control": "private, no-store",
+      },
+    });
   } catch (error) {
     const payload = toAgentErrorPayload(error);
     const { status, ...body } = payload;
@@ -250,7 +289,45 @@ export async function POST(request: Request) {
       });
     }
 
-    return NextResponse.json(body, { status });
+    return NextResponse.json(body, {
+      status,
+      headers: {
+        "Cache-Control": "private, no-store",
+      },
+    });
+  } finally {
+    if (modelGateLeaseId) {
+      await releaseAgentModelGate(modelGateLeaseId);
+    }
+  }
+}
+
+async function claimRouteAgentModelGate(input: {
+  routeContext: RouteAgentContext;
+  request: Request;
+  requestKind: "chat" | "prompt_chips" | "opening_bubble";
+  modelGatePlan: ReturnType<typeof buildAgentModelGatePlan>;
+}) {
+  try {
+    return await claimAgentModelGate({
+      scopeHash: getAgentModelGateScope({
+        userId: input.routeContext.eventContext?.userId,
+        clientIp: getClientIp(input.request),
+        userAgent: input.request.headers.get("user-agent"),
+        salt: process.env.PIP_RATE_LIMIT_SALT,
+      }),
+      requestKind: input.requestKind,
+      plan: input.modelGatePlan,
+    });
+  } catch (error) {
+    console.warn(
+      "Agent model gate claim failed.",
+      getSafeErrorMessage(error, "Agent model gate unavailable."),
+    );
+    return {
+      outcome: "unavailable" as const,
+      retryAfterSeconds: 30,
+    };
   }
 }
 

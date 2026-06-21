@@ -128,6 +128,68 @@ export type Database = {
         };
         Relationships: [];
       };
+      agent_model_gate_windows: {
+        Row: {
+          id: string;
+          scope_hash: string;
+          request_kind: string;
+          window_kind: string;
+          window_start: string;
+          request_count: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          scope_hash: string;
+          request_kind: string;
+          window_kind: string;
+          window_start: string;
+          request_count?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          scope_hash?: string;
+          request_kind?: string;
+          window_kind?: string;
+          window_start?: string;
+          request_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      agent_model_gate_leases: {
+        Row: {
+          id: string;
+          scope_hash: string;
+          request_kind: string;
+          acquired_at: string;
+          expires_at: string;
+          released_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          scope_hash: string;
+          request_kind: string;
+          acquired_at?: string;
+          expires_at: string;
+          released_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          scope_hash?: string;
+          request_kind?: string;
+          acquired_at?: string;
+          expires_at?: string;
+          released_at?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       connected_institutions: {
         Row: {
           id: string;
@@ -894,6 +956,23 @@ export type Database = {
         Args: never;
         Returns: void;
       };
+      claim_agent_model_gate: {
+        Args: {
+          p_scope_hash: string;
+          p_request_kind: string;
+          p_minute_limit: number;
+          p_day_limit: number;
+          p_global_concurrency_limit: number;
+          p_lease_ttl_seconds: number;
+          p_now?: string;
+        };
+        Returns: {
+          allowed: boolean;
+          denial_reason: string | null;
+          retry_after_seconds: number | null;
+          lease_id: string | null;
+        }[];
+      };
       delete_current_user_financial_data: {
         Args: never;
         Returns: void;
@@ -901,6 +980,13 @@ export type Database = {
       is_beta_invited: {
         Args: {
           input_email: string;
+        };
+        Returns: boolean;
+      };
+      release_agent_model_gate: {
+        Args: {
+          p_lease_id: string;
+          p_now?: string;
         };
         Returns: boolean;
       };

@@ -154,6 +154,37 @@ describe("Supabase financial-data schema", () => {
     expect(migration).toContain("stale_after timestamptz");
   });
 
+  it("keeps the agent model gate service-role only", () => {
+    expect(allMigrations).toContain("create table if not exists public.agent_model_gate_windows");
+    expect(allMigrations).toContain("create table if not exists public.agent_model_gate_leases");
+    expect(allMigrations).toContain("alter table public.agent_model_gate_windows enable row level security;");
+    expect(allMigrations).toContain("alter table public.agent_model_gate_leases enable row level security;");
+    expect(allMigrations).toContain(
+      "revoke all on table public.agent_model_gate_windows from public, anon, authenticated;",
+    );
+    expect(allMigrations).toContain(
+      "revoke all on table public.agent_model_gate_leases from public, anon, authenticated;",
+    );
+    expect(allMigrations).toContain(
+      "grant execute on function public.claim_agent_model_gate(text, text, integer, integer, integer, integer, timestamptz)\nto service_role;",
+    );
+    expect(allMigrations).toContain(
+      "grant execute on function public.release_agent_model_gate(uuid, timestamptz)\nto service_role;",
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.claim_agent_model_gate(text, text, integer, integer, integer, integer, timestamptz) to authenticated"),
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.claim_agent_model_gate(text, text, integer, integer, integer, integer, timestamptz) to anon"),
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.release_agent_model_gate(uuid, timestamptz) to authenticated"),
+    );
+    expect(normalizeSql(allMigrations)).not.toContain(
+      normalizeSql("grant execute on function public.release_agent_model_gate(uuid, timestamptz) to anon"),
+    );
+  });
+
   it("indexes foreign keys that beta sync and account joins use", () => {
     [
       "create index if not exists accounts_institution_id_idx on public.accounts(institution_id);",
