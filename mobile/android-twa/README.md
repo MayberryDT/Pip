@@ -1,5 +1,8 @@
 # Pip Android TWA
 
+This shell is deprecated. See `DEPRECATED.md`; the current release Android target is `mobile/android-webview`.
+The build, signing, and install notes below are historical reference only unless a separate migration plan reactivates this shell.
+
 This is the Android Trusted Web Activity wrapper for the hosted Pip web app.
 
 The app opens:

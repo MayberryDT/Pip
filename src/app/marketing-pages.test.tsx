@@ -17,6 +17,8 @@ import TermsPage from "@/app/terms/page";
 import AndroidAccessPage from "@/app/android-access/page";
 import DeleteAccountPage from "@/app/delete-account/page";
 import { marketingAssets, requiredMarketingAssetRoles } from "@/lib/marketing/assets";
+import { getPublishedArticles } from "@/lib/marketing/content";
+import { publicMarketingPages } from "@/lib/marketing/site";
 import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 
@@ -236,6 +238,22 @@ describe("marketing website pages", () => {
     expect(urls).toContain("https://spendwithpip.com/blog/how-much-can-i-spend-today");
     expect(urls).not.toContain("https://spendwithpip.com/app");
     expect(urls).not.toContain("https://spendwithpip.com/blog/daily-spending-allowance-vs-budget");
+  });
+
+  it("uses marketing metadata as the source for public sitemap dates", () => {
+    const entries = new Map(sitemap().map((entry) => [entry.url, entry]));
+
+    for (const page of publicMarketingPages) {
+      expect(entries.get(`https://spendwithpip.com${page.path === "/" ? "/" : page.path}`)?.lastModified).toEqual(
+        new Date(`${page.updatedAt}T00:00:00Z`),
+      );
+    }
+
+    const article = getPublishedArticles().find((candidate) => candidate.slug === "what-is-spendable-cash-today");
+
+    expect(entries.get("https://spendwithpip.com/blog/what-is-spendable-cash-today")?.lastModified).toEqual(
+      new Date(`${article?.updatedAt}T00:00:00Z`),
+    );
   });
 
   it("keeps robots focused on public marketing pages", () => {
