@@ -126,7 +126,11 @@ describe("marketing website pages", () => {
 
   it("keeps the mobile hero subject from being clipped", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
-    const mobileHeroCss = css.slice(css.lastIndexOf("@media (max-width: 767px)"));
+    const mobileHeroCss = sliceCssFromMediaQueryContaining(
+      css,
+      "@media (max-width: 767px)",
+      ".pip-home-title-lockup {\n    max-width: none;",
+    );
 
     expect(css).toContain(".pip-title-line {\n  display: block;\n  white-space: nowrap;");
     expect(css).toContain(".pip-home-title .pip-title-line-accent,");
@@ -146,7 +150,7 @@ describe("marketing website pages", () => {
     const tabletCss = css
       .slice(css.lastIndexOf("@media (max-width: 980px)"))
       .split("@media (max-width: 900px)")[0];
-    const mobileCss = css.slice(css.lastIndexOf("@media (max-width: 767px)"));
+    const mobileCss = sliceCssFromMediaQueryContaining(css, "@media (max-width: 767px)", ".pip-generated-figure,");
 
     expect(css).toContain(".pip-balance-layout,");
     expect(css).toContain(".pip-generated-figure {");
@@ -209,7 +213,7 @@ describe("marketing website pages", () => {
     expect(html).toContain("application/ld+json");
     expect(html).toContain("BreadcrumbList");
     expect(html).toContain("Get Pip and try Spendable Cash Today");
-    expect(html).toContain(marketingAssets.articleCoverTemplate.src);
+    expect(html).toContain(marketingAssets.blogSpendableCashCard.src);
   });
 
   it("renders rich article blocks on published article pages", async () => {
@@ -357,3 +361,13 @@ describe("marketing website pages", () => {
     }
   });
 });
+
+function sliceCssFromMediaQueryContaining(css: string, mediaQuery: string, selector: string): string {
+  const selectorIndex = css.indexOf(selector);
+  expect(selectorIndex).toBeGreaterThanOrEqual(0);
+
+  const mediaIndex = css.lastIndexOf(mediaQuery, selectorIndex);
+  expect(mediaIndex).toBeGreaterThanOrEqual(0);
+
+  return css.slice(mediaIndex);
+}

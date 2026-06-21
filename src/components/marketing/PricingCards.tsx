@@ -45,7 +45,7 @@ export function PricingCards({
             <p className="mt-3 text-xs font-semibold leading-5 text-ink/50">{plan.annualizedLabel}</p>
             <MarketingCtaLink
               className={[
-                "focus-ring mt-auto inline-flex min-h-11 w-fit items-center justify-center px-5 text-sm font-bold transition",
+                "focus-ring mt-auto inline-flex min-h-11 w-fit items-center justify-center px-5 text-sm font-bold",
                 plan.recommended
                   ? "bg-ink text-porcelain hover:bg-moss"
                   : "border border-line bg-porcelain text-ink hover:border-moss",

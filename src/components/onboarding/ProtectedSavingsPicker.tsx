@@ -66,7 +66,7 @@ export function ProtectedSavingsPicker({
               key={option.amountCents}
               type="button"
               className={[
-                "focus-ring min-h-10 shrink-0 rounded-full border px-3 text-xs font-semibold transition",
+                "focus-ring ui-pressable min-h-10 shrink-0 rounded-full border px-3 text-xs font-semibold",
                 active
                   ? "border-moss/35 bg-moss text-paper shadow-[0_10px_24px_rgba(83,101,79,0.16)]"
                   : "border-ink/10 bg-white/62 text-ink/[0.72] hover:bg-white/82",
@@ -106,7 +106,7 @@ export function ProtectedSavingsPicker({
 
       <button
         type="button"
-        className="focus-ring min-h-11 w-full rounded-full bg-ink px-5 text-sm font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)] transition disabled:bg-ink/30"
+        className="focus-ring ui-pressable min-h-11 w-full rounded-full bg-ink px-5 text-sm font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)] disabled:bg-ink/30"
         disabled={isSaving}
         onClick={saveAmount}
       >

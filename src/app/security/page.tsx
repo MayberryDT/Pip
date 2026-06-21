@@ -156,7 +156,7 @@ export default function SecurityPage() {
           </div>
           <div className="col-span-12 lg:col-span-4 lg:col-start-9">
             <MarketingCtaLink
-              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-porcelain px-6 text-sm font-bold text-ink transition hover:bg-paper"
+              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-porcelain px-6 text-sm font-bold text-ink hover:bg-paper"
               eventLabel="security_get_pip"
               eventProperties={{ intent: "get_pip" }}
               href={getProductAccessHref()}

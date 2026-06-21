@@ -207,7 +207,7 @@ export function ReportResponseControl({
     <div className="space-y-2">
       <button
         type="button"
-        className="focus-ring inline-flex min-h-11 items-center gap-1.5 rounded-full px-2 text-[0.68rem] font-semibold text-taupe/75 transition hover:text-ink"
+        className="focus-ring ui-pressable inline-flex min-h-11 items-center gap-1.5 rounded-full px-2.5 text-[0.68rem] font-semibold text-taupe/75 hover:text-ink"
         onClick={() => {
           setIsOpen((current) => !current);
           setStatusText("");
@@ -227,7 +227,7 @@ export function ReportResponseControl({
                 key={option.value}
                 type="button"
                 className={[
-                  "focus-ring min-h-11 rounded-full border px-3 text-xs font-semibold transition",
+                  "focus-ring ui-pressable min-h-11 rounded-full border px-3 text-xs font-semibold",
                   reason === option.value
                     ? "border-moss bg-moss text-paper"
                     : "border-line bg-white/55 text-ink/75 hover:border-moss",
@@ -253,7 +253,7 @@ export function ReportResponseControl({
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
-              className="focus-ring inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-3 text-xs font-bold text-paper transition disabled:bg-ink/35"
+              className="focus-ring ui-pressable inline-flex min-h-11 items-center justify-center rounded-full bg-ink px-3 text-xs font-bold text-paper disabled:bg-ink/35"
               disabled={isSubmitting}
               onClick={submitReport}
             >
@@ -261,7 +261,7 @@ export function ReportResponseControl({
             </button>
             <button
               type="button"
-              className="focus-ring inline-flex min-h-11 items-center justify-center rounded-full border border-line bg-white/55 px-3 text-xs font-semibold text-ink/75"
+              className="focus-ring ui-pressable inline-flex min-h-11 items-center justify-center rounded-full border border-line bg-white/55 px-3 text-xs font-semibold text-ink/75"
               onClick={() => {
                 setIsOpen(false);
                 setStatusText("");

@@ -81,7 +81,7 @@ export default async function ArticlePage({ params }: PageProps) {
           <SwissSection folio="01 / Article">
             <div className="col-span-12 lg:col-span-7">
               <Link
-                className="focus-ring inline-flex items-center gap-2 text-sm font-bold text-moss hover:text-ink"
+                className="focus-ring pip-text-action-link gap-2 text-sm font-bold text-moss hover:text-ink"
                 href="/blog"
               >
                 <ArrowLeft aria-hidden="true" size={16} />
@@ -139,7 +139,7 @@ export default async function ArticlePage({ params }: PageProps) {
           </div>
           <div className="col-span-12 lg:col-span-4 lg:col-start-9">
             <MarketingCtaLink
-              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-ink px-6 text-sm font-bold text-porcelain transition hover:bg-moss"
+              className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 bg-ink px-6 text-sm font-bold text-porcelain hover:bg-moss"
               eventLabel="article_page_get_pip"
               eventProperties={{ intent: "get_pip", slug: article.slug }}
               href={getProductAccessHref()}

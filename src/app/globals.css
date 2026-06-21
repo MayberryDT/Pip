@@ -8,6 +8,7 @@
   color: #1c1b1b;
   --font-display: Newsreader, Georgia, "Times New Roman", Times, serif;
   --font-body: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --pip-image-outline: rgba(0, 0, 0, 0.1);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -84,6 +85,16 @@ button {
 
 .focus-ring:focus-visible {
   outline-color: #8c7a67;
+}
+
+.ui-pressable {
+  transition-property: background-color, border-color, color, box-shadow, transform, scale, opacity;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.ui-pressable:active:not(:disabled) {
+  scale: 0.96;
 }
 
 .font-display {
@@ -755,16 +766,24 @@ button {
 }
 
 .editorial-nav-link {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
   border-radius: 9999px;
   padding: 0.625rem 0.85rem;
   transition:
     background 160ms ease,
-    color 160ms ease;
+    color 160ms ease,
+    scale 150ms ease-out;
 }
 
 .editorial-nav-link:hover {
   background: rgba(208, 234, 194, 0.56);
   color: var(--pip-ink);
+}
+
+.editorial-nav-link:active {
+  scale: 0.96;
 }
 
 .editorial-header-cta {
@@ -881,6 +900,7 @@ button {
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.02em;
+  text-wrap: balance;
 }
 
 .editorial-title-hero {
@@ -913,6 +933,7 @@ button {
   font-size: 1.0625rem;
   font-weight: 400;
   line-height: 1.75rem;
+  text-wrap: pretty;
 }
 
 .editorial-spread-ink .editorial-text {
@@ -934,6 +955,7 @@ button {
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 0.92;
+  font-variant-numeric: tabular-nums;
 }
 
 .editorial-number span {
@@ -959,6 +981,8 @@ button {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  outline: 1px solid var(--pip-image-outline);
+  outline-offset: -1px;
 }
 
 .editorial-figure-hero {
@@ -1000,12 +1024,14 @@ button {
   color: var(--pip-ink);
   font-size: 1rem;
   font-weight: 700;
+  text-wrap: balance;
 }
 
 .editorial-rule-copy {
   color: rgba(67, 72, 64, 0.78);
   font-size: 0.9375rem;
   font-weight: 400;
+  text-wrap: pretty;
 }
 
 .editorial-spread-ink .editorial-rule-item,
@@ -1032,6 +1058,7 @@ button {
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 0.95;
+  font-variant-numeric: tabular-nums;
 }
 
 .swiss-type {
@@ -1044,7 +1071,8 @@ button {
 
 .editorial-site a.bg-ink,
 .editorial-site button.bg-ink,
-.editorial-site .bg-moss {
+.editorial-site a.bg-moss,
+.editorial-site button.bg-moss {
   border-bottom: 2px solid #374c2f;
   border-radius: 9999px;
   background-color: var(--pip-sage) !important;
@@ -1054,8 +1082,30 @@ button {
 
 .editorial-site a.bg-ink:hover,
 .editorial-site button.bg-ink:hover,
-.editorial-site .bg-moss:hover {
+.editorial-site a.bg-moss:hover,
+.editorial-site button.bg-moss:hover {
   background-color: #3f5738 !important;
+}
+
+.editorial-site a.bg-ink,
+.editorial-site button.bg-ink,
+.editorial-site a.bg-moss,
+.editorial-site button.bg-moss,
+.editorial-site a.bg-porcelain,
+.editorial-site button.bg-porcelain {
+  border-radius: 9999px;
+  transition-property: background-color, border-color, color, box-shadow, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.editorial-site a.bg-ink:active,
+.editorial-site button.bg-ink:active,
+.editorial-site a.bg-moss:active,
+.editorial-site button.bg-moss:active,
+.editorial-site a.bg-porcelain:active,
+.editorial-site button.bg-porcelain:active {
+  scale: 0.96;
 }
 
 .editorial-site .bg-porcelain,
@@ -1069,6 +1119,58 @@ button {
 
 .editorial-site .shadow-soft {
   box-shadow: var(--pip-shadow-soft) !important;
+}
+
+.legal-reference-back-link {
+  display: inline-flex;
+  min-width: 2.5rem;
+  min-height: 2.5rem;
+  align-items: center;
+  border-radius: 9999px;
+  transition-property: color, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.legal-reference-back-link:active {
+  scale: 0.96;
+}
+
+.legal-reference-article {
+  text-wrap: pretty;
+}
+
+.legal-reference-article > section {
+  border-radius: 1.25rem;
+  background: rgba(255, 253, 248, 0.64);
+  padding: 1.25rem;
+  box-shadow:
+    0 0 0 1px rgba(28, 27, 27, 0.05),
+    0 14px 34px rgba(28, 27, 27, 0.035);
+}
+
+.legal-reference-article > section h2,
+.legal-reference-article > section h3 {
+  text-wrap: balance;
+}
+
+.legal-reference-article > section p,
+.legal-reference-article > section li {
+  text-wrap: pretty;
+}
+
+.editorial-footer-links a {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  border-radius: 9999px;
+  transition-property: color, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.editorial-footer-links a:active {
+  scale: 0.96;
 }
 
 /* Stitch refinement: soften the remaining spread-era layout. */
@@ -1345,7 +1447,7 @@ button {
 
   .editorial-mobile-link {
     display: flex;
-    min-height: 2.35rem;
+    min-height: 2.5rem;
     align-items: center;
     border-radius: 0.85rem;
     padding: 0 0.85rem;
@@ -1511,6 +1613,7 @@ button {
   font-family: var(--font-display);
   font-weight: 500;
   letter-spacing: 0;
+  text-wrap: balance;
 }
 
 .pip-home-title .pip-title-line-accent,
@@ -1554,6 +1657,7 @@ button {
   font-size: 1.06rem;
   font-weight: 400;
   line-height: 1.75rem;
+  text-wrap: pretty;
 }
 
 .pip-home-lede {
@@ -1585,11 +1689,16 @@ button {
     background-color 160ms ease,
     border-color 160ms ease,
     color 160ms ease,
-    transform 160ms ease;
+    transform 160ms ease,
+    scale 150ms ease-out;
 }
 
 .pip-button:hover {
   transform: translateY(-1px);
+}
+
+.pip-button:active {
+  scale: 0.96;
 }
 
 .pip-button-primary {
@@ -1721,6 +1830,8 @@ button {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  outline: 1px solid var(--pip-image-outline);
+  outline-offset: -1px;
 }
 
 .pip-story-poster {
@@ -1750,6 +1861,8 @@ button {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  outline: 1px solid var(--pip-image-outline);
+  outline-offset: -1px;
 }
 
 .pip-story-poster-anti,
@@ -1936,6 +2049,7 @@ button {
   font-size: 1.28rem;
   font-weight: 500;
   line-height: 1.22;
+  text-wrap: balance;
 }
 
 .pip-step-rule span {
@@ -1944,6 +2058,7 @@ button {
   color: rgba(67, 72, 64, 0.76);
   font-size: 0.92rem;
   line-height: 1.48rem;
+  text-wrap: pretty;
 }
 
 .pip-balance-stage,
@@ -2533,6 +2648,8 @@ button {
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
+  outline: 1px solid var(--pip-image-outline);
+  outline-offset: -1px;
 }
 
 .pip-blog-card-body {
@@ -2564,6 +2681,7 @@ button {
   font-size: 2rem;
   font-weight: 500;
   line-height: 1.05;
+  text-wrap: balance;
 }
 
 .pip-blog-card-compact h3,
@@ -2656,6 +2774,7 @@ button {
   color: rgba(67, 72, 64, 0.76);
   font-size: 0.95rem;
   line-height: 1.55rem;
+  text-wrap: pretty;
 }
 
 .pip-blog-card-meta {
@@ -2673,6 +2792,23 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
+}
+
+.article-body h2,
+.article-body h3,
+.article-body blockquote p {
+  text-wrap: balance;
+}
+
+.article-body p,
+.article-body li,
+.article-body figcaption {
+  text-wrap: pretty;
+}
+
+.article-body img {
+  outline: 1px solid var(--pip-image-outline);
+  outline-offset: -1px;
 }
 
 .pip-final-proof {
@@ -2955,6 +3091,7 @@ button {
 
 .pip-inline-link {
   display: inline-flex;
+  min-height: 2.5rem;
   width: fit-content;
   align-items: center;
   gap: 0.5rem;
@@ -2963,6 +3100,27 @@ button {
   font-size: 0.9rem;
   font-weight: 750;
   text-decoration: none;
+  transition:
+    color 150ms ease-out,
+    scale 150ms ease-out;
+}
+
+.pip-inline-link:active {
+  scale: 0.96;
+}
+
+.pip-text-action-link {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  border-radius: 9999px;
+  transition-property: color, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+}
+
+.pip-text-action-link:active {
+  scale: 0.96;
 }
 
 .pip-ask-row {
@@ -3715,6 +3873,7 @@ button {
   font-weight: 700;
   line-height: 1.35;
   text-align: center;
+  text-wrap: pretty;
 }
 
 .pip-metric-subtitle-row {
@@ -3889,6 +4048,14 @@ button {
   text-align: left;
 }
 
+.assistant-intro-message > p:first-of-type {
+  text-wrap: balance;
+}
+
+.assistant-intro-message p {
+  text-wrap: pretty;
+}
+
 .assistant-intro-message::after {
   position: absolute;
   bottom: -0.7rem;
@@ -3967,6 +4134,17 @@ button {
     inset 0 -1px 0 rgba(151, 122, 82, 0.045);
 }
 
+.pip-card-shell {
+  border-radius: 1.85rem;
+}
+
+.pip-card-shell p,
+.pip-assistant-bubble,
+.pip-user-bubble,
+.pip-error-bubble {
+  text-wrap: pretty;
+}
+
 .assistant-ready-intro-panel .assistant-intro-message::after {
   left: 2.7rem;
 }
@@ -4041,6 +4219,7 @@ button {
 
 .pip-card-row {
   border-color: rgba(190, 171, 142, 0.34);
+  border-radius: 1rem;
   background:
     linear-gradient(180deg, rgba(255, 253, 248, 0.88), rgba(255, 249, 240, 0.7)),
     rgba(255, 250, 242, 0.74);
@@ -4049,7 +4228,15 @@ button {
     0 4px 12px rgba(84, 62, 35, 0.035);
 }
 
+.pip-card-row span:last-child,
+.pip-card-row p:last-child,
+.pip-card-row dd,
+.pip-card-row strong:last-child {
+  font-variant-numeric: tabular-nums;
+}
+
 .pip-card-warning {
+  border-radius: 1rem;
   border-color: rgba(180, 151, 105, 0.2);
   background:
     linear-gradient(180deg, rgba(255, 247, 232, 0.88), rgba(248, 235, 208, 0.58));
@@ -4079,6 +4266,9 @@ button {
 }
 
 .pip-prompt-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 0;
   width: 100%;
   overflow: hidden;
@@ -4093,6 +4283,10 @@ button {
     0 6px 16px rgba(84, 62, 35, 0.052),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
   white-space: normal;
+  transition-property: background-color, border-color, color, box-shadow, transform, scale;
+  transition-duration: 150ms;
+  transition-timing-function: ease-out;
+  text-wrap: pretty;
 }
 
 .pip-prompt-tray.is-compact .pip-prompt-chip {

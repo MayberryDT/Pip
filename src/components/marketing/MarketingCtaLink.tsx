@@ -19,7 +19,7 @@ export function MarketingCtaLink({
 }) {
   return (
     <Link
-      className={className}
+      className={`${className} ui-pressable`}
       href={href}
       onClick={() => {
         void trackMarketingEvent("marketing_cta_clicked", {

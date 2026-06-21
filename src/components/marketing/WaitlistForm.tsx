@@ -85,7 +85,7 @@ export function WaitlistForm({
           />
         </div>
         <button
-          className="focus-ring inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-moss px-6 text-sm font-bold text-porcelain shadow-soft transition hover:bg-ink disabled:cursor-not-allowed disabled:opacity-70"
+          className="focus-ring ui-pressable inline-flex min-h-12 items-center justify-center gap-2 rounded-full bg-moss px-6 text-sm font-bold text-porcelain shadow-soft hover:bg-ink disabled:cursor-not-allowed disabled:opacity-70"
           disabled={state === "submitting"}
           type="submit"
         >

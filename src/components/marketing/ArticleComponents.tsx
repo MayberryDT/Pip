@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { ArrowRight, Clock3, Quote } from "lucide-react";
 import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { PipSays } from "@/components/marketing/PipSays";
@@ -316,31 +316,43 @@ function ArticleTable({
 }) {
   const alignmentClass = (alignment: "left" | "center" | "right" | undefined) =>
     alignment === "right" ? "text-right" : alignment === "center" ? "text-center" : "text-left";
+  const columnCount = Math.max(headers.length, 1);
+  const gridStyle = {
+    gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))`,
+    width: `max(100%, ${columnCount * 9}rem)`,
+  } satisfies CSSProperties;
 
   return (
     <div className="max-w-3xl overflow-x-auto rounded-3xl border border-line bg-paper shadow-[0_18px_44px_rgba(28,27,27,0.045)]">
-      <table className="min-w-full border-collapse text-sm">
-        <thead className="bg-moss/10 text-xs font-extrabold uppercase tracking-normal text-moss">
-          <tr>
-            {headers.map((header, index) => (
-              <th className={["border-b border-line px-4 py-3", alignmentClass(alignments[index])].join(" ")} key={`${header}-${index}`}>
-                {renderInlineText(header)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-line text-ink/72">
-          {rows.map((row, rowIndex) => (
-            <tr key={`${row.join("-")}-${rowIndex}`}>
-              {headers.map((header, columnIndex) => (
-                <td className={["px-4 py-3 align-top", alignmentClass(alignments[columnIndex])].join(" ")} key={`${header}-${columnIndex}`}>
-                  {renderInlineText(row[columnIndex] ?? "")}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+      <div className="grid text-sm" style={gridStyle}>
+        {headers.map((header, index) => (
+          <div
+            className={[
+              "border-b border-line bg-moss/10 px-4 py-3 text-xs font-extrabold uppercase tracking-normal text-moss",
+              alignmentClass(alignments[index]),
+            ].join(" ")}
+            key={`${header}-${index}`}
+          >
+            {renderInlineText(header)}
+          </div>
+        ))}
+        {rows.map((row, rowIndex) =>
+          headers.map((header, columnIndex) => (
+            <div
+              className={[
+                rowIndex === 0 ? "" : "border-t border-line",
+                "px-4 py-3 text-ink/72",
+                alignmentClass(alignments[columnIndex]),
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              key={`${row.join("-")}-${header}-${columnIndex}`}
+            >
+              {renderInlineText(row[columnIndex] ?? "")}
+            </div>
+          )),
+        )}
+      </div>
     </div>
   );
 }
@@ -411,7 +423,7 @@ function InlineCtaCard({
     <aside className="max-w-2xl rounded-3xl border border-moss/20 bg-moss/10 p-6 shadow-[0_18px_44px_rgba(28,27,27,0.045)]">
       <p className="text-base font-bold leading-7 text-ink">{renderInlineText(body)}</p>
       <MarketingCtaLink
-        className="focus-ring mt-4 inline-flex min-h-11 items-center justify-center gap-2 bg-moss px-5 text-sm font-bold text-porcelain transition hover:bg-ink"
+        className="focus-ring mt-4 inline-flex min-h-11 items-center justify-center gap-2 bg-moss px-5 text-sm font-bold text-porcelain hover:bg-ink"
         eventLabel="article_inline_cta"
         eventProperties={{ intent: "get_pip" }}
         href={href}

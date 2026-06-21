@@ -50,13 +50,13 @@ export function ConsentGate({ email }: { email: string }) {
           </div>
         </PipIntroScene>
         <div className="mt-8 flex gap-4 text-xs font-semibold text-ink/[0.45]">
-          <Link className="hover:text-ink" href="/privacy">
+          <Link className="focus-ring pip-text-action-link hover:text-ink" href="/privacy">
             Privacy
           </Link>
-          <Link className="hover:text-ink" href="/terms">
+          <Link className="focus-ring pip-text-action-link hover:text-ink" href="/terms">
             Terms
           </Link>
-          <Link className="hover:text-ink" href="/support">
+          <Link className="focus-ring pip-text-action-link hover:text-ink" href="/support">
             Support
           </Link>
         </div>

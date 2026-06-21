@@ -26,6 +26,10 @@ export default async function AppPage({
     return <PipHome authState={{ status: "guest" }} authNotice={authNotice} devOnboardingFlow />;
   }
 
+  if (devOnboardingState === "demo") {
+    return <PipHome />;
+  }
+
   if (devOnboardingState === "consent") {
     return <PipHome authState={{ status: "needs-consent", email: "tester@example.com" }} />;
   }

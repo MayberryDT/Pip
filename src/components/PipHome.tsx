@@ -1451,7 +1451,7 @@ function OnboardingIntro({
           actions={
             <button
               type="button"
-              className="focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)] transition disabled:bg-ink/30"
+              className="focus-ring ui-pressable inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)] disabled:bg-ink/30"
               disabled={isSavingMonthlySavings}
               onClick={saveDefaultMonthlySavings}
             >
@@ -1482,14 +1482,14 @@ function OnboardingIntro({
           onStartDevSignIn ? (
             <button
               type="button"
-              className="focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
+              className="focus-ring ui-pressable inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
               onClick={onStartDevSignIn}
             >
               Continue with Google
             </button>
           ) : (
             <a
-              className="focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
+              className="focus-ring ui-pressable inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
               href="/api/auth/oauth/google"
             >
               Continue with Google
@@ -1549,7 +1549,7 @@ function ReadyIntro({
         actions={
           <button
             type="button"
-            className="focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
+            className="focus-ring ui-pressable inline-flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
             onClick={onConnectData}
           >
             {dataAction?.buttonLabel ?? "Connect data"}

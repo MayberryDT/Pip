@@ -71,7 +71,7 @@ export function PlaidOAuthResume() {
           ) : null}
           {state === "error" ? (
             <a
-              className="focus-ring mt-5 inline-flex min-h-11 items-center rounded-full border border-ink/10 bg-porcelain px-5 text-sm font-semibold text-ink"
+              className="focus-ring ui-pressable mt-5 inline-flex min-h-11 items-center rounded-full border border-ink/10 bg-porcelain px-5 text-sm font-semibold text-ink"
               href="/app"
             >
               Back to Pip
