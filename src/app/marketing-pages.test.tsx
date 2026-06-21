@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import MarketingHomePage from "@/app/page";
 import AppPage from "@/app/app/page";
 import BlogIndexPage from "@/app/blog/page";
@@ -66,8 +66,10 @@ describe("marketing website pages", () => {
     expect(html).toContain('class="pip-title-line"');
     expect(html).toContain('class="pip-title-line pip-title-line-accent"');
     expect(html).toContain("Get Pip");
-    expect(html).toContain("$2.99/week");
     expect(html).toContain("$7.99/month");
+    expect(html).not.toContain("$2.99/week");
+    expect(html).not.toContain("Best value");
+    expect(html).not.toContain("About $95.88/year");
     expect(html).not.toContain("Read-only account data. Pip cannot move your money.");
     expect(html).not.toContain("Read-only account data");
     expect(html).not.toContain("Pip cannot move money");
@@ -85,6 +87,7 @@ describe("marketing website pages", () => {
     expect(html).toContain(marketingAssets.homepageBalanceRoom.src);
     expect(html).toContain(marketingAssets.homepageAskPip.src);
     expect(html).toContain(marketingAssets.blogMeetPipCard.src);
+    expect(html).toContain(">How the number works</a>");
     expect(html).toContain("editorial-mobile-menu");
     expect(html).not.toContain("editorial-mobile-nav");
     expect(html).not.toMatch(stalePublicMarketingPattern);
@@ -141,6 +144,9 @@ describe("marketing website pages", () => {
       .slice(css.lastIndexOf("@media (max-width: 980px)"))
       .split("@media (max-width: 900px)")[0];
     const mobileCss = css.slice(css.lastIndexOf("@media (max-width: 767px)"));
+    const posterCss = css
+      .slice(css.indexOf(".pip-story-poster-anti,\n.pip-story-poster-final {"))
+      .split(".pip-story-poster-anti::before")[0];
 
     expect(css).toContain(".pip-balance-layout,");
     expect(css).toContain(".pip-generated-figure {");
@@ -149,6 +155,10 @@ describe("marketing website pages", () => {
     expect(css).toContain(".pip-step-rule-list {");
     expect(css).toContain(".pip-blog-editorial-grid {");
     expect(css).toContain(".pip-final-figure {");
+    expect(css).toContain(".pip-home-section {\n  padding: 5.75rem 0;");
+    expect(css).toContain(".pip-hero-section {");
+    expect(css).toContain("padding-bottom: 5.5rem;");
+    expect(posterCss).toContain("aspect-ratio: 16 / 8.5;");
     expect(tabletCss).toContain(".pip-balance-layout,");
     expect(tabletCss).toContain(".pip-habit-layout,");
     expect(tabletCss).toContain(".pip-ask-layout {");
@@ -159,21 +169,31 @@ describe("marketing website pages", () => {
   });
 
   it("keeps the product app available at /app", async () => {
-    const page = await AppPage({
-      searchParams: Promise.resolve({
-        onboarding: "guest",
-      }),
-    });
-    const html = renderToStaticMarkup(page);
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
-    expect(html).toContain("Hi,");
-    expect(html).toContain("Continue with Google");
-    expect(html).not.toContain("Spendable Cash Today");
+    try {
+      const page = await AppPage({
+        searchParams: Promise.resolve({}),
+      });
+      const html = renderToStaticMarkup(page);
+
+      expect(html).toContain("Hi,");
+      expect(html).toContain("Continue with Google");
+      expect(html).toContain("read-only account connection");
+      expect(html).not.toContain("$104");
+      expect(html).not.toContain("I see a payment to Capital One");
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("renders required public support pages", () => {
-    expect(renderToStaticMarkup(<HowItWorksPage />)).toContain("Pip turns money noise into one daily number");
-    expect(renderToStaticMarkup(<HowTheNumberWorksPage />)).toContain("Spendable Cash Today is simple on purpose");
+    expect(renderToStaticMarkup(<HowItWorksPage />)).toContain(
+      "Pip turns your bank balance into today&#x27;s spending room.",
+    );
+    expect(renderToStaticMarkup(<HowTheNumberWorksPage />)).toContain(
+      "The in-app receipt should read like",
+    );
     expect(renderToStaticMarkup(<PricingPageContent />)).toContain("Simple pricing for one daily number");
     expect(renderToStaticMarkup(<SecurityPage />)).toContain("No money movement");
     expect(renderToStaticMarkup(<SupportPage />)).toContain("Account Connection Help");
@@ -266,7 +286,9 @@ describe("marketing website pages", () => {
     const llms = readFileSync(join(process.cwd(), "public/llms.txt"), "utf8");
 
     expect(llms).toContain("Spendable Cash Today");
-    expect(llms).toContain("$2.99/week");
+    expect(llms).toContain("$7.99/month");
+    expect(llms).not.toContain("$2.99/week");
+    expect(llms).not.toMatch(/weekly pricing|weekly plan/i);
     expect(llms).toContain("https://spendwithpip.com/how-the-number-works");
     expect(llms).toContain("https://spendwithpip.com/security");
     expect(llms).toContain("https://spendwithpip.com/delete-account");

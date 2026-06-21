@@ -1459,7 +1459,7 @@ function OnboardingIntro({
       <PipIntroScene
         priority
         notice={authNotice ? <AuthNotice /> : null}
-        title="Hi, I’m Pip. I’ll help you find what’s okay to spend today."
+        title="Hi, I’m Pip. I’ll help you find today's spending room."
         className="onboarding-step-scene"
         actions={
           onStartDevSignIn ? (
@@ -1481,7 +1481,10 @@ function OnboardingIntro({
         }
         messageClassName="onboarding-intro-message"
       >
-        <p>First we’ll sign in. Then we’ll choose monthly savings and connect data.</p>
+        <p>
+          First we’ll sign in. Then we’ll choose monthly savings and connect a read-only account
+          connection.
+        </p>
       </PipIntroScene>
     </div>
   );

@@ -232,7 +232,8 @@ describe("PipHome", () => {
     expect(visibleText).not.toContain("Spendable Cash Today");
     expect(visibleText).not.toContain("Connect data to see today’s number.");
     expect(countOccurrences(markup, 'data-testid="pip-cash-number"')).toBe(0);
-    expect(visibleText).toContain("Hi, I’m Pip. I’ll help you find what’s okay to spend today.");
+    expect(visibleText).toContain("Hi, I’m Pip. I’ll help you find today&#x27;s spending room.");
+    expect(visibleText).toContain("read-only account connection");
     expect(markup).toContain("Continue with Google");
     expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
     expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(0);

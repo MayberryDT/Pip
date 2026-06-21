@@ -7,8 +7,9 @@ describe("onboarding copy", () => {
   it("keeps sign-in focused on Pip accuracy without exposing balances by default", () => {
     const markup = renderToStaticMarkup(<LoginPanel />);
 
-    expect(markup).toContain("Hi, I’m Pip. I’ll help you find the money");
+    expect(markup).toContain("Hi, I’m Pip. I’ll help you find today&#x27;s spending room.");
     expect(markup).toContain("Connect checking and cards");
+    expect(markup).toContain("read-only account connection");
     expect(markup).toContain("without making balances the default number");
     expect(markup).toContain("Sign in with Google to set up Pip");
     expect(markup).toContain("Continue with Google");

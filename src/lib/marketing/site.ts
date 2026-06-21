@@ -2,7 +2,7 @@ export const marketingSite = {
   name: "Pip",
   defaultTitle: "Pip - Before you spend, check one number",
   defaultDescription:
-    "Pip is a paid daily money companion that shows Spendable Cash Today, one calm number before you spend. Plans start at $2.99/week.",
+    "Pip is a paid daily money companion that shows Spendable Cash Today, one calm number before you spend. One monthly subscription costs $7.99/month.",
   domain: "spendwithpip.com",
   supportEmail: "tyler@animasai.co",
   appPath: "/app",
@@ -27,7 +27,7 @@ export const publicMarketingPages = [
   {
     path: "/pricing",
     label: "Pricing",
-    description: "See Pip weekly and monthly pricing.",
+    description: "See Pip's single monthly price.",
   },
   {
     path: "/security",

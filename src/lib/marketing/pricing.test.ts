@@ -13,10 +13,11 @@ describe("marketing pricing constants", () => {
       status: "available",
       primaryLabel: "Get Pip",
     });
-    expect(pipPricing.weekly.displayPrice).toBe("$2.99/week");
     expect(pipPricing.monthly.displayPrice).toBe("$7.99/month");
-    expect(pipPricingPlans.map((plan) => plan.id)).toEqual(["weekly", "monthly"]);
+    expect(pipPricing).not.toHaveProperty("weekly");
+    expect(pipPricingPlans.map((plan) => plan.id)).toEqual(["monthly"]);
+    expect(pipPricingPlans).toHaveLength(1);
     expect(pipPaidTrustLine).toContain("money data should not be the product");
-    expect(pipSubscriptionCaveat).toContain("Subscriptions are managed");
+    expect(pipSubscriptionCaveat).toContain("One monthly subscription");
   });
 });

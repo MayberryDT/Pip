@@ -20,7 +20,7 @@ import { buildOrganizationJsonLd, buildWebSiteJsonLd } from "@/lib/marketing/str
 export const metadata: Metadata = buildMarketingMetadata({
   title: "Pip",
   description:
-    "Pip is a paid daily money companion that shows Spendable Cash Today: one calm number before you spend. Plans start at $2.99/week.",
+    "Pip is a paid daily money companion that shows Spendable Cash Today: one calm number before you spend. One monthly subscription costs $7.99/month.",
   path: "/",
 });
 
@@ -68,7 +68,7 @@ const askPipConversation = [
   },
   {
     speaker: "Pip",
-    body: "Yes. You still have $84 for today.",
+    body: "A $50 purchase would leave about $84 in today's number.",
     tone: "pip",
   },
   {
@@ -391,8 +391,8 @@ export default function MarketingHomePage() {
                 <span className="pip-title-line">before you spend.</span>
               </h2>
               <p className="pip-home-lede">
-                Pip gives you one calm number before the next purchase. Plans start at{" "}
-                {pipPricing.weekly.displayPrice}.
+                Pip gives you one calm number before the next purchase. One monthly subscription
+                costs {pipPricing.monthly.displayPrice}.
               </p>
               <div className="pip-action-row">
                 <MarketingCtaLink
@@ -408,7 +408,7 @@ export default function MarketingHomePage() {
                   View pricing
                 </Link>
               </div>
-              <p className="pip-final-proof">Plans start at {pipPricing.weekly.displayPrice}.</p>
+              <p className="pip-final-proof">One price: {pipPricing.monthly.displayPrice}.</p>
               </figcaption>
             </figure>
           </div>

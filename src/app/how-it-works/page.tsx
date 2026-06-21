@@ -51,7 +51,7 @@ export default function HowItWorksPage() {
           <div className="col-span-12 lg:col-span-8">
             <SwissKicker>How it works</SwissKicker>
             <SwissTitle className="mt-5" level={1} size="page">
-              Pip turns money noise into one daily number.
+              Pip turns your bank balance into today's spending room.
             </SwissTitle>
           </div>
           <div className="col-span-12 lg:col-span-3 lg:col-start-10">

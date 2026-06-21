@@ -41,7 +41,7 @@ export default async function AppPage({
   }
 
   if (!isSupabaseConfigured()) {
-    return <PipHome />;
+    return <PipHome authState={{ status: "guest" }} authNotice={authNotice} />;
   }
 
   const supabase = await createSupabaseServerClient();

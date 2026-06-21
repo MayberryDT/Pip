@@ -9,10 +9,8 @@ Primary product concept:
 Spendable Cash Today is the one daily number Pip shows by default. It is meant to help users stop guessing from their bank balance without maintaining a budget, spreadsheet, or finance dashboard.
 
 Pricing:
-- Weekly plan: $2.99/week.
-- Monthly plan: $7.99/month.
-- Weekly is about $155.48/year if kept weekly.
-- Monthly is about $95.88/year if kept monthly.
+- Pip costs $7.99/month.
+- One price, one way to pay.
 - Pip is paid because money data should not be the product. Pip does not position itself as a permanent free product.
 
 Product access:

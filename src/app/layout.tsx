@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     template: "%s | Pip",
   },
   description:
-    "Pip is a cute daily money companion that shows what is actually okay to use today.",
+    "Pip is a cute daily money companion that shows today's spending room before you spend.",
   manifest: "/manifest.webmanifest",
   icons: {
     icon: [
@@ -41,7 +41,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "Pip - The number your bank won't show you",
     description:
-      "Pip is a cute daily money companion that shows what is actually okay to use today.",
+      "Pip is a cute daily money companion that shows today's spending room before you spend.",
   },
   formatDetection: {
     telephone: false,

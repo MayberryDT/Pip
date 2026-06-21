@@ -8,7 +8,7 @@ import { isAndroidAppShellUserAgent } from "@/lib/platform/android-shell";
 const pricingMetadata: Metadata = buildMarketingMetadata({
   title: "Pip Pricing",
   description:
-    "Pip plans start at $2.99/week for one daily spending number, read-only account connection, and Ask Pip context.",
+    "Pip costs $7.99/month for one daily spending number, read-only account connection, and Ask Pip context.",
   path: "/pricing",
 });
 

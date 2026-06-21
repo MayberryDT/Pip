@@ -38,4 +38,16 @@ describe("pipTrustPolicy", () => {
     expect(answer.message).not.toMatch(/\$2\.99|\$7\.99|pricing/i);
     expect(answer.href).not.toBe("/pricing");
   });
+
+  it("answers web pricing questions with the single monthly price", () => {
+    const answer = composeTrustPolicyAnswer("How much does Pip cost?");
+
+    expect(answer).toMatchObject({
+      category: "pricing",
+      href: "/pricing",
+    });
+    expect(pipTrustPolicy.pricing).not.toHaveProperty("weekly");
+    expect(answer.message).toContain("$7.99/month");
+    expect(answer.message).not.toMatch(/\$2\.99|weekly/i);
+  });
 });

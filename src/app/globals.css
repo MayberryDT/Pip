@@ -1229,18 +1229,6 @@ button {
     0 1px 0 rgba(255, 255, 255, 0.88) inset;
 }
 
-.editorial-site .pricing-plan-card-recommended {
-  border-color: rgba(78, 101, 69, 0.5);
-  box-shadow:
-    0 20px 46px rgba(78, 101, 69, 0.11),
-    0 1px 0 rgba(255, 255, 255, 0.9) inset;
-}
-
-.editorial-site .pricing-plan-badge {
-  border-radius: 9999px;
-  box-shadow: none;
-}
-
 .editorial-site .pricing-plan-card .swiss-price {
   font-size: clamp(2.8rem, 4.2vw, 4rem);
 }
@@ -1449,7 +1437,7 @@ button {
 }
 
 .pip-home-section {
-  padding: 7.5rem 0;
+  padding: 5.75rem 0;
 }
 
 .pip-hero-section {
@@ -1457,7 +1445,7 @@ button {
   overflow: hidden;
   background: linear-gradient(180deg, rgba(252, 249, 248, 0.98), rgba(246, 243, 242, 0.82));
   padding-top: 4.5rem;
-  padding-bottom: 7.5rem;
+  padding-bottom: 5.5rem;
 }
 
 .pip-hero-grid,
@@ -1754,7 +1742,7 @@ button {
 
 .pip-story-poster-anti,
 .pip-story-poster-final {
-  aspect-ratio: 1672 / 941;
+  aspect-ratio: 16 / 8.5;
 }
 
 .pip-story-poster-anti::before {
@@ -3172,7 +3160,7 @@ button {
   }
 
   .pip-home-section {
-    padding: 4rem 0;
+    padding: 3.25rem 0;
   }
 
   .pip-hero-section {

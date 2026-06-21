@@ -1,6 +1,6 @@
 ---
 title: "What is Spendable Cash Today?"
-description: "Spendable Cash Today is Pip's daily number for what is actually okay to use today."
+description: "Spendable Cash Today is Pip's daily number for today's spending room."
 slug: "what-is-spendable-cash-today"
 publishedAt: "2026-06-11"
 updatedAt: "2026-06-12"
@@ -26,7 +26,7 @@ related:
 ---
 ## Quick answer
 
-Spendable Cash Today is Pip's daily number for what is actually okay to use today after bills, Monthly Savings, Savings Goals, and recent spending pressure are considered. It is a decision-support number, not a guarantee, not a full budget, and not the same as your bank balance.
+Spendable Cash Today is Pip's daily number for today's spending room after bills, Monthly Savings, Savings Goals, and recent spending pressure are considered. It is a decision-support number, not a guarantee, not a full budget, and not the same as your bank balance.
 
 The point is to answer a daily question: "What room do I have before I spend?" Pip makes that number the default because most everyday spending decisions happen quickly. You should not need a spreadsheet before lunch, a cart, or a night out.
 

@@ -16,7 +16,7 @@ seo:
   description: "Meet Pip, a cute daily money companion that gives you one useful number: Spendable Cash Today."
 faq:
   - question: "What is Pip?"
-    answer: "Pip is a cute daily money companion that shows Spendable Cash Today, one number for what is actually okay to use today."
+    answer: "Pip is a cute daily money companion that shows Spendable Cash Today, one number for today's spending room."
   - question: "Is Pip just a mascot?"
     answer: "No. Pip is the friendly wrapper around a serious daily money signal. The character makes checking money feel lighter, but the product still uses account data carefully."
   - question: "Is Pip a budget app?"

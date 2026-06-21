@@ -23,20 +23,16 @@ import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 
 const pricingFaq = [
   {
-    title: "What do the plans cost?",
-    copy: `${pipPricing.weekly.displayPrice} or ${pipPricing.monthly.displayPrice}. That is about ${pipTrustPolicy.pricing.weeklyAnnualized} weekly or ${pipTrustPolicy.pricing.monthlyAnnualized} monthly over a full year.`,
+    title: "What does Pip cost?",
+    copy: `Pip costs ${pipPricing.monthly.displayPrice}. One price, one way to pay.`,
   },
   {
     title: "Why is Pip paid?",
     copy: "Pip uses sensitive money context. The paid model keeps incentives direct: no ads and no selling your financial data.",
   },
   {
-    title: "Who is weekly for?",
-    copy: "Weekly is for people who want the lowest commitment before making Pip a daily habit.",
-  },
-  {
-    title: "Who is monthly for?",
-    copy: "Monthly is for people who want the best value and plan to check Pip before spending most days.",
+    title: "What is included?",
+    copy: "The monthly subscription includes Spendable Cash Today, read-only account connection, monthly savings, Ask Pip, purchase checks, account management, financial reads, and daily number updates.",
   },
   {
     title: "How are subscriptions managed?",
@@ -66,8 +62,8 @@ export function PricingPageContent() {
               Simple pricing for one daily number.
             </SwissTitle>
             <SwissText className="mt-6 text-lg leading-8">
-              Pip helps you stop guessing from your bank balance before the next purchase. Plans
-              start at {pipPricing.weekly.displayPrice}.
+              Pip helps you stop guessing from your bank balance before the next purchase. One
+              monthly subscription costs {pipPricing.monthly.displayPrice}.
             </SwissText>
           </div>
           <div className="col-span-12 lg:col-span-7 lg:col-start-6 lg:row-span-2 lg:row-start-1">

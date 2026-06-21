@@ -97,7 +97,6 @@ Body`),
       expect.arrayContaining([
         "why-pip-is-paid",
         "why-your-money-app-should-not-be-free",
-        "weekly-pricing-for-a-daily-spending-app",
         "bank-balance-vs-spending-number",
       ]),
     );

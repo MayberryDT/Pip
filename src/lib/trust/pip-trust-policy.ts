@@ -34,10 +34,7 @@ export const pipTrustPolicy = {
     },
   ],
   pricing: {
-    weekly: pipPricing.weekly.displayPrice,
     monthly: pipPricing.monthly.displayPrice,
-    weeklyAnnualized: "$155.48/year",
-    monthlyAnnualized: "$95.88/year",
   },
   productBoundaries: [
     "Pip is decision support, not a bank, broker, lender, credit counselor, tax advisor, or financial advisor.",
@@ -61,7 +58,7 @@ export const pipTrustPolicy = {
   deletionSummary:
     "Deletion removes account and financial rows, balances, transactions, sync logs, settings, reports, feedback, chat context, product events, and provider tokens, while limited records may be retained for fraud prevention, security, tax, accounting, or legal obligations.",
   subscriptionSummary:
-    "Subscriptions are managed where they start or install. Cancel through that platform before renewal; email support for access or billing mismatch questions.",
+    "One monthly subscription is managed where it starts or installs. Cancel through that platform before renewal; email support for access or billing mismatch questions.",
   calculationSummary:
     "Spendable Cash Today starts from connected balances and transactions, subtracts recurring obligations and monthly savings, accounts for pending committed spend, adjusts for recent spending pace, and caps the result against available cash.",
   publicLinks: {
@@ -152,7 +149,7 @@ export function composeTrustPolicyAnswer(
     return {
       category: "pricing",
       message:
-        `Pip lists ${pipTrustPolicy.pricing.weekly} and ${pipTrustPolicy.pricing.monthly}. Subscriptions are managed where they start or install.`,
+        `Pip lists one public price: ${pipTrustPolicy.pricing.monthly}. One monthly subscription is managed where it starts or installs.`,
       linkLabel: "Pricing details",
       href: pipTrustPolicy.publicLinks.pricing,
     };

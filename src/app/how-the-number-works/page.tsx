@@ -117,8 +117,8 @@ export default function HowTheNumberWorksPage() {
           </div>
           <div className="col-span-12 border-t border-line pt-5 lg:col-span-5 lg:col-start-8">
             <p className="text-sm font-black uppercase leading-6 tracking-[0.08em] text-moss">
-              The in-app receipt should read like: based on connected data refreshed at a specific
-              time, with known limits shown beside the number.
+              The in-app receipt should read like a timestamped note: based on connected data
+              refreshed at a specific time, with known limits shown beside the number.
             </p>
           </div>
         </SwissSection>

@@ -19,20 +19,12 @@ export function PricingCards({
 }) {
   return (
     <div>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4">
         {pipPricingPlans.map((plan) => (
           <article
-            className={[
-              "pricing-plan-card relative flex min-h-[19rem] flex-col p-6 text-ink",
-              plan.recommended ? "pricing-plan-card-recommended" : "",
-            ].join(" ")}
+            className="pricing-plan-card relative flex min-h-[19rem] flex-col p-6 text-ink"
             key={plan.id}
           >
-            {plan.recommended ? (
-              <span className="pricing-plan-badge absolute right-4 top-4 bg-moss px-3 py-1 text-xs font-bold text-porcelain">
-                Best value
-              </span>
-            ) : null}
             <p className="text-xs font-extrabold uppercase tracking-[0.08em] text-moss">{plan.label}</p>
             <div aria-label={plan.displayPrice} className="mt-5 flex items-end gap-2">
               <p className="swiss-price text-ink">
@@ -42,14 +34,8 @@ export function PricingCards({
             </div>
             <h3 className="mt-5 text-xl font-bold text-ink">{plan.tagline}</h3>
             <p className="mt-2 text-sm leading-6 text-ink/66">{plan.description}</p>
-            <p className="mt-3 text-xs font-semibold leading-5 text-ink/50">{plan.annualizedLabel}</p>
             <MarketingCtaLink
-              className={[
-                "focus-ring mt-auto inline-flex min-h-11 w-fit items-center justify-center px-5 text-sm font-bold transition",
-                plan.recommended
-                  ? "bg-ink text-porcelain hover:bg-moss"
-                  : "border border-line bg-porcelain text-ink hover:border-moss",
-              ].join(" ")}
+              className="focus-ring mt-auto inline-flex min-h-11 w-fit items-center justify-center bg-ink px-5 text-sm font-bold text-porcelain transition hover:bg-moss"
               eventLabel={`${eventSource}_${plan.id}`}
               eventProperties={{
                 intent: "get_pip",

@@ -1775,7 +1775,7 @@ function createPipTools() {
           state: getSpendableCashTodayState(result),
           confidence: metric?.confidence,
           definition:
-            "Spendable Cash Today is the amount I estimate is okay to use today from your normal money pattern, recurring obligations, monthly savings, recent spending pace, and available cash.",
+            "Spendable Cash Today is the spending room I estimate for today from your normal money pattern, recurring obligations, monthly savings, recent spending pace, and available cash.",
           risesWhen: [
             "your normal income pattern leaves more room after bills and savings",
             "recent everyday spending runs lighter than pace",

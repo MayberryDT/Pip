@@ -17,7 +17,7 @@ export function LoginPanel() {
       <section className="w-full max-w-sm">
         <PipIntroScene
           priority
-          title="Hi, I’m Pip. I’ll help you find the money that’s actually okay to use today."
+          title="Hi, I’m Pip. I’ll help you find today's spending room."
           actions={
             <Link
               className="focus-ring flex min-h-12 w-full items-center justify-center rounded-full bg-ink px-5 text-base font-semibold text-paper shadow-[0_12px_34px_rgba(23,26,31,0.12)]"
@@ -29,8 +29,8 @@ export function LoginPanel() {
           messageClassName="onboarding-intro-message"
         >
           <p>
-            Connect checking and cards so I can show Spendable Cash Today without making balances the
-            default number.
+            Connect checking and cards with a read-only account connection so I can show Spendable
+            Cash Today without making balances the default number.
           </p>
           <p className="mt-3 text-xs leading-5 text-ink/50">
             Sign in with Google to set up Pip on this device.
