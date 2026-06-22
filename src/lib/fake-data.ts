@@ -9,7 +9,8 @@ export type FakeDataScenario =
   | "missing-card"
   | "cash-guardrail"
   | "cutback-dining"
-  | "negative";
+  | "negative"
+  | "production-scale";
 
 export const fakeSnapshot: FinancialSnapshot = {
   settings: {
@@ -572,6 +573,8 @@ export const cutbackDiningPipSnapshot: FinancialSnapshot = {
   ],
 };
 
+export const productionScalePipSnapshot = buildProductionScaleSnapshot();
+
 export function getFakeSnapshot(scenario: string | null | undefined): FinancialSnapshot {
   switch (scenario) {
     case "healthy":
@@ -590,6 +593,8 @@ export function getFakeSnapshot(scenario: string | null | undefined): FinancialS
       return cutbackDiningPipSnapshot;
     case "negative":
       return negativePipCashSnapshot;
+    case "production-scale":
+      return productionScalePipSnapshot;
     case "default":
     default:
       return fakeSnapshot;
@@ -606,8 +611,485 @@ export function isFakeDataScenario(value: string | null | undefined): value is F
     value === "missing-card" ||
     value === "cash-guardrail" ||
     value === "cutback-dining" ||
-    value === "negative"
+    value === "negative" ||
+    value === "production-scale"
   );
+}
+
+function buildProductionScaleSnapshot(): FinancialSnapshot {
+  const months = [
+    "2025-01",
+    "2025-02",
+    "2025-03",
+    "2025-04",
+    "2025-05",
+    "2025-06",
+    "2025-07",
+    "2025-08",
+    "2025-09",
+    "2025-10",
+    "2025-11",
+    "2025-12",
+    "2026-01",
+    "2026-02",
+    "2026-03",
+    "2026-04",
+    "2026-05",
+    "2026-06",
+  ];
+  const transactions = months.flatMap((month, index) =>
+    buildProductionScaleMonth({
+      month,
+      monthIndex: index,
+      currentMonth: month === "2026-06",
+    }),
+  );
+
+  return {
+    settings: {
+      asOfDate: "2026-06-20",
+      protectedSavingsMonthlyCents: 65000,
+    },
+    accounts: [
+      {
+        id: "prod_checking_primary",
+        name: "Primary Checking",
+        institutionName: "Cedar Test Bank",
+        kind: "checking",
+        balanceCents: 624300,
+        availableBalanceCents: 618900,
+        lastFour: "1204",
+      },
+      {
+        id: "prod_checking_household",
+        name: "Household Checking",
+        institutionName: "Cedar Test Bank",
+        kind: "checking",
+        balanceCents: 187500,
+        availableBalanceCents: 185100,
+        lastFour: "2291",
+      },
+      {
+        id: "prod_savings_protected",
+        name: "Protected Savings",
+        institutionName: "Cedar Test Bank",
+        kind: "savings",
+        balanceCents: 1484000,
+        availableBalanceCents: 1484000,
+        lastFour: "4588",
+        isProtectedSavings: true,
+      },
+      {
+        id: "prod_savings_emergency",
+        name: "Emergency Reserve",
+        institutionName: "Pine Test Credit Union",
+        kind: "savings",
+        balanceCents: 723000,
+        availableBalanceCents: 723000,
+        lastFour: "8073",
+      },
+      {
+        id: "prod_card_everyday",
+        name: "Everyday Rewards Card",
+        institutionName: "Cedar Test Bank",
+        kind: "credit_card",
+        balanceCents: -184200,
+        availableBalanceCents: 515800,
+        lastFour: "6194",
+      },
+      {
+        id: "prod_card_travel",
+        name: "Travel Card",
+        institutionName: "Summit Test Financial",
+        kind: "credit_card",
+        balanceCents: -94800,
+        availableBalanceCents: 405200,
+        lastFour: "3342",
+      },
+      {
+        id: "prod_card_store",
+        name: "Store Card",
+        institutionName: "Harbor Test Bank",
+        kind: "credit_card",
+        balanceCents: -12650,
+        availableBalanceCents: 187350,
+        lastFour: "5520",
+      },
+      {
+        id: "prod_auto_loan",
+        name: "Auto Loan",
+        institutionName: "Pine Test Credit Union",
+        kind: "loan",
+        balanceCents: -1132000,
+        availableBalanceCents: 0,
+        lastFour: "9407",
+        includedInPipCash: false,
+      },
+    ],
+    savingsGoals: [
+      {
+        id: "prod_goal_winter_trip",
+        userId: "prod_local_user",
+        name: "Winter trip",
+        targetAmountCents: 240000,
+        targetDate: "2026-12-15",
+        startingAmountCents: 30000,
+        currentAmountCents: 74000,
+        monthlyContributionCents: 6000,
+        includeInSpendableCash: true,
+        status: "active",
+        createdAt: "2026-02-01T12:00:00.000Z",
+        updatedAt: "2026-06-18T12:00:00.000Z",
+      },
+    ],
+    transactions,
+  };
+}
+
+function buildProductionScaleMonth(input: {
+  month: string;
+  monthIndex: number;
+  currentMonth: boolean;
+}): FinancialSnapshot["transactions"] {
+  const prefix = `prod-${input.month}`;
+  const day = (value: number) => `${input.month}-${String(value).padStart(2, "0")}`;
+  const incomeBumpCents = input.monthIndex % 6 === 0 ? 18000 : 0;
+  const groceryShiftCents = (input.monthIndex % 4) * 325;
+  const diningShiftCents = (input.monthIndex % 5) * 215;
+  const pendingSuffix = input.currentMonth ? "-pending" : "";
+  const scaleDiscretionarySpend = (amountCents: number) =>
+    input.currentMonth ? Math.round(amountCents * 0.55) : amountCents;
+  const baseTransactions: FinancialSnapshot["transactions"] = [
+    {
+      id: `${prefix}-income-primary`,
+      accountId: "prod_checking_primary",
+      date: day(5),
+      description: "Payroll deposit",
+      merchantName: "Evergreen Payroll",
+      amountCents: 325000 + incomeBumpCents,
+      category: "payroll",
+      kind: "income",
+    },
+    {
+      id: `${prefix}-income-household`,
+      accountId: "prod_checking_household",
+      date: day(20),
+      description: "Household payroll deposit",
+      merchantName: "Juniper Studio",
+      amountCents: 214000,
+      category: "payroll",
+      kind: "income",
+    },
+    {
+      id: `${prefix}-rent`,
+      accountId: "prod_checking_primary",
+      date: day(1),
+      description: "Monthly rent",
+      merchantName: "Ridgeview Homes",
+      amountCents: -212500,
+      category: "rent",
+      kind: "rent",
+    },
+    {
+      id: `${prefix}-utilities`,
+      accountId: "prod_checking_primary",
+      date: day(3),
+      description: "Electric and water",
+      merchantName: "Valley Utilities",
+      amountCents: -19600 - input.monthIndex * 18,
+      category: "utilities",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-phone`,
+      accountId: "prod_card_everyday",
+      date: day(8),
+      description: "Wireless bill",
+      merchantName: "Signal Grove Mobile",
+      amountCents: -11800,
+      category: "phone",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-insurance`,
+      accountId: "prod_checking_household",
+      date: day(12),
+      description: "Insurance premium",
+      merchantName: "Anchor Mutual",
+      amountCents: -16400,
+      category: "insurance",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-childcare`,
+      accountId: "prod_checking_household",
+      date: day(6),
+      description: "Childcare tuition",
+      merchantName: "Little Pines Learning",
+      amountCents: -72000,
+      category: "childcare",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-subscription-video`,
+      accountId: "prod_card_everyday",
+      date: day(9),
+      description: "Streaming bundle",
+      merchantName: "Stream Garden",
+      amountCents: -2899,
+      category: "subscriptions",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-subscription-workout`,
+      accountId: "prod_card_everyday",
+      date: day(14),
+      description: "Fitness subscription",
+      merchantName: "Forge Online",
+      amountCents: -1900,
+      category: "subscriptions",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-auto-payment`,
+      accountId: "prod_checking_primary",
+      date: day(15),
+      description: "Auto loan payment",
+      merchantName: "Pine Test Credit Union",
+      amountCents: -38600,
+      category: "auto",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-protected-transfer`,
+      accountId: "prod_checking_primary",
+      date: day(7),
+      description: "Transfer to protected savings",
+      merchantName: "Cedar Test Bank",
+      amountCents: -65000,
+      category: "transfer",
+      kind: "transfer",
+    },
+    {
+      id: `${prefix}-reserve-transfer`,
+      accountId: "prod_checking_household",
+      date: day(18),
+      description: "Emergency reserve transfer",
+      merchantName: "Pine Test Credit Union",
+      amountCents: -25000,
+      category: "transfer",
+      kind: "transfer",
+    },
+    {
+      id: `${prefix}-card-payment-everyday`,
+      accountId: "prod_checking_primary",
+      date: day(16),
+      description: "Autopay Everyday Rewards Card",
+      merchantName: "Cedar Test Bank Card",
+      amountCents: -98000 - input.monthIndex * 525,
+      category: "credit card payment",
+      kind: "credit_card_payment",
+      metadata: {
+        issuerName: "Cedar Test Bank Card",
+        matchedConnectedCard: true,
+      },
+    },
+    {
+      id: `${prefix}-card-payment-missing`,
+      accountId: "prod_checking_household",
+      date: day(17),
+      description: "Autopay detached card",
+      merchantName: "Willow Card Services",
+      amountCents: -18600,
+      category: "credit card payment",
+      kind: "credit_card_payment",
+      metadata: {
+        issuerName: "Willow Card Services",
+        matchedConnectedCard: input.monthIndex % 3 !== 0,
+      },
+    },
+    ...buildProductionScaleSpendGroup(prefix, "groceries", "Maple Market", "prod_card_everyday", [
+      [2, scaleDiscretionarySpend(-17440 - groceryShiftCents)],
+      [10, scaleDiscretionarySpend(-13890 - groceryShiftCents)],
+      [15, scaleDiscretionarySpend(-21210 - groceryShiftCents)],
+      [19, scaleDiscretionarySpend(-11480 - groceryShiftCents)],
+    ]),
+    ...buildProductionScaleSpendGroup(prefix, "dining", "Mesa Test Kitchen", "prod_card_everyday", [
+      [4, scaleDiscretionarySpend(-4250 - diningShiftCents)],
+      [11, scaleDiscretionarySpend(-3180 - diningShiftCents)],
+      [13, scaleDiscretionarySpend(-6490 - diningShiftCents)],
+      [18, scaleDiscretionarySpend(-2875 - diningShiftCents)],
+    ]),
+    ...buildProductionScaleSpendGroup(prefix, "transport", "Metro Test Transit", "prod_card_everyday", [
+      [3, scaleDiscretionarySpend(-650)],
+      [7, scaleDiscretionarySpend(-2420)],
+      [16, scaleDiscretionarySpend(-3180)],
+    ]),
+    {
+      id: `${prefix}-pharmacy`,
+      accountId: "prod_card_everyday",
+      date: day(10),
+      description: "Pharmacy purchase",
+      merchantName: "Clover Pharmacy",
+      amountCents: scaleDiscretionarySpend(-3480),
+      category: "health",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-medical-copay`,
+      accountId: "prod_card_everyday",
+      date: day(13),
+      description: "Care visit copay",
+      merchantName: "North Clinic",
+      amountCents: scaleDiscretionarySpend(-4500),
+      category: "health",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-travel${pendingSuffix}`,
+      accountId: "prod_card_travel",
+      date: day(input.currentMonth ? 19 : 11),
+      description: "Regional travel",
+      merchantName: "Compass Rail",
+      amountCents: scaleDiscretionarySpend(-28600 - input.monthIndex * 140),
+      category: "travel",
+      kind: "purchase",
+      pending: input.currentMonth,
+    },
+    {
+      id: `${prefix}-home-supplies`,
+      accountId: "prod_card_store",
+      date: day(9),
+      description: "Home supplies",
+      merchantName: "Habitat Supply",
+      amountCents: scaleDiscretionarySpend(-9740),
+      category: "home",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-school`,
+      accountId: "prod_card_store",
+      date: day(12),
+      description: "School supplies",
+      merchantName: "Notebook Corner",
+      amountCents: scaleDiscretionarySpend(-4220),
+      category: "education",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-coffee-a`,
+      accountId: "prod_card_everyday",
+      date: day(6),
+      description: "Coffee",
+      merchantName: "Copper Test Cafe",
+      amountCents: scaleDiscretionarySpend(-725),
+      category: "coffee",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-coffee-b`,
+      accountId: "prod_card_everyday",
+      date: day(17),
+      description: "Coffee",
+      merchantName: "Copper Test Cafe",
+      amountCents: scaleDiscretionarySpend(-690),
+      category: "coffee",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-pet-supplies`,
+      accountId: "prod_card_everyday",
+      date: day(14),
+      description: "Pet supplies",
+      merchantName: "Paw Print Supply",
+      amountCents: scaleDiscretionarySpend(-5320),
+      category: "pets",
+      kind: "purchase",
+    },
+    {
+      id: `${prefix}-entertainment`,
+      accountId: "prod_card_travel",
+      date: day(19),
+      description: "Weekend tickets",
+      merchantName: "Civic Stage",
+      amountCents: scaleDiscretionarySpend(-7400),
+      category: "entertainment",
+      kind: "purchase",
+    },
+  ];
+
+  if (input.monthIndex % 4 === 1) {
+    baseTransactions.push({
+      id: `${prefix}-refund`,
+      accountId: "prod_card_everyday",
+      date: day(18),
+      description: "Returned item credit",
+      merchantName: "Habitat Supply",
+      amountCents: 4200,
+      category: "refund",
+      kind: "refund",
+    });
+  }
+
+  if (input.monthIndex % 5 === 2) {
+    baseTransactions.push({
+      id: `${prefix}-fee`,
+      accountId: "prod_checking_primary",
+      date: day(19),
+      description: "Account service fee",
+      merchantName: "Cedar Test Bank",
+      amountCents: -1200,
+      category: "bank fees",
+      kind: "fee",
+    });
+  }
+
+  if (input.currentMonth) {
+    baseTransactions.push(
+      {
+        id: `${prefix}-same-day-market-posted`,
+        accountId: "prod_card_everyday",
+        date: day(20),
+        description: "Same-day groceries",
+        merchantName: "Maple Market",
+        amountCents: -750,
+        category: "groceries",
+        kind: "purchase",
+      },
+      {
+        id: `${prefix}-same-day-market-pending`,
+        accountId: "prod_card_everyday",
+        date: day(20),
+        description: "Same-day groceries pending",
+        merchantName: "Maple Market",
+        amountCents: -750,
+        category: "groceries",
+        kind: "purchase",
+        pending: true,
+      },
+    );
+  }
+
+  return baseTransactions;
+}
+
+function buildProductionScaleSpendGroup(
+  prefix: string,
+  category: string,
+  merchantName: string,
+  accountId: string,
+  entries: Array<[number, number]>,
+): FinancialSnapshot["transactions"] {
+  return entries.map(([day, amountCents], index) => ({
+    id: `${prefix}-${category}-${index + 1}`,
+    accountId,
+    date: `${prefix.slice("prod-".length)}-${String(day).padStart(2, "0")}`,
+    description: category === "groceries" ? "Grocery run" : category,
+    merchantName,
+    amountCents,
+    category,
+    kind: "purchase",
+  }));
 }
 
 function buildPipScenario(input: {

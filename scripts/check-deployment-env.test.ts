@@ -293,6 +293,34 @@ PIP_EMAIL_MODE=off
     expect(output).toContain("- PIP_SUPABASE_MODE must not be off in beta mode.");
   });
 
+  it("fails beta mode when local fake app mode is enabled", async () => {
+    const cwd = createTempProject(`
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
+NEXT_PUBLIC_SITE_URL=https://spendwithpip.com
+SUPABASE_SERVICE_ROLE_KEY=service-role-key
+PIP_OPERATOR_TOKEN=operator-token
+PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_RATE_LIMIT_SALT=rate-limit-salt
+PIP_LOCAL_FAKE_APP_MODE=1
+PLAID_CLIENT_ID=plaid-client-id
+PLAID_SECRET=plaid-secret
+PLAID_ENV=production
+OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
+RESEND_API_KEY=resend-key
+PIP_EMAIL_FROM=Pip <hello@spendwithpip.com>
+PIP_EMAIL_POSTAL_ADDRESS=123 Pip St, Denver, CO
+PIP_EMAIL_UNSUBSCRIBE_SECRET=email-secret
+RESEND_WEBHOOK_SECRET=whsec_123
+`);
+
+    const result = await runCheck(cwd, "--mode=beta");
+    const output = result.stderr + result.stdout + result.warnings;
+
+    expect(result.status).toBe(1);
+    expect(output).toContain("- PIP_LOCAL_FAKE_APP_MODE must not be enabled for beta mode.");
+  });
+
   it("fails local-beta mode when staging flag or localhost origins are missing", async () => {
     const cwd = createTempProject(`
 NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co

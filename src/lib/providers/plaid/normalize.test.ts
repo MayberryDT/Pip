@@ -125,4 +125,100 @@ describe("Plaid normalization", () => {
       category: "food and drink:coffee shop",
     });
   });
+
+  it("persists transaction kind from Plaid personal finance categories when available", () => {
+    const cases = [
+      {
+        id: "tx_paycheck",
+        amount: -2200,
+        personalFinanceCategory: {
+          primary: "INCOME",
+          detailed: "INCOME_SALARY",
+        },
+        expectedKind: "income",
+      },
+      {
+        id: "tx_rent",
+        amount: 1400,
+        personalFinanceCategory: {
+          primary: "RENT_AND_UTILITIES",
+          detailed: "RENT_AND_UTILITIES_RENT",
+        },
+        expectedKind: "rent",
+      },
+      {
+        id: "tx_card_payment",
+        amount: 125,
+        personalFinanceCategory: {
+          primary: "LOAN_PAYMENTS",
+          detailed: "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT",
+        },
+        expectedKind: "credit_card_payment",
+      },
+      {
+        id: "tx_transfer",
+        amount: 250,
+        personalFinanceCategory: {
+          primary: "TRANSFER_OUT",
+          detailed: "TRANSFER_OUT_ACCOUNT_TRANSFER",
+        },
+        expectedKind: "transfer",
+      },
+      {
+        id: "tx_refund",
+        amount: -42,
+        personalFinanceCategory: {
+          primary: "TRANSFER_IN",
+          detailed: "TRANSFER_IN_REFUND",
+        },
+        expectedKind: "refund",
+      },
+      {
+        id: "tx_atm_fee",
+        amount: 3.5,
+        personalFinanceCategory: {
+          primary: "BANK_FEES",
+          detailed: "BANK_FEES_ATM_FEES",
+        },
+        expectedKind: "fee",
+      },
+      {
+        id: "tx_streaming",
+        amount: 15.99,
+        personalFinanceCategory: {
+          primary: "ENTERTAINMENT",
+          detailed: "ENTERTAINMENT_TV_AND_MOVIES",
+        },
+        expectedKind: undefined,
+      },
+      {
+        id: "tx_broad_transfer",
+        amount: 125,
+        personalFinanceCategory: {
+          primary: "TRANSFER_OUT",
+          detailed: "TRANSFER_OUT_OTHER_TRANSFER",
+        },
+        expectedKind: undefined,
+      },
+    ] as const;
+
+    for (const caseDef of cases) {
+      const normalized = normalizePlaidTransaction({
+          transaction_id: caseDef.id,
+          account_id: "acct_checking",
+          amount: caseDef.amount,
+          date: "2026-06-05",
+          authorized_date: null,
+          name: caseDef.id,
+          merchant_name: caseDef.id,
+          pending: false,
+          personal_finance_category: caseDef.personalFinanceCategory,
+        } as PlaidTransaction);
+
+      expect(normalized).toMatchObject({
+        id: caseDef.id,
+      });
+      expect(normalized.kind).toBe(caseDef.expectedKind);
+    }
+  });
 });

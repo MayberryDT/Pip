@@ -416,7 +416,11 @@ export const cardSchema = z.discriminatedUnion("type", [
 ]);
 
 export const responseModeSchema = z.enum(["chat_only", "show_card", "update_context", "clarify", "guidance"]);
-export const rawPromptChipOutputSchema = z.union([promptChipSchema, z.string().min(1).max(160)]);
+export const rawPromptChipOutputSchema = z.union([
+  promptChipSchema,
+  z.string().min(1).max(160),
+  z.record(z.string(), z.unknown()),
+]);
 const savingsGoalPendingFieldSchema = z.enum([
   "target_amount",
   "target_date",

@@ -55,6 +55,10 @@ export function runDeploymentEnvCheck({
       addUnique(missing, "SUPABASE_SERVICE_ROLE_KEY must be a Supabase service-role or secret key in local-beta mode.");
     }
 
+    if (effectiveEnv.PIP_LOCAL_FAKE_APP_MODE === "1") {
+      addUnique(missing, "PIP_LOCAL_FAKE_APP_MODE must not be enabled for beta mode.");
+    }
+
     if (hasValue(effectiveEnv.PLAID_ENV) && effectiveEnv.PLAID_ENV !== "production") {
       addUnique(missing, `PLAID_ENV must be production for ${mode} mode.`);
     }

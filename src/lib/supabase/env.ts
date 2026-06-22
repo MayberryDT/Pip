@@ -17,6 +17,10 @@ export function isSupabaseConfigured(env: Record<string, string | undefined> = p
   return Boolean(env.NEXT_PUBLIC_SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
+export function isLocalFakeAppMode(): boolean {
+  return process.env.PIP_LOCAL_FAKE_APP_MODE === "1";
+}
+
 export function getSupabasePublicConfig(): { url: string; anonKey: string } {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

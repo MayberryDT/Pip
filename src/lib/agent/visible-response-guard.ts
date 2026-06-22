@@ -9,7 +9,7 @@ export type VisibleResponseLimits = {
 };
 
 export const visibleResponseSurfaceLimits: Record<VisibleResponseSurface, VisibleResponseLimits> = {
-  bridge: { maxWords: 95, maxChars: 520 },
+  bridge: { maxWords: 45, maxChars: 260 },
   companion: { maxWords: 85, maxChars: 520 },
   openingBubble: { maxWords: 38, maxChars: 220 },
   correction: { maxWords: 70, maxChars: 420 },
@@ -66,7 +66,7 @@ export function guardVisibleFinalMessage(
 
   const unsupportedPromise = getUnsupportedCardPromise(message, cards);
 
-  if (cards.length > 0 && /\?\s*$/.test(message.trim())) {
+  if (shouldRemoveTrailingQuestion(message, cards)) {
     const repairedMessage = removeTrailingQuestionSentence(message);
 
     if (
@@ -196,6 +196,15 @@ function repairDisallowedFinalLanguageText(message: string, detail: string): str
     return repaired === message ? null : repaired;
   }
 
+  if (detail === "you can spend") {
+    const repaired = message
+      .replace(/\byou can spend\s+(\$?-?\d[\d,]*(?:\.\d{1,2})?)\.?/gi, "Testing $1:")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return repaired === message ? null : repaired;
+  }
+
   if (detail !== "detached metric opening") {
     return null;
   }
@@ -212,6 +221,21 @@ function removeTrailingQuestionSentence(message: string): string | null {
   const repaired = message.trim().replace(/\s*[^.!?]*\?\s*$/, "").trim();
 
   return repaired && repaired !== message.trim() ? repaired : null;
+}
+
+function shouldRemoveTrailingQuestion(message: string, cards: AgentCard[]): boolean {
+  const normalized = message.trim();
+
+  if (!/\?\s*$/.test(normalized)) {
+    return false;
+  }
+
+  return (
+    cards.length > 0 ||
+    /\b(?:want me to|should i|can i|would you like me to)\b.{0,80}\b(?:run|check|test|show|pull|list|view)\b/i.test(
+      normalized,
+    )
+  );
 }
 
 function repairUnsupportedCardPromiseText(message: string, detail: string): string | null {
@@ -237,6 +261,12 @@ function repairUnsupportedCardPromiseText(message: string, detail: string): stri
 
   if (detail === "breakdown promised without breakdown card") {
     const repaired = message
+      .replace(/\bi see your Spendable Cash Today is/gi, "Your Spendable Cash Today is")
+      .replace(/\bi don(?:'|\u2019)?t see a concrete cutback opportunity yet/gi, "I don’t have a concrete cutback opportunity yet")
+      .replace(/\bi don(?:'|\u2019)?t have (?:a )?(?:detailed )?breakdown card yet,?\s*but\s*/gi, "")
+      .replace(/\bi can pull(?: up)? (?:a )?(?:detailed )?breakdown(?: if)?/gi, "I can talk through the details")
+      .replace(/\bi can pull (?:the )?biggest drivers for you\.?/gi, "I can talk through the biggest factors.")
+      .replace(/\bshow you today(?:'|\u2019)s spend drivers\b/gi, "talk through today’s spend factors")
       .replace(/\bi see (?:my |the )?main drivers?:?/gi, "The same main drivers still apply:")
       .replace(/\b(show|showing|shown|showed|see|pull|pulled|view|list|listed)( me)?\b/gi, "talk through")
       .replace(/\bbreak down\b/gi, "talk through")
@@ -269,8 +299,11 @@ function repairUnsupportedCardPromiseText(message: string, detail: string): stri
     const repaired = message
       .replace(/\bwith\s+\d+\s+transactions?\b/gi, "with connected activity")
       .replace(/\b\d+\s+transactions?\b/gi, "connected activity")
+      .replace(/\b(the )?app shows\b(.{0,40})\bconnected activity\b/gi, "$1app has$2connected data")
+      .replace(/\bbills list,\s*show upcoming charges\b/gi, "bills, talk through upcoming activity")
+      .replace(/\bshow upcoming charges\b/gi, "talk through upcoming activity")
       .replace(/\bshow how (?:a )?purchases? would affect it\b/gi, "talk through how spending would affect it")
-      .replace(/\b(show|showing|shown|showed|see|list|listed|pull|pulled|view)( me)?\b.{0,28}\b(transactions?|charges?|purchases?|activity)\b/gi, "talk through recent activity")
+      .replace(/\b(show|shows|showing|shown|showed|see|list|listed|pull|pulled|view)( me)?\b.{0,28}\b(transactions?|charges?|purchases?|activity)\b/gi, "talk through recent activity")
       .replace(/\btransactions?\b/gi, "activity")
       .replace(/\bcharges?\b/gi, "activity")
       .replace(/\bpurchases?\b/gi, "spending")
@@ -338,6 +371,24 @@ export function getUnsupportedCardPromise(message: string, cards: AgentCard[]): 
     return null;
   }
 
+  if (
+    (
+      /\bbreakdown card\b.{0,80}\b(?:show|pull|view|list|break ?down)\b/.test(normalized) ||
+      /\b(?:show|pull|view|list)(?: up)?\b.{0,40}\b(?:detailed )?breakdown\b/.test(normalized) ||
+      /\bshow you today(?:'|\u2019)s spend drivers\b/.test(normalized)
+    ) &&
+    !hasAnyCard(cards, ["spending_breakdown", "pip_cash_explanation", "math_breakdown", "spendable_cash_forecast", "recent_transactions"])
+  ) {
+    return "breakdown promised without breakdown card";
+  }
+
+  if (
+    /\bshow upcoming charges\b/.test(normalized) &&
+    !hasAnyCard(cards, ["recent_transactions", "spending_breakdown", "recurring_activity", "purchase_simulation"])
+  ) {
+    return "transactions promised without transaction card";
+  }
+
   if (isNoDataCardRefusal(normalized)) {
     return null;
   }
@@ -363,7 +414,7 @@ export function getUnsupportedCardPromise(message: string, cards: AgentCard[]): 
   }
 
   if (/\b(transactions?|charges?|purchases?|activity)\b/.test(normalized)) {
-    return hasAnyCard(cards, ["recent_transactions", "spending_breakdown"])
+    return hasAnyCard(cards, ["recent_transactions", "spending_breakdown", "recurring_activity", "purchase_simulation"])
       ? null
       : "transactions promised without transaction card";
   }
@@ -385,7 +436,7 @@ export function getUnsupportedCardPromise(message: string, cards: AgentCard[]): 
   }
 
   if (
-    /\b(showing|shown|showed|this card|the card|the view|trend view|fuller view)\b/.test(normalized) ||
+    /\b(shows|showing|shown|showed|this card|the card|the view|trend view|fuller view)\b/.test(normalized) ||
     (cards.length === 0 && /\b(missing cards?|cards? (?:are|is|were|was) connected)\b/.test(normalizedWithoutCreditCardTopic))
   ) {
     return cards.length > 0 ? null : "card promised without card";
@@ -418,7 +469,7 @@ function hasSpecificDisplayCapabilityPromise(normalized: string): boolean {
 }
 
 function containsDisplayPromise(normalized: string): boolean {
-  return /\b(show|showing|shown|showed|see|pull|pulled|view|here is|here are)\b/.test(normalized) ||
+  return /\b(show|shows|showing|shown|showed|see|pull|pulled|view|here is|here are)\b/.test(normalized) ||
     /\btrend view\b/.test(normalized) ||
     /\b(?:this|the|data|details?) cards?\b|\bcards?\b.{0,20}\b(?:shown|below)\b/.test(normalized) ||
     (
@@ -445,6 +496,7 @@ function getDisallowedFinalLanguageDetail(message: string): string | null {
   const disallowedPatterns: Array<[RegExp, string]> = [
     [new RegExp(`\\b${guaranteedSpendingPhrase}\\b`), guaranteedSpendingPhrase],
     [/\bsafe to buy\b/, "safe to buy"],
+    [/\byou can spend\b/, "you can spend"],
     [/\byou can afford\b/, "you can afford"],
     [/\bi recommend\b/, "i recommend"],
     [/\bmy recommendation\b/, "my recommendation"],

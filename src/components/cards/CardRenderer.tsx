@@ -220,7 +220,7 @@ export function CardRenderer({
             </div>
           ) : (
             <p className="text-sm leading-6 text-ink/[0.66]">
-              I do not see a clear repeating charge in the connected data yet.
+              I do not see a confirmed or clear repeating bill in the connected data yet.
             </p>
           )}
         </CardShell>

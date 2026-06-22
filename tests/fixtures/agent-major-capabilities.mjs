@@ -338,10 +338,12 @@ export const majorCapabilities = [
     tiers: ["api", "ui", "multi_turn"],
     primaryCase: {
       id: "major-savings-goal-routing",
-      description: "A concrete savings-goal request should route to savings-goal creation.",
+      description: "A concrete savings-goal request should start a preview and ask for missing planning details.",
       message: "I want to save for a trip that costs $5,000",
-      expectedTools: ["create_savings_goal"],
-      routingOnly: true,
+      expectedTools: ["preview_savings_goal"],
+      expectedPendingActionType: "preview_savings_goal",
+      expectedResponseMode: "clarify",
+      forbiddenTools: ["create_savings_goal"],
     },
     paraphrases: [
       "Create a savings goal for a $1,200 emergency fund",
@@ -434,18 +436,6 @@ function applyExpandedCaseOverrides(capability, caseDef) {
     next.expectedTools = ["simulate_purchase"];
   }
 
-  if (
-    capability.id === "savings_goal_setup" &&
-    ["I want to save for Japan", "Save for a big purchase"].includes(next.message)
-  ) {
-    delete next.expectedTools;
-    delete next.expectedCards;
-    next.expectedPendingActionType = "create_savings_goal";
-    next.expectedResponseMode = "clarify";
-    next.expectNoCards = true;
-    next.routingOnly = false;
-  }
-
   if (next.id === "major-cutback-opportunity-state-cash-guardrail") {
     delete next.expectedCards;
     next.expectedResponseMode = "chat_only";
@@ -515,16 +505,17 @@ export const majorCapabilityMultiTurnCases = [
     ],
     conversationState: {
       pendingAction: {
-        type: "create_savings_goal",
+        type: "preview_savings_goal",
         name: "Japan trip",
         missing: ["target_amount"],
+        includeInSpendableCash: true,
       },
     },
-    expectedPendingActionType: "create_savings_goal",
-    expectedResponseMode: "clarify",
-    expectNoCards: true,
+    expectedTools: ["preview_savings_goal"],
+    expectedCards: ["savings_goal_preview"],
+    expectedPendingActionType: "ordinary_write",
+    expectedResponseMode: "show_card",
     forbiddenTools: ["create_savings_goal"],
-    forbiddenCards: ["savings_goal_plan"],
     forbidFalseSavingsCreate: true,
   },
   {
@@ -540,9 +531,10 @@ export const majorCapabilityMultiTurnCases = [
     ],
     conversationState: {
       pendingAction: {
-        type: "create_savings_goal",
+        type: "preview_savings_goal",
         name: "Japan trip",
         missing: ["target_amount"],
+        includeInSpendableCash: true,
       },
     },
     forbiddenTools: ["create_savings_goal"],
@@ -646,7 +638,8 @@ export const majorCapabilityMultiTurnCases = [
     safetyClass: "local_side_effect",
     description: "Savings goal monthly wording starts a goal draft, not a protection toggle or false save.",
     message: "Put $300/month toward my trip goal",
-    expectedPendingActionType: "create_savings_goal",
+    expectedTools: ["preview_savings_goal"],
+    expectedPendingActionType: "preview_savings_goal",
     expectedResponseMode: "clarify",
     expectNoCards: true,
     forbiddenTools: ["create_savings_goal", "set_savings_goal_protection"],

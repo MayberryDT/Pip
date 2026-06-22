@@ -207,6 +207,341 @@ describe("Pip agent eval harness", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("does not treat card-provider wording in read-only policy copy as a UI card promise", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_trust_policy"],
+        expectNoCards: true,
+        expectedResponseMode: "chat_only",
+      },
+      response: {
+        message: "I can’t move money. Pip only reads your connected accounts (read-only) and can’t transfer or pay funds. If you want to act, you’d need to use your bank or card provider directly.",
+        responseMode: "chat_only",
+        usedTools: ["get_trust_policy"],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("allows no-card greeting copy to mention missing-card data quality", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectNoCards: true,
+        expectedResponseMode: "chat_only",
+      },
+      response: {
+        message: "Good morning! I’ve noticed data is missing a card, which can make the number a bit uncertain. Want me to check data quality or refresh data to tighten the read?",
+        responseMode: "chat_only",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("allows no-card repeated explanations to mention that a card may be missing", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectNoCards: true,
+        expectedResponseMode: "chat_only",
+      },
+      response: {
+        message: "I found the main drivers behind today's number: Normal room plus recent spending pace, minus bills held back and monthly savings. One warning: data is an early estimate and a card may be missing.",
+        responseMode: "chat_only",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("accepts upcoming-bills wording when a guidance card carries the read", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_financial_guidance_context"],
+        expectedCards: ["guidance_card"],
+        expectedResponseMode: "guidance",
+      },
+      response: {
+        message: "Your read shows the main pressure comes from normal room and upcoming bills, plus monthly savings held out.",
+        responseMode: "guidance",
+        usedTools: ["get_financial_guidance_context"],
+        cards: [{ type: "guidance_card" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("does not treat missing-card data-quality wording as a breakdown promise", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_data_quality"],
+        expectedCards: ["missing_card_nudge"],
+      },
+      response: {
+        message: "Here’s what might be missing: a Capital One card payment shows, but Capital One isn’t connected.",
+        responseMode: "show_card",
+        usedTools: ["get_data_quality"],
+        cards: [{ type: "missing_card_nudge" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("accepts missing-card payment and activity diagnostics with a missing-card card", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_data_quality"],
+        expectedAnyCards: ["missing_card_nudge", "connect_account"],
+      },
+      response: {
+        message: "I’m missing data on a connected card. Specifically, Capital One shows a payment, but Capital One isn’t connected, so that card’s activity can’t be fully counted today.",
+        responseMode: "show_card",
+        usedTools: ["get_data_quality"],
+        cards: [{ type: "missing_card_nudge" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("does not treat current forecast or cash language as a trust receipt promise", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const forecastResult = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["forecast_spendable_cash"],
+        expectedCards: ["spendable_cash_forecast"],
+      },
+      response: {
+        message: "Here’s your 7-day forecast: Spendable Cash Today is $0. This forecast assumes current patterns hold and is not guaranteed.",
+        responseMode: "show_card",
+        usedTools: ["forecast_spendable_cash"],
+        cards: [{ type: "spendable_cash_forecast" }],
+        promptChips: [],
+      },
+    });
+    const purchaseResult = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["simulate_purchase"],
+        expectedCards: ["purchase_simulation"],
+      },
+      response: {
+        message: "I can’t cover a $50 spending right now—the current Spendable Cash Today shows a shortfall.",
+        responseMode: "show_card",
+        usedTools: ["simulate_purchase"],
+        cards: [{ type: "purchase_simulation" }],
+        promptChips: [],
+      },
+    });
+
+    expect(forecastResult.ok).toBe(true);
+    expect(forecastResult.failures).toEqual([]);
+    expect(purchaseResult.ok).toBe(true);
+    expect(purchaseResult.failures).toEqual([]);
+  });
+
+  it("accepts counted current-activity wording when a trust receipt card is returned", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_trust_receipt"],
+        expectedCards: ["trust_receipt"],
+      },
+      response: {
+        message: "Here's what’s counted in today’s number: 3 connected accounts with current activity. Data freshness isn’t confirmed. There’s a potential missing card in the data.",
+        responseMode: "show_card",
+        usedTools: ["get_trust_receipt"],
+        cards: [{ type: "trust_receipt" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("accepts upcoming activity wording when a forecast card carries the forecast", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["forecast_spendable_cash"],
+        expectedCards: ["spendable_cash_forecast"],
+      },
+      response: {
+        message: "Here’s a 7-day forecast. The forecast shows a flat trend with a negative projected total due to upcoming activity. Not guaranteed.",
+        responseMode: "show_card",
+        usedTools: ["forecast_spendable_cash"],
+        cards: [{ type: "spendable_cash_forecast" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("accepts rolling balance wording when a forecast card carries projected points", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["forecast_spendable_cash"],
+        expectedCards: ["spendable_cash_forecast"],
+      },
+      response: {
+        message: "Here’s your 7-day forecast. The forecast shows a flat path, leading to a rolling balance around -$1,510.70 by day 7.",
+        responseMode: "show_card",
+        usedTools: ["forecast_spendable_cash"],
+        cards: [{ type: "spendable_cash_forecast" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("accepts cutback insight windows without requiring a forecast card", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_spending_opportunity"],
+        expectedCards: ["insight_card"],
+      },
+      response: {
+        message: "Dining shows $200 spent in the last 14 days. A simple next step: set a $65/week dining cap for the next 14 days.",
+        responseMode: "show_card",
+        usedTools: ["get_spending_opportunity"],
+        cards: [{ type: "insight_card" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("accepts no-card cutback suggestions that mention bills may repeat", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_spending_opportunity"],
+        expectedResponseMode: "chat_only",
+        expectNoCards: true,
+      },
+      response: {
+        message: "Here are quick ideas: reduce small frequent spends, check bills that may repeat, and keep monthly savings steady.",
+        responseMode: "chat_only",
+        usedTools: ["get_spending_opportunity"],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("accepts read-only policy wording about viewable balances and activity without cards", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_trust_policy"],
+        expectNoCards: true,
+      },
+      response: {
+        message: "I can’t move your money. Connected accounts are read-only, so I can only view balances and activity from Plaid.",
+        responseMode: "chat_only",
+        usedTools: ["get_trust_policy"],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("does not treat trailing action offers as missing transaction cards", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_pip_cash_math"],
+        expectedCards: ["math_breakdown"],
+      },
+      response: {
+        message: "Here’s the math behind today’s number: I counted $430.00 paid in bills and other spending. If you want, I can show a breakdown or simulate a different purchase.",
+        responseMode: "show_card",
+        usedTools: ["get_pip_cash_math"],
+        cards: [{ type: "math_breakdown" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("accepts purchase simulation wording when a purchase simulation card is returned", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["simulate_purchase"],
+        expectedCards: ["purchase_simulation"],
+      },
+      response: {
+        message: "Purchase simulation shows after spending $50 today you’d have $54 left. Note: one card may be missing.",
+        responseMode: "show_card",
+        usedTools: ["simulate_purchase"],
+        cards: [{ type: "purchase_simulation" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
+  });
+
+  it("fails guaranteed spending language that avoids the legacy safe-to-spend phrase", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {},
+      response: {
+        message: "You can spend $50.",
+        responseMode: "chat_only",
+        usedTools: [],
+        cards: [],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.failures.join("\n")).toContain("you can spend");
+  });
+
   it("fails required tool and card mismatches", async () => {
     const { evaluateAgentResponse } = await loadEvalHarness();
     const result = evaluateAgentResponse({
@@ -226,6 +561,26 @@ describe("Pip agent eval harness", () => {
     expect(result.ok).toBe(false);
     expect(result.failures).toContain("expected tool not used: get_spending_breakdown");
     expect(result.failures).toContain("expected card not returned: spending_breakdown");
+  });
+
+  it("allows recent transaction copy to mention card payments when a recent transactions card is returned", async () => {
+    const { evaluateAgentResponse } = await loadEvalHarness();
+    const result = evaluateAgentResponse({
+      caseDef: {
+        expectedTools: ["get_recent_transactions"],
+        expectedCards: ["recent_transactions"],
+      },
+      response: {
+        message: "Here’s what I found in your recent buys: Capital One card payment and groceries.",
+        responseMode: "show_card",
+        usedTools: ["get_recent_transactions"],
+        cards: [{ type: "recent_transactions" }],
+        promptChips: [],
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.failures).toEqual([]);
   });
 
   it("fails false savings-goal creation claims without the create tool and card", async () => {
@@ -254,10 +609,23 @@ describe("Pip agent eval harness", () => {
         promptChips: [],
       },
     });
+    const previewAllowed = evaluateAgentResponse({
+      caseDef: {
+        forbidFalseSavingsCreate: true,
+      },
+      response: {
+        message: "I can set up a Japan trip savings goal. I previewed it with a $500 monthly contribution.",
+        responseMode: "show_card",
+        usedTools: ["preview_savings_goal"],
+        cards: [{ type: "savings_goal_preview" }],
+        promptChips: [],
+      },
+    });
 
     expect(result.ok).toBe(false);
     expect(result.failures.join("\n")).toContain("claimed savings goal creation without create_savings_goal");
     expect(allowed.ok).toBe(true);
+    expect(previewAllowed.ok).toBe(true);
   });
 
   it("fails repeated assistant messages, repeated chip sets, and adjacent tool loops", async () => {
@@ -670,6 +1038,59 @@ describe("Pip agent eval harness", () => {
     }
   });
 
+  it("stops the major-capability suite with a blocked report when AI is not configured", async () => {
+    const { runAgentEval } = await loadEvalHarness();
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-major-ai-blocked-"));
+    const reportPath = join(tempDir, "report.json");
+    let requestCount = 0;
+
+    try {
+      const report = await runAgentEval({
+        baseUrl: "http://localhost:3999",
+        reportPath,
+        suite: "major-capabilities",
+        conversationPrefix: "major-ai-blocked-test",
+        log: () => undefined,
+        fetchImpl: async () => {
+          requestCount += 1;
+
+          return {
+            status: 503,
+            ok: false,
+            json: async () => ({
+              code: "missing-openai-config",
+              error: "AI is not configured.",
+              detail: "Set OPENAI_API_KEY, OPENAI_BASE_URL, or enable Netlify AI Gateway before using the agent.",
+            }),
+          };
+        },
+      });
+      const writtenReport = JSON.parse(readFileSync(reportPath, "utf8"));
+
+      expect(requestCount).toBe(1);
+      expect(report.status).toBe("blocked");
+      expect(report.failureCount).toBe(report.caseCount);
+      expect(report.blocker).toMatchObject({
+        code: "missing-openai-config",
+        failedPreflightCaseId: "major-guest-start",
+      });
+      expect(report.cases).toHaveLength(report.caseCount);
+      expect(report.cases[0]).toMatchObject({
+        id: "major-guest-start",
+        httpStatus: 503,
+        blocked: true,
+      });
+      expect(report.cases[1]).toMatchObject({
+        httpStatus: null,
+        blocked: true,
+      });
+      expect(writtenReport.status).toBe("blocked");
+      expect(writtenReport.blocker.code).toBe("missing-openai-config");
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it("uses canonical major-capability fixtures for the 20 capability gate", async () => {
     const { majorCapabilities, majorCapabilityEvalCases } = await loadEvalHarness();
 
@@ -681,6 +1102,69 @@ describe("Pip agent eval harness", () => {
     expect(new Set(majorCapabilities.map((capability) => capability.id)).size).toBe(20);
     expect(majorCapabilities.every((capability) => capability.tiers.includes("api"))).toBe(true);
     expect(majorCapabilities.every((capability) => capability.safetyClass)).toBe(true);
+  });
+
+  it("keeps first-turn savings goal setup preview-first in the major capability gate", async () => {
+    const { majorCapabilityEvalCases } = await loadEvalHarness();
+    const savingsGoalCase = majorCapabilityEvalCases.find((caseDef) => caseDef.id === "major-savings-goal-routing");
+
+    expect(savingsGoalCase).toMatchObject({
+      expectedTools: ["preview_savings_goal"],
+      expectedResponseMode: "clarify",
+      expectedPendingActionType: "preview_savings_goal",
+      forbiddenTools: ["create_savings_goal"],
+    });
+  });
+
+  it("keeps vague expanded savings goal setup paraphrases preview-first", async () => {
+    const { buildMajorCapabilityExpandedCases } = await loadEvalHarness();
+    const expandedCases = buildMajorCapabilityExpandedCases();
+    const vagueSavingsCases = expandedCases.filter((caseDef) =>
+      ["major-savings-goal-routing-paraphrase-2", "major-savings-goal-routing-paraphrase-3"].includes(caseDef.id),
+    );
+
+    expect(vagueSavingsCases).toHaveLength(2);
+    expect(vagueSavingsCases).toEqual([
+      expect.objectContaining({
+        expectedTools: ["preview_savings_goal"],
+        expectedResponseMode: "clarify",
+        expectedPendingActionType: "preview_savings_goal",
+        forbiddenTools: ["create_savings_goal"],
+      }),
+      expect.objectContaining({
+        expectedTools: ["preview_savings_goal"],
+        expectedResponseMode: "clarify",
+        expectedPendingActionType: "preview_savings_goal",
+        forbiddenTools: ["create_savings_goal"],
+      }),
+    ]);
+  });
+
+  it("keeps multi-turn savings goal setup on the preview-first flow", async () => {
+    const { majorCapabilityMultiTurnCases } = await loadEvalHarness();
+    const amountDateCase = majorCapabilityMultiTurnCases.find((caseDef) =>
+      caseDef.id === "major-multiturn-savings-goal-amount-date"
+    );
+    const monthlyCase = majorCapabilityMultiTurnCases.find((caseDef) =>
+      caseDef.id === "major-multiturn-savings-goal-monthly-preview"
+    );
+
+    expect(amountDateCase).toMatchObject({
+      expectedTools: ["preview_savings_goal"],
+      expectedCards: ["savings_goal_preview"],
+      expectedPendingActionType: "ordinary_write",
+      expectedResponseMode: "show_card",
+      forbiddenTools: ["create_savings_goal"],
+    });
+    expect(amountDateCase?.conversationState?.pendingAction).toMatchObject({
+      type: "preview_savings_goal",
+    });
+    expect(monthlyCase).toMatchObject({
+      expectedTools: ["preview_savings_goal"],
+      expectedPendingActionType: "preview_savings_goal",
+      expectedResponseMode: "clarify",
+      forbiddenTools: ["create_savings_goal", "set_savings_goal_protection"],
+    });
   });
 
   it("can run the expanded major-capability API matrix", async () => {

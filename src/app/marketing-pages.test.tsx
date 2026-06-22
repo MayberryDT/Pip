@@ -17,6 +17,7 @@ import TermsPage from "@/app/terms/page";
 import AndroidAccessPage from "@/app/android-access/page";
 import DeleteAccountPage from "@/app/delete-account/page";
 import { marketingAssets, requiredMarketingAssetRoles } from "@/lib/marketing/assets";
+import { getArticleVisual } from "@/lib/marketing/article-visuals";
 import { getPublishedArticles } from "@/lib/marketing/content";
 import { publicMarketingPages } from "@/lib/marketing/site";
 import robots from "@/app/robots";
@@ -109,9 +110,19 @@ describe("marketing website pages", () => {
     const homeHtml = renderToStaticMarkup(<MarketingHomePage />);
     const blogIndexHtml = renderToStaticMarkup(<BlogIndexPage />);
 
+    const homeSupportingArticles = getPublishedArticles()
+      .filter((article) => article.slug !== "meet-pip-cute-money-companion")
+      .slice(0, 2);
+
+    expect(homeSupportingArticles.map((article) => article.slug)).toEqual([
+      "why-is-my-bank-balance-misleading",
+      "budgeting-app-alternative",
+    ]);
     expectImageLoading(homeHtml, marketingAssets.blogMeetPipCard.src, "eager");
-    expectImageLoading(homeHtml, marketingAssets.blogBankBalanceCard.src, "eager");
-    expectImageLoading(homeHtml, marketingAssets.blogSpendableCashCard.src, "eager");
+    for (const article of homeSupportingArticles) {
+      expect(homeHtml).toContain(article.title);
+      expectImageLoading(homeHtml, getArticleVisual(article).src, "eager");
+    }
     expectImageLoading(blogIndexHtml, marketingAssets.blogMeetPipCard.src, "eager");
     expectImageLoading(blogIndexHtml, marketingAssets.blogBankBalanceCard.src, "eager");
     expectImageLoading(blogIndexHtml, marketingAssets.blogSpendableCashCard.src, "eager");

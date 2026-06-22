@@ -1,0 +1,1026 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Production-Scale Local Inventory - 2026-06-22</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #111827;
+        --muted: #5d6677;
+        --subtle: #7a8496;
+        --line: #d8dde7;
+        --panel: #ffffff;
+        --panel-soft: #f7f8fb;
+        --page: #eef1f5;
+        --green: #16784b;
+        --green-soft: #e7f5ee;
+        --blue: #245b9f;
+        --blue-soft: #e8f0fb;
+        --amber: #a15c07;
+        --amber-soft: #fff3df;
+        --red: #a23434;
+        --red-soft: #fff0ee;
+        --shadow: 0 18px 45px rgba(17, 24, 39, 0.08);
+        --radius: 8px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        background: var(--page);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        line-height: 1.5;
+      }
+
+      a {
+        color: var(--blue);
+        text-decoration: none;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      code {
+        padding: 0.14rem 0.34rem;
+        border: 1px solid #d9e0ea;
+        border-radius: 6px;
+        background: #f4f6f9;
+        color: #1f2937;
+        font-family:
+          "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        font-size: 0.9em;
+      }
+
+      .page {
+        width: min(1480px, 100%);
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 270px minmax(0, 1fr);
+        gap: 24px;
+        align-items: start;
+      }
+
+      .sidebar {
+        position: sticky;
+        top: 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: var(--shadow);
+        padding: 18px;
+      }
+
+      .sidebar-title {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 0.76rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .nav-list {
+        display: grid;
+        gap: 4px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .nav-list a {
+        display: block;
+        border-radius: 6px;
+        padding: 8px 10px;
+        color: #273142;
+        font-size: 0.92rem;
+      }
+
+      .nav-list a:hover {
+        background: var(--panel-soft);
+        text-decoration: none;
+      }
+
+      .source-link {
+        display: block;
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      main {
+        min-width: 0;
+      }
+
+      .hero {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.92), #ffffff),
+          var(--panel);
+        box-shadow: var(--shadow);
+        padding: clamp(24px, 4vw, 48px);
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--green);
+        font-size: 0.78rem;
+        font-weight: 850;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        max-width: 960px;
+        margin: 0;
+        font-size: clamp(2.1rem, 4vw, 4.2rem);
+        line-height: 1.02;
+        letter-spacing: 0;
+      }
+
+      .hero-copy {
+        max-width: 850px;
+        margin: 18px 0 0;
+        color: var(--muted);
+        font-size: clamp(1rem, 1.4vw, 1.16rem);
+      }
+
+      .meta-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .pill {
+        display: inline-flex;
+        min-height: 32px;
+        align-items: center;
+        gap: 7px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        background: #fff;
+        color: #2f3949;
+        padding: 6px 12px;
+        font-size: 0.88rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .pill.pass {
+        border-color: #c9e7d8;
+        background: var(--green-soft);
+        color: #0f623b;
+      }
+
+      .pill.warn {
+        border-color: #f1d8a9;
+        background: var(--amber-soft);
+        color: var(--amber);
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(6, minmax(0, 1fr));
+        gap: 12px;
+        margin-top: 22px;
+      }
+
+      .stat {
+        min-height: 118px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        padding: 16px;
+      }
+
+      .stat strong {
+        display: block;
+        color: var(--ink);
+        font-size: clamp(1.5rem, 2vw, 2.2rem);
+        line-height: 1;
+      }
+
+      .stat span {
+        display: block;
+        margin-top: 8px;
+        color: var(--muted);
+        font-size: 0.86rem;
+      }
+
+      .section {
+        margin-top: 18px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+        padding: clamp(20px, 3vw, 32px);
+      }
+
+      .section-header {
+        display: flex;
+        gap: 16px;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 18px;
+      }
+
+      .section h2 {
+        margin: 0;
+        font-size: clamp(1.45rem, 2.2vw, 2.25rem);
+        line-height: 1.12;
+      }
+
+      .section p {
+        color: var(--muted);
+      }
+
+      .section-intro {
+        max-width: 780px;
+        margin: 8px 0 0;
+        color: var(--muted);
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        background: var(--blue-soft);
+        color: var(--blue);
+        padding: 6px 10px;
+        font-size: 0.78rem;
+        font-weight: 800;
+        white-space: nowrap;
+      }
+
+      .two-col {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .check-list,
+      .plain-list {
+        display: grid;
+        gap: 9px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .check-list li,
+      .plain-list li {
+        position: relative;
+        border: 1px solid #e1e6ef;
+        border-radius: var(--radius);
+        background: var(--panel-soft);
+        padding: 12px 14px 12px 38px;
+        color: #2b3545;
+      }
+
+      .check-list li::before {
+        content: "";
+        position: absolute;
+        top: 16px;
+        left: 15px;
+        width: 9px;
+        height: 9px;
+        border-radius: 999px;
+        background: var(--green);
+      }
+
+      .plain-list li::before {
+        content: "";
+        position: absolute;
+        top: 17px;
+        left: 16px;
+        width: 7px;
+        height: 7px;
+        border-radius: 999px;
+        background: var(--blue);
+      }
+
+      .table-wrap {
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 780px;
+      }
+
+      th,
+      td {
+        border-bottom: 1px solid #e7ebf2;
+        padding: 13px 14px;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f8fafc;
+        color: #475062;
+        font-size: 0.76rem;
+        font-weight: 850;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      td {
+        color: #273142;
+        font-size: 0.92rem;
+      }
+
+      tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .route {
+        white-space: nowrap;
+        font-weight: 750;
+      }
+
+      .status-pass {
+        display: inline-flex;
+        align-items: center;
+        border-radius: 999px;
+        background: var(--green-soft);
+        color: #0f623b;
+        padding: 4px 8px;
+        font-size: 0.78rem;
+        font-weight: 850;
+      }
+
+      .bug-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+      }
+
+      .bug-card {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: #fff;
+        padding: 16px;
+      }
+
+      .bug-top {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+
+      .bug-id {
+        font-weight: 900;
+        letter-spacing: 0.03em;
+      }
+
+      .bug-surface {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font-size: 0.9rem;
+        font-weight: 750;
+      }
+
+      .bug-card dl {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+      }
+
+      .bug-card dt {
+        color: var(--subtle);
+        font-size: 0.74rem;
+        font-weight: 850;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .bug-card dd {
+        margin: 3px 0 0;
+        color: #263041;
+      }
+
+      .capability-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 10px;
+        counter-reset: cap;
+      }
+
+      .capability {
+        counter-increment: cap;
+        display: grid;
+        grid-template-columns: 34px minmax(0, 1fr);
+        gap: 10px;
+        align-items: center;
+        min-height: 72px;
+        border: 1px solid #e1e6ef;
+        border-radius: var(--radius);
+        background: var(--panel-soft);
+        padding: 12px;
+        color: #253043;
+        font-weight: 700;
+      }
+
+      .capability::before {
+        content: counter(cap);
+        display: grid;
+        width: 34px;
+        height: 34px;
+        place-items: center;
+        border-radius: 999px;
+        background: #172033;
+        color: #fff;
+        font-size: 0.82rem;
+      }
+
+      .callout {
+        border: 1px solid #cfe2d8;
+        border-radius: var(--radius);
+        background: var(--green-soft);
+        padding: 16px;
+        color: #174b34;
+      }
+
+      .callout p {
+        margin: 0;
+        color: #174b34;
+      }
+
+      .footnote {
+        margin: 14px 0 0;
+        color: var(--subtle);
+        font-size: 0.86rem;
+      }
+
+      @media (max-width: 1180px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+          position: static;
+        }
+
+        .nav-list {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        .stats {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+
+        .capability-grid,
+        .bug-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 760px) {
+        .page {
+          padding: 12px;
+        }
+
+        .hero,
+        .section,
+        .sidebar {
+          padding: 16px;
+        }
+
+        .nav-list,
+        .stats,
+        .two-col,
+        .capability-grid,
+        .bug-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .section-header {
+          display: block;
+        }
+
+        .tag {
+          margin-top: 10px;
+        }
+
+        table {
+          min-width: 720px;
+        }
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .page {
+          max-width: none;
+          padding: 0;
+        }
+
+        .layout {
+          display: block;
+        }
+
+        .sidebar {
+          display: none;
+        }
+
+        .hero,
+        .section {
+          box-shadow: none;
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="layout">
+        <aside class="sidebar" aria-label="Report navigation">
+          <p class="sidebar-title">QA Inventory</p>
+          <ul class="nav-list">
+            <li><a href="#summary">Summary</a></li>
+            <li><a href="#run-rules">Run Rules</a></li>
+            <li><a href="#fixture">Data Fixture</a></li>
+            <li><a href="#roles">Roles &amp; States</a></li>
+            <li><a href="#pages">Page Routes</a></li>
+            <li><a href="#api">API Routes</a></li>
+            <li><a href="#controls">Controls &amp; States</a></li>
+            <li><a href="#capabilities">Capabilities</a></li>
+            <li><a href="#bugs">Bug Log</a></li>
+            <li><a href="#verification">Verification</a></li>
+            <li><a href="#clean-pass">Clean Pass</a></li>
+          </ul>
+          <a class="source-link" href="./2026-06-22-production-scale-local-inventory.md">Source Markdown</a>
+        </aside>
+
+        <main>
+          <header class="hero" id="summary">
+            <p class="eyebrow">Production-like local QA report</p>
+            <h1>Production-Scale Local Inventory</h1>
+            <p class="hero-copy">
+              A readable visual version of the June 22, 2026 QA inventory for Pip's sanitized
+              <code>production-scale</code> local scenario, production-like runtime checks, real-user app smoke,
+              and OpenAI-backed agent dogfood gates.
+            </p>
+            <div class="meta-row">
+              <span class="pill pass">Clean local pass</span>
+              <span class="pill">Date: 2026-06-22</span>
+              <span class="pill">Scenario: <code>production-scale</code></span>
+              <span class="pill warn">No production writes</span>
+            </div>
+            <div class="stats" aria-label="Verification summary">
+              <div class="stat"><strong>8+</strong><span>accounts across checking, savings, credit card, and loan</span></div>
+              <div class="stat"><strong>500+</strong><span>synthetic transactions across 18 months</span></div>
+              <div class="stat"><strong>20/20</strong><span>major capability cases passed</span></div>
+              <div class="stat"><strong>91/91</strong><span>expanded capability cases passed</span></div>
+              <div class="stat"><strong>13/13</strong><span>multi-turn journeys passed</span></div>
+              <div class="stat"><strong>4,626</strong><span>unit tests passed in the final suite</span></div>
+            </div>
+          </header>
+
+          <section class="section" id="run-rules">
+            <div class="section-header">
+              <div>
+                <h2>Run Rules</h2>
+                <p class="section-intro">Boundaries for keeping the inventory production-like without using sensitive or destructive surfaces.</p>
+              </div>
+              <span class="tag">Execution Boundary</span>
+            </div>
+            <ul class="check-list">
+              <li>Local data only: use <code>PIP_SUPABASE_MODE=off</code>, <code>PIP_LOCAL_FAKE_APP_MODE=1</code>, and <code>scenario=production-scale</code> for financial data.</li>
+              <li>Production-like runtime: verify with <code>npm run build</code> and <code>npm run start</code>, not only <code>next dev</code>.</li>
+              <li>Browser evidence: use Codex in-app Browser with backend <code>iab</code>.</li>
+              <li>Safety: no production writes, no real provider tokens, no real user data, no destructive account/data deletion action without explicit approval.</li>
+              <li>Rerun policy: after any fix, rerun the affected focused check, then rerun the complete inventory gates.</li>
+            </ul>
+          </section>
+
+          <section class="section" id="fixture">
+            <div class="section-header">
+              <div>
+                <h2>Data Fixture Acceptance</h2>
+                <p class="section-intro">The synthetic scenario has to be large enough to expose production-scale behavior while staying sanitized and deterministic.</p>
+              </div>
+              <span class="tag">Synthetic Fixture</span>
+            </div>
+            <div class="two-col">
+              <div>
+                <h3>Acceptance</h3>
+                <ul class="check-list">
+                  <li><code>isFakeDataScenario("production-scale")</code> returns true.</li>
+                  <li><code>/api/pip-cash?scenario=production-scale</code> works when Supabase is disabled.</li>
+                  <li>Contains at least 8 accounts across checking, savings, credit card, and loan.</li>
+                  <li>Contains at least 500 transactions across 18 months.</li>
+                  <li>Includes income, rent, purchases, transfers, card payments, refunds, fees, pending transactions, matched card payments, and an unmatched card-payment warning path.</li>
+                  <li>Contains no emails, OAuth/provider names, production project names, full account numbers, or Tyler-specific identifiers.</li>
+                  <li>Produces a valid <code>calculatePipCash()</code> result without throwing.</li>
+                </ul>
+              </div>
+              <div>
+                <h3>Finite Edge Cases</h3>
+                <ul class="plain-list">
+                  <li>Current-month partial data, same-day posted purchase, and same-day pending duplicate purchase.</li>
+                  <li>Pending current-month income and pending travel purchase.</li>
+                  <li>Matched and unmatched credit-card settlement rows.</li>
+                  <li>Refund and bank-fee months.</li>
+                  <li>Multiple institutions and multiple account kinds.</li>
+                  <li>Protected savings plus separate reserve savings.</li>
+                  <li>Loan account present but excluded from Pip Cash.</li>
+                  <li>Active savings goal included in Spendable Cash Today.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <section class="section" id="roles">
+            <div class="section-header">
+              <div>
+                <h2>Roles And States</h2>
+                <p class="section-intro">Every major user posture and its expected visible behavior.</p>
+              </div>
+              <span class="tag">User States</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Role/state</th><th>Routes</th><th>Acceptance criteria</th><th>Finite edge cases</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Public visitor</td><td><code>/</code>, <code>/how-it-works</code>, <code>/how-the-number-works</code>, <code>/pricing</code>, <code>/security</code>, <code>/blog</code>, <code>/blog/[slug]</code>, <code>/privacy</code>, <code>/terms</code>, <code>/support</code>, <code>/delete-account</code>, <code>/android-access</code></td><td>Marketing nav renders, CTA routes to product access, waitlist form has email validation, legal/support pages render without app chat.</td><td>Mobile nav open/closed, pricing hidden when configured, invalid waitlist email, waitlist API failure, long blog slug, missing article slug.</td></tr>
+                  <tr><td>Signed-out app visitor</td><td><code>/app</code></td><td>Shows app access gate and Google sign-in link; does not render Pip chat or fake money.</td><td>Auth error notice, Supabase unavailable, back/forward to <code>/app</code>.</td></tr>
+                  <tr><td>Waitlisted signed-in user</td><td><code>/app</code></td><td>Saves verified email to waitlist, blocks app, shows sign-out action, no financial surface.</td><td>Missing email, waitlist insert already exists, email send disabled/fails safely.</td></tr>
+                  <tr><td>Consent-needed user</td><td><code>/app</code></td><td>Shows consent copy, monthly savings picker, privacy/terms/support links, and no chat until consent is saved.</td><td>Quick amount buttons, custom amount, over-limit validation, failed save.</td></tr>
+                  <tr><td>Ready user without connected data</td><td><code>/app</code></td><td>Shows connect-data state, not fake money; account controls available only when signed in.</td><td>Provider unavailable, connect session failure, app-open sync status pending.</td></tr>
+                  <tr><td>Ready user with data</td><td><code>/app?scenario=production-scale</code> in local fake mode, authenticated production analog in beta</td><td>Shows one Spendable Cash Today number, opening bubble, prompt chips, chat composer, and grounded cards.</td><td>Desktop/mobile, long prompt, Enter vs Shift+Enter, prompt-chip fallback, agent failure, low-confidence/missing-card states.</td></tr>
+                  <tr><td>Play reviewer</td><td><code>/reviewer-login</code>, Android shell copy</td><td>Reviewer login form works only with reviewer credentials; Android visible copy stays review-safe.</td><td>Wrong password, disabled reviewer account, mobile viewport.</td></tr>
+                  <tr><td>Email recipient</td><td><code>/unsubscribe</code></td><td>Token-based unsubscribe button posts once, disables after success, reports failure.</td><td>Missing token, bad token, network/API failure.</td></tr>
+                  <tr><td>Operator</td><td><code>/api/operator/*</code></td><td>Bearer-token routes remain protected and return review/admin data only to authorized calls.</td><td>Missing token, wrong token, empty data, high row counts.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section" id="pages">
+            <div class="section-header">
+              <div>
+                <h2>Page Route Inventory</h2>
+                <p class="section-intro">User-facing pages, the job each page performs, and finite edge cases.</p>
+              </div>
+              <span class="tag">Pages</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Route</th><th>Feature</th><th>Acceptance criteria</th><th>Edge cases</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td class="route"><code>/</code></td><td>Home marketing page</td><td>Brand, offer, product scene, CTA, waitlist form, proof/trust sections render.</td><td>Mobile nav, CTA tracking failure, waitlist failure.</td></tr>
+                  <tr><td class="route"><code>/how-it-works</code></td><td>Product explanation</td><td>Steps stay read-only and monthly-only; CTA works.</td><td>Narrow viewport, pricing access state.</td></tr>
+                  <tr><td class="route"><code>/how-the-number-works</code></td><td>Calculation explanation</td><td>Explains Spendable Cash Today without promising money movement.</td><td>Long section anchors, mobile scan.</td></tr>
+                  <tr><td class="route"><code>/pricing</code></td><td>Pricing</td><td>Pricing copy matches product-access config and no hidden app chat.</td><td>Pricing disabled state.</td></tr>
+                  <tr><td class="route"><code>/security</code></td><td>Security/trust</td><td>Read-only/provider-token language renders with support CTA.</td><td>Long legal copy on mobile.</td></tr>
+                  <tr><td class="route"><code>/blog</code></td><td>Blog index</td><td>Article cards render with image/fallback and links.</td><td>Empty article list, image loading.</td></tr>
+                  <tr><td class="route"><code>/blog/[slug]</code></td><td>Blog detail</td><td>Valid slug renders article, table of contents, CTA; invalid slug 404s.</td><td>Long headings, image alt/fallback.</td></tr>
+                  <tr><td class="route"><code>/privacy</code></td><td>Privacy</td><td>Legal shell renders support links and no app controls.</td><td>Mobile legal layout.</td></tr>
+                  <tr><td class="route"><code>/terms</code></td><td>Terms</td><td>Legal shell renders accuracy/read-only boundaries.</td><td>Mobile legal layout.</td></tr>
+                  <tr><td class="route"><code>/support</code></td><td>Support</td><td>Support path and email copy render.</td><td>Long support email/copy.</td></tr>
+                  <tr><td class="route"><code>/delete-account</code></td><td>Account deletion instructions</td><td>Deletion instructions are clear and non-destructive in page view.</td><td>User wants deletion: ask before destructive action.</td></tr>
+                  <tr><td class="route"><code>/android-access</code></td><td>Android access instructions</td><td>Android-specific copy is visible and review-safe.</td><td>Android user agent.</td></tr>
+                  <tr><td class="route"><code>/reviewer-login</code></td><td>Reviewer auth</td><td>Email/password form posts, status is visible, redirects to <code>/app</code> after success.</td><td>Bad password, submit disabled, mobile viewport.</td></tr>
+                  <tr><td class="route"><code>/unsubscribe</code></td><td>Email unsubscribe</td><td>Token button posts to API, success/error states visible.</td><td>Missing/bad token.</td></tr>
+                  <tr><td class="route"><code>/plaid/oauth</code></td><td>Provider OAuth resume</td><td>OAuth resume handles return-to-app state and errors.</td><td>Missing OAuth params, provider callback failure.</td></tr>
+                  <tr><td class="route"><code>/app</code></td><td>Main product</td><td>Access gates, consent, no-data, and connected-data states render without leaking fake data in authenticated shells.</td><td>Supabase unavailable, signed out, waitlisted, consent, ready/no data, ready/data.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section" id="api">
+            <div class="section-header">
+              <div>
+                <h2>API Route Inventory</h2>
+                <p class="section-intro">Backend routes that support visible product workflows, with safety expectations and finite edge cases.</p>
+              </div>
+              <span class="tag">APIs</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Route</th><th>User-facing workflow</th><th>Acceptance criteria</th><th>Edge cases</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td class="route"><code>/api/account/delete</code></td><td>Account deletion</td><td>Requires authenticated exact confirmation; destructive path not exercised without approval.</td><td>Wrong confirmation, auth delete failure, data delete failure.</td></tr>
+                  <tr><td class="route"><code>/api/delete-data</code></td><td>Data deletion request</td><td>Validates request and does not expose private data.</td><td>Invalid payload, unauthenticated.</td></tr>
+                  <tr><td class="route"><code>/api/auth/oauth/google</code></td><td>Google auth start</td><td>Redirects only to safe app paths.</td><td>OAuth unconfigured, unsafe next path.</td></tr>
+                  <tr><td class="route"><code>/api/auth/callback</code></td><td>OAuth callback</td><td>Exchanges code and redirects safely.</td><td>Missing code, exchange failure, unsafe next path.</td></tr>
+                  <tr><td class="route"><code>/api/auth/sign-in</code></td><td>Email/password sign-in</td><td>Authenticates and sets session.</td><td>Invalid credentials, malformed email.</td></tr>
+                  <tr><td class="route"><code>/api/auth/sign-out</code></td><td>Sign-out</td><td>Clears session and redirects safely.</td><td>Missing session.</td></tr>
+                  <tr><td class="route"><code>/api/auth/consent</code></td><td>Consent save</td><td>Saves consent and monthly protected savings.</td><td>Too large amount, invalid amount, auth missing.</td></tr>
+                  <tr><td class="route"><code>/api/auth/reviewer-login</code></td><td>Reviewer login</td><td>Allows only reviewer accounts.</td><td>Non-reviewer email, wrong password.</td></tr>
+                  <tr><td class="route"><code>/api/pip-cash</code></td><td>Spendable Cash Today</td><td>Returns local scenario data when Supabase off; requires auth when Supabase configured.</td><td>Invalid scenario, no financial data, auth required.</td></tr>
+                  <tr><td class="route"><code>/api/free-cash</code></td><td>Rebrand compatibility</td><td>Returns compatible Pip Cash data.</td><td>Same as <code>/api/pip-cash</code>.</td></tr>
+                  <tr><td class="route"><code>/api/agent</code></td><td>Ask Pip</td><td>Enforces model/rate gates, uses deterministic tools, returns cards/actions.</td><td>Empty message, production salt missing, unsafe money movement, no-data state.</td></tr>
+                  <tr><td class="route"><code>/api/ai-reports</code></td><td>Report assistant response</td><td>Stores user report safely.</td><td>Long detail text, missing message id, auth missing.</td></tr>
+                  <tr><td class="route"><code>/api/feedback</code></td><td>Feedback</td><td>Stores feedback from signed-in app flow.</td><td>Empty feedback, auth missing.</td></tr>
+                  <tr><td class="route"><code>/api/events</code></td><td>Product event</td><td>Records safe product events without secrets.</td><td>Oversized properties, unauthenticated.</td></tr>
+                  <tr><td class="route"><code>/api/usage</code></td><td>Usage counters</td><td>Returns/records usage safely.</td><td>Missing auth, rate limit.</td></tr>
+                  <tr><td class="route"><code>/api/settings</code></td><td>User settings</td><td>Reads/updates settings and manual refresh state.</td><td>Missing row, manual-refresh default.</td></tr>
+                  <tr><td class="route"><code>/api/sync/status</code></td><td>Sync status</td><td>Reports provider connection/sync state.</td><td>No providers, stale provider, failed sync.</td></tr>
+                  <tr><td class="route"><code>/api/sync/app-open</code></td><td>App-open sync</td><td>Queues or skips refresh based on cooldown/settings.</td><td>Manual-refresh-only, pending job, provider unavailable.</td></tr>
+                  <tr><td class="route"><code>/api/sync/manual</code></td><td>Manual refresh</td><td>Starts refresh only when allowed.</td><td>Cooldown, provider failure, no connection.</td></tr>
+                  <tr><td class="route"><code>/api/providers/connect</code></td><td>Start provider connect</td><td>Creates provider session/action.</td><td>Unknown provider, provider unavailable.</td></tr>
+                  <tr><td class="route"><code>/api/providers/plaid/exchange</code></td><td>Plaid exchange</td><td>Exchanges public token and stores credentials server-side.</td><td>Bad token, Plaid env mismatch, duplicate institution.</td></tr>
+                  <tr><td class="route"><code>/api/providers/teller/enrollment</code></td><td>Teller enrollment</td><td>Handles enrollment token flow.</td><td>Missing cert/key, provider error.</td></tr>
+                  <tr><td class="route"><code>/api/providers/teller/health</code></td><td>Teller health</td><td>Reports provider readiness without secrets.</td><td>Missing env.</td></tr>
+                  <tr><td class="route"><code>/api/webhooks/plaid</code></td><td>Plaid webhook</td><td>Verifies webhook and queues sync.</td><td>Bad signature, unknown item.</td></tr>
+                  <tr><td class="route"><code>/api/missing-card-preferences</code></td><td>Missing-card suppression</td><td>Saves suppressed issuer preference.</td><td>Empty issuer, auth missing.</td></tr>
+                  <tr><td class="route"><code>/api/pip/reactions/seen</code></td><td>Pip reaction state</td><td>Marks seen reaction.</td><td>Unknown reaction, auth missing.</td></tr>
+                  <tr><td class="route"><code>/api/savings-goals</code></td><td>Savings goals list/create</td><td>Preview/create flow stays confirmation-first.</td><td>Missing fields, over-tight goal, feature flag off.</td></tr>
+                  <tr><td class="route"><code>/api/savings-goals/[goalId]</code></td><td>Savings goal update/delete</td><td>Updates selected goal only.</td><td>Unknown goal, invalid amount/date.</td></tr>
+                  <tr><td class="route"><code>/api/marketing/waitlist</code></td><td>Public waitlist</td><td>Validates email and records attribution.</td><td>Invalid email, duplicate email, email provider disabled.</td></tr>
+                  <tr><td class="route"><code>/api/marketing/events</code></td><td>Marketing event</td><td>Records only safe attribution/event fields.</td><td>Oversized payload, bad event name.</td></tr>
+                  <tr><td class="route"><code>/api/marketing/distribb-webhook</code></td><td>Marketing webhook</td><td>Validates webhook before ingest.</td><td>Bad secret, duplicate event.</td></tr>
+                  <tr><td class="route"><code>/api/email/unsubscribe</code></td><td>Email unsubscribe</td><td>Validates token and suppresses email.</td><td>Missing/expired token.</td></tr>
+                  <tr><td class="route"><code>/api/email/resend-webhook</code></td><td>Email provider webhook</td><td>Validates provider signature.</td><td>Bad signature, unknown event.</td></tr>
+                  <tr><td class="route"><code>/api/operator/overview</code></td><td>Operator overview</td><td>Requires operator bearer token.</td><td>Missing/wrong token, empty rows.</td></tr>
+                  <tr><td class="route"><code>/api/operator/access-grants</code></td><td>Operator access grants</td><td>Requires operator bearer token and validates grant changes.</td><td>Invalid email/status.</td></tr>
+                  <tr><td class="route"><code>/api/operator/email-list</code></td><td>Operator email list</td><td>Requires operator bearer token.</td><td>Missing/wrong token.</td></tr>
+                  <tr><td class="route"><code>/api/operator/agent-chats</code></td><td>Operator agent review</td><td>Requires operator bearer token and redacts safely.</td><td>Large local JSONL, malformed row.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section" id="controls">
+            <div class="section-header">
+              <div>
+                <h2>Controls, Inputs, Modals, And States</h2>
+                <p class="section-intro">No blocking modal/dialog is currently part of the app shell; <code>PipHome</code> explicitly avoids <code>role="dialog"</code>. The report UI is an inline expandable panel.</p>
+              </div>
+              <span class="tag">Interaction QA</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Surface</th><th>Controls and states</th><th>Acceptance criteria</th><th>Edge cases</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Marketing header/footer</td><td>Logo link, primary nav links, mobile <code>&lt;details&gt;</code> menu, product CTA</td><td>Links are keyboard-focusable, mobile menu opens without overlap, CTA uses product-access href.</td><td>Pricing hidden mode, small viewport.</td></tr>
+                  <tr><td>Waitlist form</td><td>Email input, submit button, idle/submitting/succeeded/failed status</td><td>Required email validation, button disables while submitting, live message updates.</td><td>Invalid email, network failure, duplicate email.</td></tr>
+                  <tr><td>App access gate</td><td>Google link, sign-out button, privacy/terms/support links</td><td>Signed-out/waitlisted/unavailable states do not show chat or fake cash.</td><td>Auth notice, unavailable config.</td></tr>
+                  <tr><td>Consent/onboarding</td><td>Savings quick buttons, custom numeric input, save button, error text</td><td>Amount sanitizes to digits, max is enforced, save calls consent API.</td><td>Empty input, over max, API error.</td></tr>
+                  <tr><td>Ready/no-data setup</td><td>Connect data button, status copy</td><td>Shows setup without fake number; provider action is explicit.</td><td>Provider unavailable, repeated clicks.</td></tr>
+                  <tr><td>Main metric</td><td>Spendable Cash Today number, savings-note state, opening bubble</td><td>One number only, no dashboard/table chrome, missing-card warning visible when relevant.</td><td><code>negative</code>, <code>missing-card</code>, <code>low-confidence</code>, <code>production-scale</code>.</td></tr>
+                  <tr><td>Prompt chips</td><td>Up to three visible chips, settings pinned for live ready state</td><td>Chips submit prompt and remain conversational.</td><td>Empty model chips, compact chat state.</td></tr>
+                  <tr><td>Chat composer</td><td>Textarea, Enter send, Shift+Enter newline, send button, busy/disabled</td><td>Trims empty prompts, resizes, handles mobile keyboard, clears after submit.</td><td>Long prompt, rapid submit, network failure.</td></tr>
+                  <tr><td>Assistant cards</td><td>Card action buttons, missing-card suppress button</td><td>Card actions submit prompts; suppression calls preferences only for signed-in users.</td><td>Unknown card, long merchant names, suppressed issuer.</td></tr>
+                  <tr><td>Report response</td><td>Report toggle, five reason buttons, details textarea, send/cancel, status</td><td>Sends bounded excerpt/details; cancel closes without sending.</td><td>Long details, API failure, repeated submit.</td></tr>
+                  <tr><td>Reviewer login</td><td>Email input, password input, submit, status</td><td>Failed login shows error; success redirects to <code>/app</code>.</td><td>Empty password, wrong reviewer, mobile.</td></tr>
+                  <tr><td>Unsubscribe</td><td>Unsubscribe button, success/error status</td><td>Button disables after success and reports bad token.</td><td>Missing token, API failure.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section" id="capabilities">
+            <div class="section-header">
+              <div>
+                <h2>Major Capability Workflow Matrix</h2>
+                <p class="section-intro">Source: <code>tests/fixtures/agent-major-capabilities.mjs</code></p>
+              </div>
+              <span class="tag">Agent Coverage</span>
+            </div>
+            <div class="two-col">
+              <div>
+                <h3>Acceptance</h3>
+                <ul class="check-list">
+                  <li>20 primary capabilities pass the API suite.</li>
+                  <li>91 expanded/paraphrase/state cases pass.</li>
+                  <li>13 multi-turn journeys pass.</li>
+                  <li>Production-safe subset runs redacted and non-destructive.</li>
+                  <li>Browser proof covers desktop and mobile for UI-backed capabilities.</li>
+                </ul>
+              </div>
+              <div>
+                <h3>Finite Workflow Edge Cases</h3>
+                <ul class="plain-list">
+                  <li>State cases: <code>default</code>, <code>negative</code>, <code>overspending</code>, <code>low-confidence</code>, <code>missing-card</code>, <code>cutback-dining</code>, <code>cash-guardrail</code>, <code>production-scale</code>.</li>
+                  <li>Multi-turn: no repeated why-this-number answer, forecast affirmative follow-up, purchase follow-up, read-only follow-up, institution removal confirmation, repair-vs-new-connection, refresh-status-vs-refresh, delete confirmation, savings preview/create/cancel/review.</li>
+                  <li>Safety: money movement always refused; destructive delete requires exact confirmation and is not exercised in this run.</li>
+                </ul>
+              </div>
+            </div>
+            <h3>Capabilities</h3>
+            <div class="capability-grid" aria-label="Major capabilities">
+              <div class="capability">Guest start and chat tone.</div>
+              <div class="capability">Spendable Cash explanation.</div>
+              <div class="capability">Calculation transparency.</div>
+              <div class="capability">Recent transaction read.</div>
+              <div class="capability">Spending breakdown.</div>
+              <div class="capability">Recurring bills and subscriptions.</div>
+              <div class="capability">Spendable Cash forecast.</div>
+              <div class="capability">Purchase simulation.</div>
+              <div class="capability">Financial guidance read.</div>
+              <div class="capability">Actionable cutback guidance.</div>
+              <div class="capability">Actual balances.</div>
+              <div class="capability">Connected account management.</div>
+              <div class="capability">New account connection.</div>
+              <div class="capability">Manual data refresh.</div>
+              <div class="capability">Data quality and missing-data detection.</div>
+              <div class="capability">Trust receipt.</div>
+              <div class="capability">Read-only money movement boundary.</div>
+              <div class="capability">Savings goal setup.</div>
+              <div class="capability">Savings goal review.</div>
+              <div class="capability">Privacy and destructive action safety.</div>
+            </div>
+          </section>
+
+          <section class="section" id="bugs">
+            <div class="section-header">
+              <div>
+                <h2>Bug Log</h2>
+                <p class="section-intro">Every bug logged during the run, with reproduction evidence, shared-cause diagnosis, fix, and regression hook.</p>
+              </div>
+              <span class="tag">Fixed Findings</span>
+            </div>
+            <div class="bug-grid">
+              <article class="bug-card">
+                <div class="bug-top"><span class="bug-id">DATA-001</span><span class="status-pass">Fixed</span></div>
+                <p class="bug-surface">Synthetic local data</p>
+                <dl>
+                  <div><dt>Evidence</dt><dd><code>npx vitest run src/lib/fake-data.test.ts</code> first failed because <code>production-scale</code> was not a recognized scenario.</dd></div>
+                  <div><dt>Root cause</dt><dd>No production-scale local scenario existed.</dd></div>
+                  <div><dt>Fix</dt><dd>Added deterministic <code>production-scale</code> snapshot in <code>src/lib/fake-data.ts</code>.</dd></div>
+                  <div><dt>Regression</dt><dd><code>src/lib/fake-data.test.ts</code> validates size, account/transaction coverage, sanitization, and <code>calculatePipCash()</code>.</dd></div>
+                </dl>
+              </article>
+              <article class="bug-card">
+                <div class="bug-top"><span class="bug-id">DATA-002</span><span class="status-pass">Fixed</span></div>
+                <p class="bug-surface">Synthetic local data</p>
+                <dl>
+                  <div><dt>Evidence</dt><dd>In-app Browser showed <code>$0</code> for <code>/app?scenario=production-scale</code>; local API showed v2 state <code>shortfall</code>.</dd></div>
+                  <div><dt>Root cause</dt><dd>The current-month fixture had a zero-amount payroll and a same-day pending travel hold.</dd></div>
+                  <div><dt>Fix</dt><dd>Made current-month payroll nonzero, scaled current-month discretionary rows, and moved the pending travel hold off the as-of date.</dd></div>
+                  <div><dt>Regression</dt><dd><code>src/lib/fake-data.test.ts</code> requires nonzero transactions, positive v2 Spendable Cash Today, and non-shortfall state.</dd></div>
+                </dl>
+              </article>
+              <article class="bug-card">
+                <div class="bug-top"><span class="bug-id">LOCAL-001</span><span class="status-pass">Fixed</span></div>
+                <p class="bug-surface">Production-like local <code>/app</code></p>
+                <dl>
+                  <div><dt>Evidence</dt><dd>In-app Browser hit <code>http://127.0.0.1:3001/app?scenario=production-scale</code> and saw "Pip access is temporarily unavailable" instead of the fake app.</dd></div>
+                  <div><dt>Root cause</dt><dd><code>NODE_ENV=production</code> disables dev onboarding/demo routes, and Supabase-off was treated only as unavailable.</dd></div>
+                  <div><dt>Fix</dt><dd>Added explicit <code>PIP_LOCAL_FAKE_APP_MODE=1</code> local app shell and rejected that flag in beta deployment checks.</dd></div>
+                  <div><dt>Regression</dt><dd><code>src/app/app/page.test.tsx</code> covers the local fake app route; <code>scripts/check-deployment-env.test.ts</code> blocks beta mode with the flag.</dd></div>
+                </dl>
+              </article>
+              <article class="bug-card">
+                <div class="bug-top"><span class="bug-id">LOCAL-002</span><span class="status-pass">Fixed</span></div>
+                <p class="bug-surface">Production-like local <code>/api/agent</code></p>
+                <dl>
+                  <div><dt>Evidence</dt><dd><code>npm run eval:agent:major</code> against the built local server returned HTTP 503 for every case with <code>agent-model-gate-unavailable</code>.</dd></div>
+                  <div><dt>Root cause</dt><dd>Production mode disables the in-memory model gate, and Supabase-off mode has no RPC-backed gate.</dd></div>
+                  <div><dt>Fix</dt><dd>Allowed the in-memory gate only when <code>PIP_LOCAL_FAKE_APP_MODE=1</code>; beta deployment checks reject that flag.</dd></div>
+                  <div><dt>Regression</dt><dd><code>src/lib/agent/agent-model-gate.test.ts</code> covers production + Supabase-off + local fake mode.</dd></div>
+                </dl>
+              </article>
+              <article class="bug-card">
+                <div class="bug-top"><span class="bug-id">AGENT-001</span><span class="status-pass">Fixed</span></div>
+                <p class="bug-surface">Major agent dogfood</p>
+                <dl>
+                  <div><dt>Evidence</dt><dd>OpenAI-backed expanded evals exposed response-contract failures: card replies ended with questions, no-card replies promised cards/views, and read-only/card-provider wording caused false positives.</dd></div>
+                  <div><dt>Root cause</dt><dd>Model output was stochastic and the visible-response guard/scorer did not cover several production-language variants.</dd></div>
+                  <div><dt>Fix</dt><dd>Strengthened <code>visible-response-guard.ts</code>, deterministic response-mode normalization, and eval scorer exceptions.</dd></div>
+                  <div><dt>Regression</dt><dd><code>src/lib/agent/ai-agent.test.ts</code>, <code>visible-response-guard.test.ts</code>, <code>scripts/eval-agent.test.ts</code>; primary, expanded, and multi-turn OpenAI suites passed.</dd></div>
+                </dl>
+              </article>
+              <article class="bug-card">
+                <div class="bug-top"><span class="bug-id">GATE-001</span><span class="status-pass">Fixed</span></div>
+                <p class="bug-surface">Pip money companion gate</p>
+                <dl>
+                  <div><dt>Evidence</dt><dd><code>npm run test:pip-money-companion-gate</code> initially blocked on "No default verification is wired for DOGFOOD-001".</dd></div>
+                  <div><dt>Root cause</dt><dd>The default gate adapter had deterministic category commands but no sanitized local DOGFOOD path.</dd></div>
+                  <div><dt>Fix</dt><dd>Added a fail-closed local sanitized DOGFOOD adapter that verifies <code>/app</code> plus <code>/api/pip-cash?scenario=production-scale</code>.</dd></div>
+                  <div><dt>Regression</dt><dd><code>scripts/pip-money-companion-gate.test.ts</code>; <code>/tmp/pip-money-companion-gate-rerun/manifest.json</code> passed the full gate.</dd></div>
+                </dl>
+              </article>
+              <article class="bug-card">
+                <div class="bug-top"><span class="bug-id">DATA-003</span><span class="status-pass">Fixed</span></div>
+                <p class="bug-surface">Production-scale fixture</p>
+                <dl>
+                  <div><dt>Evidence</dt><dd>DOGFOOD-002 failed because <code>production-scale</code> had no same-day discretionary spend on the as-of date; DOGFOOD-005 would not cover savings goal impact.</dd></div>
+                  <div><dt>Root cause</dt><dd>Fixture breadth was large but missed two user-facing workflow edges.</dd></div>
+                  <div><dt>Fix</dt><dd>Added same-day posted+pending duplicate purchase and an active savings goal included in Spendable Cash Today.</dd></div>
+                  <div><dt>Regression</dt><dd><code>src/lib/fake-data.test.ts</code>; full money-companion gate passed.</dd></div>
+                </dl>
+              </article>
+              <article class="bug-card">
+                <div class="bug-top"><span class="bug-id">API-001</span><span class="status-pass">Fixed</span></div>
+                <p class="bug-surface">Hydrated <code>/app?scenario=production-scale</code> chat</p>
+                <dl>
+                  <div><dt>Evidence</dt><dd>In-app Browser submitted "Can I spend $50?" and the UI showed "I couldn't answer that cleanly."</dd></div>
+                  <div><dt>Root cause</dt><dd><code>/api/agent</code> request schema omitted <code>production-scale</code>, so the hydrated client sent a scenario that the route rejected.</dd></div>
+                  <div><dt>Fix</dt><dd>Added <code>production-scale</code> to the agent route schema.</dd></div>
+                  <div><dt>Regression</dt><dd><code>src/app/api/agent/route.test.ts</code>; in-app Browser rerun returned a purchase simulation card.</dd></div>
+                </dl>
+              </article>
+            </div>
+          </section>
+
+          <section class="section" id="verification">
+            <div class="section-header">
+              <div>
+                <h2>Verification Log</h2>
+                <p class="section-intro">Focused red/green checks, broad regressions, production-like build, API dogfood, browser proof, and final reruns.</p>
+              </div>
+              <span class="tag">Evidence</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Check</th><th>Status</th><th>Evidence</th></tr>
+                </thead>
+                <tbody>
+                  <tr><td>Baseline unit suite before changes</td><td><span class="status-pass">Passed</span></td><td><code>npm test</code>: 184 files passed, 4,584 tests passed, 1 skipped.</td></tr>
+                  <tr><td>Production-scale data TDD red</td><td><span class="status-pass">Passed</span></td><td><code>npx vitest run src/lib/fake-data.test.ts</code> failed on unrecognized scenario.</td></tr>
+                  <tr><td>Production-scale data TDD green</td><td><span class="status-pass">Passed</span></td><td><code>npx vitest run src/lib/fake-data.test.ts</code>: 1 file passed, 1 test passed.</td></tr>
+                  <tr><td>Local fake app TDD red</td><td><span class="status-pass">Passed</span></td><td><code>npx vitest run src/app/app/page.test.tsx scripts/check-deployment-env.test.ts</code> failed on unavailable <code>/app</code> and missing beta guard.</td></tr>
+                  <tr><td>Production-scale data shape green</td><td><span class="status-pass">Passed</span></td><td><code>npx vitest run src/lib/fake-data.test.ts</code>: 1 file passed, 1 test passed after nonzero/positive-state criteria.</td></tr>
+                  <tr><td>Local fake model gate TDD green</td><td><span class="status-pass">Passed</span></td><td><code>npx vitest run src/lib/agent/agent-model-gate.test.ts</code>: 1 file passed, 12 tests passed.</td></tr>
+                  <tr><td>Major capability missing-AI TDD red</td><td><span class="status-pass">Passed</span></td><td><code>npx vitest run scripts/eval-agent.test.ts --testNamePattern "blocked report"</code> first failed with <code>expected 20 to be 1</code>, proving the runner attempted all cases after the first global 503.</td></tr>
+                  <tr><td>Major capability missing-AI TDD green</td><td><span class="status-pass">Passed</span></td><td><code>npx vitest run scripts/eval-agent.test.ts --testNamePattern "blocked report"</code>: 1 test passed.</td></tr>
+                  <tr><td>Eval harness regression</td><td><span class="status-pass">Passed</span></td><td><code>npx vitest run scripts/eval-agent.test.ts</code>: 46 tests passed.</td></tr>
+                  <tr><td>Major capability API dogfood</td><td><span class="status-pass">Passed</span></td><td><code>PIP_AGENT_EVAL_BASE_URL=http://127.0.0.1:3007 PIP_AGENT_EVAL_REPORT=/tmp/pip-major-capabilities-openai.json npm run eval:agent:major</code>: 20/20 passed.</td></tr>
+                  <tr><td>Major capability expanded API dogfood</td><td><span class="status-pass">Passed</span></td><td><code>PIP_AGENT_EVAL_BASE_URL=http://127.0.0.1:3007 PIP_AGENT_EVAL_REPORT=/tmp/pip-major-expanded-openai.json npm run eval:agent -- --suite major-capabilities-expanded</code>: 91/91 passed.</td></tr>
+                  <tr><td>Major capability multi-turn API dogfood</td><td><span class="status-pass">Passed</span></td><td><code>PIP_AGENT_EVAL_BASE_URL=http://127.0.0.1:3007 PIP_AGENT_EVAL_REPORT=/tmp/pip-major-multiturn-openai.json npm run eval:agent -- --suite major-capabilities-multiturn</code>: 13/13 passed.</td></tr>
+                  <tr><td>Final major capability API dogfood rerun</td><td><span class="status-pass">Passed</span></td><td><code>PIP_AGENT_EVAL_BASE_URL=http://127.0.0.1:3008 PIP_AGENT_EVAL_REPORT=/tmp/pip-major-capabilities-openai-rerun.json npm run eval:agent:major</code>: 20/20 passed.</td></tr>
+                  <tr><td>Final expanded API dogfood rerun</td><td><span class="status-pass">Passed</span></td><td><code>PIP_AGENT_EVAL_BASE_URL=http://127.0.0.1:3008 PIP_AGENT_EVAL_REPORT=/tmp/pip-major-expanded-openai-rerun.json npm run eval:agent -- --suite major-capabilities-expanded</code>: 91/91 passed.</td></tr>
+                  <tr><td>Final multi-turn API dogfood rerun</td><td><span class="status-pass">Passed</span></td><td><code>PIP_AGENT_EVAL_BASE_URL=http://127.0.0.1:3008 PIP_AGENT_EVAL_REPORT=/tmp/pip-major-multiturn-openai-rerun.json npm run eval:agent -- --suite major-capabilities-multiturn</code>: 13/13 passed.</td></tr>
+                  <tr><td>Router dogfood</td><td><span class="status-pass">Passed</span></td><td><code>npm run dogfood:router</code>: 3,356 tests passed.</td></tr>
+                  <tr><td>Pip money companion gate</td><td><span class="status-pass">Passed</span></td><td><code>npm run test:pip-money-companion-gate -- --from 1 --base-url http://127.0.0.1:3007 --run-dir /tmp/pip-money-companion-gate-full</code>: all 137 cases passed.</td></tr>
+                  <tr><td>Final Pip money companion gate rerun</td><td><span class="status-pass">Passed</span></td><td><code>npm run test:pip-money-companion-gate -- --from 1 --base-url http://127.0.0.1:3008 --run-dir /tmp/pip-money-companion-gate-rerun</code>: passed.</td></tr>
+                  <tr><td>Pip money companion gate regression</td><td><span class="status-pass">Passed</span></td><td><code>npx vitest run scripts/pip-money-companion-gate.test.ts</code>: 10 tests passed.</td></tr>
+                  <tr><td>Full regression suite</td><td><span class="status-pass">Passed</span></td><td>Final <code>npm test</code>: 184 files passed, 4,626 tests passed, 1 skipped.</td></tr>
+                  <tr><td>Production build</td><td><span class="status-pass">Passed</span></td><td><code>npm run build</code>: compile, TypeScript, static generation, and route trace collection completed.</td></tr>
+                  <tr><td>Diff whitespace check</td><td><span class="status-pass">Passed</span></td><td><code>git diff --check</code>: no whitespace errors.</td></tr>
+                  <tr><td>Fake deployment check</td><td><span class="status-pass">Passed</span></td><td><code>PIP_SUPABASE_MODE=off PIP_RATE_LIMIT_SALT=local-production-scale-check npm run check:deployment -- --mode=fake</code>: passed.</td></tr>
+                  <tr><td>DB schema names</td><td><span class="status-pass">Passed</span></td><td><code>npm run check:db-schema-names</code>: passed.</td></tr>
+                  <tr><td>Android visible copy</td><td><span class="status-pass">Passed</span></td><td><code>npm run play:android-copy:verify</code>: passed.</td></tr>
+                  <tr><td>Production-scale API smoke</td><td><span class="status-pass">Passed</span></td><td><code>curl http://127.0.0.1:3008/api/pip-cash?scenario=production-scale</code>: HTTP 200; sanitized scenario rendered <code>$12</code> in the app.</td></tr>
+                  <tr><td>Final in-app Browser app smoke</td><td><span class="status-pass">Passed</span></td><td>Codex in-app Browser <code>iab</code>: desktop 1280x720 and mobile 390x844 rendered <code>/app?scenario=production-scale</code> with <code>$12</code>, savings-goal note, opening bubble, prompt chips, and composer; submitting "Can I spend $50?" returned a purchase simulation with no captured app console errors.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="section" id="clean-pass">
+            <div class="section-header">
+              <div>
+                <h2>Clean Pass</h2>
+                <p class="section-intro">Final state and explicit remaining safety boundary.</p>
+              </div>
+              <span class="tag">Final Status</span>
+            </div>
+            <div class="callout">
+              <p>Final state is a clean local pass for sanitized production-scale data under production-like settings. No production writes, real provider data, real user financial data, or destructive actions were used.</p>
+            </div>
+            <p class="footnote">
+              The local production-like server used the approved OpenAI key loaded from the canonical local env without printing or copying the key. Real connected-account DOGFOOD remains intentionally outside this sanitized local pass unless explicitly approved at action time.
+            </p>
+          </section>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

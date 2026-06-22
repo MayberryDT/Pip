@@ -310,6 +310,51 @@ describe("POST /api/agent", () => {
     expect(routeMocks.releaseAgentModelGate).toHaveBeenCalledWith("lease-1");
   });
 
+  it("accepts the production-scale local scenario from the hydrated app", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
+      message: "Testing $50: after that, you would have room left today.",
+      cards: [
+        {
+          type: "purchase_simulation",
+          title: "Purchase simulation",
+          amountCents: 5000,
+          beforeCents: 1200,
+          todayRemainingCents: 0,
+          todayOverageCents: 3800,
+          afterTodayCents: 0,
+          monthlyAverageAfterCents: 100,
+        },
+      ],
+      usedTools: ["simulate_purchase"],
+      responseMode: "show_card",
+    }));
+
+    const response = await POST(
+      jsonRequest({
+        message: "Can I spend $50?",
+        scenario: "production-scale",
+        conversationId: "production-scale-browser-smoke",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      usedTools: ["simulate_purchase"],
+      responseMode: "show_card",
+    });
+    expect(routeMocks.getCurrentFinancialSnapshot).toHaveBeenCalledWith({
+      scenario: "production-scale",
+    });
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Can I spend $50?",
+        snapshot: fakeSnapshot,
+      }),
+    );
+  });
+
   it("rate limits guest agent calls before running the model", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockRejectedValue(new AuthenticationRequiredError());
@@ -676,6 +721,53 @@ describe("POST /api/agent", () => {
         expectedAmountCents: 8400,
         expectedDay: 3,
       }),
+    );
+  });
+
+  it("asks for the monthly day before saving a bill rule that cannot infer a schedule", async () => {
+    enableSupabaseEnv();
+    const tableCalls: unknown[][] = [];
+    const supabase = createSupabaseClient({ id: "user-1" }, undefined, {
+      tableCalls,
+    });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.createSupabaseAdminClient.mockReturnValue(supabase);
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue({
+      ...fakeSnapshot,
+      transactions: [],
+    });
+    routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
+    routeMocks.runAIAgent.mockImplementation(async (input) => {
+      const result = await input.actions?.correctRecurringObligation?.({
+        merchantName: "City Power",
+        treatment: "bill",
+        expectedAmountCents: 8400,
+      });
+
+      return createAgentResponse({
+        message: result?.message,
+        usedTools: ["correct_recurring_obligation"],
+        responseMode: "chat_only",
+        clientAction: result?.clientAction,
+      });
+    });
+
+    const response = await POST(jsonRequest({ message: "Treat City Power as an $84 monthly bill" }));
+    const payload = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(payload.message).toContain("What day of the month");
+    expect(tableCalls).not.toContainEqual([
+      "upsert",
+      "recurring_obligation_rules",
+      expect.anything(),
+      expect.anything(),
+    ]);
+    expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "recurring_obligation_corrected",
+      expect.anything(),
     );
   });
 
@@ -1149,6 +1241,7 @@ function createSupabaseClient(
     connectedInstitutions?: Array<Record<string, unknown>>;
     syncRuns?: Array<Record<string, unknown>>;
     tableCalls?: unknown[][];
+    transactions?: Array<Record<string, unknown>>;
   } = {},
 ) {
   return {
@@ -1184,6 +1277,12 @@ function createSupabaseClient(
 
       if (tableName === "recurring_obligation_rules") {
         return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockResolvedValue({
+            data: [],
+            error: null,
+          }),
           upsert: vi.fn((payload, optionsArg) => {
             options.tableCalls?.push(["upsert", tableName, payload, optionsArg]);
 
@@ -1209,6 +1308,70 @@ function createSupabaseClient(
             };
           }),
         };
+      }
+
+      if (tableName === "accounts") {
+        const query = {
+          data: [
+            {
+              id: "checking",
+              user_id: "user-1",
+              institution_id: "institution-1",
+              provider_account_id: "provider-checking",
+              name: "Everyday Checking",
+              institution_name: "Northstar Bank",
+              kind: "checking",
+              balance_cents: 100000,
+              available_balance_cents: 100000,
+              last_four: "1234",
+              is_protected_savings: false,
+              active: true,
+              created_at: "2026-06-20T00:00:00.000Z",
+              updated_at: "2026-06-20T00:00:00.000Z",
+            },
+          ],
+          error: null,
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+        };
+
+        return query;
+      }
+
+      if (tableName === "account_preferences" || tableName === "missing_card_preferences") {
+        const query = {
+          data: [],
+          error: null,
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+        };
+
+        return query;
+      }
+
+      if (tableName === "transactions") {
+        const query = {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockResolvedValue({
+            data: options.transactions ?? [],
+            error: null,
+          }),
+        };
+
+        return query;
+      }
+
+      if (tableName === "savings_goals") {
+        const query = {
+          data: [],
+          error: null,
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockReturnThis(),
+        };
+
+        return query;
       }
 
       if (tableName === "pip_cash_snapshots") {

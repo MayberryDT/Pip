@@ -119,6 +119,37 @@ describe("agent model gate", () => {
     );
   });
 
+  it("uses the in-memory limiter in production when explicit local fake app mode is enabled", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_LOCAL_FAKE_APP_MODE", "1");
+
+    await expect(claimAgentModelGate({
+      scopeHash: "local-production-fake-scope",
+      requestKind: "chat",
+      plan: buildAgentModelGatePlan({ onboardingStatus: "ready", requestKind: "chat" }),
+    })).resolves.toMatchObject({
+      outcome: "allowed",
+    });
+  });
+
+  it("raises chat quotas only for explicit local fake eval mode", () => {
+    vi.stubEnv("PIP_LOCAL_FAKE_APP_MODE", "1");
+    vi.stubEnv("PIP_LOCAL_AGENT_EVAL_MODE", "1");
+
+    const evalPlan = buildAgentModelGatePlan({ onboardingStatus: "guest", requestKind: "chat" });
+
+    expect(evalPlan.minuteLimit).toBeGreaterThanOrEqual(60);
+    expect(evalPlan.dayLimit).toBeGreaterThanOrEqual(200);
+
+    vi.stubEnv("PIP_LOCAL_FAKE_APP_MODE", "");
+
+    const normalPlan = buildAgentModelGatePlan({ onboardingStatus: "guest", requestKind: "chat" });
+
+    expect(normalPlan.minuteLimit).toBe(5);
+    expect(normalPlan.dayLimit).toBe(40);
+  });
+
   it("requires an explicit salt in production", () => {
     vi.stubEnv("NODE_ENV", "production");
     expect(() =>

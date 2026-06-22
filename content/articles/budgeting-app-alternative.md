@@ -13,7 +13,7 @@ faq:
     answer: "Yes. Both partners can use the same Pip account and see the same daily spending-room figure. It encourages transparent, low-drama conversations because Pip isn't a surveillance tool - it's a read-only daily signal that anyone can check before swiping."
   - question: "What if my bank connection is stale or a bill hasn’t appeared yet?"
     answer: "Pip’s estimate can be slightly off until the connection updates. It’s a decision‑support signal, not an exact ledger. If you notice missing transactions, you can manually refresh the connection in the app; the number will update once the data flows through."
-ogImage: "/marketing/blog/articles/budgeting-app-alternative.svg"
+ogImage: "/marketing/blog/articles/budgeting-app-alternative.png"
 publishedAt: "2026-06-21"
 updatedAt: "2026-06-21"
 author: "Pip"

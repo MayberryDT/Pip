@@ -124,6 +124,7 @@ const requestSchema = z.object({
       "cash-guardrail",
       "cutback-dining",
       "negative",
+      "production-scale",
     ])
     .optional(),
   selectedPromptChipId: z.string().min(1).max(80).optional(),
@@ -1150,6 +1151,14 @@ function createAgentActions(input: {
           ok: false,
           status: "recurring_obligation_amount_required",
           message: `Tell me the usual monthly amount for ${merchantName}.`,
+        };
+      }
+
+      if (!inferred.expectedDay) {
+        return {
+          ok: false,
+          status: "recurring_obligation_day_required",
+          message: `What day of the month does ${merchantName} usually hit?`,
         };
       }
 

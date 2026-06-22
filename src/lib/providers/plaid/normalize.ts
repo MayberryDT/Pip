@@ -39,6 +39,7 @@ export function normalizePlaidBalance(
 export function normalizePlaidTransaction(transaction: PlaidTransaction): Transaction {
   const amountCents = Math.round(transaction.amount * -100);
   const category = getPlaidCategory(transaction);
+  const kind = getPlaidTransactionKind(transaction);
 
   return {
     id: transaction.transaction_id,
@@ -48,6 +49,7 @@ export function normalizePlaidTransaction(transaction: PlaidTransaction): Transa
     merchantName: transaction.merchant_name ?? undefined,
     amountCents,
     category,
+    kind,
     pending: transaction.pending,
   };
 }
@@ -98,4 +100,45 @@ function getPlaidCategory(transaction: PlaidTransaction): string | undefined {
   }
 
   return transaction.category?.join(":").toLowerCase();
+}
+
+function getPlaidTransactionKind(transaction: PlaidTransaction): Transaction["kind"] {
+  const personalFinanceCategory = transaction.personal_finance_category;
+
+  if (!personalFinanceCategory) {
+    return undefined;
+  }
+
+  const primary = normalizePlaidCategoryField(personalFinanceCategory.primary);
+  const detailed = normalizePlaidCategoryField(personalFinanceCategory.detailed);
+
+  if (primary === "INCOME") {
+    return "income";
+  }
+
+  if (primary === "BANK_FEES") {
+    return "fee";
+  }
+
+  if (detailed.includes("REFUND")) {
+    return "refund";
+  }
+
+  if (detailed === "TRANSFER_IN_ACCOUNT_TRANSFER" || detailed === "TRANSFER_OUT_ACCOUNT_TRANSFER") {
+    return "transfer";
+  }
+
+  if (detailed === "LOAN_PAYMENTS_CREDIT_CARD_PAYMENT") {
+    return "credit_card_payment";
+  }
+
+  if (detailed === "RENT_AND_UTILITIES_RENT") {
+    return "rent";
+  }
+
+  return undefined;
+}
+
+function normalizePlaidCategoryField(value: string): string {
+  return value.trim().toUpperCase();
 }
