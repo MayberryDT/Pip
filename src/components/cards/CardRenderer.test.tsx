@@ -309,6 +309,20 @@ function getRenderableCards(): Array<{
       expectedText: ["Likely recurring activity", "Youtube Premium", "2026-07-08", "high confidence", "-$13.99"],
     },
     {
+      name: "recurring_activity_empty",
+      card: {
+        type: "recurring_activity",
+        title: "Likely recurring activity",
+        asOfDate: "2026-06-20",
+        horizonDays: 45,
+        items: [],
+      },
+      expectedText: [
+        "Likely recurring activity",
+        "I do not see a confirmed or clear repeating bill in the connected data yet.",
+      ],
+    },
+    {
       name: "spendable_cash_forecast",
       card: {
         type: "spendable_cash_forecast",

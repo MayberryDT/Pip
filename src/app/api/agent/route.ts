@@ -1165,6 +1165,14 @@ function createAgentActions(input: {
         };
       }
 
+      if (!inferred.expectedDay) {
+        return {
+          ok: false,
+          status: "recurring_obligation_day_required",
+          message: `What day of the month does ${merchantName} usually hit?`,
+        };
+      }
+
       await upsertRecurringObligationRuleForUser(supabase, userId, {
         merchantKey: normalizeMerchantKey(merchantName),
         label: merchantName,

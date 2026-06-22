@@ -3841,6 +3841,7 @@ function getRecurringObligationCorrectionTool(
   }
 
   const expectedAmountCents = extractExplicitPurchaseAmountCents(message) ?? undefined;
+  const expectedDay = extractExpectedMonthlyDay(message) ?? undefined;
 
   return {
     toolName: "correct_recurring_obligation",
@@ -3848,9 +3849,22 @@ function getRecurringObligationCorrectionTool(
       merchant_name: merchantName,
       treatment,
       ...(expectedAmountCents ? { expected_amount_cents: expectedAmountCents } : {}),
+      ...(expectedDay ? { expected_day: expectedDay } : {}),
     },
     requireCard: false,
   };
+}
+
+function extractExpectedMonthlyDay(message: string): number | null {
+  const numeric = /\b(?:on|around|near|due)\s+(?:the\s+)?(\d{1,2})(?:st|nd|rd|th)?\b/i.exec(message);
+
+  if (!numeric) {
+    return null;
+  }
+
+  const day = Number(numeric[1]);
+
+  return day >= 1 && day <= 31 ? day : null;
 }
 
 function getRecurringObligationCorrectionTreatment(
@@ -3864,8 +3878,8 @@ function getRecurringObligationCorrectionTreatment(
   }
 
   if (
-    /\b(treat|mark|count|set)\b.{0,28}\b(as )?(a )?(monthly )?(bill|recurring|subscription|monthly charge)\b/.test(normalized) ||
-    /\b(is|was|should be)\b.{0,12}\b(a )?(monthly )?(bill|recurring|subscription|monthly charge)\b/.test(normalized) ||
+    /\b(treat|mark|count|set)\b.{0,48}\b(as\s+)?(?:a|an)?\s*(?:\$?\d[\d,.]*\s+)?(?:monthly\s+)?(bill|recurring|subscription|monthly charge)\b/.test(normalized) ||
+    /\b(is|was|should be)\b.{0,24}\b(?:a|an)?\s*(?:\$?\d[\d,.]*\s+)?(?:monthly\s+)?(bill|recurring|subscription|monthly charge)\b/.test(normalized) ||
     /\bbill is usually\b/.test(normalized)
   ) {
     return "bill";
@@ -3881,11 +3895,11 @@ function extractRecurringObligationMerchantName(
 ): string | null {
   const patterns = treatment === "bill"
     ? [
-        /\btreat\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
-        /\bmark\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
-        /\bcount\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
-        /\bset\s+(.+?)\s+as\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
-        /\b(.+?)\s+(?:is|was|should be)\s+(?:a\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\btreat\s+(.+?)\s+as\s+(?:a|an)?\s*(?:\$?\d[\d,.]*\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bmark\s+(.+?)\s+as\s+(?:a|an)?\s*(?:\$?\d[\d,.]*\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bcount\s+(.+?)\s+as\s+(?:a|an)?\s*(?:\$?\d[\d,.]*\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\bset\s+(.+?)\s+as\s+(?:a|an)?\s*(?:\$?\d[\d,.]*\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
+        /\b(.+?)\s+(?:is|was|should be)\s+(?:a|an)?\s*(?:\$?\d[\d,.]*\s+)?(?:monthly\s+)?(?:bill|recurring|subscription|monthly charge)\b/i,
         /\bmy\s+(.+?)\s+bill\s+is\s+usually\b/i,
       ]
     : [

@@ -1190,7 +1190,7 @@ describe("runAIAgent", () => {
     });
     expect(
       __agentTestHooks.getForcedAgentTool({
-        message: "My phone bill is usually $80",
+        message: "My phone bill is usually $80 on the 15th",
       }),
     ).toMatchObject({
       toolName: "correct_recurring_obligation",
@@ -1198,6 +1198,34 @@ describe("runAIAgent", () => {
         merchant_name: "phone",
         treatment: "bill",
         expected_amount_cents: 8000,
+        expected_day: 15,
+      },
+      requireCard: false,
+    });
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Treat City Power as a monthly bill around the 3rd",
+      }),
+    ).toMatchObject({
+      toolName: "correct_recurring_obligation",
+      args: {
+        merchant_name: "City Power",
+        treatment: "bill",
+        expected_day: 3,
+      },
+      requireCard: false,
+    });
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Treat City Power as an $84 monthly bill due the 3rd",
+      }),
+    ).toMatchObject({
+      toolName: "correct_recurring_obligation",
+      args: {
+        merchant_name: "City Power",
+        treatment: "bill",
+        expected_amount_cents: 8400,
+        expected_day: 3,
       },
       requireCard: false,
     });

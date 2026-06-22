@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildRecurringActivity, buildSpendableCashForecast } from "@/lib/pip-cash/insights";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { fakeSnapshot } from "@/lib/fake-data";
-import type { FinancialSnapshot, Transaction } from "@/lib/types";
+import type { FinancialSnapshot, RecurringObligationRule, Transaction } from "@/lib/types";
 
 describe("Spendable Cash forecast", () => {
   it("uses the V2 Spendable Cash Today metric instead of legacy rolling surplus", () => {
@@ -24,6 +24,59 @@ describe("Spendable Cash forecast", () => {
 });
 
 describe("Recurring activity", () => {
+  it("shows confirmed monthly obligation rules even without recent matching transactions", () => {
+    const activity = buildRecurringActivity(snapshotWith([], {
+      recurringObligationRules: [
+        rule({
+          merchantKey: "city-power",
+          label: "City Power",
+          expectedAmountCents: 8400,
+          expectedDay: 3,
+          source: "user_confirmed",
+          status: "active",
+        }),
+      ],
+    }));
+
+    expect(activity.items).toEqual([
+      expect.objectContaining({
+        id: "confirmed-city-power",
+        label: "City Power",
+        merchantName: "City Power",
+        expectedDate: "2026-07-03",
+        amountCents: -8400,
+        kind: "purchase",
+        cadence: "monthly",
+        confidence: "high",
+        sourceTransactionCount: 0,
+        lastSeenDate: "2026-06-20",
+      }),
+    ]);
+  });
+
+  it("schedules confirmed rules later in the current month when the expected day has not passed", () => {
+    const activity = buildRecurringActivity(snapshotWith([], {
+      recurringObligationRules: [
+        rule({
+          merchantKey: "phone-plan",
+          label: "Phone Plan",
+          expectedAmountCents: 8000,
+          expectedDay: 28,
+          source: "user_confirmed",
+          status: "active",
+        }),
+      ],
+    }));
+
+    expect(activity.items[0]).toMatchObject({
+      id: "confirmed-phone-plan",
+      label: "Phone Plan",
+      expectedDate: "2026-06-28",
+      amountCents: -8000,
+      confidence: "high",
+    });
+  });
+
   it("detects a confirmed monthly subscription", () => {
     const activity = buildRecurringActivity(snapshotWith([
       tx({
@@ -126,6 +179,176 @@ describe("Recurring activity", () => {
       sourceTransactionCount: 4,
       lastSeenDate: "2026-06-03",
     });
+  });
+
+  it("lets confirmed rules take precedence over detected transactions for the same merchant", () => {
+    const activity = buildRecurringActivity(snapshotWith([
+      tx({
+        id: "power_may",
+        date: "2026-05-03",
+        description: "City Power utility bill",
+        merchantName: "City Power",
+        amountCents: -12100,
+        category: "utilities",
+        kind: "purchase",
+      }),
+      tx({
+        id: "power_jun",
+        date: "2026-06-03",
+        description: "City Power utility bill",
+        merchantName: "City Power",
+        amountCents: -12200,
+        category: "utilities",
+        kind: "purchase",
+      }),
+    ], {
+      recurringObligationRules: [
+        rule({
+          merchantKey: "city-power",
+          label: "City Power",
+          expectedAmountCents: 8400,
+          expectedDay: 3,
+          source: "user_confirmed",
+          status: "active",
+        }),
+      ],
+    }));
+
+    expect(activity.items).toHaveLength(1);
+    expect(activity.items[0]).toMatchObject({
+      id: "confirmed-city-power",
+      amountCents: -8400,
+      confidence: "high",
+    });
+  });
+
+  it("lets confirmed rules suppress detected transactions with a more specific merchant label", () => {
+    const activity = buildRecurringActivity(snapshotWith([
+      tx({
+        id: "power_may",
+        date: "2026-05-03",
+        description: "City Power utility bill",
+        merchantName: "City Power Utility Bill",
+        amountCents: -12100,
+        category: "utilities",
+        kind: "purchase",
+      }),
+      tx({
+        id: "power_jun",
+        date: "2026-06-03",
+        description: "City Power utility bill",
+        merchantName: "City Power Utility Bill",
+        amountCents: -12200,
+        category: "utilities",
+        kind: "purchase",
+      }),
+    ], {
+      recurringObligationRules: [
+        rule({
+          merchantKey: "city-power",
+          label: "City Power",
+          expectedAmountCents: 8400,
+          expectedDay: 3,
+          source: "user_confirmed",
+          status: "active",
+        }),
+      ],
+    }));
+
+    expect(activity.items).toHaveLength(1);
+    expect(activity.items[0]).toMatchObject({
+      id: "confirmed-city-power",
+      amountCents: -8400,
+      confidence: "high",
+    });
+  });
+
+  it("suppresses detected recurring activity when the user ignored that merchant", () => {
+    const activity = buildRecurringActivity(snapshotWith([
+      tx({
+        id: "power_apr",
+        date: "2026-04-03",
+        description: "City Power utility bill",
+        merchantName: "City Power",
+        amountCents: -9800,
+        category: "utilities",
+        kind: "purchase",
+      }),
+      tx({
+        id: "power_may",
+        date: "2026-05-03",
+        description: "City Power utility bill",
+        merchantName: "City Power",
+        amountCents: -12100,
+        category: "utilities",
+        kind: "purchase",
+      }),
+      tx({
+        id: "power_jun",
+        date: "2026-06-03",
+        description: "City Power utility bill",
+        merchantName: "City Power",
+        amountCents: -12200,
+        category: "utilities",
+        kind: "purchase",
+      }),
+    ], {
+      recurringObligationRules: [
+        rule({
+          merchantKey: "city-power",
+          label: "City Power",
+          expectedAmountCents: 0,
+          source: "user_correction",
+          status: "ignored",
+        }),
+      ],
+    }));
+
+    expect(activity.items).toEqual([]);
+  });
+
+  it("suppresses detected recurring activity when an ignored merchant has a more specific transaction label", () => {
+    const activity = buildRecurringActivity(snapshotWith([
+      tx({
+        id: "power_apr",
+        date: "2026-04-03",
+        description: "City Power utility bill",
+        merchantName: "City Power Utility Bill",
+        amountCents: -9800,
+        category: "utilities",
+        kind: "purchase",
+      }),
+      tx({
+        id: "power_may",
+        date: "2026-05-03",
+        description: "City Power utility bill",
+        merchantName: "City Power Utility Bill",
+        amountCents: -12100,
+        category: "utilities",
+        kind: "purchase",
+      }),
+      tx({
+        id: "power_jun",
+        date: "2026-06-03",
+        description: "City Power utility bill",
+        merchantName: "City Power Utility Bill",
+        amountCents: -12200,
+        category: "utilities",
+        kind: "purchase",
+      }),
+    ], {
+      recurringObligationRules: [
+        rule({
+          merchantKey: "city-power",
+          label: "City Power",
+          expectedAmountCents: 0,
+          source: "user_correction",
+          status: "ignored",
+        }),
+      ],
+    }));
+
+    expect(activity.items).toEqual([]);
   });
 
   it("excludes payroll from default recurring bill activity", () => {
@@ -263,9 +486,132 @@ describe("Recurring activity", () => {
 
     expect(activity.items).toEqual([]);
   });
+
+  it("shows a low-confidence historical bill candidate when monthly bill evidence is older than the fresh detector window", () => {
+    const activity = buildRecurringActivity(snapshotWith([
+      tx({
+        id: "internet_jan",
+        date: "2026-01-15",
+        description: "Fiber Internet monthly bill",
+        merchantName: "Fiber Internet",
+        amountCents: -7000,
+        category: "internet",
+        kind: "purchase",
+      }),
+      tx({
+        id: "internet_feb",
+        date: "2026-02-15",
+        description: "Fiber Internet monthly bill",
+        merchantName: "Fiber Internet",
+        amountCents: -7000,
+        category: "internet",
+        kind: "purchase",
+      }),
+      tx({
+        id: "internet_mar",
+        date: "2026-03-15",
+        description: "Fiber Internet monthly bill",
+        merchantName: "Fiber Internet",
+        amountCents: -7000,
+        category: "internet",
+        kind: "purchase",
+      }),
+    ]));
+
+    expect(activity.items[0]).toMatchObject({
+      id: "historical-fiber-internet",
+      label: "Fiber Internet",
+      expectedDate: "2026-07-15",
+      amountCents: -7000,
+      confidence: "low",
+      sourceTransactionCount: 3,
+      lastSeenDate: "2026-03-15",
+    });
+  });
+
+  it("suppresses historical bill candidates when the user ignored that merchant", () => {
+    const activity = buildRecurringActivity(snapshotWith([
+      tx({
+        id: "internet_jan",
+        date: "2026-01-15",
+        description: "Fiber Internet monthly bill",
+        merchantName: "Fiber Internet",
+        amountCents: -7000,
+        category: "internet",
+        kind: "purchase",
+      }),
+      tx({
+        id: "internet_feb",
+        date: "2026-02-15",
+        description: "Fiber Internet monthly bill",
+        merchantName: "Fiber Internet",
+        amountCents: -7000,
+        category: "internet",
+        kind: "purchase",
+      }),
+      tx({
+        id: "internet_mar",
+        date: "2026-03-15",
+        description: "Fiber Internet monthly bill",
+        merchantName: "Fiber Internet",
+        amountCents: -7000,
+        category: "internet",
+        kind: "purchase",
+      }),
+    ], {
+      recurringObligationRules: [
+        rule({
+          merchantKey: "fiber-internet",
+          label: "Fiber Internet",
+          expectedAmountCents: 0,
+          source: "user_correction",
+          status: "ignored",
+        }),
+      ],
+    }));
+
+    expect(activity.items).toEqual([]);
+  });
+
+  it("does not show repeat retail purchases as historical bill candidates", () => {
+    const activity = buildRecurringActivity(snapshotWith([
+      tx({
+        id: "target_jan",
+        date: "2026-01-15",
+        description: "Target",
+        merchantName: "Target",
+        amountCents: -7000,
+        category: "shops",
+        kind: "purchase",
+      }),
+      tx({
+        id: "target_feb",
+        date: "2026-02-15",
+        description: "Target",
+        merchantName: "Target",
+        amountCents: -7000,
+        category: "shops",
+        kind: "purchase",
+      }),
+      tx({
+        id: "target_mar",
+        date: "2026-03-15",
+        description: "Target",
+        merchantName: "Target",
+        amountCents: -7000,
+        category: "shops",
+        kind: "purchase",
+      }),
+    ]));
+
+    expect(activity.items).toEqual([]);
+  });
 });
 
-function snapshotWith(transactions: Transaction[]): FinancialSnapshot {
+function snapshotWith(
+  transactions: Transaction[],
+  overrides: Partial<Pick<FinancialSnapshot, "recurringObligationRules">> = {},
+): FinancialSnapshot {
   return {
     settings: {
       asOfDate: "2026-06-20",
@@ -296,6 +642,7 @@ function snapshotWith(transactions: Transaction[]): FinancialSnapshot {
       },
     ],
     transactions,
+    ...overrides,
   };
 }
 
@@ -303,5 +650,22 @@ function tx(input: Omit<Transaction, "accountId"> & { accountId?: string }): Tra
   return {
     accountId: "checking",
     ...input,
+  };
+}
+
+function rule(overrides: Partial<RecurringObligationRule>): RecurringObligationRule {
+  return {
+    id: "rule-1",
+    userId: "user-1",
+    merchantKey: "city-power",
+    label: "City Power",
+    expectedAmountCents: 8400,
+    cadence: "monthly",
+    source: "user_confirmed",
+    status: "active",
+    lastConfirmedAt: "2026-06-20T00:00:00.000Z",
+    createdAt: "2026-06-20T00:00:00.000Z",
+    updatedAt: "2026-06-20T00:00:00.000Z",
+    ...overrides,
   };
 }

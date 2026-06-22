@@ -11,10 +11,16 @@ import {
   annotateCreditCardPaymentMatches,
 } from "@/lib/pip-cash/dedupe-credit-card-payments";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
+import {
+  buildRecurringObligations,
+  normalizeRecurringMerchantKey,
+} from "@/lib/pip-cash/recurring-obligations";
 import { toPipCashSnapshot } from "@/lib/pip-cash/account-filters";
 import type {
   Account,
   FinancialSnapshot,
+  RecurringObligation,
+  RecurringObligationRule,
   RollingWindow,
   Transaction,
   TransactionKind,
@@ -67,6 +73,12 @@ export type RecurringActivity = {
   asOfDate: string;
   horizonDays: number;
   items: RecurringActivityItem[];
+};
+
+type RecurringActivitySourceEntry = {
+  merchantKey: string;
+  item: RecurringActivityItem;
+  priority: number;
 };
 
 export type SpendableCashForecastPoint = {
@@ -125,14 +137,33 @@ export function buildRecurringActivity(
   snapshot = toPipCashSnapshot(snapshot);
   const asOfDate = snapshot.settings.asOfDate;
   const horizonDays = input.horizonDays ?? RECURRING_CARD_HORIZON_DAYS;
-  const transactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts)
+  const recurringModel = buildRecurringObligations({
+    snapshot,
+    rules: snapshot.recurringObligationRules ?? [],
+  });
+  const ignoredMerchantKeys = new Set(recurringModel.ignoredMerchantKeys);
+  const confirmedMerchantKeys = new Set(
+    recurringModel.confirmed.map((obligation) => obligation.merchantKey),
+  );
+  const lookbackTransactions = annotateCreditCardPaymentMatches(snapshot.transactions, snapshot.accounts)
     .filter((transaction) =>
       transaction.date <= asOfDate &&
       transaction.date >= addDays(asOfDate, -RECURRING_LOOKBACK_DAYS),
-    )
+    );
+  const recurringTransactions = lookbackTransactions
     .filter((transaction) => isDefaultRecurringActivityCandidate(transaction));
-  const grouped = groupBy(transactions, (transaction) => recurringGroupKey(transaction));
-  const items: RecurringActivityItem[] = [];
+  const grouped = groupBy(recurringTransactions, (transaction) => recurringGroupKey(transaction));
+  const sourceEntries: RecurringActivitySourceEntry[] = buildConfirmedRecurringActivityItems({
+    obligations: recurringModel.confirmed,
+    rules: snapshot.recurringObligationRules ?? [],
+    transactions: lookbackTransactions,
+    asOfDate,
+    horizonDays,
+  }).map((item) => ({
+    merchantKey: getRecurringMerchantKey(item),
+    item,
+    priority: 0,
+  }));
 
   for (const group of grouped.values()) {
     const candidate = buildRecurringCandidate(group, asOfDate);
@@ -141,10 +172,44 @@ export function buildRecurringActivity(
       continue;
     }
 
-    if (candidate.expectedDate > asOfDate && candidate.expectedDate <= addDays(asOfDate, horizonDays)) {
-      items.push(candidate);
+    const merchantKey = getRecurringMerchantKey(candidate);
+
+    if (
+      !hasRelatedRecurringMerchantKey(ignoredMerchantKeys, merchantKey) &&
+      !hasRelatedRecurringMerchantKey(confirmedMerchantKeys, merchantKey) &&
+      candidate.expectedDate > asOfDate &&
+      candidate.expectedDate <= addDays(asOfDate, horizonDays)
+    ) {
+      sourceEntries.push({
+        merchantKey,
+        item: candidate,
+        priority: 1,
+      });
     }
   }
+
+  for (const group of grouped.values()) {
+    const candidate = buildHistoricalRecurringCandidate(group, asOfDate, horizonDays);
+
+    if (!candidate) {
+      continue;
+    }
+
+    const merchantKey = getRecurringMerchantKey(candidate);
+
+    if (
+      !hasRelatedRecurringMerchantKey(ignoredMerchantKeys, merchantKey) &&
+      !hasRelatedRecurringMerchantKey(confirmedMerchantKeys, merchantKey)
+    ) {
+      sourceEntries.push({
+        merchantKey,
+        item: candidate,
+        priority: 2,
+      });
+    }
+  }
+
+  const items = dedupeRecurringItemsByMerchant(sourceEntries);
 
   return {
     asOfDate,
@@ -410,6 +475,57 @@ function aggregateIncomeGroups(transactions: Transaction[]): SpendingBreakdownGr
   return [...grouped.values()].sort((left, right) => right.amountCents - left.amountCents);
 }
 
+function buildConfirmedRecurringActivityItems(input: {
+  obligations: RecurringObligation[];
+  rules: RecurringObligationRule[];
+  transactions: Transaction[];
+  asOfDate: string;
+  horizonDays: number;
+}): RecurringActivityItem[] {
+  const rulesByMerchantKey = new Map(
+    input.rules
+      .filter((rule) => rule.status === "active" && rule.source === "user_confirmed")
+      .map((rule) => [rule.merchantKey, rule]),
+  );
+  const items: RecurringActivityItem[] = [];
+
+  for (const obligation of input.obligations) {
+    const matchingTransactions = input.transactions
+      .filter((transaction) =>
+        transaction.amountCents < 0 &&
+        transactionMatchesMerchantKey(transaction, obligation.merchantKey),
+      )
+      .sort((left, right) => left.date.localeCompare(right.date));
+    const latest = matchingTransactions.at(-1);
+    const expectedDate = obligation.expectedDay
+      ? nextMonthlyDayAfter(obligation.expectedDay, input.asOfDate)
+      : latest
+        ? nextMonthlyDateAfter(latest.date, input.asOfDate)
+        : null;
+
+    if (!expectedDate || !isWithinRecurringHorizon(expectedDate, input.asOfDate, input.horizonDays)) {
+      continue;
+    }
+
+    const rule = rulesByMerchantKey.get(obligation.merchantKey);
+
+    items.push({
+      id: `confirmed-${obligation.merchantKey}`,
+      label: formatLabel(obligation.label),
+      merchantName: latest?.merchantName ?? formatLabel(obligation.label),
+      expectedDate,
+      amountCents: -Math.abs(obligation.expectedAmountCents),
+      kind: latest ? classifyTransaction(latest) : "purchase",
+      cadence: "monthly",
+      confidence: "high",
+      sourceTransactionCount: matchingTransactions.length,
+      lastSeenDate: latest?.date ?? getRuleActivityDate(rule) ?? input.asOfDate,
+    });
+  }
+
+  return items;
+}
+
 function buildRecurringCandidate(
   transactions: Transaction[],
   asOfDate: string,
@@ -448,6 +564,53 @@ function buildRecurringCandidate(
   };
 }
 
+function buildHistoricalRecurringCandidate(
+  transactions: Transaction[],
+  asOfDate: string,
+  horizonDays: number,
+): RecurringActivityItem | null {
+  const sorted = [...transactions].sort((left, right) => left.date.localeCompare(right.date));
+  const monthlyOccurrences = getMonthlyRecurringOccurrences(sorted);
+  const latest = monthlyOccurrences.at(-1);
+
+  if (!latest || monthlyOccurrences.length < 3) {
+    return null;
+  }
+
+  if (latest.date >= addDays(asOfDate, -ACTIVE_MONTHLY_LOOKBACK_DAYS)) {
+    return null;
+  }
+
+  if (!isDefaultRecurringActivityCandidate(latest)) {
+    return null;
+  }
+
+  const expectedDate = nextMonthlyDateAfter(latest.date, asOfDate);
+
+  if (!isWithinRecurringHorizon(expectedDate, asOfDate, horizonDays)) {
+    return null;
+  }
+
+  const label = getTransactionLabel(latest);
+  const amountCents = Math.round(
+    monthlyOccurrences.reduce((total, transaction) => total + transaction.amountCents, 0) /
+      monthlyOccurrences.length,
+  );
+
+  return {
+    id: `historical-${normalizeRecurringMerchantKey(label)}`,
+    label,
+    merchantName: latest.merchantName,
+    expectedDate,
+    amountCents,
+    kind: classifyTransaction(latest),
+    cadence: "monthly",
+    confidence: "low",
+    sourceTransactionCount: monthlyOccurrences.length,
+    lastSeenDate: latest.date,
+  };
+}
+
 function getMonthlyRecurringOccurrences(transactions: Transaction[]): Transaction[] {
   const monthlyGroups = groupBy(transactions, (transaction) => transaction.date.slice(0, 7));
   const occurrences = [...monthlyGroups.entries()]
@@ -470,6 +633,23 @@ function getMonthlyRecurringOccurrences(transactions: Transaction[]): Transactio
   }
 
   return occurrences;
+}
+
+function dedupeRecurringItemsByMerchant(entries: RecurringActivitySourceEntry[]): RecurringActivityItem[] {
+  const bestByMerchant = new Map<string, { item: RecurringActivityItem; priority: number }>();
+
+  for (const entry of entries) {
+    const current = bestByMerchant.get(entry.merchantKey);
+
+    if (!current || entry.priority < current.priority) {
+      bestByMerchant.set(entry.merchantKey, {
+        item: entry.item,
+        priority: entry.priority,
+      });
+    }
+  }
+
+  return [...bestByMerchant.values()].map((entry) => entry.item);
 }
 
 function getRecurringConfidence(transactions: Transaction[]): RecurringActivityItem["confidence"] {
@@ -498,6 +678,28 @@ function nextMonthlyDateAfter(lastSeenDate: string, asOfDate: string): string {
   }
 
   return next;
+}
+
+function nextMonthlyDayAfter(expectedDay: number, asOfDate: string): string {
+  const asOf = parseDateParts(asOfDate);
+  const thisMonth = formatDateParts({
+    year: asOf.year,
+    month: asOf.month,
+    day: Math.min(expectedDay, daysInMonth(asOf.year, asOf.month)),
+  });
+
+  if (thisMonth > asOfDate) {
+    return thisMonth;
+  }
+
+  const nextYear = asOf.month === 12 ? asOf.year + 1 : asOf.year;
+  const nextMonth = asOf.month === 12 ? 1 : asOf.month + 1;
+
+  return formatDateParts({
+    year: nextYear,
+    month: nextMonth,
+    day: Math.min(expectedDay, daysInMonth(nextYear, nextMonth)),
+  });
 }
 
 function addOneCalendarMonth(date: string): string {
@@ -552,6 +754,10 @@ function isMonthlyInterval(dayCount: number): boolean {
   return dayCount >= MONTHLY_INTERVAL_MIN_DAYS && dayCount <= MONTHLY_INTERVAL_MAX_DAYS;
 }
 
+function isWithinRecurringHorizon(expectedDate: string, asOfDate: string, horizonDays: number): boolean {
+  return expectedDate > asOfDate && expectedDate <= addDays(asOfDate, horizonDays);
+}
+
 function daysBetweenDates(startDate: string, endDate: string): number {
   const millisecondsPerDay = 24 * 60 * 60 * 1000;
 
@@ -563,6 +769,60 @@ function recurringGroupKey(transaction: Transaction): string {
     normalizeText(getTransactionLabel(transaction)),
     classifyTransaction(transaction),
   ].join(":");
+}
+
+function getRecurringMerchantKey(item: RecurringActivityItem): string {
+  const idMatch = /^(?:confirmed|historical)-(.+)$/.exec(item.id);
+
+  if (idMatch?.[1]) {
+    return idMatch[1];
+  }
+
+  return normalizeRecurringMerchantKey(item.merchantName ?? item.label);
+}
+
+function transactionMatchesMerchantKey(transaction: Transaction, merchantKey: string): boolean {
+  return getTransactionMerchantKeys(transaction).some((transactionKey) =>
+    areRelatedRecurringMerchantKeys(transactionKey, merchantKey)
+  );
+}
+
+function hasRelatedRecurringMerchantKey(keys: Set<string>, merchantKey: string): boolean {
+  for (const key of keys) {
+    if (areRelatedRecurringMerchantKeys(key, merchantKey)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function areRelatedRecurringMerchantKeys(left: string, right: string): boolean {
+  return left === right ||
+    left.startsWith(`${right}-`) ||
+    right.startsWith(`${left}-`);
+}
+
+function getTransactionMerchantKeys(transaction: Transaction): string[] {
+  return [
+    transaction.merchantName,
+    transaction.description,
+    getTransactionLabel(transaction),
+  ]
+    .filter((value): value is string => Boolean(value))
+    .map((value) => normalizeRecurringMerchantKey(value));
+}
+
+function getRuleActivityDate(rule: RecurringObligationRule | undefined): string | null {
+  return (
+    normalizeDateString(rule?.lastConfirmedAt) ??
+    normalizeDateString(rule?.updatedAt) ??
+    null
+  );
+}
+
+function normalizeDateString(value: string | undefined): string | null {
+  return value && /^\d{4}-\d{2}-\d{2}/.test(value) ? value.slice(0, 10) : null;
 }
 
 function clampForecastHorizon(horizonDays: number | undefined): number {
