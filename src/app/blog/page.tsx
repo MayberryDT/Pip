@@ -55,10 +55,10 @@ export default function BlogIndexPage() {
         </SwissSection>
 
         <SwissSection folio="02 / Start here" tone="porcelain">
-          <div className="col-span-12">{featured ? <ArticleCard article={featured} featured /> : null}</div>
+          <div className="col-span-12">{featured ? <ArticleCard article={featured} featured imageLoading="eager" /> : null}</div>
           <div className="col-span-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
             {remaining.map((article) => (
-              <ArticleCard article={article} key={article.slug} />
+              <ArticleCard article={article} imageLoading="eager" key={article.slug} />
             ))}
           </div>
         </SwissSection>

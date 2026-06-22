@@ -105,6 +105,18 @@ describe("marketing website pages", () => {
     expect(html).toContain('type="email"');
   });
 
+  it("loads visible blog card images eagerly instead of leaving blank lazy slots", () => {
+    const homeHtml = renderToStaticMarkup(<MarketingHomePage />);
+    const blogIndexHtml = renderToStaticMarkup(<BlogIndexPage />);
+
+    expectImageLoading(homeHtml, marketingAssets.blogMeetPipCard.src, "eager");
+    expectImageLoading(homeHtml, marketingAssets.blogBankBalanceCard.src, "eager");
+    expectImageLoading(homeHtml, marketingAssets.blogSpendableCashCard.src, "eager");
+    expectImageLoading(blogIndexHtml, marketingAssets.blogMeetPipCard.src, "eager");
+    expectImageLoading(blogIndexHtml, marketingAssets.blogBankBalanceCard.src, "eager");
+    expectImageLoading(blogIndexHtml, marketingAssets.blogSpendableCashCard.src, "eager");
+  });
+
   it("keeps mobile marketing chrome from stacking sticky bars", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const mobileChromeCss = css
@@ -408,4 +420,14 @@ function sliceCssFromMediaQueryContaining(css: string, mediaQuery: string, selec
   expect(mediaIndex).toBeGreaterThanOrEqual(0);
 
   return css.slice(mediaIndex);
+}
+
+function expectImageLoading(html: string, src: string, loading: "eager" | "lazy"): void {
+  const imageMatch = html.match(new RegExp(`<img[^>]+src="${escapeRegExp(src)}"[^>]*>`));
+
+  expect(imageMatch?.[0], src).toContain(`loading="${loading}"`);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

@@ -11,10 +11,12 @@ import { getProductAccessHref, productAccess } from "@/lib/marketing/product-acc
 export function ArticleCard({
   article,
   featured = false,
+  imageLoading = "lazy",
   variant,
 }: {
   article: Article;
   featured?: boolean;
+  imageLoading?: "eager" | "lazy";
   variant?: "default" | "featured" | "homeFeatured" | "homeCompact";
 }) {
   const resolvedVariant = variant ?? (featured ? "featured" : "default");
@@ -30,7 +32,7 @@ export function ArticleCard({
             alt={asset.alt}
             width={asset.width}
             height={asset.height}
-            loading="lazy"
+            loading={imageLoading}
             decoding="async"
           />
         </Link>
@@ -65,7 +67,7 @@ export function ArticleCard({
             alt={asset.alt}
             width={asset.width}
             height={asset.height}
-            loading="lazy"
+            loading={imageLoading}
             decoding="async"
           />
         </Link>
@@ -104,7 +106,7 @@ export function ArticleCard({
             alt={asset.alt}
             width={asset.width}
             height={asset.height}
-            loading="lazy"
+            loading={imageLoading}
             decoding="async"
           />
         </Link>
@@ -154,7 +156,7 @@ export function ArticleCard({
           alt={asset.alt}
           width={asset.width}
           height={asset.height}
-          loading="lazy"
+          loading={imageLoading}
           decoding="async"
         />
       </Link>

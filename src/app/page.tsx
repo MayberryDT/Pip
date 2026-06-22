@@ -363,11 +363,11 @@ export default function MarketingHomePage() {
             </div>
             <div className="pip-blog-editorial-grid">
               {featuredArticles[0] ? (
-                <ArticleCard article={featuredArticles[0]} variant="homeFeatured" />
+                <ArticleCard article={featuredArticles[0]} imageLoading="eager" variant="homeFeatured" />
               ) : null}
               <div className="pip-blog-supporting">
                 {featuredArticles.slice(1).map((article) => (
-                  <ArticleCard article={article} key={article.slug} variant="homeCompact" />
+                  <ArticleCard article={article} imageLoading="eager" key={article.slug} variant="homeCompact" />
                 ))}
               </div>
             </div>
