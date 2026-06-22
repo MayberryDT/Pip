@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { fakeSnapshot } from "@/lib/fake-data";
@@ -7,6 +7,7 @@ const pageMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   createSupabaseAdminClient: vi.fn(),
   getCurrentPipCashState: vi.fn(),
+  isLocalFakeAppMode: vi.fn(),
   isSupabaseConfigured: vi.fn(),
   loadActiveAppAccessGrant: vi.fn(),
   recordAppAccessGrantAccess: vi.fn(),
@@ -15,6 +16,7 @@ const pageMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/lib/supabase/env", () => ({
+  isLocalFakeAppMode: pageMocks.isLocalFakeAppMode,
   isSupabaseConfigured: pageMocks.isSupabaseConfigured,
 }));
 
@@ -55,6 +57,10 @@ vi.mock("@/lib/data/current-snapshot", async (importOriginal) => {
 
 import AppPage from "@/app/app/page";
 
+beforeEach(() => {
+  pageMocks.isLocalFakeAppMode.mockReturnValue(false);
+});
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -70,6 +76,22 @@ describe("/app page data loading", () => {
 
     expect(markup).toContain("Pip access is temporarily unavailable");
     expect(markup).not.toContain("data-testid=\"agent-thread\"");
+    expect(pageMocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(pageMocks.getCurrentPipCashState).not.toHaveBeenCalled();
+  });
+
+  it("allows explicit local fake app mode without exposing it as the default Supabase-missing state", async () => {
+    pageMocks.isSupabaseConfigured.mockReturnValue(false);
+    pageMocks.isLocalFakeAppMode.mockReturnValue(true);
+
+    const page = await AppPage({
+      searchParams: Promise.resolve({}),
+    });
+    const markup = renderToStaticMarkup(page);
+
+    expect(markup).toContain("data-testid=\"agent-thread\"");
+    expect(markup).toContain("Spendable Cash Today");
+    expect(markup).not.toContain("Pip access is temporarily unavailable");
     expect(pageMocks.createSupabaseServerClient).not.toHaveBeenCalled();
     expect(pageMocks.getCurrentPipCashState).not.toHaveBeenCalled();
   });

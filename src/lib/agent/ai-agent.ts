@@ -373,10 +373,48 @@ export async function runAIAgent(
     } catch (error) {
       const agentError = toAgentUnavailableError(error);
 
+      if (repair && shouldRetryFinalOutput(agentError)) {
+        const fallbackFinalOutput = createFallbackFinalOutput(context);
+
+        if (fallbackFinalOutput) {
+          const response = buildAgentResponse(fallbackFinalOutput, context, input, {
+            usedModel: true,
+            model: getPipAiModel(),
+            transport: getOpenAIClientConfig().transport,
+          });
+          const violation = getModelFirstViolation({
+            requestKind: input.requestKind ?? "chat",
+            userMessage: input.message,
+            response,
+          });
+
+          if (!violation) {
+            return response;
+          }
+        }
+      }
+
       if (!repair && shouldRetryFinalOutput(agentError)) {
         repair = createAgentResponseRepair(agentError);
         lastError = agentError;
         continue;
+      }
+
+      if (shouldRecoverBroadChatFinalOutput(agentError, context)) {
+        const response = buildAgentResponse(createBroadChatFallbackFinalOutput(input), context, input, {
+          usedModel: true,
+          model: getPipAiModel(),
+          transport: getOpenAIClientConfig().transport,
+        });
+        const violation = getModelFirstViolation({
+          requestKind: input.requestKind ?? "chat",
+          userMessage: input.message,
+          response,
+        });
+
+        if (!violation) {
+          return response;
+        }
       }
 
       throw agentError;
@@ -615,6 +653,12 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
     return undefined;
   }
 
+  const pendingPreviewSavingsGoalTool = getPendingPreviewSavingsGoalForcedTool(input);
+
+  if (pendingPreviewSavingsGoalTool) {
+    return pendingPreviewSavingsGoalTool;
+  }
+
   if (getIntentRouterMode() !== "legacy") {
     const decision = resolveIntentRoute({
       message: input.message,
@@ -639,6 +683,38 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
   }
 
   return getLegacyForcedAgentTool(input);
+}
+
+function getPendingPreviewSavingsGoalForcedTool(input: RunAiAgentInput): ForcedAgentTool | undefined {
+  const pendingAction = input.conversationState?.pendingAction;
+
+  if (pendingAction?.type !== "preview_savings_goal") {
+    return undefined;
+  }
+
+  if (isCancellationPrompt(input.message)) {
+    return undefined;
+  }
+
+  const draft = buildSavingsGoalDraft({
+    message: input.message,
+    pendingAction,
+  });
+  const missing = getSavingsGoalPreviewMissingFields(draft);
+
+  return {
+    toolName: "preview_savings_goal",
+    args: {
+      name: draft.name,
+      ...(draft.targetAmountCents === undefined ? {} : { target_amount_cents: draft.targetAmountCents }),
+      ...(draft.targetDate ? { target_date: draft.targetDate } : {}),
+      ...(draft.startingAmountCents === undefined ? {} : { starting_amount_cents: draft.startingAmountCents }),
+      ...(draft.currentAmountCents === undefined ? {} : { current_amount_cents: draft.currentAmountCents }),
+      ...(draft.monthlyContributionCents === undefined ? {} : { monthly_contribution_cents: draft.monthlyContributionCents }),
+      include_in_spendable_cash: true,
+    },
+    requireCard: missing.length === 0,
+  };
 }
 
 function isRetiredSavingsGoalProtectionPrompt(input: RunAiAgentInput): boolean {
@@ -2665,6 +2741,7 @@ function buildAgentResponse(
     cards,
     usedTools,
     forcedToolRequiresCard: Boolean(context.forcedTool?.requireCard),
+    pendingAction: context.pendingAction,
   });
   const visibleModelOutput = selectVisibleModelOutput(parsed, context, guidanceSelection);
 
@@ -2746,6 +2823,7 @@ function selectFinalResponseMode(input: {
   cards: AgentCard[];
   usedTools: string[];
   forcedToolRequiresCard: boolean;
+  pendingAction?: AgentPendingAction;
 }): AgentResponse["responseMode"] {
   const hasGuidanceSurface =
     input.cards.some((card) => card.type === "guidance_card") ||
@@ -2753,6 +2831,10 @@ function selectFinalResponseMode(input: {
 
   if (input.requestKind === "prompt_chips") {
     return "chat_only";
+  }
+
+  if (input.pendingAction?.type === "preview_savings_goal" && input.cards.length === 0) {
+    return "clarify";
   }
 
   if (
@@ -2773,6 +2855,10 @@ function selectFinalResponseMode(input: {
 
   if (input.cards.length === 0 && input.parsedResponseMode === "show_card") {
     return input.usedTools.length > 0 ? "update_context" : "chat_only";
+  }
+
+  if (input.cards.length === 0 && !input.pendingAction && input.parsedResponseMode === "clarify") {
+    return "chat_only";
   }
 
   if (input.cards.length > 0 && input.forcedToolRequiresCard) {
@@ -2804,6 +2890,12 @@ function createFallbackFinalOutput(context: PipAgentContext): AgentFinalOutput |
     return null;
   }
 
+  const previewSavingsGoalFallback = createForcedPreviewSavingsGoalFallbackFinalOutput(context);
+
+  if (previewSavingsGoalFallback) {
+    return previewSavingsGoalFallback;
+  }
+
   if (context.usedTools.length === 0) {
     return null;
   }
@@ -2827,6 +2919,54 @@ function createFallbackFinalOutput(context: PipAgentContext): AgentFinalOutput |
         : "chat_only",
     promptChips: [],
   };
+}
+
+function createForcedPreviewSavingsGoalFallbackFinalOutput(context: PipAgentContext): AgentFinalOutput | null {
+  if (context.forcedTool?.toolName !== "preview_savings_goal" || context.usedTools.length > 0) {
+    return null;
+  }
+
+  const toolInput = previewSavingsGoalParameters.parse(context.forcedTool.args);
+  const draft = {
+    type: "preview_savings_goal" as const,
+    name: toolInput.name,
+    ...(toolInput.target_amount_cents === undefined ? {} : { targetAmountCents: toolInput.target_amount_cents }),
+    ...(toolInput.target_date ? { targetDate: toolInput.target_date } : {}),
+    ...(toolInput.starting_amount_cents === undefined ? {} : { startingAmountCents: toolInput.starting_amount_cents }),
+    ...(toolInput.current_amount_cents === undefined ? {} : { currentAmountCents: toolInput.current_amount_cents }),
+    ...(toolInput.monthly_contribution_cents === undefined ? {} : { monthlyContributionCents: toolInput.monthly_contribution_cents }),
+    includeInSpendableCash: true,
+  };
+  const missing = getSavingsGoalPreviewMissingFields(draft);
+
+  if (missing.length === 0) {
+    return null;
+  }
+
+  recordTool(context, "preview_savings_goal");
+  context.pendingAction = {
+    ...draft,
+    missing,
+  };
+  context.fallbackFinalOutput = true;
+
+  return {
+    message: createPreviewSavingsGoalClarifyingMessage(draft.name, missing),
+    responseMode: "clarify",
+    promptChips: [],
+  };
+}
+
+function createPreviewSavingsGoalClarifyingMessage(name: string, missing: string[]): string {
+  if (missing.includes("target_amount") && missing.includes("target_date_or_monthly_contribution")) {
+    return `I can preview ${name}. What target amount should I use, and do you want a target date or monthly contribution?`;
+  }
+
+  if (missing.includes("target_amount")) {
+    return `I can preview ${name}. What target amount should I use?`;
+  }
+
+  return `I can preview ${name}. Do you want a target date or monthly contribution?`;
 }
 
 function shouldRecoverBroadChatFinalOutput(
@@ -2943,6 +3083,7 @@ function hasDeterministicNoCardFallback(context: PipAgentContext): boolean {
     [
       "get_pip_cash_snapshot",
       "get_spendable_cash_definition",
+      "get_spending_opportunity",
       "get_sync_status",
       "get_trust_policy",
     ].includes(toolName),
@@ -2955,6 +3096,10 @@ function createFallbackFinalMessage(context: PipAgentContext): string {
   }
 
   const latestCard = context.availableCards.at(-1);
+
+  if (context.usedTools.includes("get_spending_opportunity") && context.availableCards.length === 0) {
+    return "I checked for an easy cutback, but cash is already constrained. Keep the next move to essentials.";
+  }
 
   switch (latestCard?.type) {
     case "spendable_cash_forecast":
@@ -4332,6 +4477,7 @@ function isRepairablePlaidErrorCode(errorCode: string | null | undefined): boole
 
 export const __agentTestHooks = {
   createBroadChatFallbackFinalOutput,
+  createForcedPreviewSavingsGoalFallbackFinalOutput,
   getForcedAgentTool,
   getUnsupportedCardPromise,
   guardVisibleFinalMessage,

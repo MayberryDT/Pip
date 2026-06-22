@@ -2,6 +2,30 @@ import { describe, expect, it } from "vitest";
 import { composeAgentVisibleAnswer } from "@/lib/agent/answer-composer";
 
 describe("answer composer", () => {
+  it("replaces repeated no-card follow-ups with a next-step answer", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message: "I found the main drivers behind today's number.",
+      },
+      userMessage: "why?",
+      history: [
+        {
+          role: "assistant",
+          content: "I found the main drivers behind today's number.",
+        },
+      ],
+      cards: [],
+      usedTools: [],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer.repeatedMessage).toBe(true);
+    expect(answer.repetitionAdjusted).toBe(true);
+    expect(answer.message).not.toBe("I found the main drivers behind today's number.");
+    expect(answer.message).toContain("go deeper");
+  });
+
   it("preserves model output for purchase cards instead of deterministic simulation copy", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {

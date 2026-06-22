@@ -737,6 +737,19 @@ describe("runAIAgent", () => {
 
     expect(
       __agentTestHooks.getForcedAgentTool({
+        message: "Save for a big purchase",
+      }),
+    ).toMatchObject({
+      toolName: "preview_savings_goal",
+      args: {
+        name: "Big purchase",
+        include_in_spendable_cash: true,
+      },
+      requireCard: false,
+    });
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
         message: "Show my savings goals",
       }),
     ).toMatchObject({
@@ -814,6 +827,94 @@ describe("runAIAgent", () => {
         include_in_spendable_cash: true,
       },
       requireCard: false,
+    });
+  });
+
+  it("recovers forced savings goal previews when the model skips the required tool", () => {
+    const context = {
+      inputMessage: "Save for a big purchase",
+      requestKind: "chat",
+      forcedTool: {
+        toolName: "preview_savings_goal",
+        args: {
+          name: "Big purchase",
+          include_in_spendable_cash: true,
+        },
+        requireCard: false,
+      },
+      usedTools: [],
+      availableCards: [],
+    };
+    const fallback = __agentTestHooks.createForcedPreviewSavingsGoalFallbackFinalOutput(context);
+
+    expect(fallback).toMatchObject({
+      responseMode: "clarify",
+      promptChips: [],
+    });
+    expect(fallback?.message).toContain("target amount");
+    expect(context.usedTools).toEqual(["preview_savings_goal"]);
+    expect(context).toMatchObject({
+      pendingAction: {
+        type: "preview_savings_goal",
+        name: "Big purchase",
+        missing: ["target_amount", "target_date_or_monthly_contribution"],
+      },
+    });
+  });
+
+  it("keeps no-card preview savings pending actions in clarify mode", () => {
+    type ResponseModeInput = Parameters<typeof __agentTestHooks.selectFinalResponseMode>[0] & {
+      pendingAction?: { type: "preview_savings_goal" };
+    };
+
+    expect(
+      __agentTestHooks.selectFinalResponseMode({
+        parsedResponseMode: "chat_only",
+        message: "I still need either a monthly contribution or a target date.",
+        cards: [],
+        usedTools: ["preview_savings_goal"],
+        forcedToolRequiresCard: false,
+        pendingAction: {
+          type: "preview_savings_goal",
+        },
+      } satisfies ResponseModeInput),
+    ).toBe("clarify");
+  });
+
+  it("coerces no-card non-pending clarify replies back to chat only", () => {
+    expect(
+      __agentTestHooks.selectFinalResponseMode({
+        parsedResponseMode: "clarify",
+        message: "I don’t have a specific opportunity yet.",
+        cards: [],
+        usedTools: ["get_spending_opportunity"],
+        forcedToolRequiresCard: false,
+      }),
+    ).toBe("chat_only");
+  });
+
+  it("forces pending preview savings details back through preview_savings_goal", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "It costs $3,000 by December 1st",
+        conversationState: {
+          pendingAction: {
+            type: "preview_savings_goal",
+            name: "Japan trip",
+            missing: ["target_amount"],
+            includeInSpendableCash: true,
+          },
+        },
+      }),
+    ).toMatchObject({
+      toolName: "preview_savings_goal",
+      args: {
+        name: "Japan trip",
+        target_amount_cents: 300000,
+        target_date: "2026-12-01",
+        include_in_spendable_cash: true,
+      },
+      requireCard: true,
     });
   });
 
@@ -1740,6 +1841,26 @@ describe("runAIAgent", () => {
     ).toBe("I set up the goal, and it will be included in your Spendable Cash Today.");
   });
 
+  it("repairs guaranteed purchase simulation language before showing it", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "You can spend $50. Purchase simulation shows after spending $50 today you’d have $54 left.",
+        [purchaseSimulationCard()],
+      ),
+    ).toBe("Testing $50: Purchase simulation shows after spending $50 today you’d have $54 left.");
+  });
+
+  it("removes trailing follow-up questions from card replies", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "Testing $50: After that, Spendable Cash Today would be about $54 remaining. Looks fine, though data quality is a bit low and one card may be missing. Want me to run a quick check on that card or test another amount?",
+        [purchaseSimulationCard()],
+      ),
+    ).toBe(
+      "Testing $50: After that, Spendable Cash Today would be about $54 remaining. Looks fine, though data quality is a bit low and one card may be missing.",
+    );
+  });
+
   it("repairs transaction counts when no transaction card is returned", () => {
     expect(
       __agentTestHooks.guardVisibleFinalMessage(
@@ -1894,6 +2015,17 @@ describe("runAIAgent", () => {
     expect(__agentTestHooks.normalizeAgentFinalOutput(parsed).promptChips).toEqual([]);
   });
 
+  it("allows malformed prompt chip objects at the raw model boundary", () => {
+    const parsed = agentFinalOutputSchema.parse({
+      message: "Short draft.",
+      responseMode: "chat_only",
+      promptChips: [{ label: "Forecast next week" }],
+    });
+
+    expect(parsed.promptChips).toEqual([{ label: "Forecast next week" }]);
+    expect(__agentTestHooks.normalizeAgentFinalOutput(parsed).promptChips).toEqual([]);
+  });
+
   it("drops non-string support mistakes at the raw model boundary", () => {
     const parsed = agentFinalOutputSchema.parse({
       message: "Short draft.",
@@ -1943,6 +2075,62 @@ describe("runAIAgent", () => {
         "I can show your spending breakdown in more detail.",
       ),
     ).toBe("I can talk through your spending summary in more detail.");
+  });
+
+  it("repairs breakdown wording when a recent transactions card carries the detail", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "I can show a quick breakdown of what you bought lately.",
+        [{ type: "recent_transactions", title: "Recent transactions", transactions: [] }],
+      ),
+    ).toBe("I can talk through a quick summary of what you bought lately.");
+  });
+
+  it("repairs cardless breakdown-card offers", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "Nice to meet you! I see your Spendable Cash Today is $104. I don’t have a breakdown card yet, but I can pull the biggest drivers for you.",
+      ),
+    ).toBe(
+      "Nice to meet you! Your Spendable Cash Today is $104. I can talk through the biggest factors.",
+    );
+
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "I can help with that. Right now, Spendable Cash Today is tight at $2. The biggest pressure comes from Normal room and Monthly savings, plus recent spending adjustments. I don’t see a concrete cutback opportunity yet, but I can pull up a detailed breakdown if",
+      ),
+    ).toBe(
+      "I can help with that. Right now, Spendable Cash Today is tight at $2. The biggest pressure comes from Normal room and Monthly savings, plus recent spending adjustments. I don’t have a concrete cutback opportunity yet, but I can talk through the details",
+    );
+
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "Here’s where you can cut back. I don’t have a specific opportunity yet, but you can ask: What can I cut back on from my recent spending? Alternatively, I can show you today’s spend drivers and next bills to spot pressure.",
+      ),
+    ).toBe(
+      "Here’s where you can cut back. I don’t have a specific opportunity yet, but you can ask: What can I cut back on from my recent spending? Alternatively, I can talk through today’s spend factors and next bills to spot pressure.",
+    );
+  });
+
+  it("repairs data-quality activity promises when only a connect-account card is returned", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "I found data is marked as a low-confidence early estimate. The app shows 3 connected accounts, connected activity, and no completed two-month history yet.",
+        [{ type: "connect_account", title: "Connect or repair data", detail: "Connect data." }],
+      ),
+    ).toBe(
+      "I found data is marked as a low-confidence early estimate. The app has 3 connected accounts, connected data, and no completed two-month history yet.",
+    );
+  });
+
+  it("repairs read-only policy display offers without cards", () => {
+    expect(
+      __agentTestHooks.guardVisibleFinalMessage(
+        "I can’t pay bills directly, but I can help you manage them. I can connect to your bills list, show upcoming charges, or help you plan how to cover them with your Spendable Cash Today.",
+      ),
+    ).toBe(
+      "I can’t pay bills directly, but I can help you manage them. I can connect to your bills, talk through upcoming activity, or help you plan how to cover them with your Spendable Cash Today.",
+    );
   });
 
   it("repairs cardless driver display language", () => {
@@ -2176,6 +2364,19 @@ function accountConnectionsCard(): AgentCard {
         actions: [],
       },
     ],
+  };
+}
+
+function purchaseSimulationCard(): AgentCard {
+  return {
+    type: "purchase_simulation",
+    title: "Purchase simulation",
+    amountCents: 5000,
+    beforeCents: 10400,
+    todayRemainingCents: 5400,
+    todayOverageCents: 0,
+    afterTodayCents: 5400,
+    monthlyAverageAfterCents: 0,
   };
 }
 

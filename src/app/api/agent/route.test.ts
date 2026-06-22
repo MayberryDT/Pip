@@ -288,6 +288,51 @@ describe("POST /api/agent", () => {
     expect(routeMocks.releaseAgentModelGate).toHaveBeenCalledWith("lease-1");
   });
 
+  it("accepts the production-scale local scenario from the hydrated app", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
+      message: "Testing $50: after that, you would have room left today.",
+      cards: [
+        {
+          type: "purchase_simulation",
+          title: "Purchase simulation",
+          amountCents: 5000,
+          beforeCents: 1200,
+          todayRemainingCents: 0,
+          todayOverageCents: 3800,
+          afterTodayCents: 0,
+          monthlyAverageAfterCents: 100,
+        },
+      ],
+      usedTools: ["simulate_purchase"],
+      responseMode: "show_card",
+    }));
+
+    const response = await POST(
+      jsonRequest({
+        message: "Can I spend $50?",
+        scenario: "production-scale",
+        conversationId: "production-scale-browser-smoke",
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      usedTools: ["simulate_purchase"],
+      responseMode: "show_card",
+    });
+    expect(routeMocks.getCurrentFinancialSnapshot).toHaveBeenCalledWith({
+      scenario: "production-scale",
+    });
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Can I spend $50?",
+        snapshot: fakeSnapshot,
+      }),
+    );
+  });
+
   it("rate limits guest agent calls before running the model", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockRejectedValue(new AuthenticationRequiredError());

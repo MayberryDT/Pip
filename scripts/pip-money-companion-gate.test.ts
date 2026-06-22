@@ -241,7 +241,61 @@ describe("Pip money companion gate runner", () => {
     }
   });
 
-  it("blocks unsupported default-adapter cases during preflight without scoring", async () => {
+  it("uses the default adapter to run local sanitized DOGFOOD evidence", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-money-gate-"));
+    const { runPipMoneyCompanionGate } = await import("./pip-money-companion-gate.mjs");
+    const requestedUrls: string[] = [];
+
+    try {
+      const result = await runPipMoneyCompanionGate({
+        runDir: tempDir,
+        cases: [makeCase("DOGFOOD-001", 1)],
+        baseUrl: "http://pip.local.test",
+        spawn: () => {
+          throw new Error("dogfood adapter should not spawn category test commands");
+        },
+        fetcher: async (url: string) => {
+          requestedUrls.push(String(url));
+
+          if (String(url).includes("/api/pip-cash")) {
+            return jsonResponse(makeProductionScaleApiPayload());
+          }
+
+          return textResponse('<main class="pip-app-shell">Pip Spendable Cash Today</main>', "text/html");
+        },
+        stdout: () => undefined,
+        stderr: () => undefined,
+      });
+
+      const manifest = readJson(join(tempDir, "manifest.json"));
+      const caseReport = readJson(join(tempDir, "case-001.json"));
+
+      expect(result.status).toBe(0);
+      expect(manifest.status).toBe("passed");
+      expect(manifest.completedCaseIds).toEqual(["DOGFOOD-001"]);
+      expect(requestedUrls).toEqual([
+        "http://pip.local.test/api/pip-cash?scenario=production-scale",
+        "http://pip.local.test/app?scenario=production-scale",
+      ]);
+      expect(caseReport).toMatchObject({
+        caseId: "DOGFOOD-001",
+        score: 100,
+        passed: true,
+        observed: {
+          verificationMode: "local-sanitized-dogfood-proxy",
+          dogfoodScope: "production-scale-local-fake-data",
+          noRealProviderDataUsed: true,
+          scenario: "production-scale",
+          trueBalanceCount: 4,
+          sameDayDiscretionarySpendCents: 1800,
+        },
+      });
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("fails local sanitized DOGFOOD evidence closed when the app is unavailable", async () => {
     const tempDir = mkdtempSync(join(tmpdir(), "pip-money-gate-"));
     const { runPipMoneyCompanionGate } = await import("./pip-money-companion-gate.mjs");
 
@@ -249,6 +303,45 @@ describe("Pip money companion gate runner", () => {
       const result = await runPipMoneyCompanionGate({
         runDir: tempDir,
         cases: [makeCase("DOGFOOD-001", 1)],
+        baseUrl: "http://pip.local.test",
+        fetcher: async (url: string) => {
+          if (String(url).includes("/api/pip-cash")) {
+            return jsonResponse(makeProductionScaleApiPayload());
+          }
+
+          return textResponse("not found", "text/plain", 404);
+        },
+        stdout: () => undefined,
+        stderr: () => undefined,
+      });
+
+      const manifest = readJson(join(tempDir, "manifest.json"));
+      const caseReport = readJson(join(tempDir, "case-001.json"));
+
+      expect(result.status).toBe(1);
+      expect(manifest.status).toBe("failed");
+      expect(manifest.failedCaseId).toBe("DOGFOOD-001");
+      expect(caseReport.score).toBe(0);
+      expect(caseReport.hardZeroReasons).toEqual(["localDogfoodEvidence"]);
+      expect(caseReport.observed.checks).toContainEqual(
+        expect.objectContaining({
+          id: "app-smoke-ok",
+          passed: false,
+        }),
+      );
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("blocks unknown default-adapter cases during preflight without scoring", async () => {
+    const tempDir = mkdtempSync(join(tmpdir(), "pip-money-gate-"));
+    const { runPipMoneyCompanionGate } = await import("./pip-money-companion-gate.mjs");
+
+    try {
+      const result = await runPipMoneyCompanionGate({
+        runDir: tempDir,
+        cases: [{ ...makeCase("UNKNOWN-001", 1), category: "unknown" }],
         spawn: () => {
           throw new Error("preflight should stop before spawning commands");
         },
@@ -263,7 +356,7 @@ describe("Pip money companion gate runner", () => {
       expect(result.error).toMatch(/preflight/i);
       expect(manifest.status).toBe("blocked");
       expect(manifest.cases).toEqual([]);
-      expect(manifest.failures[0]).toContain("No default verification is wired for DOGFOOD-001");
+      expect(manifest.failures[0]).toContain("No default verification is wired for UNKNOWN-001");
       expect(manifest.preflight).toMatchObject({
         status: "failed",
         reportPath: join(tempDir, "preflight.json"),
@@ -272,8 +365,8 @@ describe("Pip money companion gate runner", () => {
         status: "failed",
         missingHarness: [
           expect.objectContaining({
-            caseId: "DOGFOOD-001",
-            category: "dogfood",
+            caseId: "UNKNOWN-001",
+            category: "unknown",
           }),
         ],
       });
@@ -319,4 +412,45 @@ function categoryForTestCase(id: string) {
 
 function readJson(path: string) {
   return JSON.parse(readFileSync(path, "utf8"));
+}
+
+function makeProductionScaleApiPayload() {
+  return {
+    pipCashTodayCents: 2031,
+    trueBalances: [
+      { accountId: "checking", name: "Primary Checking", institutionName: "Cedar Test Bank", balanceCents: 618900 },
+      { accountId: "savings", name: "Savings", institutionName: "Cedar Test Bank", balanceCents: 950000 },
+      { accountId: "card", name: "Rewards Card", institutionName: "Harbor Test Card", balanceCents: -228100 },
+      { accountId: "loan", name: "Auto Loan", institutionName: "Northstar Test Credit", balanceCents: -1080000 },
+    ],
+    spendableCashToday: {
+      metricVersion: "v2",
+      spendableCashTodayCents: 2031,
+      baselineDailyAllowanceCents: 8200,
+      sameDayDiscretionarySpendCents: 1800,
+      sameDayPendingSpendCents: 900,
+      billVarianceCents: 0,
+      currentMonthVarianceCents: -5400,
+      completedMonthCount: 5,
+      savingsGoalMonthlyCents: 35000,
+      drivers: [
+        { id: "baseline", label: "Pattern", detail: "Pattern", amountCents: 8200, tone: "positive" },
+        { id: "savings-goals", label: "Savings goals", detail: "Savings", amountCents: -35000, tone: "neutral" },
+      ],
+    },
+  };
+}
+
+function jsonResponse(value: unknown, status = 200) {
+  return new Response(JSON.stringify(value), {
+    status,
+    headers: { "content-type": "application/json" },
+  });
+}
+
+function textResponse(value: string, contentType = "text/plain", status = 200) {
+  return new Response(value, {
+    status,
+    headers: { "content-type": contentType },
+  });
 }

@@ -19,6 +19,13 @@ function words(count: number): string {
 }
 
 describe("visible response guard", () => {
+  it("keeps bridge replies inside the compact chat contract", () => {
+    expect(visibleResponseSurfaceLimits.bridge).toEqual({
+      maxWords: 45,
+      maxChars: 260,
+    });
+  });
+
   it.each(surfaceLimits)(
     "allows %s replies at the surface word limit",
     (surface, maxWords) => {

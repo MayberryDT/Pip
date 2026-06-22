@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { isLocalFakeAppMode, isSupabaseConfigured } from "@/lib/supabase/env";
 
 export type AgentModelGateRequestKind = "chat" | "prompt_chips" | "opening_bubble";
 export type AgentModelGateOnboardingStatus = "guest" | "needs-consent" | "ready";
@@ -64,6 +64,10 @@ export function buildAgentModelGatePlan(input: {
   onboardingStatus: AgentModelGateOnboardingStatus;
   requestKind: AgentModelGateRequestKind;
 }): AgentModelGatePlan {
+  if (isLocalFakeAgentEvalMode()) {
+    return { minuteLimit: 120, dayLimit: 1_000, globalConcurrencyLimit: 24, leaseTtlSeconds: 60 };
+  }
+
   if (input.onboardingStatus === "guest" && input.requestKind === "opening_bubble") {
     return { minuteLimit: 2, dayLimit: 12, globalConcurrencyLimit: 12, leaseTtlSeconds: 45 };
   }
@@ -191,7 +195,11 @@ export async function releaseAgentModelGate(
 }
 
 function shouldUseLocalModelGate(): boolean {
-  return process.env.NODE_ENV !== "production";
+  return process.env.NODE_ENV !== "production" || isLocalFakeAppMode();
+}
+
+function isLocalFakeAgentEvalMode(): boolean {
+  return isLocalFakeAppMode() && process.env.PIP_LOCAL_AGENT_EVAL_MODE === "1";
 }
 
 function claimLocalModelGate(input: {

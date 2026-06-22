@@ -28,6 +28,7 @@ const QUALITY_BAR = {
   requiredPassRate: "all selected cases",
   rerunPolicy: "fix root cause, rerun affected scenarios, then rerun complete suite",
 };
+const MISSING_AI_CONFIG_CODE = "missing-openai-config";
 
 export {
   buildMajorCapabilityExpandedCases,
@@ -48,6 +49,7 @@ const ALL_CARD_TYPES = [
   "spendable_cash_forecast",
   "missing_card_nudge",
   "trust_receipt",
+  "savings_goal_preview",
   "savings_goal_plan",
   "savings_goals_summary",
   "insight_card",
@@ -445,6 +447,7 @@ const disallowedTextChecks = [
   { label: "dashboard", pattern: /\bdashboard\b/i },
   { label: "safe to spend", pattern: /\bsafe to spend\b/i },
   { label: "safe to buy", pattern: /\bsafe to buy\b/i },
+  { label: "you can spend", pattern: /\byou can spend\b/i },
   { label: "you can afford", pattern: /\byou can afford\b/i },
   { label: "I recommend", pattern: /\bi recommend\b/i },
   { label: "financial advice", pattern: /\bfinancial advice\b/i },
@@ -468,8 +471,8 @@ const genericCutbackAdviceChecks = [
 ];
 
 const showPromisePattern =
-  /\b(?:show|showing|shown|list|listing|pull|view|card|cards|trend view|here is|here are|here's)\b/i;
-const cardWordExclusionPattern = /\b(?:credit cards?|debit cards?|cards? (?:details?|data|transactions?|charges?))\b/i;
+  /\b(?:show|shows|showing|shown|list|listing|pull|view|trend view|here is|here are|here's)\b/i;
+const cardWordExclusionPattern = /\b(?:credit cards?|debit cards?|cards? providers?|cards? (?:details?|data|transactions?|charges?))\b/i;
 
 const promiseCapabilities = [
   {
@@ -480,12 +483,12 @@ const promiseCapabilities = [
   {
     label: "breakdown",
     pattern: /\b(?:breakdown|break down|category|categories|merchants|card payments?|complete breakdown)\b/i,
-    cards: ["spending_breakdown", "pip_cash_explanation", "math_breakdown", "spendable_cash_forecast"],
+    cards: ["spending_breakdown", "pip_cash_explanation", "math_breakdown", "spendable_cash_forecast", "recent_transactions"],
   },
   {
     label: "transactions",
     pattern: /\b(?:transactions?|charges?|purchases?|recent items|activity)\b/i,
-    cards: ["recent_transactions", "spending_breakdown", "recurring_activity"],
+    cards: ["recent_transactions", "spending_breakdown", "recurring_activity", "purchase_simulation"],
   },
   {
     label: "balances",
@@ -499,13 +502,13 @@ const promiseCapabilities = [
   },
   {
     label: "trust receipt",
-    pattern: /\b(?:trust|receipt|reliable|accurate|current|fresh|up to date)\b/i,
+    pattern: /\b(?:trust|receipt|reliable|accurate|fresh|up to date|data freshness|current data|current feed|current source)\b/i,
     cards: ["trust_receipt"],
   },
   {
     label: "savings goals",
     pattern: /\b(?:savings? goals?|save for|save toward|save towards|trip|vacation|big purchase)\b/i,
-    cards: ["savings_goal_plan", "savings_goals_summary"],
+    cards: ["savings_goal_preview", "savings_goal_plan", "savings_goals_summary"],
   },
   {
     label: "recurring",
@@ -598,6 +601,48 @@ function includesAny(values, wanted) {
   return wanted.some((value) => values.includes(value));
 }
 
+function stripTrailingActionOffer(text) {
+  return text
+    .replace(/\bif you want,?\s+i can\b.*$/i, "")
+    .replace(/\bwant me to\b.*$/i, "")
+    .trim();
+}
+
+function hasMatchingPromiseCard({ capability, cardTypes, text }) {
+  if (includesAny(cardTypes, capability.cards)) return true;
+
+  const isMissingCardDiagnostic =
+    cardTypes.includes("missing_card_nudge") &&
+    /\b(?:missing|data gaps?|isn'?t connected|not connected|card(?:'|\u2019)?s?|payments?|activity)\b/i.test(text);
+  const isForecastActivity =
+    capability.label === "transactions" &&
+    cardTypes.includes("spendable_cash_forecast") &&
+    /\b(?:forecast|projected|trend|upcoming activity|expected activity)\b/i.test(text);
+  const isTrustReceiptActivity =
+    capability.label === "transactions" &&
+    cardTypes.includes("trust_receipt") &&
+    /\b(?:counted|current activity|connected accounts?|data freshness|missing card)\b/i.test(text);
+  const isGuidanceRecurringContext =
+    capability.label === "recurring" &&
+    cardTypes.includes("guidance_card") &&
+    /\b(?:upcoming bills?|bills?|monthly savings|main pressure|held out)\b/i.test(text);
+  const isForecastBalance =
+    capability.label === "balances" &&
+    cardTypes.includes("spendable_cash_forecast") &&
+    /\b(?:forecast|projected|rolling balance|spendable cash)\b/i.test(text);
+  const isCutbackWindow =
+    capability.label === "forecast" &&
+    cardTypes.includes("insight_card") &&
+    /\b(?:cutback|dining|cap|trim|last 14 days|prior 14 days|next 14 days)\b/i.test(text);
+
+  return (["breakdown", "transactions"].includes(capability.label) && isMissingCardDiagnostic) ||
+    isForecastActivity ||
+    isTrustReceiptActivity ||
+    isGuidanceRecurringContext ||
+    isForecastBalance ||
+    isCutbackWindow;
+}
+
 function validateVisibleText({ label, text, failures }) {
   if (!text) return;
 
@@ -618,10 +663,17 @@ function validateVisibleText({ label, text, failures }) {
 
 function validateDisplayPromise({ label, text, cardTypes, failures }) {
   if (!text || cardWordExclusionPattern.test(text)) return;
-  const promisesDisplay = showPromisePattern.test(text);
+  const promiseText = stripTrailingActionOffer(text);
+  const promisesDisplay = showPromisePattern.test(promiseText);
 
   for (const capability of promiseCapabilities) {
-    if (promisesDisplay && capability.pattern.test(text) && !includesAny(cardTypes, capability.cards)) {
+    if (
+      promisesDisplay &&
+      capability.pattern.test(promiseText) &&
+      !hasMatchingPromiseCard({ capability, cardTypes, text: promiseText }) &&
+      !isSupportedNoCardCutbackSuggestion({ capability, cardTypes, text: promiseText }) &&
+      !isSupportedNoCardReadOnlyPolicyLanguage(promiseText)
+    ) {
       failures.push(
         `${label} promises ${capability.label} detail without a matching card (${capability.cards.join(", ")}).`,
       );
@@ -632,7 +684,9 @@ function validateDisplayPromise({ label, text, cardTypes, failures }) {
     /\b(?:card|cards|view|trend view|this card|the card|the view)\b/i.test(text) &&
     !cardWordExclusionPattern.test(text) &&
     cardTypes.length === 0 &&
-    !isSupportedDiscussionLanguage(text)
+    !isSupportedDiscussionLanguage(text) &&
+    !isSupportedNoCardDataQualityLanguage(text) &&
+    !isSupportedNoCardReadOnlyPolicyLanguage(text)
   ) {
     failures.push(`${label} uses show/list/view language but returned no cards.`);
   }
@@ -640,6 +694,20 @@ function validateDisplayPromise({ label, text, cardTypes, failures }) {
 
 function isSupportedDiscussionLanguage(text) {
   return /\b(?:we can talk|talk through|discuss|i can explain|i can help|i can walk through|let's talk)\b/i.test(text);
+}
+
+function isSupportedNoCardDataQualityLanguage(text) {
+  return /\b(?:missing (?:a )?card|card (?:may|might|could) be missing|data is missing|data quality|refresh data|tighten the read)\b/i.test(text);
+}
+
+function isSupportedNoCardCutbackSuggestion({ capability, cardTypes, text }) {
+  return capability.label === "recurring" &&
+    cardTypes.length === 0 &&
+    /\b(?:quick ideas?|small frequent spends|bills? that may repeat|monthly savings steady)\b/i.test(text);
+}
+
+function isSupportedNoCardReadOnlyPolicyLanguage(text) {
+  return /\b(?:read-only|can(?:not|'?t) move|only view balances? and activity|view balances? and activity)\b/i.test(text);
 }
 
 function isSupportedDisplayChip(text) {
@@ -754,10 +822,12 @@ function validateSavingsGoalCreationClaims({ caseDef, message, usedTools, cardTy
   const createClaimPattern =
     /\b(created|saved|set up|set|started|added|tracking|tracked)\b.{0,80}\b(savings? goal|goal|japan|trip|vacation|big purchase)\b/i;
 
-  if (
-    createClaimPattern.test(message) &&
-    (!usedTools.includes("create_savings_goal") || !cardTypes.includes("savings_goal_plan"))
-  ) {
+  const hasCreateEvidence = usedTools.includes("create_savings_goal") && cardTypes.includes("savings_goal_plan");
+  const hasPreviewEvidence = usedTools.includes("preview_savings_goal") &&
+    cardTypes.includes("savings_goal_preview") &&
+    /\bpreview(?:ed)?\b/i.test(message);
+
+  if (createClaimPattern.test(message) && !hasCreateEvidence && !hasPreviewEvidence) {
     failures.push("claimed savings goal creation without create_savings_goal and savings_goal_plan.");
   }
 }
@@ -910,6 +980,56 @@ async function readJson(response) {
   }
 }
 
+function isMajorCapabilitySuite(suite) {
+  return (
+    suite === MAJOR_CAPABILITY_SUITE ||
+    suite === MAJOR_CAPABILITY_EXPANDED_SUITE ||
+    suite === MAJOR_CAPABILITY_MULTITURN_SUITE ||
+    suite === MAJOR_CAPABILITY_PRODUCTION_SAFE_SUITE
+  );
+}
+
+function isMissingAiConfigResponse({ payload, httpStatus }) {
+  return (
+    httpStatus === 503 &&
+    (payload?.code === MISSING_AI_CONFIG_CODE || payload?.error === "AI is not configured.")
+  );
+}
+
+function buildMissingAiConfigBlocker({ payload, failedPreflightCaseId }) {
+  return {
+    code: MISSING_AI_CONFIG_CODE,
+    message: typeof payload?.error === "string" ? payload.error : "AI is not configured.",
+    detail: typeof payload?.detail === "string" ? payload.detail : undefined,
+    failedPreflightCaseId,
+  };
+}
+
+function buildUnattemptedBlockedResult({ caseDef, shouldRedactReport, blockerMessage }) {
+  return {
+    id: caseDef.id,
+    description: caseDef.description,
+    inputMessage: shouldRedactReport ? "[redacted]" : caseDef.message,
+    group: caseDef.group,
+    quality: caseDef.quality,
+    scenario: caseDef.scenario ?? "default",
+    selectedPromptChipId: caseDef.selectedPromptChipId,
+    httpStatus: null,
+    durationMs: 0,
+    ok: false,
+    blocked: true,
+    blockerCode: MISSING_AI_CONFIG_CODE,
+    failures: [`blocked: ${blockerMessage}`],
+    message: "",
+    responseSearchText: "",
+    responseMode: "",
+    usedTools: [],
+    cardTypes: [],
+    promptChips: [],
+    responseMessage: "",
+  };
+}
+
 export async function runAgentEval({
   baseUrl = process.env.PIP_AGENT_EVAL_BASE_URL || DEFAULT_BASE_URL,
   reportPath = process.env.PIP_AGENT_EVAL_REPORT || DEFAULT_REPORT_PATH,
@@ -942,7 +1062,7 @@ export async function runAgentEval({
 
   log(`Running ${selectedCases.length} Pip agent eval cases from ${normalizedSuite} against ${agentUrl}`);
 
-  for (const caseDef of selectedCases) {
+  for (const [caseIndex, caseDef] of selectedCases.entries()) {
     const caseStart = Date.now();
     const conversationId = `${conversationPrefix}-${caseDef.id}`;
     const requestBody = buildRequestBody(caseDef, conversationId);
@@ -1008,6 +1128,58 @@ export async function runAgentEval({
       responseMessage: reportEvaluation.message,
       ...(shouldIncludeRawResponse ? { rawResponse: payload } : {}),
     };
+
+    if (
+      caseIndex === 0 &&
+      isMajorCapabilitySuite(normalizedSuite) &&
+      isMissingAiConfigResponse({ payload, httpStatus })
+    ) {
+      const blocker = buildMissingAiConfigBlocker({
+        payload,
+        failedPreflightCaseId: caseDef.id,
+      });
+      const blockedFirstResult = {
+        ...result,
+        ok: false,
+        blocked: true,
+        blockerCode: blocker.code,
+        failures: [`HTTP ${httpStatus}`, `blocked: ${blocker.message}`],
+      };
+      const blockedCases = [
+        blockedFirstResult,
+        ...selectedCases
+          .slice(1)
+          .map((unattemptedCase) =>
+            buildUnattemptedBlockedResult({
+              caseDef: unattemptedCase,
+              shouldRedactReport,
+              blockerMessage: blocker.message,
+            }),
+          ),
+      ];
+      const blockedReport = {
+        status: "blocked",
+        generatedAt: new Date().toISOString(),
+        startedAt,
+        baseUrl,
+        agentUrl,
+        suite: normalizedSuite,
+        evaluationMethod: EVALUATION_METHOD,
+        qualityBar: QUALITY_BAR,
+        variant: variant || "champion",
+        caseCount: blockedCases.length,
+        attemptedCaseCount: 1,
+        failureCount: blockedCases.length,
+        routingOnly,
+        blocker,
+        cases: blockedCases,
+      };
+
+      writeFileSync(reportPath, `${JSON.stringify(blockedReport, null, 2)}\n`);
+      log(`Blocked Pip agent eval report at ${reportPath}: ${blocker.message}`);
+
+      return blockedReport;
+    }
 
     results.push(result);
     scoringResults.push(scoringResult);

@@ -39,6 +39,10 @@ export function runDeploymentEnvCheck({
       warnings.push("PIP_SUPABASE_MODE=off disables real Supabase data.");
     }
 
+    if (effectiveEnv.PIP_LOCAL_FAKE_APP_MODE === "1") {
+      addUnique(missing, "PIP_LOCAL_FAKE_APP_MODE must not be enabled for beta mode.");
+    }
+
     if (hasValue(effectiveEnv.PLAID_ENV) && effectiveEnv.PLAID_ENV !== "production") {
       addUnique(missing, "PLAID_ENV must be production for beta mode.");
     }

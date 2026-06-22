@@ -12,7 +12,7 @@ import {
 import { sendAppWaitlistConfirmation } from "@/lib/email/transactional";
 import { submitMarketingWaitlist } from "@/lib/marketing/waitlist";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
+import { isLocalFakeAppMode, isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AppPage({
@@ -53,6 +53,10 @@ export default async function AppPage({
   }
 
   if (!isSupabaseConfigured()) {
+    if (isLocalFakeAppMode()) {
+      return <PipHome />;
+    }
+
     return <AppAccessGate state="unavailable" />;
   }
 

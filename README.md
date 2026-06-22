@@ -85,12 +85,23 @@ Use this switch when you want the local prototype to ignore configured Supabase 
 PIP_SUPABASE_MODE=off
 ```
 
+For production-like local review of the built `/app` route without Supabase or real financial data, enable the local fake app shell and use an explicit fake scenario:
+
+```bash
+PIP_SUPABASE_MODE=off PIP_LOCAL_FAKE_APP_MODE=1 PIP_LOCAL_AGENT_EVAL_MODE=1 PIP_RATE_LIMIT_SALT=local-only npm run start -- --hostname 127.0.0.1 --port 3001
+# then open http://127.0.0.1:3001/app?scenario=production-scale
+```
+
+`PIP_LOCAL_FAKE_APP_MODE=1` is local-only; beta deployment checks reject it. `PIP_LOCAL_AGENT_EVAL_MODE=1` only raises the local in-memory agent gate when fake app mode is also enabled, so production-like local evals can run a full suite without guest throttling.
+
 Supabase env:
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
+PIP_LOCAL_FAKE_APP_MODE=
+PIP_LOCAL_AGENT_EVAL_MODE=
 PIP_OPERATOR_TOKEN=
 PIP_RATE_LIMIT_SALT=
 ```
@@ -201,6 +212,7 @@ Fake scenario URLs:
 ```text
 http://localhost:3000
 http://localhost:3000?scenario=negative
+http://localhost:3000/app?scenario=production-scale
 ```
 
 ## Verification

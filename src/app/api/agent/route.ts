@@ -124,6 +124,7 @@ const requestSchema = z.object({
       "cash-guardrail",
       "cutback-dining",
       "negative",
+      "production-scale",
     ])
     .optional(),
   selectedPromptChipId: z.string().min(1).max(80).optional(),

@@ -60,6 +60,22 @@ export function composeAgentVisibleAnswer(
     candidate: modelMessage,
     history: input.history,
   });
+
+  if (modelRepeated && input.cards.length === 0) {
+    return {
+      message: fitVisibleMessage(
+        "I already covered that part. Ask for the math, recent spending, or upcoming bills and I'll go deeper.",
+        {
+          maxChars: input.maxChars,
+          maxWords: input.maxWords,
+        },
+      ),
+      answerPatternId: "repetition-next-step",
+      repeatedMessage: true,
+      repetitionAdjusted: true,
+    };
+  }
+
   return {
     message: modelMessage,
     answerPatternId: input.cards[0]?.type === "guidance_card" ? "guidance-model" : "model",
