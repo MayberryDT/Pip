@@ -103,7 +103,7 @@ describe("marketing website pages", () => {
   it("keeps mobile marketing chrome from stacking sticky bars", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const mobileChromeCss = css
-      .slice(css.lastIndexOf("@media (max-width: 900px)"))
+      .slice(css.lastIndexOf("@media (max-width: 1100px)"))
       .split("@media (max-width: 767px)")[0];
 
     expect(mobileChromeCss).toContain(".editorial-header {\n    position: relative;");
@@ -117,6 +117,17 @@ describe("marketing website pages", () => {
     expect(mobileChromeCss).not.toContain(".editorial-mobile-nav {\n    position: static;");
     expect(mobileChromeCss).not.toContain("position: sticky;");
     expect(mobileChromeCss).not.toContain("top: 4.5rem;");
+  });
+
+  it("keeps marketing header nav labels on one line before switching to the menu", () => {
+    const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+    const navLinkCss = css
+      .slice(css.lastIndexOf(".editorial-nav-link {"))
+      .split(".editorial-nav-link:hover")[0];
+
+    expect(navLinkCss).toContain("flex: 0 0 auto;");
+    expect(navLinkCss).toContain("white-space: nowrap;");
+    expect(css).toContain("@media (max-width: 1100px)");
   });
 
   it("keeps the hero product asset transparent", () => {
@@ -152,7 +163,7 @@ describe("marketing website pages", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     const tabletCss = css
       .slice(css.lastIndexOf("@media (max-width: 980px)"))
-      .split("@media (max-width: 900px)")[0];
+      .split("@media (max-width: 1100px)")[0];
     const mobileCss = sliceCssFromMediaQueryContaining(css, "@media (max-width: 767px)", ".pip-generated-figure,");
     const posterCss = css
       .slice(css.indexOf(".pip-story-poster-anti,\n.pip-story-poster-final {"))
