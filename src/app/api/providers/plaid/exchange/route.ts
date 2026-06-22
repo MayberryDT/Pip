@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getAppAccessFailureForUser } from "@/lib/app-access/route-guard";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { createPlaidClient, getPlaidConfig } from "@/lib/providers/plaid/config";
 import { storePlaidCredential } from "@/lib/providers/plaid/credential-store";
@@ -42,6 +43,12 @@ export async function POST(request: Request) {
     }
 
     userId = user.id;
+    const appAccessFailure = await getAppAccessFailureForUser(user);
+
+    if (appAccessFailure) {
+      return appAccessFailure;
+    }
+
     const body = await request.json().catch(() => null);
     const parsed = exchangeSchema.safeParse(body);
 

@@ -23,7 +23,7 @@ import robots from "@/app/robots";
 import sitemap from "@/app/sitemap";
 
 const stalePublicMarketingPattern =
-  /\b(?:waitlist|launch access|launch list|notify me|request access)\b|join the beta|join the list|#launch-access|when pip launches|when it launches|coming soon to (?:iphone|android|the app store|google play)/i;
+  /\b(?:launch access|launch list|notify me|request access)\b|join the beta|join the list|#launch-access|when pip launches|when it launches|coming soon to (?:iphone|android|the app store|google play)/i;
 
 const homepageSectionHooks = [
   "hero",
@@ -67,7 +67,11 @@ describe("marketing website pages", () => {
     expect(html).toContain("pip-home-title-lockup");
     expect(html).toContain('class="pip-title-line"');
     expect(html).toContain('class="pip-title-line pip-title-line-accent"');
-    expect(html).toContain("Get Pip");
+    expect(html).toContain("Join waitlist");
+    expect(html).toContain("Email for early access");
+    expect(html).toContain("app access invites and occasional product updates");
+    expect(html).toContain("Unsubscribe anytime");
+    expect(html).not.toContain("Get Pip");
     expect(html).toContain("$7.99/month");
     expect(html).not.toContain("$2.99/week");
     expect(html).not.toContain("Best value");
@@ -96,8 +100,9 @@ describe("marketing website pages", () => {
     expect(html).toContain(">How the number works</a>");
     expect(html).toContain("editorial-mobile-menu");
     expect(html).not.toContain("editorial-mobile-nav");
+    expect(html).not.toContain('href="/app"');
     expect(html).not.toMatch(stalePublicMarketingPattern);
-    expect(html).not.toContain('type="email"');
+    expect(html).toContain('type="email"');
   });
 
   it("keeps mobile marketing chrome from stacking sticky bars", () => {
@@ -189,7 +194,7 @@ describe("marketing website pages", () => {
     expect(mobileCss).toContain("min-height: 2.75rem;");
   });
 
-  it("keeps the product app available at /app", async () => {
+  it("keeps the product app gated at /app when access checks are unavailable", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
     try {
@@ -198,9 +203,9 @@ describe("marketing website pages", () => {
       });
       const html = renderToStaticMarkup(page);
 
-      expect(html).toContain("Hi,");
-      expect(html).toContain("Continue with Google");
-      expect(html).toContain("read-only account connection");
+      expect(html).toContain("Pip access is temporarily unavailable");
+      expect(html).not.toContain("data-testid=\"agent-thread\"");
+      expect(html).not.toContain("Continue with Google");
       expect(html).not.toContain("$104");
       expect(html).not.toContain("I see a payment to Capital One");
     } finally {
@@ -243,7 +248,7 @@ describe("marketing website pages", () => {
     expect(html).toContain("FAQ");
     expect(html).toContain("application/ld+json");
     expect(html).toContain("BreadcrumbList");
-    expect(html).toContain("Get Pip and try Spendable Cash Today");
+    expect(html).toContain("Join waitlist");
     expect(html).toContain(marketingAssets.blogSpendableCashCard.src);
   });
 
@@ -335,7 +340,7 @@ describe("marketing website pages", () => {
     expect(llms).not.toMatch(stalePublicMarketingPattern);
   });
 
-  it("keeps old product names, stale launch language, and forms out of public marketing pages", async () => {
+  it("keeps old product names and stale launch language out of public marketing pages", async () => {
     const article = await ArticlePage({
       params: Promise.resolve({
         slug: "meet-pip-cute-money-companion",
@@ -360,7 +365,7 @@ describe("marketing website pages", () => {
     expect(publicHtml).not.toContain("finance command center");
     expect(publicHtml).not.toContain("AI finance coach");
     expect(publicHtml).not.toMatch(stalePublicMarketingPattern);
-    expect(publicHtml).not.toContain('type="email"');
+    expect(publicHtml).toContain('type="email"');
   });
 
   it("maps and renders the required marketing image assets", async () => {

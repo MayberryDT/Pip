@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getAppAccessFailureForUser } from "@/lib/app-access/route-guard";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { getTellerConfig } from "@/lib/providers/teller/config";
 import { storeTellerCredential } from "@/lib/providers/teller/credential-store";
@@ -47,6 +48,12 @@ export async function POST(request: Request) {
     }
 
     userId = user.id;
+    const appAccessFailure = await getAppAccessFailureForUser(user);
+
+    if (appAccessFailure) {
+      return appAccessFailure;
+    }
+
     const body = await request.json().catch(() => null);
     const parsed = enrollmentSchema.safeParse(body);
 

@@ -1,3 +1,4 @@
+import { getAppAccessFailureForUser } from "@/lib/app-access/route-guard";
 import { loadSyncStatusForUser } from "@/lib/data/sync-status";
 import { getSafeErrorMessage } from "@/lib/security/error-messages";
 import { sensitiveJson } from "@/lib/security/http-cache";
@@ -18,6 +19,12 @@ export async function GET() {
 
     if (userError || !user) {
       return sensitiveJson({ error: "Authentication required." }, { status: 401 });
+    }
+
+    const appAccessFailure = await getAppAccessFailureForUser(user);
+
+    if (appAccessFailure) {
+      return appAccessFailure;
     }
 
     return sensitiveJson(await loadSyncStatusForUser(supabase, user.id));

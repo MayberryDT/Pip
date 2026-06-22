@@ -26,6 +26,12 @@ describe("Netlify deployment secret boundary", () => {
     expect(safeDeployScript).toContain("copyNextStaticIntoServerFunction");
     expect(safeDeployScript).toContain("--no-build");
     expect(safeDeployScript).toContain(".netlify/static");
+    expect(getFunctionBody(safeDeployScript, "cleanGeneratedNetlifyArtifacts")).toContain(
+      '".netlify/static"',
+    );
+    expect(getFunctionBody(safeDeployScript, "cleanGeneratedNetlifyArtifacts")).toContain(
+      '".netlify/deploy"',
+    );
     expect(safeDeployScript).toContain("PIP_DEPLOY_MODE");
     expect(safeDeployScript).toContain("scripts/check-netlify-bundle.mjs");
     expect(bundleCheckScript).toContain("unzip");
@@ -101,4 +107,12 @@ async function loadNetlifyBundleCheck() {
     stdout: (line: string) => void;
     stderr: (line: string) => void;
   }) => number;
+}
+
+function getFunctionBody(source: string, functionName: string) {
+  const functionStart = source.indexOf(`function ${functionName}()`);
+  expect(functionStart).toBeGreaterThanOrEqual(0);
+
+  const nextFunction = source.indexOf("\nfunction ", functionStart + 1);
+  return source.slice(functionStart, nextFunction >= 0 ? nextFunction : undefined);
 }

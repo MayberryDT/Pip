@@ -11,6 +11,10 @@ describe("verify-reviewer-account readiness", () => {
       settings: {
         manual_refresh_only: true,
       },
+      appAccessGrant: {
+        status: "active",
+        normalized_email: "play-review@animasai.co",
+      },
       institutions: [
         {
           id: "institution-1",
@@ -29,6 +33,10 @@ describe("verify-reviewer-account readiness", () => {
     expect(evaluateReviewerReadiness({
       settings: {
         manual_refresh_only: false,
+      },
+      appAccessGrant: {
+        status: "active",
+        normalized_email: "play-review@animasai.co",
       },
       institutions: [
         {
@@ -52,6 +60,10 @@ describe("verify-reviewer-account readiness", () => {
       settings: {
         manual_refresh_only: true,
       },
+      appAccessGrant: {
+        status: "active",
+        normalized_email: "play-review@animasai.co",
+      },
       institutions: [
         {
           id: "institution-1",
@@ -64,6 +76,40 @@ describe("verify-reviewer-account readiness", () => {
     })).toEqual([
       "Reviewer institution Play Review Bank has status failed.",
       "Reviewer institution Play Review Bank is missing last_successful_sync_at.",
+    ]);
+  });
+
+  it("fails when reviewer app access is missing or revoked", () => {
+    const readyData = {
+      settings: {
+        manual_refresh_only: true,
+      },
+      institutions: [
+        {
+          id: "institution-1",
+          institution_name: "Play Review Bank",
+          status: "connected",
+          last_successful_sync_at: "2026-06-18T12:00:00.000Z",
+          stale_after: durableReviewerStaleAfter,
+        },
+      ],
+    };
+
+    expect(evaluateReviewerReadiness({
+      ...readyData,
+      appAccessGrant: null,
+    })).toEqual([
+      "Reviewer account is missing an active app access grant.",
+    ]);
+
+    expect(evaluateReviewerReadiness({
+      ...readyData,
+      appAccessGrant: {
+        status: "revoked",
+        normalized_email: "play-review@animasai.co",
+      },
+    })).toEqual([
+      "Reviewer account is missing an active app access grant.",
     ]);
   });
 });

@@ -19,7 +19,7 @@ const supportedCustomBlockTypes = new Set([
   "figure",
 ]);
 const staleLaunchLanguagePattern =
-  /\b(?:beta|waitlist|tester|testers|launch access|launch list|notify me|request access)\b|join the beta|join the list|#join-beta|#launch-access|when pip launches|when it launches|coming soon to (?:iphone|android|the app store|google play)/i;
+  /\b(?:beta|tester|testers|launch access|launch list|notify me|request access)\b|join the beta|join the list|#join-beta|#launch-access|when pip launches|when it launches|coming soon to (?:iphone|android|the app store|google play)/i;
 
 const faqSchema = z.object({
   question: z.string().trim().min(1),
@@ -609,8 +609,8 @@ function parseCustomBlock(lines: string[], startIndex: number): { block: Article
         block: {
           type: "inline-cta",
           body: requireBlockBody(rawType, body),
-          href: attributes.href ?? "/app",
-          label: attributes.label ?? "Get Pip",
+          href: attributes.href ?? "/#waitlist",
+          label: attributes.label ?? "Join waitlist",
         },
         nextIndex,
       };

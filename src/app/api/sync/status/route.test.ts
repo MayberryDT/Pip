@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
+  getAppAccessFailureForUser: vi.fn(),
   loadSyncStatusForUser: vi.fn(),
 }));
 
@@ -13,7 +14,15 @@ vi.mock("@/lib/data/sync-status", () => ({
   loadSyncStatusForUser: routeMocks.loadSyncStatusForUser,
 }));
 
+vi.mock("@/lib/app-access/route-guard", () => ({
+  getAppAccessFailureForUser: routeMocks.getAppAccessFailureForUser,
+}));
+
 import { GET } from "@/app/api/sync/status/route";
+
+beforeEach(() => {
+  routeMocks.getAppAccessFailureForUser.mockResolvedValue(null);
+});
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -95,6 +104,23 @@ describe("GET /api/sync/status", () => {
       },
     });
     expect(routeMocks.loadSyncStatusForUser).toHaveBeenCalledWith(supabase, "user-1");
+  });
+
+  it("requires app access before loading sync status", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getAppAccessFailureForUser.mockResolvedValue(
+      Response.json({ error: "Pip app access is not active for this account." }, { status: 403 }),
+    );
+
+    const response = await GET();
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Pip app access is not active for this account.",
+    });
+    expect(routeMocks.loadSyncStatusForUser).not.toHaveBeenCalled();
   });
 
   it("logs unexpected status failures without exposing secret-shaped values", async () => {

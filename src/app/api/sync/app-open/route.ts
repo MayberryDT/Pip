@@ -1,3 +1,4 @@
+import { getAppAccessFailureForUser } from "@/lib/app-access/route-guard";
 import { getAppOpenSyncDecision, type AppOpenSyncDecision } from "@/lib/data/app-open-sync";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { loadPendingPipSyncJobsForUser } from "@/lib/data/sync-jobs";
@@ -26,6 +27,12 @@ export async function POST() {
 
     if (userError || !user) {
       return sensitiveJson({ error: "Authentication required." }, { status: 401 });
+    }
+
+    const appAccessFailure = await getAppAccessFailureForUser(user);
+
+    if (appAccessFailure) {
+      return appAccessFailure;
     }
 
     const now = new Date();

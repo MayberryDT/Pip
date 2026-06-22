@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sendPublicWaitlistConfirmation } from "@/lib/email/transactional";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
@@ -33,10 +34,15 @@ export async function POST(request: Request) {
 
   try {
     const supabase = createSupabaseAdminClient();
-    await submitMarketingWaitlist(supabase, parsed.data);
+    const result = await submitMarketingWaitlist(supabase, parsed.data);
+    await sendPublicWaitlistConfirmation(supabase, {
+      email: parsed.data.email,
+      normalizedEmail: result.normalizedEmail,
+    });
 
     return NextResponse.json({
       status: "joined",
+      normalizedEmail: result.normalizedEmail,
     });
   } catch {
     return NextResponse.json({ error: "Waitlist signup failed." }, { status: 500 });

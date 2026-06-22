@@ -26,6 +26,8 @@ describe("public legal and support pages", () => {
     expect(privacy).toContain("delete your account from the in-app settings panel");
     expect(privacy).toContain("AI response reports");
     expect(privacy).toContain("does not intentionally train a Pip-owned AI model");
+    expect(privacy).toContain('href="/">Pip</a>');
+    expect(privacy).not.toContain('href="/app">Pip</a>');
     expect(terms).toContain("not financial, tax, investment, credit, or legal advice");
     expect(terms).toContain("cannot move, withdraw, transfer");
     expect(terms).toContain("No Guarantee");
@@ -40,7 +42,7 @@ describe("public legal and support pages", () => {
     expect(deletion).toContain("To delete your Pip account");
     expect(deletion).toContain("typing DELETE");
     expect(deletion).toContain("If account deletion cannot complete, Pip keeps the request retryable");
-    expect([privacy, terms, support, deletion].join("\n")).not.toMatch(/\b(?:beta|waitlist)\b|join-beta/i);
+    expect([privacy, terms, support, deletion].join("\n")).not.toMatch(/\bbeta\b|join-beta/i);
     expect([privacy, terms, support, deletion].join("\n")).not.toMatch(/\$2\.99|\$7\.99|href="\/pricing"|View pricing|Pricing details/);
   });
 });

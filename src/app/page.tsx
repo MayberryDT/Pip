@@ -10,6 +10,7 @@ import { ArticleCard, JsonLd } from "@/components/marketing/ArticleComponents";
 import { MarketingCtaLink } from "@/components/marketing/MarketingCtaLink";
 import { MarketingLayout } from "@/components/marketing/MarketingLayout";
 import { PricingCards } from "@/components/marketing/PricingCards";
+import { WaitlistForm } from "@/components/marketing/WaitlistForm";
 import { marketingAssets } from "@/lib/marketing/assets";
 import { getPublishedArticles } from "@/lib/marketing/content";
 import { buildMarketingMetadata } from "@/lib/marketing/metadata";
@@ -373,7 +374,7 @@ export default function MarketingHomePage() {
           </div>
         </section>
 
-        <section className="pip-home-section pip-final-cta" data-section="final-cta" id="get-pip">
+        <section className="pip-home-section pip-final-cta" data-section="final-cta" id="waitlist">
           <div className="pip-home-wrap">
             <figure className="pip-story-poster pip-story-poster-final">
               <img
@@ -394,16 +395,8 @@ export default function MarketingHomePage() {
                 Pip gives you one calm number before the next purchase. One monthly subscription
                 costs {pipPricing.monthly.displayPrice}.
               </p>
+              <WaitlistForm compact sourcePage="/" />
               <div className="pip-action-row">
-                <MarketingCtaLink
-                  className="pip-button pip-button-primary focus-ring"
-                  eventLabel="home_final_get_pip"
-                  eventProperties={{ intent: "get_pip" }}
-                  href={getProductAccessHref()}
-                >
-                  {productAccess.primaryLabel}
-                  <ArrowRight aria-hidden="true" size={17} />
-                </MarketingCtaLink>
                 <Link className="pip-button pip-button-secondary focus-ring" href="/pricing">
                   View pricing
                 </Link>

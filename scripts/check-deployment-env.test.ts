@@ -38,6 +38,7 @@ NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
 PIP_OPERATOR_TOKEN=operator-token
 PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_EMAIL_MODE=off
 PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=sandbox
@@ -72,6 +73,11 @@ PLAID_CLIENT_ID=plaid-client-id
 PLAID_SECRET=plaid-secret
 PLAID_ENV=production
 OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
+RESEND_API_KEY=resend-key
+PIP_EMAIL_FROM=Pip <hello@spendwithpip.com>
+PIP_EMAIL_POSTAL_ADDRESS=123 Pip St, Denver, CO
+PIP_EMAIL_UNSUBSCRIBE_SECRET=email-secret
+RESEND_WEBHOOK_SECRET=whsec_123
 `);
 
     const result = await runCheck(cwd, "--mode=beta");
@@ -94,6 +100,11 @@ PLAID_SECRET=plaid-secret
 PLAID_ENV=production
 NETLIFY_AI_GATEWAY_BASE_URL=https://api.netlify.com/ai/v1
 NETLIFY_AI_GATEWAY_KEY=netlify-gateway-key
+RESEND_API_KEY=resend-key
+PIP_EMAIL_FROM=Pip <hello@spendwithpip.com>
+PIP_EMAIL_POSTAL_ADDRESS=123 Pip St, Denver, CO
+PIP_EMAIL_UNSUBSCRIBE_SECRET=email-secret
+RESEND_WEBHOOK_SECRET=whsec_123
 `);
 
     const result = await runCheck(cwd, "--mode=beta");
@@ -116,6 +127,11 @@ PLAID_SECRET=plaid-secret
 PLAID_ENV=production
 PLAID_REDIRECT_URI=http://localhost:3000/plaid/oauth
 OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
+RESEND_API_KEY=resend-key
+PIP_EMAIL_FROM=Pip <hello@spendwithpip.com>
+PIP_EMAIL_POSTAL_ADDRESS=123 Pip St, Denver, CO
+PIP_EMAIL_UNSUBSCRIBE_SECRET=email-secret
+RESEND_WEBHOOK_SECRET=whsec_123
 `);
 
     const result = await runCheck(cwd, "--mode=beta");
@@ -142,6 +158,11 @@ PLAID_SECRET=plaid-secret
 PLAID_ENV=production
 PLAID_REDIRECT_URI=https://preview--spendwithpip.netlify.app/plaid/oauth
 OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
+RESEND_API_KEY=resend-key
+PIP_EMAIL_FROM=Pip <hello@spendwithpip.com>
+PIP_EMAIL_POSTAL_ADDRESS=123 Pip St, Denver, CO
+PIP_EMAIL_UNSUBSCRIBE_SECRET=email-secret
+RESEND_WEBHOOK_SECRET=whsec_123
 `);
 
     const result = await runCheck(cwd, "--mode=beta");
@@ -152,10 +173,46 @@ OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
     );
   });
 
+  it("fails beta mode when email delivery env is incomplete", async () => {
+    const cwd = createTempProject(`
+NEXT_PUBLIC_SUPABASE_URL=https://example.supabase.co
+NEXT_PUBLIC_SITE_URL=https://spendwithpip.com
+NEXT_PUBLIC_SUPABASE_ANON_KEY=anon-key
+SUPABASE_SERVICE_ROLE_KEY=service-role-key
+PIP_OPERATOR_TOKEN=operator-token
+PIP_PROVIDER_TOKEN_KEY_BASE64=token-key
+PIP_RATE_LIMIT_SALT=rate-limit-salt
+PLAID_CLIENT_ID=plaid-client-id
+PLAID_SECRET=plaid-secret
+PLAID_ENV=production
+OPENAI_BASE_URL=https://pip.netlify.app/.netlify/ai
+RESEND_API_KEY=resend-key
+`);
+
+    const result = await runCheck(cwd, "--mode=beta");
+    const output = result.stderr + result.stdout + result.warnings;
+
+    expect(result.status).toBe(1);
+    expect(output).toContain("PIP_EMAIL_FROM");
+    expect(output).toContain("PIP_EMAIL_POSTAL_ADDRESS");
+    expect(output).toContain("PIP_EMAIL_UNSUBSCRIBE_SECRET");
+    expect(output).toContain("RESEND_WEBHOOK_SECRET");
+  });
+
   it("documents the production rate-limit salt in local and Netlify setup files", () => {
     expect(readFileSync(".env.example", "utf8")).toContain("PIP_RATE_LIMIT_SALT=");
     expect(readFileSync("README.md", "utf8")).toContain("PIP_RATE_LIMIT_SALT");
     expect(readFileSync("netlify.toml", "utf8")).toContain("PIP_RATE_LIMIT_SALT");
+  });
+
+  it("documents app access grants and operator-token invite operations", () => {
+    const readme = readFileSync("README.md", "utf8");
+    const playAccess = readFileSync("docs/play-store/app-access.md", "utf8");
+
+    expect(readme).toContain("/api/operator/access-grants");
+    expect(readme).toContain("PIP_OPERATOR_TOKEN");
+    expect(readme).toContain("app_access_grants");
+    expect(playAccess).toContain("active app access grant");
   });
 });
 

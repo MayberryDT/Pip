@@ -134,7 +134,7 @@ export default async function ArticlePage({ params }: PageProps) {
           <div className="col-span-12 lg:col-span-7">
             <SwissTitle size="compact">Want the daily number?</SwissTitle>
             <SwissText className="mt-4">
-              Get Pip and check Spendable Cash Today before the next spending decision.
+              Join the Pip waitlist and check Spendable Cash Today before the next spending decision.
             </SwissText>
           </div>
           <div className="col-span-12 lg:col-span-4 lg:col-start-9">

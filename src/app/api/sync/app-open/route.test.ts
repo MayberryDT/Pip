@@ -7,6 +7,7 @@ import type { SyncStatus } from "@/lib/data/sync-status";
 const routeMocks = vi.hoisted(() => ({
   createSupabaseAdminClient: vi.fn(),
   createSupabaseServerClient: vi.fn(),
+  getAppAccessFailureForUser: vi.fn(),
   loadPendingPipSyncJobsForUser: vi.fn(),
   loadSyncStatusForUser: vi.fn(),
   loadManualRefreshOnlyForUser: vi.fn(),
@@ -20,6 +21,10 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: routeMocks.createSupabaseAdminClient,
+}));
+
+vi.mock("@/lib/app-access/route-guard", () => ({
+  getAppAccessFailureForUser: routeMocks.getAppAccessFailureForUser,
 }));
 
 vi.mock("@/lib/data/sync-jobs", () => ({
@@ -43,6 +48,7 @@ vi.mock("@/lib/data/manual-sync", () => ({
 }));
 
 beforeEach(() => {
+  routeMocks.getAppAccessFailureForUser.mockResolvedValue(null);
   routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(false);
   routeMocks.createSupabaseAdminClient.mockReturnValue(createSupabaseAdminClient());
 });
@@ -83,6 +89,23 @@ describe("POST /api/sync/app-open", () => {
     expect(routeMocks.loadManualRefreshOnlyForUser).toHaveBeenCalledWith(supabase, "reviewer-1");
     expect(routeMocks.loadSyncStatusForUser).not.toHaveBeenCalled();
     expect(routeMocks.loadPendingPipSyncJobsForUser).not.toHaveBeenCalled();
+    expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
+  });
+
+  it("requires app access before checking app-open freshness", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
+    routeMocks.getAppAccessFailureForUser.mockResolvedValue(
+      Response.json({ error: "Pip app access is not active for this account." }, { status: 403 }),
+    );
+
+    const response = await POST();
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Pip app access is not active for this account.",
+    });
+    expect(routeMocks.loadManualRefreshOnlyForUser).not.toHaveBeenCalled();
     expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
   });
 

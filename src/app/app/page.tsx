@@ -1,10 +1,18 @@
 import { PipHome } from "@/components/PipHome";
+import { AppAccessGate } from "@/components/app-access/AppAccessGate";
 import {
   getCurrentPipCashState,
   NoFinancialDataError,
   type PipCashApiState,
 } from "@/lib/data/current-snapshot";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
+import {
+  loadActiveAppAccessGrant,
+  recordAppAccessGrantAccess,
+} from "@/lib/data/app-access-grants";
+import { sendAppWaitlistConfirmation } from "@/lib/email/transactional";
+import { submitMarketingWaitlist } from "@/lib/marketing/waitlist";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export default async function AppPage({
@@ -45,7 +53,7 @@ export default async function AppPage({
   }
 
   if (!isSupabaseConfigured()) {
-    return <PipHome authState={{ status: "guest" }} authNotice={authNotice} />;
+    return <AppAccessGate state="unavailable" />;
   }
 
   const supabase = await createSupabaseServerClient();
@@ -65,8 +73,35 @@ export default async function AppPage({
   }
 
   if (!user) {
-    return <PipHome authState={{ status: "guest" }} authNotice={authNotice} />;
+    return <AppAccessGate state="signed-out" authNotice={authNotice} />;
   }
+
+  const admin = createAppAccessAdminClient();
+
+  if (!admin) {
+    return <AppAccessGate state="unavailable" />;
+  }
+
+  const grant = user.email ? await loadActiveAppAccessGrant(admin, user.email) : null;
+
+  if (!grant) {
+    if (user.email) {
+      const waitlistResult = await submitMarketingWaitlist(admin, {
+        email: user.email,
+        sourcePage: "/app",
+        sourceKind: "app_oauth",
+        authUserId: user.id,
+      });
+      await sendAppWaitlistConfirmation(admin, {
+        email: user.email,
+        normalizedEmail: waitlistResult.normalizedEmail,
+      });
+    }
+
+    return <AppAccessGate state="waitlisted" email={user.email ?? undefined} />;
+  }
+
+  await recordAppAccessGrantAccess(admin, grant, user.id);
 
   if (!hasConsented) {
     return <PipHome authState={{ status: "needs-consent", email: user.email ?? "" }} />;
@@ -102,4 +137,16 @@ function getAuthNotice(auth: string | undefined): "auth-error" | undefined {
 
 function getConnectionNotice(plaid: string | undefined): "plaid-connected" | undefined {
   return plaid === "connected" ? "plaid-connected" : undefined;
+}
+
+function createAppAccessAdminClient() {
+  try {
+    return createSupabaseAdminClient();
+  } catch (error) {
+    if (error instanceof SupabaseConfigError) {
+      return null;
+    }
+
+    throw error;
+  }
 }

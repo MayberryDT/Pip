@@ -92,11 +92,13 @@ npm run play:reviewer:verify -- --email=play-delete-test@animasai.co
 Expected verification result:
 
 - `play-review@animasai.co` exists.
+- An active app access grant exists for `play-review@animasai.co`.
 - Demo data exists and is internally consistent.
 - Account is not marked deleted or disabled.
 - No live Plaid/Teller credential is required.
 - No payment entitlement is required.
 - `play-delete-test@animasai.co` exists or can be recreated for deletion testing.
+- An active app access grant exists for `play-delete-test@animasai.co`.
 
 For account-deletion proof, use the disposable account and then run:
 

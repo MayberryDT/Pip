@@ -8,7 +8,11 @@ export async function POST() {
   }
 
   const supabase = await createSupabaseServerClient();
-  await supabase.auth.signOut();
+  const { error } = await supabase.auth.signOut();
+
+  if (error) {
+    return sensitiveJson({ error: "Sign-out failed." }, { status: 500 });
+  }
 
   return sensitiveJson({
     status: "signed-out",

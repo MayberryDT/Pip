@@ -8,6 +8,10 @@ import {
 } from "@/lib/data/current-snapshot";
 import { recordAgentChatTurnSafely } from "@/lib/data/agent-chat-turns";
 import {
+  loadActiveAppAccessGrant,
+  recordAppAccessGrantAccess,
+} from "@/lib/data/app-access-grants";
+import {
   type ConnectedAccountsResult,
   deleteCurrentUserFinancialData,
   loadConnectedAccountsForUser,
@@ -36,6 +40,7 @@ import { recordProductEventSafely } from "@/lib/data/product-events";
 import { loadSyncStatusForUser, type SyncStatus } from "@/lib/data/sync-status";
 import {
   runAIAgent,
+  AgentUnavailableError,
   toAgentErrorPayload,
   type PipAgentActions,
   type PipAgentOnboardingState,
@@ -76,7 +81,7 @@ import { getSafeErrorMessage, sanitizeSensitiveText } from "@/lib/security/error
 import { sensitiveJson } from "@/lib/security/http-cache";
 import { getClientPipPlatform } from "@/lib/platform/android-shell";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import type { Database } from "@/lib/supabase/database.types";
 import type { FinancialSnapshot } from "@/lib/types";
@@ -369,8 +374,14 @@ async function createRouteAgentContext(input: {
   } = await supabase.auth.getUser();
 
   if (error || !user) {
-    return createGuestContext();
+    throw new AgentUnavailableError({
+      code: "authentication-required",
+      message: "Sign in to use Pip.",
+      status: 401,
+    });
   }
+
+  await requireAppAccessForAgent(user);
 
   const eventContext = {
     supabase,
@@ -424,11 +435,54 @@ async function createRouteAgentContext(input: {
     }
 
     if (error instanceof AuthenticationRequiredError) {
-      return createGuestContext();
+      throw new AgentUnavailableError({
+        code: "authentication-required",
+        message: "Sign in to use Pip.",
+        status: 401,
+      });
     }
 
     throw error;
   }
+}
+
+async function requireAppAccessForAgent(user: { id: string; email?: string | null }) {
+  if (!user.email) {
+    throw new AgentUnavailableError({
+      code: "app-access-email-required",
+      message: "Pip app access requires a verified email.",
+      status: 403,
+    });
+  }
+
+  let supabase: SupabaseClient<Database>;
+
+  try {
+    supabase = createSupabaseAdminClient();
+  } catch (error) {
+    if (error instanceof SupabaseConfigError) {
+      throw new AgentUnavailableError({
+        code: "app-access-unavailable",
+        message: "Pip app access is temporarily unavailable.",
+        status: 503,
+        cause: error,
+      });
+    }
+
+    throw error;
+  }
+
+  const grant = await loadActiveAppAccessGrant(supabase, user.email);
+
+  if (!grant) {
+    throw new AgentUnavailableError({
+      code: "app-access-required",
+      message: "Pip app access is not active for this account.",
+      status: 403,
+    });
+  }
+
+  await recordAppAccessGrantAccess(supabase, grant, user.id);
 }
 
 function createGuestContext(): RouteAgentContext {

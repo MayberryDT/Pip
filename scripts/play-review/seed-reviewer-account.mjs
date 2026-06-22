@@ -5,6 +5,7 @@ import {
   auditUserAppData,
   createSupabaseAdminFromEnv,
   ensureReviewerUser,
+  ensureReviewerAppAccessGrant,
   getReviewerEmail,
   getReviewerPassword,
   loadEnvFiles,
@@ -31,6 +32,10 @@ export async function runSeedReviewerAccount({
     });
 
     await seedReviewerAppData(admin, user.id);
+    await ensureReviewerAppAccessGrant(admin, {
+      email,
+      userId: user.id,
+    });
 
     const auditRows = await auditUserAppData(admin, user.id);
     stdout(`Seeded Play reviewer account: ${email}`);

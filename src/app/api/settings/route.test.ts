@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const routeMocks = vi.hoisted(() => ({
   createSupabaseAdminClient: vi.fn(),
   createSupabaseServerClient: vi.fn(),
+  getAppAccessFailureForUser: vi.fn(),
   upsertUserSettings: vi.fn(),
   markPipCashSnapshotsStaleForUser: vi.fn(),
   recordProductEventSafely: vi.fn(),
@@ -25,7 +26,15 @@ vi.mock("@/lib/data/product-events", () => ({
   recordProductEventSafely: routeMocks.recordProductEventSafely,
 }));
 
+vi.mock("@/lib/app-access/route-guard", () => ({
+  getAppAccessFailureForUser: routeMocks.getAppAccessFailureForUser,
+}));
+
 import { GET, PUT } from "@/app/api/settings/route";
+
+beforeEach(() => {
+  routeMocks.getAppAccessFailureForUser.mockResolvedValue(null);
+});
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -72,6 +81,23 @@ describe("/api/settings", () => {
       manualRefreshOnly: false,
       privacyConsentAt: null,
     });
+  });
+
+  it("requires app access before reading settings", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getAppAccessFailureForUser.mockResolvedValue(
+      Response.json({ error: "Pip app access is not active for this account." }, { status: 403 }),
+    );
+
+    const response = await GET();
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Pip app access is not active for this account.",
+    });
+    expect(supabase.from).not.toHaveBeenCalled();
   });
 
   it("requires authentication before validating protected-savings updates", async () => {

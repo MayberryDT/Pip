@@ -7,6 +7,8 @@ const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   getFinancialDataProvider: vi.fn(),
   getCurrentFinancialSnapshot: vi.fn(),
+  loadActiveAppAccessGrant: vi.fn(),
+  recordAppAccessGrantAccess: vi.fn(),
   recordAgentChatTurnSafely: vi.fn(),
   recordProductEventSafely: vi.fn(),
   runAIAgent: vi.fn(),
@@ -33,6 +35,11 @@ vi.mock("@/lib/data/current-snapshot", async (importOriginal) => {
     getCurrentFinancialSnapshot: routeMocks.getCurrentFinancialSnapshot,
   };
 });
+
+vi.mock("@/lib/data/app-access-grants", () => ({
+  loadActiveAppAccessGrant: routeMocks.loadActiveAppAccessGrant,
+  recordAppAccessGrantAccess: routeMocks.recordAppAccessGrantAccess,
+}));
 
 vi.mock("@/lib/data/product-events", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/data/product-events")>();
@@ -112,6 +119,13 @@ describe("POST /api/agent", () => {
       leaseId: "lease-1",
     });
     routeMocks.releaseAgentModelGate.mockResolvedValue(undefined);
+    routeMocks.createSupabaseAdminClient.mockReturnValue({ kind: "admin" });
+    routeMocks.loadActiveAppAccessGrant.mockResolvedValue({
+      normalized_email: "tester@example.com",
+      status: "active",
+      first_accessed_at: null,
+    });
+    routeMocks.recordAppAccessGrantAccess.mockResolvedValue(undefined);
   });
 
   it("rejects invalid request bodies with a structured 400 response", async () => {
@@ -123,6 +137,39 @@ describe("POST /api/agent", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Message is required.",
     });
+  });
+
+  it("rejects missing Supabase auth before acquiring a model gate", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient(null);
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    const response = await POST(jsonRequest({ message: "Can I spend $50?" }));
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "authentication-required",
+      error: "Sign in to use Pip.",
+    });
+    expect(routeMocks.claimAgentModelGate).not.toHaveBeenCalled();
+    expect(routeMocks.runAIAgent).not.toHaveBeenCalled();
+  });
+
+  it("rejects signed-in users without app access before acquiring a model gate", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1", email: "tester@example.com" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.loadActiveAppAccessGrant.mockResolvedValue(null);
+
+    const response = await POST(jsonRequest({ message: "Can I spend $50?" }));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "app-access-required",
+      error: "Pip app access is not active for this account.",
+    });
+    expect(routeMocks.claimAgentModelGate).not.toHaveBeenCalled();
+    expect(routeMocks.runAIAgent).not.toHaveBeenCalled();
   });
 
   it("returns a structured AI error when model configuration is missing", async () => {
@@ -547,6 +594,7 @@ describe("POST /api/agent", () => {
       tableCalls,
     });
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.createSupabaseAdminClient.mockReturnValue(supabase);
     routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
     routeMocks.recordProductEventSafely.mockResolvedValue(undefined);
     routeMocks.runAIAgent.mockImplementation(async (input) => {
@@ -1071,7 +1119,7 @@ function enableSupabaseEnv() {
 }
 
 function createSupabaseClient(
-  user: { id: string } | null,
+  user: { id: string; email?: string } | null,
   settings: Record<string, unknown> | null = {
     privacy_consent_at: "2026-06-07T00:00:00.000Z",
   },
@@ -1085,7 +1133,12 @@ function createSupabaseClient(
     auth: {
       getUser: vi.fn().mockResolvedValue({
         data: {
-          user,
+          user: user
+            ? {
+                email: "tester@example.com",
+                ...user,
+              }
+            : null,
         },
         error: null,
       }),

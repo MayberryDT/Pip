@@ -67,7 +67,12 @@ function restoreLocalEnvFiles() {
 }
 
 function cleanGeneratedNetlifyArtifacts() {
-  for (const directory of [".netlify/functions", ".netlify/functions-internal"]) {
+  for (const directory of [
+    ".netlify/deploy",
+    ".netlify/functions",
+    ".netlify/functions-internal",
+    ".netlify/static",
+  ]) {
     rmSync(join(root, directory), {
       recursive: true,
       force: true,

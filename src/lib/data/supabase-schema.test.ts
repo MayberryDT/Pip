@@ -179,6 +179,19 @@ describe("Supabase financial-data schema", () => {
     });
     expect(allMigrations).toContain("'waitlist_signup_succeeded'");
     expect(allMigrations).toContain("'distribb_webhook_received'");
+    expect(allMigrations).toContain("create table if not exists public.app_access_grants");
+    expect(allMigrations).toContain("app_waitlist_requested_at timestamptz");
+    expect(allMigrations).toContain("app_waitlist_request_count integer not null default 0");
+    expect(allMigrations).toContain("alter table public.app_access_grants enable row level security");
+    expect(allMigrations).toContain("newsletter_opt_in_at timestamptz");
+    expect(allMigrations).toContain("waitlist_confirmation_reserved_at timestamptz");
+    expect(allMigrations).toContain("waitlist_confirmation_sent_at timestamptz");
+    expect(allMigrations).toContain("app_waitlist_confirmation_reserved_at timestamptz");
+    expect(allMigrations).toContain("invite_email_reserved_at timestamptz");
+    expect(allMigrations).toContain("email_suppressed_at timestamptz");
+    expect(allMigrations).toContain("provider_event_id text unique");
+    expect(allMigrations).toContain("create table if not exists public.email_events");
+    expect(allMigrations).toContain("alter table public.email_events enable row level security");
   });
 
   it("creates sync logs and stale connection fields for provider operations", () => {

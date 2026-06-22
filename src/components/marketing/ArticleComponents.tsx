@@ -201,7 +201,7 @@ export function ArticleBody({
       {blocks.map((block, index) => (
         <div key={`${block.type}-${index}`}>
           {renderBlock(block)}
-          {index === autoCtaIndex ? <InlineCtaCard body="Get Pip and check one daily number before you spend." /> : null}
+          {index === autoCtaIndex ? <InlineCtaCard body="Join the Pip waitlist and check one daily number before you spend." /> : null}
         </div>
       ))}
     </div>

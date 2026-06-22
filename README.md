@@ -16,6 +16,9 @@ Open http://localhost:3000.
 ## Marketing Content
 
 The public marketing site lives at `/`; the authenticated/beta app stays behind `/app`.
+Public calls to action collect email waitlist signups. `/app` uses Google OAuth to collect a
+verified app-access request, then requires an active operator-managed grant before the app or agent
+routes are available.
 Marketing articles are version-controlled Markdown files with validated frontmatter and a small
 custom block syntax for product-led callouts, Pip says notes, money examples, comparisons, inline
 CTAs, pull quotes, and figures.
@@ -39,7 +42,8 @@ ship at the cost of blocking beta app access.
 
 The project is linked to `spendwithpip` on Netlify.
 
-- Site URL: https://spendwithpip.com/app
+- Public site URL: https://spendwithpip.com/
+- App route: https://spendwithpip.com/app
 - Latest verified production deploy: https://6a37265034af39c993db28dc--spendwithpip.netlify.app
 - Latest verified draft deploy: https://6a2a780edf4805a6c39e47e5--spendwithpip.netlify.app
 - Netlify is configured for real beta mode with Supabase, Netlify AI Gateway/OpenAI, and Plaid production env. Fake-data preview deploys remain available with `PIP_DEPLOY_MODE=fake npm run deploy:netlify`.
@@ -93,6 +97,32 @@ PIP_RATE_LIMIT_SALT=
 
 `PIP_RATE_LIMIT_SALT` is required in production and fake Netlify preview checks. Set a long random value in Netlify environment variables; do not commit the real salt. Public fake previews without Supabase fail closed for AI requests instead of using process-local rate-limit counters.
 
+### Email delivery
+
+Pip sends transactional waitlist and invite emails through Resend first. Supabase remains the source of truth for contacts, consent, unsubscribe state, sent timestamps, and provider-neutral `email_events`.
+
+Required beta email env:
+
+- `PIP_EMAIL_MODE` (`off` disables delivery requirements)
+- `RESEND_API_KEY`
+- `PIP_EMAIL_FROM`
+- `PIP_EMAIL_REPLY_TO` optional
+- `PIP_EMAIL_POSTAL_ADDRESS`
+- `PIP_EMAIL_UNSUBSCRIBE_SECRET`
+- `RESEND_WEBHOOK_SECRET`
+
+Public waitlist signups send one confirmation email. Verified `/app` waitlist signups send one app-access-list confirmation email. Operator grants send one invite email with the `/app` URL and return `inviteEmailStatus` so manual fallback is obvious if delivery fails.
+
+Configure a Resend webhook at:
+
+```text
+https://spendwithpip.com/api/email/resend-webhook
+```
+
+Enable delivery, bounce, and complaint events. Bounces and complaints hard-suppress future email sends in Supabase without deleting the waitlist row.
+
+AWS SES migration path: add an `SesEmailProvider` implementing `EmailProvider`, verify the sending domain in SES, wire SNS bounce/complaint/delivery notifications into the same `email_events` and hard-suppression helpers, and switch `createConfiguredEmailProvider()` from Resend to SES. No contact export or product behavior should depend on Resend state.
+
 If account deletion finalization logs show a post-auth saga write failure, run `npm run privacy:reconcile-account-deletions` to dry-run rows where the Auth user is already gone, then `npm run privacy:reconcile-account-deletions -- --dry-run=false` to mark those rows completed.
 
 The first database migration lives at `supabase/migrations/20260605000000_free_cash_foundation.sql`. It creates user-scoped financial tables, RLS policies, a private provider-credentials table, sync/event tables, and the authenticated delete-data function. Its snapshot table uses a historical name that is renamed to `pip_cash_snapshots` by a later rebrand migration.
@@ -101,8 +131,20 @@ Google signup flow:
 
 - `/api/auth/oauth/google` starts the primary Google OAuth flow through Supabase Auth.
 - `/api/auth/sign-in` remains a magic-link fallback route, but it is not the default onboarding path.
-- `/auth/callback` exchanges the auth code or OTP and returns signed-in users to the same Pip screen. Any Google account can sign up.
-- Authenticated users must accept the real-data consent step and can keep or change the default protected-savings amount before seeing Spendable Cash Today.
+- `/auth/callback` exchanges the auth code or OTP and returns signed-in users to `/app`.
+- Signed-in users without an active `app_access_grants` row are written to the waitlist with `/app`
+  intent metadata and blocked from the app.
+- Active grants are keyed by normalized verified email. Grant access with:
+
+```bash
+curl -X POST "$NEXT_PUBLIC_SITE_URL/api/operator/access-grants" \
+  -H "Authorization: Bearer $PIP_OPERATOR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"person@example.com","action":"grant","note":"manual invite"}'
+```
+
+- Revoke access with the same endpoint and `{"email":"person@example.com","action":"revoke"}`.
+- Granted authenticated users must accept the real-data consent step and can keep or change the default protected-savings amount before seeing Spendable Cash Today.
 - Chat owns setup and account actions. Manual refresh, protected-savings settings, provider repair, sign-out, and delete-data should be reached through Pip rather than a separate settings/dashboard surface.
 - `/api/sync/manual` runs server-side provider sync, rate limits manual refreshes, records sync logs, and stores a Spendable Cash Today snapshot. Plaid syncs every stored Item and can return a `partial` result when at least one institution refreshed but another needs repair.
 - `/api/sync/status` reports last refresh, stale connection state, and latest sync failure details for chat-owned refresh and repair prompts.

@@ -47,6 +47,26 @@ describe("POST /api/auth/sign-out", () => {
     });
     expect(supabase.auth.signOut).toHaveBeenCalled();
   });
+
+  it("returns a no-store error when Supabase sign-out fails", async () => {
+    enableSupabaseEnv();
+    const supabase = {
+      auth: {
+        signOut: vi.fn().mockResolvedValue({
+          error: new Error("sign-out failed"),
+        }),
+      },
+    };
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+
+    const response = await POST();
+
+    expect(response.status).toBe(500);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    await expect(response.json()).resolves.toEqual({
+      error: "Sign-out failed.",
+    });
+  });
 });
 
 function enableSupabaseEnv() {

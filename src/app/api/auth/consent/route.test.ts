@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
+  getAppAccessFailureForUser: vi.fn(),
   recordProductEventSafely: vi.fn(),
 }));
 
@@ -13,7 +14,15 @@ vi.mock("@/lib/data/product-events", () => ({
   recordProductEventSafely: routeMocks.recordProductEventSafely,
 }));
 
+vi.mock("@/lib/app-access/route-guard", () => ({
+  getAppAccessFailureForUser: routeMocks.getAppAccessFailureForUser,
+}));
+
 import { POST } from "@/app/api/auth/consent/route";
+
+beforeEach(() => {
+  routeMocks.getAppAccessFailureForUser.mockResolvedValue(null);
+});
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -42,6 +51,23 @@ describe("POST /api/auth/consent", () => {
     expect(response.status).toBe(401);
     await expect(response.json()).resolves.toEqual({
       error: "Authentication required.",
+    });
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("requires app access before recording consent", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.getAppAccessFailureForUser.mockResolvedValue(
+      Response.json({ error: "Pip app access is not active for this account." }, { status: 403 }),
+    );
+
+    const response = await POST(jsonRequest({}));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Pip app access is not active for this account.",
     });
     expect(supabase.from).not.toHaveBeenCalled();
   });

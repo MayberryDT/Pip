@@ -29,9 +29,13 @@ export default function SupportPage() {
       <section>
         <h2 className="text-lg font-bold text-ink">App Access</h2>
         <p className="mt-3">
-          Use Pip on the web from the App link in the site header. Native App Store and Google Play
-          links can be added when those listings are ready. The Android Play test build is
-          consumption-only and does not include purchase or external-payment prompts.
+          Join the public email waitlist from the homepage. When access is granted, sign in at
+          <Link className="font-bold text-moss hover:text-ink" href="/app">
+            {" "}
+            /app
+          </Link>
+          . The Android Play test build is consumption-only and does not include purchase or
+          external-payment prompts.
         </p>
       </section>
 

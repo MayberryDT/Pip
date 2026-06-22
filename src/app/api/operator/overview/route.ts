@@ -1,18 +1,14 @@
-import { timingSafeEqual } from "node:crypto";
 import { loadOperatorOverview } from "@/lib/operator/overview";
+import { getOperatorAuthFailure } from "@/lib/operator/auth";
 import { sensitiveJson } from "@/lib/security/http-cache";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 
 export async function GET(request: Request) {
-  const expectedToken = process.env.PIP_OPERATOR_TOKEN;
+  const authFailure = getOperatorAuthFailure(request);
 
-  if (!expectedToken) {
-    return sensitiveJson({ error: "Operator access is not configured." }, { status: 503 });
-  }
-
-  if (!isValidOperatorRequest(request, expectedToken)) {
-    return sensitiveJson({ error: "Operator authentication required." }, { status: 401 });
+  if (authFailure) {
+    return authFailure;
   }
 
   if (!isSupabaseConfigured()) {
@@ -26,19 +22,6 @@ export async function GET(request: Request) {
   } catch (error) {
     return sensitiveJson(toErrorBody(error), { status: 500 });
   }
-}
-
-function isValidOperatorRequest(request: Request, expectedToken: string): boolean {
-  const actualToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
-
-  if (!actualToken) {
-    return false;
-  }
-
-  const expected = Buffer.from(expectedToken);
-  const actual = Buffer.from(actualToken);
-
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 function toErrorBody(error: unknown) {

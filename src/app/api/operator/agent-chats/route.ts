@@ -1,21 +1,17 @@
-import { timingSafeEqual } from "node:crypto";
 import {
   loadLocalOperatorAgentChats,
   loadOperatorAgentChats,
 } from "@/lib/data/agent-chat-turns";
+import { getOperatorAuthFailure } from "@/lib/operator/auth";
 import { sensitiveJson } from "@/lib/security/http-cache";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 
 export async function GET(request: Request) {
-  const expectedToken = process.env.PIP_OPERATOR_TOKEN;
+  const authFailure = getOperatorAuthFailure(request);
 
-  if (!expectedToken) {
-    return sensitiveJson({ error: "Operator access is not configured." }, { status: 503 });
-  }
-
-  if (!isValidOperatorRequest(request, expectedToken)) {
-    return sensitiveJson({ error: "Operator authentication required." }, { status: 401 });
+  if (authFailure) {
+    return authFailure;
   }
 
   const filters = getAgentChatFilters(request);
@@ -57,19 +53,6 @@ function getAgentChatFilters(request: Request): {
     userId,
     conversationId,
   };
-}
-
-function isValidOperatorRequest(request: Request, expectedToken: string): boolean {
-  const actualToken = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
-
-  if (!actualToken) {
-    return false;
-  }
-
-  const expected = Buffer.from(expectedToken);
-  const actual = Buffer.from(actualToken);
-
-  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }
 
 function toErrorBody(error: unknown) {

@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
   createSupabaseAdminClient: vi.fn(),
+  getAppAccessFailureForUser: vi.fn(),
   createPlaidClient: vi.fn(),
   getPlaidConfig: vi.fn(),
   storePlaidCredential: vi.fn(),
@@ -15,6 +16,10 @@ vi.mock("@/lib/supabase/server", () => ({
 
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: routeMocks.createSupabaseAdminClient,
+}));
+
+vi.mock("@/lib/app-access/route-guard", () => ({
+  getAppAccessFailureForUser: routeMocks.getAppAccessFailureForUser,
 }));
 
 vi.mock("@/lib/providers/plaid/config", () => ({
@@ -31,6 +36,10 @@ vi.mock("@/lib/data/product-events", () => ({
 }));
 
 import { POST } from "@/app/api/providers/plaid/exchange/route";
+
+beforeEach(() => {
+  routeMocks.getAppAccessFailureForUser.mockResolvedValue(null);
+});
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -61,6 +70,23 @@ describe("POST /api/providers/plaid/exchange", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "Invalid Plaid exchange request.",
+    });
+    expect(routeMocks.createPlaidClient).not.toHaveBeenCalled();
+    expect(routeMocks.storePlaidCredential).not.toHaveBeenCalled();
+  });
+
+  it("requires app access before validating Plaid exchange payloads", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createServerSupabase({ id: "user-1" }));
+    routeMocks.getAppAccessFailureForUser.mockResolvedValue(
+      Response.json({ error: "Pip app access is not active for this account." }, { status: 403 }),
+    );
+
+    const response = await POST(jsonRequest({ publicToken: "short" }));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Pip app access is not active for this account.",
     });
     expect(routeMocks.createPlaidClient).not.toHaveBeenCalled();
     expect(routeMocks.storePlaidCredential).not.toHaveBeenCalled();

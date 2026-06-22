@@ -20,7 +20,6 @@ const footerLinks = [
   { href: "/privacy", label: "Privacy" },
   { href: "/terms", label: "Terms" },
   { href: "/delete-account", label: "Delete account" },
-  { href: marketingSite.appPath, label: "App" },
 ] as const;
 
 export function MarketingLayout({
@@ -72,9 +71,6 @@ export function MarketingHeader({
                 {link.label}
               </Link>
             ))}
-            <Link className="focus-ring editorial-nav-link" href={marketingSite.appPath}>
-              App
-            </Link>
           </nav>
           <MarketingCtaLink
             className="focus-ring editorial-header-cta"
@@ -99,12 +95,6 @@ export function MarketingHeader({
                   {link.label}
                 </Link>
               ))}
-              <Link
-                className="focus-ring editorial-mobile-link"
-                href={marketingSite.appPath}
-              >
-                App
-              </Link>
             </nav>
           </details>
         </div>

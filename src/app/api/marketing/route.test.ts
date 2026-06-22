@@ -2,10 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const routeMocks = vi.hoisted(() => ({
   createSupabaseAdminClient: vi.fn(),
+  sendPublicWaitlistConfirmation: vi.fn(),
 }));
 
 vi.mock("@/lib/supabase/admin", () => ({
   createSupabaseAdminClient: routeMocks.createSupabaseAdminClient,
+}));
+
+vi.mock("@/lib/email/transactional", () => ({
+  sendPublicWaitlistConfirmation: routeMocks.sendPublicWaitlistConfirmation,
 }));
 
 import { POST as postEvent } from "@/app/api/marketing/events/route";
@@ -40,9 +45,15 @@ describe("marketing API routes", () => {
 
   it("stores waitlist signups through the admin client when Supabase is configured", async () => {
     enableSupabaseEnv();
-    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const maybeSingle = vi.fn().mockResolvedValue({ data: null, error: null });
+    const insert = vi.fn().mockResolvedValue({ error: null });
     routeMocks.createSupabaseAdminClient.mockReturnValue({
-      from: vi.fn().mockReturnValue({ upsert }),
+      from: vi.fn().mockReturnValue({
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({ maybeSingle })),
+        })),
+        insert,
+      }),
     });
 
     const response = await postWaitlist(
@@ -59,14 +70,26 @@ describe("marketing API routes", () => {
     );
 
     expect(response.status).toBe(200);
-    expect(upsert).toHaveBeenCalledWith(
+    await expect(response.json()).resolves.toEqual({
+      status: "joined",
+      normalizedEmail: "tester@example.com",
+    });
+    expect(insert).toHaveBeenCalledWith(
       expect.objectContaining({
         normalized_email: "tester@example.com",
         source_page: "/blog",
+        last_source_page: "/blog",
         utm_source: "search",
+        last_utm_source: "search",
+        newsletter_opt_in_at: expect.any(String),
+        newsletter_unsubscribed_at: null,
       }),
+    );
+    expect(routeMocks.sendPublicWaitlistConfirmation).toHaveBeenCalledWith(
+      expect.anything(),
       {
-        onConflict: "normalized_email",
+        email: "Tester@Example.COM",
+        normalizedEmail: "tester@example.com",
       },
     );
   });

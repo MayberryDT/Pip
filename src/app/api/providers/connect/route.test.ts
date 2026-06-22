@@ -1,8 +1,9 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST } from "@/app/api/providers/connect/route";
 
 const routeMocks = vi.hoisted(() => ({
   createSupabaseServerClient: vi.fn(),
+  getAppAccessFailureForUser: vi.fn(),
   getFinancialDataProvider: vi.fn(),
   recordProductEventSafely: vi.fn(),
 }));
@@ -15,6 +16,10 @@ vi.mock("@/lib/data/product-events", () => ({
   recordProductEventSafely: routeMocks.recordProductEventSafely,
 }));
 
+vi.mock("@/lib/app-access/route-guard", () => ({
+  getAppAccessFailureForUser: routeMocks.getAppAccessFailureForUser,
+}));
+
 vi.mock("@/lib/providers/provider-registry", async () => {
   const errors = await vi.importActual<typeof import("@/lib/providers/provider-errors")>(
     "@/lib/providers/provider-errors",
@@ -24,6 +29,10 @@ vi.mock("@/lib/providers/provider-registry", async () => {
     getFinancialDataProvider: routeMocks.getFinancialDataProvider,
     ProviderUnavailableError: errors.ProviderUnavailableError,
   };
+});
+
+beforeEach(() => {
+  routeMocks.getAppAccessFailureForUser.mockResolvedValue(null);
 });
 
 afterEach(() => {
@@ -54,6 +63,22 @@ describe("POST /api/providers/connect", () => {
     expect(response.status).toBe(400);
     await expect(response.json()).resolves.toEqual({
       error: "Invalid provider request.",
+    });
+    expect(routeMocks.getFinancialDataProvider).not.toHaveBeenCalled();
+  });
+
+  it("requires app access before validating provider requests", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
+    routeMocks.getAppAccessFailureForUser.mockResolvedValue(
+      Response.json({ error: "Pip app access is not active for this account." }, { status: 403 }),
+    );
+
+    const response = await POST(jsonRequest({}));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Pip app access is not active for this account.",
     });
     expect(routeMocks.getFinancialDataProvider).not.toHaveBeenCalled();
   });

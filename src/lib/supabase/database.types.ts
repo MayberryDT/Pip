@@ -799,6 +799,27 @@ export type Database = {
           utm_source: string | null;
           utm_medium: string | null;
           utm_campaign: string | null;
+          last_source_page: string | null;
+          last_referrer: string | null;
+          last_utm_source: string | null;
+          last_utm_medium: string | null;
+          last_utm_campaign: string | null;
+          app_waitlist_requested_at: string | null;
+          app_waitlist_last_requested_at: string | null;
+          app_waitlist_request_count: number;
+          auth_user_id: string | null;
+          newsletter_opt_in_at: string | null;
+          newsletter_unsubscribed_at: string | null;
+          newsletter_unsubscribe_reason: string | null;
+          email_suppressed_at: string | null;
+          email_suppression_reason: string | null;
+          email_provider_contact_id: string | null;
+          waitlist_confirmation_reserved_at: string | null;
+          waitlist_confirmation_sent_at: string | null;
+          app_waitlist_confirmation_reserved_at: string | null;
+          app_waitlist_confirmation_sent_at: string | null;
+          invite_email_reserved_at: string | null;
+          invite_email_sent_at: string | null;
           consent_text_version: string;
           status: string;
           created_at: string;
@@ -813,6 +834,27 @@ export type Database = {
           utm_source?: string | null;
           utm_medium?: string | null;
           utm_campaign?: string | null;
+          last_source_page?: string | null;
+          last_referrer?: string | null;
+          last_utm_source?: string | null;
+          last_utm_medium?: string | null;
+          last_utm_campaign?: string | null;
+          app_waitlist_requested_at?: string | null;
+          app_waitlist_last_requested_at?: string | null;
+          app_waitlist_request_count?: number;
+          auth_user_id?: string | null;
+          newsletter_opt_in_at?: string | null;
+          newsletter_unsubscribed_at?: string | null;
+          newsletter_unsubscribe_reason?: string | null;
+          email_suppressed_at?: string | null;
+          email_suppression_reason?: string | null;
+          email_provider_contact_id?: string | null;
+          waitlist_confirmation_reserved_at?: string | null;
+          waitlist_confirmation_sent_at?: string | null;
+          app_waitlist_confirmation_reserved_at?: string | null;
+          app_waitlist_confirmation_sent_at?: string | null;
+          invite_email_reserved_at?: string | null;
+          invite_email_sent_at?: string | null;
           consent_text_version: string;
           status?: string;
           created_at?: string;
@@ -825,9 +867,154 @@ export type Database = {
           utm_source?: string | null;
           utm_medium?: string | null;
           utm_campaign?: string | null;
+          last_source_page?: string | null;
+          last_referrer?: string | null;
+          last_utm_source?: string | null;
+          last_utm_medium?: string | null;
+          last_utm_campaign?: string | null;
+          app_waitlist_requested_at?: string | null;
+          app_waitlist_last_requested_at?: string | null;
+          app_waitlist_request_count?: number;
+          auth_user_id?: string | null;
+          newsletter_opt_in_at?: string | null;
+          newsletter_unsubscribed_at?: string | null;
+          newsletter_unsubscribe_reason?: string | null;
+          email_suppressed_at?: string | null;
+          email_suppression_reason?: string | null;
+          email_provider_contact_id?: string | null;
+          waitlist_confirmation_reserved_at?: string | null;
+          waitlist_confirmation_sent_at?: string | null;
+          app_waitlist_confirmation_reserved_at?: string | null;
+          app_waitlist_confirmation_sent_at?: string | null;
+          invite_email_reserved_at?: string | null;
+          invite_email_sent_at?: string | null;
           consent_text_version?: string;
           status?: string;
           last_submitted_at?: string;
+        };
+        Relationships: [];
+      };
+      app_access_grants: {
+        Row: {
+          id: string;
+          normalized_email: string;
+          display_email: string;
+          status: string;
+          source: string;
+          note: string | null;
+          granted_at: string;
+          revoked_at: string | null;
+          first_accessed_at: string | null;
+          last_accessed_at: string | null;
+          auth_user_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          normalized_email: string;
+          display_email: string;
+          status?: string;
+          source?: string;
+          note?: string | null;
+          granted_at?: string;
+          revoked_at?: string | null;
+          first_accessed_at?: string | null;
+          last_accessed_at?: string | null;
+          auth_user_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          display_email?: string;
+          status?: string;
+          source?: string;
+          note?: string | null;
+          granted_at?: string;
+          revoked_at?: string | null;
+          first_accessed_at?: string | null;
+          last_accessed_at?: string | null;
+          auth_user_id?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      email_events: {
+        Row: {
+          id: string;
+          normalized_email: string;
+          event_type:
+            | "waitlist_confirmation"
+            | "app_waitlist_confirmation"
+            | "invite_granted"
+            | "newsletter_export"
+            | "newsletter_unsubscribe"
+            | "provider_bounce"
+            | "provider_complaint"
+            | "provider_delivery"
+            | "provider_duplicate";
+          provider: string;
+          provider_event_id: string | null;
+          provider_message_id: string | null;
+          status:
+            | "queued"
+            | "sent"
+            | "skipped"
+            | "failed"
+            | "delivered"
+            | "bounced"
+            | "complained"
+            | "processed"
+            | "ignored";
+          error_message: string | null;
+          metadata: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          normalized_email: string;
+          event_type:
+            | "waitlist_confirmation"
+            | "app_waitlist_confirmation"
+            | "invite_granted"
+            | "newsletter_export"
+            | "newsletter_unsubscribe"
+            | "provider_bounce"
+            | "provider_complaint"
+            | "provider_delivery"
+            | "provider_duplicate";
+          provider?: string;
+          provider_event_id?: string | null;
+          provider_message_id?: string | null;
+          status:
+            | "queued"
+            | "sent"
+            | "skipped"
+            | "failed"
+            | "delivered"
+            | "bounced"
+            | "complained"
+            | "processed"
+            | "ignored";
+          error_message?: string | null;
+          metadata?: Json;
+          created_at?: string;
+        };
+        Update: {
+          provider_event_id?: string | null;
+          provider_message_id?: string | null;
+          status?:
+            | "queued"
+            | "sent"
+            | "skipped"
+            | "failed"
+            | "delivered"
+            | "bounced"
+            | "complained"
+            | "processed"
+            | "ignored";
+          error_message?: string | null;
+          metadata?: Json;
         };
         Relationships: [];
       };

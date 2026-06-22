@@ -19,6 +19,7 @@ export function WaitlistForm({
   const [state, setState] = useState<SubmitState>("idle");
   const [message, setMessage] = useState("");
   const fieldId = useMemo(() => `launch-access-email-${sourcePage.replace(/[^a-z0-9]/gi, "-")}`, [sourcePage]);
+  const idleMessage = "Join for app access invites and occasional product updates. Unsubscribe anytime.";
 
   async function submitWaitlist(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,7 +51,7 @@ export function WaitlistForm({
 
     setState("succeeded");
     setEmail("");
-    setMessage("Thanks. Pip support has your request.");
+    setMessage("Thanks. You’re on the Pip waitlist.");
     void trackMarketingEvent("waitlist_signup_succeeded", { page: sourcePage });
   }
 
@@ -63,7 +64,7 @@ export function WaitlistForm({
       onSubmit={submitWaitlist}
     >
       <label className="text-sm font-bold text-ink/74" htmlFor={fieldId}>
-        {productAccess.primaryLabel}
+        Email for early access
       </label>
       <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto]">
         <div className="relative">
@@ -98,7 +99,7 @@ export function WaitlistForm({
         </button>
       </div>
       <p className="mt-3 min-h-5 text-sm font-semibold text-ink/66" aria-live="polite">
-        {message || "Use Pip on the web now."}
+        {message || idleMessage}
       </p>
     </form>
   );

@@ -34,7 +34,7 @@ export async function runVerifyReviewerAccount({
     }
 
     const auditRows = await auditUserAppData(admin, user.id);
-    const reviewerReadiness = await loadReviewerReadiness(admin, user.id);
+    const reviewerReadiness = await loadReviewerReadiness(admin, user.id, email);
     const readinessFailures = evaluateReviewerReadiness(reviewerReadiness);
     const missingTables = requiredSeedTables.filter((table) => {
       const row = auditRows.find((item) => item.table === table);

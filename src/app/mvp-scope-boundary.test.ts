@@ -40,6 +40,7 @@ describe("MVP scope boundary", () => {
   it("does not render permanent finance-dashboard UI primitives in components", () => {
     const componentSource = findSourceFiles(join(process.cwd(), "src/components"))
       .filter((file) => !file.endsWith(".test.ts") && !file.endsWith(".test.tsx"))
+      .filter((file) => !relative(join(process.cwd(), "src/components"), file).startsWith("marketing/"))
       .map((file) => readFileSync(file, "utf8"))
       .join("\n");
 

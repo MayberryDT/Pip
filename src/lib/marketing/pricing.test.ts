@@ -10,8 +10,8 @@ import {
 describe("marketing pricing constants", () => {
   it("defines the paid product-access pricing model", () => {
     expect(pipProductAccess).toMatchObject({
-      status: "available",
-      primaryLabel: "Get Pip",
+      status: "waitlist",
+      primaryLabel: "Join waitlist",
     });
     expect(pipPricing.monthly.displayPrice).toBe("$7.99/month");
     expect(pipPricing).not.toHaveProperty("weekly");

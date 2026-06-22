@@ -1,5 +1,3 @@
-import { marketingSite } from "@/lib/marketing/site";
-
 export type ProductAccessIntent =
   | "get_pip"
   | "open_pip"
@@ -9,14 +7,14 @@ export type ProductAccessIntent =
   | "read_blog";
 
 export const productAccess = {
-  status: "available",
-  primaryLabel: "Get Pip",
-  shortLabel: "Get Pip",
-  openLabel: "Open Pip",
-  fallbackHref: marketingSite.appPath,
+  status: "waitlist",
+  primaryLabel: "Join waitlist",
+  shortLabel: "Join waitlist",
+  openLabel: "Join waitlist",
+  fallbackHref: "/#waitlist",
   productSentence: "One daily number before you spend.",
-  availabilityLine: "Use Pip on the web now.",
-  appStoreLine: "App Store and Google Play links can be added when the native listings are ready.",
+  availabilityLine: "Join the email waitlist for app access.",
+  appStoreLine: "App access is invite-managed while the native listings are prepared.",
   subscriptionLine: "Subscriptions are managed wherever you start or install Pip.",
 } as const;
 

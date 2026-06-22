@@ -59,6 +59,13 @@ export function runDeploymentEnvCheck({
     if (plaidRedirectUri && siteOrigin && new URL(plaidRedirectUri).origin !== siteOrigin) {
       warnings.push("PLAID_REDIRECT_URI does not share the NEXT_PUBLIC_SITE_URL origin.");
     }
+
+    if (effectiveEnv.PIP_EMAIL_MODE?.trim() !== "off" && !hasBetaEmailConfiguration(effectiveEnv)) {
+      addUnique(
+        missing,
+        "RESEND_API_KEY, PIP_EMAIL_FROM, PIP_EMAIL_POSTAL_ADDRESS, PIP_EMAIL_UNSUBSCRIBE_SECRET, and RESEND_WEBHOOK_SECRET are required for beta email delivery unless PIP_EMAIL_MODE=off.",
+      );
+    }
   }
 
   if (missing.length > 0) {
@@ -174,6 +181,16 @@ function hasAiConfiguration(env) {
     hasValue(env.OPENAI_BASE_URL) ||
     (hasValue(env.NETLIFY_AI_GATEWAY_BASE_URL) && hasValue(env.NETLIFY_AI_GATEWAY_KEY))
   );
+}
+
+function hasBetaEmailConfiguration(env) {
+  return [
+    "RESEND_API_KEY",
+    "PIP_EMAIL_FROM",
+    "PIP_EMAIL_POSTAL_ADDRESS",
+    "PIP_EMAIL_UNSUBSCRIBE_SECRET",
+    "RESEND_WEBHOOK_SECRET",
+  ].every((name) => hasValue(env[name]));
 }
 
 function normalizeOrigin(rawUrl) {

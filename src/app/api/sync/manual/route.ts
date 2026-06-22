@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { getAppAccessFailureForUser } from "@/lib/app-access/route-guard";
 import {
   assertManualSyncAllowed,
   runManualSync,
@@ -35,6 +36,12 @@ export async function POST(request: Request) {
 
     if (userError || !user) {
       return sensitiveJson({ error: "Authentication required." }, { status: 401 });
+    }
+
+    const appAccessFailure = await getAppAccessFailureForUser(user);
+
+    if (appAccessFailure) {
+      return appAccessFailure;
     }
 
     const body = await request.json().catch(() => ({}));

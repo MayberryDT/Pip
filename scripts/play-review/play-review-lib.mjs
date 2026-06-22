@@ -321,6 +321,33 @@ export async function seedReviewerAppData(admin, userId) {
   );
 }
 
+export async function ensureReviewerAppAccessGrant(admin, {
+  email,
+  userId,
+}) {
+  const now = new Date().toISOString();
+  const normalizedEmail = email.trim().toLowerCase();
+
+  await expectNoError(
+    admin.from("app_access_grants").upsert(
+      {
+        normalized_email: normalizedEmail,
+        display_email: email.trim(),
+        status: "active",
+        source: "play_review_seed",
+        note: "Google Play reviewer access",
+        granted_at: now,
+        revoked_at: null,
+        auth_user_id: userId,
+        updated_at: now,
+      },
+      {
+        onConflict: "normalized_email",
+      },
+    ),
+  );
+}
+
 export async function deleteUserAppData(admin, userId) {
   const { data: syncJobs, error: syncJobsError } = await admin
     .from("pip_sync_jobs")
@@ -369,8 +396,9 @@ export async function auditUserAppData(admin, userId) {
   return rows;
 }
 
-export async function loadReviewerReadiness(admin, userId) {
-  const [settingsResult, institutionsResult] = await Promise.all([
+export async function loadReviewerReadiness(admin, userId, email) {
+  const normalizedEmail = email.trim().toLowerCase();
+  const [settingsResult, institutionsResult, appAccessGrantResult] = await Promise.all([
     admin
       .from("user_settings")
       .select("manual_refresh_only")
@@ -380,6 +408,11 @@ export async function loadReviewerReadiness(admin, userId) {
       .from("connected_institutions")
       .select("id, institution_name, status, last_successful_sync_at, stale_after")
       .eq("user_id", userId),
+    admin
+      .from("app_access_grants")
+      .select("normalized_email, status, auth_user_id")
+      .eq("normalized_email", normalizedEmail)
+      .maybeSingle(),
   ]);
 
   if (settingsResult.error) {
@@ -390,8 +423,13 @@ export async function loadReviewerReadiness(admin, userId) {
     throw institutionsResult.error;
   }
 
+  if (appAccessGrantResult.error) {
+    throw appAccessGrantResult.error;
+  }
+
   return {
     settings: settingsResult.data ?? null,
+    appAccessGrant: appAccessGrantResult.data ?? null,
     institutions: institutionsResult.data ?? [],
   };
 }
@@ -405,6 +443,10 @@ export function evaluateReviewerReadiness(readiness, {
     failures.push("Reviewer account is missing user_settings.");
   } else if (readiness.settings.manual_refresh_only !== true) {
     failures.push("Reviewer account must have manual_refresh_only=true.");
+  }
+
+  if (!readiness.appAccessGrant || readiness.appAccessGrant.status !== "active") {
+    failures.push("Reviewer account is missing an active app access grant.");
   }
 
   if (readiness.institutions.length === 0) {
