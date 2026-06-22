@@ -19,6 +19,9 @@ author: "Pip"
 tags:
   - "spendable cash"
   - "daily money habits"
+related:
+  - "what-is-spendable-cash-today"
+  - "budgeting-app-alternative"
 ---
 ## Quick answer
 
