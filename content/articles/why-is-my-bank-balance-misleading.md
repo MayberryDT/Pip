@@ -25,7 +25,7 @@ related:
 ---
 ## Quick answer
 
-Your bank balance is misleading because it shows all the money in your account, not what’s actually safe to spend. Uncleared bills, upcoming rent, credit card payments, and savings you’ve set aside all make that number look larger than your real spending power. You might see $2,000 and feel flush, but once obligations are accounted for, only a fraction is usable. That gap is why relying solely on your balance often leads to overspending and last-minute anxiety.
+Your bank balance is misleading because it shows all the money in your account, not what’s actually available to use. Uncleared bills, upcoming rent, credit card payments, and savings you’ve set aside all make that number look larger than your real spending power. You might see $2,000 and feel flush, but once obligations are accounted for, only a fraction is usable. That gap is why relying solely on your balance often leads to overspending and last-minute anxiety.
 
 ## A realistic money example
 
@@ -42,7 +42,7 @@ Consider a typical couple with a joint checking account and a savings account.
 | Protected monthly savings | -$600    |
 | **Estimated spendable today** | **$150** |
 
-Even though their combined balances look like $5,000, only about $150 is safe to spend. That $150 comes from subtracting near-term bills, credit card payments, and protected savings, exactly the formula Pip uses: estimated spendable today = usable cash – near-term bills – protected savings – already-committed card/debit spending – other known obligations. A quick glance at the bank app might suggest they could afford dinner and a shopping trip, but if the couple spends $350 today, they’d be $200 short when rent hits. This is a classic money mistake: seeing a large balance and treating it as money that’s actually available. The bank shows a comforting number; the number that keeps you safe subtracts what’s already spoken for.
+Even though their combined balances look like $5,000, only about $150 is available to use today. That $150 comes from subtracting near-term bills, credit card payments, and protected savings, exactly the formula Pip uses: estimated spendable today = usable cash – near-term bills – protected savings – already-committed card/debit spending – other known obligations. A quick glance at the bank app might suggest they could afford dinner and a shopping trip, but if the couple spends $350 today, they’d be $200 short when rent hits. This is a classic money mistake: seeing a large balance and treating it as money that’s actually available. The bank shows a comforting number; the number that keeps you safe subtracts what’s already spoken for.
 
 :::cta
 Tired of doing this math in your head? Pip calculates your true daily spendable number automatically, no spreadsheets required. [Try Pip free →](https://pip.me/try)

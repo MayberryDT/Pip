@@ -33,6 +33,30 @@ const RECURRING_CARD_HORIZON_DAYS = 45;
 const ACTIVE_MONTHLY_LOOKBACK_DAYS = 45;
 const MONTHLY_INTERVAL_MIN_DAYS = 24;
 const MONTHLY_INTERVAL_MAX_DAYS = 38;
+const STRICT_RECURRING_DAY_SPREAD_DAYS = 3;
+const STRICT_RECURRING_AMOUNT_SPREAD_RATIO = 0.15;
+const MATERIAL_RECURRING_AMOUNT_RATIO = 3;
+
+const STRONG_RECURRING_CATEGORY_PATTERNS = [
+  /^entertainment(?::|_)/,
+  /^loan_payments(?::|_)/,
+  /^rent_and_utilities(?::|_)/,
+  /^telecommunication_services(?::|_)/,
+  /^personal_care(?::|_).*gyms?/,
+  /^insurance(?::|_)/,
+];
+
+const STRICT_RECURRING_EXCLUDED_CATEGORY_PATTERNS = [
+  /^shops?(?::|_|$)/,
+  /^shopping(?::|_|$)/,
+  /^retail(?::|_|$)/,
+  /^general[ _]merchandise(?::|_|$)/,
+  /\bgrocer/,
+  /\bcoffee\b/,
+  /^gas(?::|_|$)/,
+  /^transportation(?::|_|$)/,
+  /^travel(?::|_|$)/,
+];
 
 export type SpendingBreakdownGroup = {
   id: string;
@@ -151,7 +175,7 @@ export function buildRecurringActivity(
       transaction.date >= addDays(asOfDate, -RECURRING_LOOKBACK_DAYS),
     );
   const recurringTransactions = lookbackTransactions
-    .filter((transaction) => isDefaultRecurringActivityCandidate(transaction));
+    .filter((transaction) => isRecurringExpenseCandidate(transaction));
   const grouped = groupBy(recurringTransactions, (transaction) => recurringGroupKey(transaction));
   const sourceEntries: RecurringActivitySourceEntry[] = buildConfirmedRecurringActivityItems({
     obligations: recurringModel.confirmed,
@@ -169,6 +193,10 @@ export function buildRecurringActivity(
     const candidate = buildRecurringCandidate(group, asOfDate);
 
     if (!candidate) {
+      continue;
+    }
+
+    if (!hasRecurringActivityEvidence(group, candidate)) {
       continue;
     }
 
@@ -192,6 +220,10 @@ export function buildRecurringActivity(
     const candidate = buildHistoricalRecurringCandidate(group, asOfDate, horizonDays);
 
     if (!candidate) {
+      continue;
+    }
+
+    if (!hasRecurringActivityEvidence(group, candidate)) {
       continue;
     }
 
@@ -581,10 +613,6 @@ function buildHistoricalRecurringCandidate(
     return null;
   }
 
-  if (!isDefaultRecurringActivityCandidate(latest)) {
-    return null;
-  }
-
   const expectedDate = nextMonthlyDateAfter(latest.date, asOfDate);
 
   if (!isWithinRecurringHorizon(expectedDate, asOfDate, horizonDays)) {
@@ -612,27 +640,143 @@ function buildHistoricalRecurringCandidate(
 }
 
 function getMonthlyRecurringOccurrences(transactions: Transaction[]): Transaction[] {
-  const monthlyGroups = groupBy(transactions, (transaction) => transaction.date.slice(0, 7));
-  const occurrences = [...monthlyGroups.entries()]
+  const monthlyGroups = [...groupBy(transactions, (transaction) => transaction.date.slice(0, 7)).entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([, monthTransactions]) =>
-      [...monthTransactions].sort((left, right) => left.date.localeCompare(right.date))[0],
-    )
-    .filter((transaction): transaction is Transaction => Boolean(transaction));
+    .map(([month, monthTransactions]) => ({
+      month,
+      transactions: [...monthTransactions].sort((left, right) =>
+        left.date.localeCompare(right.date) ||
+        Math.abs(right.amountCents) - Math.abs(left.amountCents)
+      ),
+    }));
 
-  if (occurrences.length < 2) {
+  if (monthlyGroups.length < 2) {
     return [];
   }
 
-  const intervals = occurrences.slice(1).map((transaction, index) =>
-    daysBetweenDates(occurrences[index].date, transaction.date),
+  let best: Transaction[] = [];
+
+  for (const { month, transactions: monthTransactions } of monthlyGroups) {
+    for (const seed of monthTransactions) {
+      const sequence = buildMonthlySequenceFromSeed(seed, month, monthlyGroups);
+
+      if (isBetterMonthlySequence(sequence, best)) {
+        best = sequence;
+      }
+    }
+  }
+
+  if (!isValidMonthlySequence(best)) {
+    return [];
+  }
+
+  return best;
+}
+
+function buildMonthlySequenceFromSeed(
+  seed: Transaction,
+  seedMonth: string,
+  monthlyGroups: { month: string; transactions: Transaction[] }[],
+): Transaction[] {
+  const sequence = [seed];
+  let previous = seed;
+
+  for (const { month, transactions } of monthlyGroups) {
+    if (month <= seedMonth) {
+      continue;
+    }
+
+    const next = transactions
+      .filter((transaction) => isMonthlyInterval(daysBetweenDates(previous.date, transaction.date)))
+      .sort((left, right) =>
+        monthlySequenceTransactionScore(seed, left) - monthlySequenceTransactionScore(seed, right)
+      )[0];
+
+    if (!next) {
+      continue;
+    }
+
+    sequence.push(next);
+    previous = next;
+  }
+
+  return sequence;
+}
+
+function isBetterMonthlySequence(candidate: Transaction[], current: Transaction[]): boolean {
+  if (candidate.length < 2) {
+    return false;
+  }
+
+  const candidateAverage = averageAbsoluteAmount(candidate);
+  const currentAverage = averageAbsoluteAmount(current);
+  const candidateMateriallyLarger =
+    candidateAverage >= currentAverage * MATERIAL_RECURRING_AMOUNT_RATIO &&
+    hasRecurringSequenceEvidence(candidate);
+  const currentMateriallyLarger =
+    currentAverage >= candidateAverage * MATERIAL_RECURRING_AMOUNT_RATIO &&
+    hasRecurringSequenceEvidence(current);
+
+  if (candidateMateriallyLarger !== currentMateriallyLarger) {
+    return candidateMateriallyLarger;
+  }
+
+  const candidateStrict = hasStrictRecurringCadence(candidate);
+  const currentStrict = hasStrictRecurringCadence(current);
+
+  if (candidateStrict !== currentStrict) {
+    return candidateStrict;
+  }
+
+  if (candidate.length !== current.length) {
+    return candidate.length > current.length;
+  }
+
+  const candidateScore = monthlySequenceStabilityScore(candidate);
+  const currentScore = monthlySequenceStabilityScore(current);
+
+  if (candidateScore !== currentScore) {
+    return candidateScore < currentScore;
+  }
+
+  return averageAbsoluteAmount(candidate) > averageAbsoluteAmount(current);
+}
+
+function isValidMonthlySequence(transactions: Transaction[]): boolean {
+  if (transactions.length < 2) {
+    return false;
+  }
+
+  return transactions
+    .slice(1)
+    .every((transaction, index) => isMonthlyInterval(daysBetweenDates(transactions[index].date, transaction.date)));
+}
+
+function monthlySequenceTransactionScore(seed: Transaction, transaction: Transaction): number {
+  const seedDay = parseDateParts(seed.date).day;
+  const transactionDay = parseDateParts(transaction.date).day;
+  const seedAmount = Math.max(1, Math.abs(seed.amountCents));
+  const amountSpreadRatio =
+    Math.abs(Math.abs(transaction.amountCents) - Math.abs(seed.amountCents)) / seedAmount;
+
+  return Math.abs(transactionDay - seedDay) * 100 + amountSpreadRatio * 100;
+}
+
+function monthlySequenceStabilityScore(transactions: Transaction[]): number {
+  const days = transactions.map((transaction) => parseDateParts(transaction.date).day);
+  const amounts = transactions.map((transaction) => Math.abs(transaction.amountCents));
+  const averageAmount = averageAbsoluteAmount(transactions);
+
+  return (
+    Math.max(...days) - Math.min(...days) +
+    (Math.max(...amounts) - Math.min(...amounts)) / averageAmount
   );
+}
 
-  if (!intervals.every(isMonthlyInterval)) {
-    return [];
-  }
+function averageAbsoluteAmount(transactions: Transaction[]): number {
+  const amounts = transactions.map((transaction) => Math.abs(transaction.amountCents));
 
-  return occurrences;
+  return Math.max(1, amounts.reduce((total, amount) => total + amount, 0) / amounts.length);
 }
 
 function dedupeRecurringItemsByMerchant(entries: RecurringActivitySourceEntry[]): RecurringActivityItem[] {
@@ -719,22 +863,109 @@ function addOneCalendarMonth(date: string): string {
   });
 }
 
-function isDefaultRecurringActivityCandidate(transaction: Transaction): boolean {
+function isRecurringExpenseCandidate(transaction: Transaction): boolean {
   const kind = classifyTransaction(transaction);
 
   if (transaction.amountCents >= 0) {
     return false;
   }
 
-  if (kind === "rent" || kind === "fee") {
-    return true;
-  }
+  return kind === "purchase" || kind === "rent" || kind === "fee";
+}
 
-  if (kind !== "purchase") {
+function hasRecurringActivityEvidence(
+  transactions: Transaction[],
+  candidate: RecurringActivityItem,
+): boolean {
+  const monthlyOccurrences = getMonthlyRecurringOccurrences(transactions);
+
+  if (monthlyOccurrences.length < 2) {
     return false;
   }
 
-  return isLikelyBillOrSubscription(transaction);
+  if (candidate.kind === "rent" || candidate.kind === "fee") {
+    return true;
+  }
+
+  if (hasMajorityRecurringTextEvidence(monthlyOccurrences)) {
+    return true;
+  }
+
+  if (
+    hasMajorityStrongRecurringCategoryEvidence(monthlyOccurrences) &&
+    getRecurringConfidence(monthlyOccurrences) !== "low"
+  ) {
+    return true;
+  }
+
+  if (monthlyOccurrences.some((transaction) => hasStrictRecurringExcludedCategory(transaction))) {
+    return false;
+  }
+
+  return hasStrictRecurringCadence(monthlyOccurrences);
+}
+
+function hasRecurringSequenceEvidence(transactions: Transaction[]): boolean {
+  return (
+    hasMajorityRecurringTextEvidence(transactions) ||
+    hasMajorityStrongRecurringCategoryEvidence(transactions)
+  );
+}
+
+function hasMajorityRecurringTextEvidence(transactions: Transaction[]): boolean {
+  return countMatching(transactions, isLikelyBillOrSubscription) > transactions.length / 2;
+}
+
+function hasMajorityStrongRecurringCategoryEvidence(transactions: Transaction[]): boolean {
+  return countMatching(transactions, hasStrongRecurringCategory) > transactions.length / 2;
+}
+
+function countMatching(
+  transactions: Transaction[],
+  predicate: (transaction: Transaction) => boolean,
+): number {
+  return transactions.filter(predicate).length;
+}
+
+function hasStrongRecurringCategory(transaction: Transaction): boolean {
+  const category = normalizeCategory(transaction.category);
+
+  if (!category) {
+    return false;
+  }
+
+  return STRONG_RECURRING_CATEGORY_PATTERNS.some((pattern) => pattern.test(category));
+}
+
+function hasStrictRecurringExcludedCategory(transaction: Transaction): boolean {
+  const category = normalizeCategory(transaction.category);
+
+  if (!category) {
+    return false;
+  }
+
+  return STRICT_RECURRING_EXCLUDED_CATEGORY_PATTERNS.some((pattern) => pattern.test(category));
+}
+
+function hasStrictRecurringCadence(transactions: Transaction[]): boolean {
+  if (transactions.length < 3) {
+    return false;
+  }
+
+  const days = transactions.map((transaction) => parseDateParts(transaction.date).day);
+  const amounts = transactions.map((transaction) => Math.abs(transaction.amountCents));
+  const daySpread = Math.max(...days) - Math.min(...days);
+  const amountSpread = Math.max(...amounts) - Math.min(...amounts);
+  const averageAmount = amounts.reduce((total, amount) => total + amount, 0) / amounts.length;
+
+  return (
+    daySpread <= STRICT_RECURRING_DAY_SPREAD_DAYS &&
+    amountSpread <= averageAmount * STRICT_RECURRING_AMOUNT_SPREAD_RATIO
+  );
+}
+
+function normalizeCategory(category: string | undefined): string {
+  return (category ?? "").trim().toLowerCase();
 }
 
 function isLikelyBillOrSubscription(transaction: Transaction): boolean {
@@ -745,8 +976,8 @@ function isLikelyBillOrSubscription(transaction: Transaction): boolean {
   ].filter(Boolean).join(" ").toLowerCase();
 
   return (
-    /\b(subscription|subscriptions|premium|membership|streaming|utility|utilities|electric|electricity|power|water|sewer|internet|broadband|mobile|phone|cellular|wireless|insurance|gym|rent|mortgage)\b/.test(haystack) ||
-    /\b(natural gas|gas bill)\b/.test(haystack)
+    /\b(subscription|subscriptions|premium|membership|memberships|streaming|utility|utilities|electric|electricity|power|water|sewer|internet|broadband|mobile|phone|cellular|wireless|insurance|gym|gyms|fitness|rent|mortgage|loan|installment)\b/.test(haystack) ||
+    /\b(natural gas|gas bill|tv and movies|credit builder)\b/.test(haystack)
   );
 }
 
