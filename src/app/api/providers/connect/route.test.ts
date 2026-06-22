@@ -96,6 +96,19 @@ describe("POST /api/providers/connect", () => {
     expect(routeMocks.getFinancialDataProvider).not.toHaveBeenCalled();
   });
 
+  it("rejects the mock provider for Supabase-backed local staging", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
+
+    const response = await POST(jsonRequest({ provider: "mock" }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Mock provider is only available in explicit fake-data mode.",
+    });
+    expect(routeMocks.getFinancialDataProvider).not.toHaveBeenCalled();
+  });
+
   it("returns 503 when Supabase is disabled", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
 

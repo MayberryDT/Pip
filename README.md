@@ -77,13 +77,33 @@ PIP_AI_MODEL=gpt-5-nano
 
 ## Data Foundation
 
-The app runs without Supabase credentials by using fake scenarios. When Supabase is configured for beta mode, authenticated routes require a signed-in user and do not fall back to fake financial data. Authenticated users without cached or synced rows get the connect-data state instead.
+Normal `/app` and authenticated APIs require Supabase credentials. They fail closed when Supabase env is missing, so local testing does not silently use fake financial data. When Supabase is configured for beta or local staging mode, authenticated routes require a signed-in user and do not fall back to fake financial data. Authenticated users without cached or synced rows get the connect-data state instead.
 
-Use this switch when you want the local prototype to ignore configured Supabase credentials and show the fake one-number flow:
+Use this explicit switch when you intentionally want the local prototype to ignore configured Supabase credentials and show the fake one-number flow:
 
 ```bash
 PIP_SUPABASE_MODE=off
 ```
+
+Use local staging mode when localhost should behave like the private beta app with Supabase-backed data and the normal answer-service path:
+
+```bash
+PIP_LOCAL_STAGING=1
+npm run check:local-staging
+npm run build:local-staging
+npm run start:local-staging
+```
+
+When using Netlify production env locally, run from the linked checkout and point the command at this worktree:
+
+```bash
+netlify dev:exec --context production -- npm --prefix /path/to/Pip run build:local-staging
+netlify dev:exec --context production -- npm --prefix /path/to/Pip run start:local-staging
+```
+
+Use `npm run dev:local-staging` when actively editing and hot reloading. Use the build/start pair for dogfood because it runs like the deployed app and avoids local file-watcher limits.
+
+In local staging mode, development onboarding shortcuts such as `/app?onboarding=demo` are ignored; use `/app` with a signed-in staging user. Put localhost-only overrides in ignored `.env.local`; the local-staging check, build, dev, and start scripts let those values replace Netlify hidden-secret placeholders. The local env must include a real Supabase service-role JWT or modern `sb_secret_...` key because `/app` uses the admin client for access-grant checks and financial data refresh paths.
 
 Supabase env:
 
@@ -93,6 +113,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 PIP_OPERATOR_TOKEN=
 PIP_RATE_LIMIT_SALT=
+PIP_LOCAL_STAGING=
 ```
 
 `PIP_RATE_LIMIT_SALT` is required in production and fake Netlify preview checks. Set a long random value in Netlify environment variables; do not commit the real salt. Public fake previews without Supabase fail closed for AI requests instead of using process-local rate-limit counters.
@@ -156,9 +177,9 @@ curl -X POST "$NEXT_PUBLIC_SITE_URL/api/operator/access-grants" \
 - `/api/events` records authenticated beta product events such as Spendable Cash Today views and prompt-chip taps.
 - `/api/agent` records server-derived beta events for agent questions, follow-ups, purchase simulations, true-balance reveals, missing-card nudges, and negative Spendable Cash Today follow-ups.
 - `/api/operator/overview` is a bearer-token-protected server route for beta operations. It summarizes stale connections, partial/failed syncs, and product-proof event counts without adding an in-app dashboard.
-- `/api/operator/agent-chats` is a bearer-token-protected review route for recent agent turns. Supabase-backed beta runs read `agent_chat_turns`; local development without Supabase reads `/tmp/pip-agent-chat-turns.jsonl`.
+- `/api/operator/agent-chats` is a bearer-token-protected review route for recent agent turns. Supabase-backed beta and local staging runs read `agent_chat_turns`; explicit fake-data mode can read `/tmp/pip-agent-chat-turns.jsonl`.
 - The authenticated home screen reads `/api/pip-cash` so the top number follows stored Supabase data after a manual sync.
-- Authenticated users without cached or synced financial rows get a connect-data state; fake `$43` prototype data is only used for unauthenticated or Supabase-disabled prototype flows.
+- Authenticated users without cached or synced financial rows get a connect-data state; fake prototype data is only used when `PIP_SUPABASE_MODE=off` is explicit.
 - `/api/missing-card-preferences` suppresses repeated missing-card nudges for an issuer the user intentionally omits.
 - `/privacy`, `/terms`, and `/support` provide the minimum private-beta legal and support affordances.
 
@@ -255,6 +276,6 @@ The Plaid automation defaults to the official Sandbox credentials `user_good` / 
 
 For the shortest final proof path, run `npm run prove:prd`. It opens the auth capture browser, then runs live-smoke preflight, `npm run test:e2e:live:final`, and `npm run check:prd-complete` in order. If `/tmp/pip-live-auth.json` already exists, use `npm run prove:prd -- --skip-capture`.
 
-`npm run check:deployment` validates the required non-public and public environment variable names for a real beta deploy without printing secret values. Use `npm run check:deployment -- --mode=fake` only for fake-data preview deploys, and still set `PIP_RATE_LIMIT_SALT` for those previews.
+`npm run check:deployment` validates the required non-public and public environment variable names for a real beta deploy without printing secret values. `npm run check:local-staging` validates the localhost private-beta shape: Supabase-backed data, a real local Supabase service-role or secret key, model config, local origins, and no `PIP_SUPABASE_MODE=off`. Use `npm run check:deployment -- --mode=fake` only for fake-data preview deploys, and still set `PIP_RATE_LIMIT_SALT` for those previews.
 
 `supabase/rls_smoke_test.sql` is a rollback-only live database smoke test for private-beta RLS. Run it after migrations are applied to verify that an authenticated user can see one own row per financial table, cannot see another user's rows, and cannot update or delete another user's financial data.

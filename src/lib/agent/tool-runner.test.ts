@@ -114,6 +114,26 @@ describe("agent tool runner", () => {
     expect(() => runAgentTool("simulate_purchase", {}, fakeSnapshot)).toThrow();
   });
 
+  it("uses unified Monthly Savings amounts in math and insight cards", () => {
+    const snapshot = snapshotWithMonthlySavingsGoal();
+    const mathCard = runAgentTool("show_math", {}, snapshot).cards[0];
+    const insightCard = runAgentTool("compose_insight_card", { topic: "payday_impact" }, snapshot).cards[0];
+
+    expect(mathCard).toMatchObject({
+      type: "math_breakdown",
+      protectedSavingsMonthlyCents: 35000,
+    });
+    expect(insightCard).toMatchObject({
+      type: "insight_card",
+      rows: expect.arrayContaining([
+        expect.objectContaining({
+          id: "savings",
+          amountCents: -35000,
+        }),
+      ]),
+    });
+  });
+
   it("limits recent transactions to the current rolling window and requested count", () => {
     const response = runAgentTool("show_recent_transactions", { limit: 2 }, fakeSnapshot);
     const card = response.cards[0];
@@ -287,3 +307,29 @@ const providerCategorySnapshot: FinancialSnapshot = {
     },
   ],
 };
+
+function snapshotWithMonthlySavingsGoal(): FinancialSnapshot {
+  return {
+    ...fakeSnapshot,
+    settings: {
+      ...fakeSnapshot.settings,
+      protectedSavingsMonthlyCents: 30000,
+    },
+    savingsGoals: [
+      {
+        id: "goal-1",
+        userId: "user-1",
+        name: "Trip",
+        targetAmountCents: 500000,
+        targetDate: "2027-06-18",
+        startingAmountCents: 0,
+        currentAmountCents: 100000,
+        monthlyContributionCents: 35000,
+        includeInSpendableCash: true,
+        status: "active",
+        createdAt: "2026-06-18T00:00:00.000Z",
+        updatedAt: "2026-06-18T00:00:00.000Z",
+      },
+    ],
+  };
+}

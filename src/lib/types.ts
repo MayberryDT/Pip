@@ -211,9 +211,12 @@ export type SpendableCashTodayResult = {
   averageMonthlyIncomeCents: number;
   averageMonthlyRecurringObligationsCents: number;
   averageMonthlyEverydaySpendCents: number;
+  monthlySavingsPolicyVersion?: "unified_monthly_savings_v1";
   monthlySavingsCents?: number;
   savingsGoalMonthlyCents?: number;
   totalSavingsProtectedMonthlyCents?: number;
+  goalMonthlySavingsCoveredCents?: number;
+  goalMonthlySavingsAboveUserCents?: number;
   protectedSavingsMonthlyCents: number;
   hiddenCushionCents: number;
   allowedSoFarThisMonthCents: number;
@@ -243,9 +246,12 @@ export type PipCashResult = {
   incomeTotalCents: number;
   spendingTotalCents: number;
   refundTotalCents: number;
+  monthlySavingsPolicyVersion?: "unified_monthly_savings_v1";
   monthlySavingsCents?: number;
   savingsGoalMonthlyCents?: number;
   totalSavingsProtectedMonthlyCents?: number;
+  goalMonthlySavingsCoveredCents?: number;
+  goalMonthlySavingsAboveUserCents?: number;
   protectedSavingsMonthlyCents: number;
   window: RollingWindow;
   drivers: PipCashDriver[];

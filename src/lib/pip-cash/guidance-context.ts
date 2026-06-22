@@ -57,6 +57,7 @@ export type FinancialGuidanceContext = {
     averageMonthlyIncomeCents: number;
     averageMonthlyRecurringObligationsCents: number;
     averageMonthlyEverydaySpendCents: number;
+    monthlySavingsCents: number;
     protectedSavingsMonthlyCents: number;
     hiddenCushionCents: number;
     completedMonthCount: number;
@@ -134,6 +135,8 @@ export function buildFinancialGuidanceContext(result: PipCashResult): FinancialG
   const materialDailyChangeCents = getMaterialDailyChangeCents(metric.baselineDailyAllowanceCents);
   const warnings = metric.warnings.length > 0 ? metric.warnings : result.warnings;
   const dataStates = metric.dataStates.length > 0 ? metric.dataStates : result.dataStates;
+  const monthlySavingsCents = metric.monthlySavingsCents ?? metric.protectedSavingsMonthlyCents;
+  const savingsGoalMonthlyCents = metric.savingsGoalMonthlyCents ?? 0;
   const hasMissingCardWarning = warnings.some((warning) => warning.id === "missing-card");
   const cashGuardrailApplied = metric.cashRealityAdjustmentCents >= materialDailyChangeCents;
   const cashGuardrailShareOfBaseline =
@@ -216,8 +219,10 @@ export function buildFinancialGuidanceContext(result: PipCashResult): FinancialG
   evidence.add({
     id: "protected-savings",
     label: "Monthly savings",
-    amountCents: -metric.protectedSavingsMonthlyCents,
-    detail: "Your chosen monthly savings are kept out of today's number.",
+    amountCents: -monthlySavingsCents,
+    detail: savingsGoalMonthlyCents > 0
+      ? "Monthly Savings includes active savings goals."
+      : "Your chosen monthly savings are kept out of today's number.",
     tone: "neutral",
     source: "user_settings",
   });
@@ -410,6 +415,7 @@ export function buildFinancialGuidanceContext(result: PipCashResult): FinancialG
       averageMonthlyIncomeCents: metric.averageMonthlyIncomeCents,
       averageMonthlyRecurringObligationsCents: metric.averageMonthlyRecurringObligationsCents,
       averageMonthlyEverydaySpendCents: metric.averageMonthlyEverydaySpendCents,
+      monthlySavingsCents,
       protectedSavingsMonthlyCents: metric.protectedSavingsMonthlyCents,
       hiddenCushionCents: metric.hiddenCushionCents,
       completedMonthCount: metric.completedMonthCount,
@@ -456,6 +462,7 @@ function buildLegacyFallbackContext(result: PipCashResult): FinancialGuidanceCon
   const spendableCashTodayCents = Math.max(0, result.pipCashTodayCents);
   const shortfallCents = Math.max(0, -result.pipCashTodayCents);
   const state: SpendableCashTodayState = shortfallCents > 0 ? "shortfall" : "low_confidence";
+  const monthlySavingsCents = result.monthlySavingsCents ?? result.protectedSavingsMonthlyCents;
   const evidence = createEvidenceCollector();
 
   evidence.add({
@@ -525,6 +532,7 @@ function buildLegacyFallbackContext(result: PipCashResult): FinancialGuidanceCon
       averageMonthlyIncomeCents: result.incomeTotalCents,
       averageMonthlyRecurringObligationsCents: 0,
       averageMonthlyEverydaySpendCents: result.spendingTotalCents,
+      monthlySavingsCents,
       protectedSavingsMonthlyCents: result.protectedSavingsMonthlyCents,
       hiddenCushionCents: 0,
       completedMonthCount: 0,

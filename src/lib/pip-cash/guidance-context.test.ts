@@ -3,6 +3,7 @@ import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { buildFinancialGuidanceContext } from "@/lib/pip-cash/guidance-context";
 import {
   cashGuardrailPipSnapshot,
+  fakeSnapshot,
   healthyPipSnapshot,
   lowConfidencePipSnapshot,
   missingCardPipSnapshot,
@@ -70,5 +71,39 @@ describe("financial guidance context", () => {
       ]),
     );
     expect(JSON.stringify(context.possibleMoves)).not.toContain("Tell the user");
+  });
+
+  it("uses the unified Monthly Savings amount in pattern evidence", () => {
+    const result = calculatePipCash({
+      ...fakeSnapshot,
+      settings: {
+        ...fakeSnapshot.settings,
+        protectedSavingsMonthlyCents: 30000,
+      },
+      savingsGoals: [
+        {
+          id: "goal-1",
+          userId: "user-1",
+          name: "Trip",
+          targetAmountCents: 500000,
+          targetDate: "2027-06-18",
+          startingAmountCents: 0,
+          currentAmountCents: 100000,
+          monthlyContributionCents: 35000,
+          includeInSpendableCash: true,
+          status: "active",
+          createdAt: "2026-06-18T00:00:00.000Z",
+          updatedAt: "2026-06-18T00:00:00.000Z",
+        },
+      ],
+    });
+    const context = buildFinancialGuidanceContext(result);
+
+    expect(context.pattern.protectedSavingsMonthlyCents).toBe(30000);
+    expect(context.pattern.monthlySavingsCents).toBe(35000);
+    expect(context.evidence.find((evidence) => evidence.id === "protected-savings")).toMatchObject({
+      amountCents: -35000,
+      detail: "Monthly Savings includes active savings goals.",
+    });
   });
 });

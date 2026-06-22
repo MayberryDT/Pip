@@ -12,7 +12,7 @@ import { loadSyncStatusForUser } from "@/lib/data/sync-status";
 import { recordProductEventSafely } from "@/lib/data/product-events";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/supabase/env";
+import { isFakeDataMode, isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
 
 export class NoFinancialDataError extends Error {
   constructor(message = "Connect financial data before using live Spendable Cash Today.") {
@@ -45,7 +45,7 @@ export async function getCurrentFinancialSnapshot(input: {
   scenario?: FakeDataScenario;
 }): Promise<FinancialSnapshot> {
   if (!isSupabaseConfigured()) {
-    return getFakeSnapshot(input.scenario);
+    return getFakeSnapshotForExplicitFakeMode(input.scenario);
   }
 
   const supabase = await createSupabaseServerClient();
@@ -71,7 +71,7 @@ export async function getCurrentPipCashResult(input: {
   scenario?: FakeDataScenario;
 }): Promise<PipCashResult> {
   if (!isSupabaseConfigured()) {
-    return calculatePipCash(getFakeSnapshot(input.scenario));
+    return calculatePipCash(getFakeSnapshotForExplicitFakeMode(input.scenario));
   }
 
   const supabase = await createSupabaseServerClient();
@@ -92,7 +92,7 @@ export async function getCurrentPipCashState(input: {
   recordFreshnessViewed?: boolean;
 }): Promise<PipCashApiState> {
   if (!isSupabaseConfigured()) {
-    return calculatePipCash(getFakeSnapshot(input.scenario));
+    return calculatePipCash(getFakeSnapshotForExplicitFakeMode(input.scenario));
   }
 
   const supabase = await createSupabaseServerClient();
@@ -141,6 +141,16 @@ export async function getCurrentPipCashState(input: {
     freshness,
     ...(reaction ? { reaction } : {}),
   };
+}
+
+function getFakeSnapshotForExplicitFakeMode(scenario?: FakeDataScenario): FinancialSnapshot {
+  if (isFakeDataMode()) {
+    return getFakeSnapshot(scenario);
+  }
+
+  throw new SupabaseConfigError(
+    "Set Supabase env or PIP_SUPABASE_MODE=off before using fake Pip Cash data.",
+  );
 }
 
 async function loadCurrentPipCashResultForUser(

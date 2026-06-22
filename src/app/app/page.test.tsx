@@ -74,6 +74,21 @@ describe("/app page data loading", () => {
     expect(pageMocks.getCurrentPipCashState).not.toHaveBeenCalled();
   });
 
+  it("ignores dev onboarding shortcuts during local staging verification", async () => {
+    vi.stubEnv("PIP_LOCAL_STAGING", "1");
+    pageMocks.isSupabaseConfigured.mockReturnValue(false);
+
+    const page = await AppPage({
+      searchParams: Promise.resolve({ onboarding: "demo" }),
+    });
+    const markup = renderToStaticMarkup(page);
+
+    expect(markup).toContain("Pip access is temporarily unavailable");
+    expect(markup).not.toContain("Spendable Cash Today");
+    expect(pageMocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(pageMocks.getCurrentPipCashState).not.toHaveBeenCalled();
+  });
+
   it("shows the OAuth waitlist gate instead of Pip chat for signed-out visitors", async () => {
     const supabase = createSupabaseClient(null);
     pageMocks.isSupabaseConfigured.mockReturnValue(true);

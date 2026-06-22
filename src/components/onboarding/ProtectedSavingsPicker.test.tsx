@@ -10,6 +10,7 @@ describe("ProtectedSavingsPicker", () => {
     const markup = renderToStaticMarkup(<ProtectedSavingsPicker onSave={async () => undefined} />);
 
     expect(markup).toContain("Monthly savings");
+    expect(markup).toContain("Savings Goals use this same monthly amount instead of adding a second holdback.");
     expect(markup).toContain("$100");
     expect(markup).toContain("$200");
     expect(markup).toContain("Recommended");
@@ -17,7 +18,7 @@ describe("ProtectedSavingsPicker", () => {
     expect(markup).toContain("$500");
     expect(markup).toContain("Custom amount");
     expect(markup).toContain("Save $200/month");
-    expect(markup).toContain("You can change this later.");
+    expect(markup).toContain("A goal can raise this amount if it needs more.");
     expect(markup).toContain("Pip does not move money.");
   });
 

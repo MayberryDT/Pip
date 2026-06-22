@@ -1428,6 +1428,41 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("rejects retired savings protection pending actions at the response boundary", () => {
+    const baseResponse = {
+      message: "Draft.",
+      cards: [],
+      promptChips: [],
+      usedTools: [],
+      responseMode: "chat_only",
+      audit: {
+        toolNames: [],
+        usedModel: true,
+      },
+    };
+
+    expect(() =>
+      agentResponseSchema.parse({
+        ...baseResponse,
+        pendingAction: {
+          type: "set_savings_goal_protection",
+          includeInSpendableCash: true,
+        },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      agentResponseSchema.parse({
+        ...baseResponse,
+        pendingAction: {
+          type: "preview_savings_goal",
+          name: "Trip",
+          missing: ["protection_choice"],
+        },
+      }),
+    ).toThrow();
+  });
+
   it("drops oversized optional guidance drafts at the final output boundary", () => {
     const parsed = agentFinalOutputSchema.parse({
         message: "My read: the rows need trimming.",
@@ -1846,26 +1881,6 @@ describe("runAIAgent", () => {
       code: "invalid-agent-output",
       error: "AI returned an invalid response.",
       status: 502,
-    });
-  });
-
-  it("has deterministic broad-chat fallbacks for service-failure recovery", () => {
-    expect(
-      __agentTestHooks.createBroadChatFallbackFinalOutput({
-        message: "How do I lower my spending without feeling miserable?",
-      }),
-    ).toMatchObject({
-      message: "Start with one small spending rule: choose one category, set a weekly cap, and keep one low-cost thing you still enjoy.",
-      responseMode: "chat_only",
-    });
-
-    expect(
-      __agentTestHooks.createBroadChatFallbackFinalOutput({
-        message: "Should I buy Bitcoin?",
-      }),
-    ).toMatchObject({
-      message: "I can’t pick crypto, but I can help test how a purchase amount would affect today.",
-      responseMode: "chat_only",
     });
   });
 

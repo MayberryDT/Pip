@@ -274,6 +274,48 @@ describe("calculatePipCash", () => {
     expect(result.rollingNetCents).toBe(60000);
   });
 
+  it("uses one unified monthly savings amount in the legacy rolling net", () => {
+    const base = calculatePipCash({
+      ...fakeSnapshot,
+      settings: {
+        ...fakeSnapshot.settings,
+        protectedSavingsMonthlyCents: 30000,
+      },
+      savingsGoals: [],
+    });
+    const withCoveredGoal = calculatePipCash({
+      ...fakeSnapshot,
+      settings: {
+        ...fakeSnapshot.settings,
+        protectedSavingsMonthlyCents: 30000,
+      },
+      savingsGoals: [
+        {
+          id: "goal-1",
+          userId: "user-1",
+          name: "Laptop",
+          targetAmountCents: 200000,
+          targetDate: "2026-12-20",
+          startingAmountCents: 0,
+          currentAmountCents: 0,
+          monthlyContributionCents: 28600,
+          includeInSpendableCash: false,
+          status: "active",
+          createdAt: "2026-06-20T00:00:00.000Z",
+          updatedAt: "2026-06-20T00:00:00.000Z",
+        },
+      ],
+    });
+
+    expect(withCoveredGoal.savingsGoalMonthlyCents).toBe(28600);
+    expect(withCoveredGoal.monthlySavingsCents).toBe(30000);
+    expect(withCoveredGoal.totalSavingsProtectedMonthlyCents).toBe(30000);
+    expect(withCoveredGoal.goalMonthlySavingsAboveUserCents).toBe(0);
+    expect(withCoveredGoal.monthlySavingsPolicyVersion).toBe("unified_monthly_savings_v1");
+    expect(withCoveredGoal.rollingNetCents).toBe(base.rollingNetCents);
+    expect(withCoveredGoal.drivers.map((driver) => driver.id)).not.toContain("savings-goals");
+  });
+
   it("can return positive, zero, and negative Pip Cash values", () => {
     const baseSnapshot: FinancialSnapshot = {
       settings: {

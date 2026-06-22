@@ -363,6 +363,15 @@ async function createRouteAgentContext(input: {
         return createReadyWithoutDataContext(null, null);
       }
 
+      if (error instanceof SupabaseConfigError) {
+        throw new AgentUnavailableError({
+          code: "supabase-config-missing",
+          message: error.message,
+          status: 503,
+          cause: error,
+        });
+      }
+
       throw error;
     }
   }
@@ -953,18 +962,6 @@ function createAgentActions(input: {
         includeInSpendableCash: goal.includeInSpendableCash,
       });
 
-      if (goal.includeInSpendableCash) {
-        await recordProductEventSafely(
-          supabase,
-          userId,
-          "savings_goal_spendable_protection_enabled",
-          {
-            goalId: goal.id,
-            monthlyContributionCents: goal.monthlyContributionCents,
-          },
-        );
-      }
-
       return {
         ok: true,
         status: "savings_goal_created",
@@ -1102,23 +1099,15 @@ function createAgentActions(input: {
         await markPipCashSnapshotsStaleForUser(supabase, userId, getWriteSupabase());
       }
 
-      await recordProductEventSafely(
-        supabase,
-        userId,
-        includeInSpendableCash
-          ? "savings_goal_spendable_protection_enabled"
-          : "savings_goal_spendable_protection_disabled",
-        {
-          goalId: goal.id,
-          monthlyContributionCents: goal.monthlyContributionCents,
-        },
-      );
+      await recordProductEventSafely(supabase, userId, "savings_goal_updated", {
+        goalId: goal.id,
+        includeInSpendableCash: goal.includeInSpendableCash,
+        monthlyContributionCents: goal.monthlyContributionCents,
+      });
 
       return {
         ok: true,
-        status: includeInSpendableCash
-          ? "savings_goal_protection_enabled"
-          : "savings_goal_protection_disabled",
+        status: "savings_goal_updated",
         cards: [buildSavingsGoalPlanCard(toSavingsGoalPlanResponse(goal))],
         ...(shouldStale
           ? {

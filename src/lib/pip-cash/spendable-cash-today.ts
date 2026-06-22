@@ -5,6 +5,7 @@ import {
   isDedupedCreditCardPayment,
 } from "@/lib/pip-cash/dedupe-credit-card-payments";
 import { toPipCashSnapshot } from "@/lib/pip-cash/account-filters";
+import { resolveUnifiedMonthlySavings } from "@/lib/pip-cash/monthly-savings";
 import { buildRecurringObligations } from "@/lib/pip-cash/recurring-obligations";
 import { buildSameDayLedger } from "@/lib/pip-cash/same-day-ledger";
 import { getActiveSavingsGoalMonthlyCents } from "@/lib/savings-goals/plan";
@@ -122,12 +123,18 @@ export function calculateSpendableCashToday(
     ),
   );
   const protectedSavingsMonthlyCents = snapshot.settings.protectedSavingsMonthlyCents;
-  const monthlySavingsCents = protectedSavingsMonthlyCents;
   const savingsGoalMonthlyCents = getActiveSavingsGoalMonthlyCents(
     snapshot.savingsGoals,
     asOfDate,
   );
-  const totalSavingsProtectedMonthlyCents = monthlySavingsCents + savingsGoalMonthlyCents;
+  const monthlySavings = resolveUnifiedMonthlySavings({
+    userMonthlySavingsCents: protectedSavingsMonthlyCents,
+    savingsGoalMonthlyCents,
+  });
+  const monthlySavingsCents = monthlySavings.totalMonthlySavingsCents;
+  const totalSavingsProtectedMonthlyCents = monthlySavings.totalMonthlySavingsCents;
+  const goalMonthlySavingsCoveredCents = monthlySavings.goalAmountCoveredByUserMonthlySavingsCents;
+  const goalMonthlySavingsAboveUserCents = monthlySavings.goalAmountAboveUserMonthlySavingsCents;
   const hiddenCushionCents = calculateHiddenCushion(averageMonthlyIncomeCents);
   const monthlyEverydayPoolCents =
     averageMonthlyIncomeCents -
@@ -260,9 +267,12 @@ export function calculateSpendableCashToday(
     averageMonthlyIncomeCents,
     averageMonthlyRecurringObligationsCents,
     averageMonthlyEverydaySpendCents,
+    monthlySavingsPolicyVersion: monthlySavings.monthlySavingsPolicyVersion,
     monthlySavingsCents,
     savingsGoalMonthlyCents,
     totalSavingsProtectedMonthlyCents,
+    goalMonthlySavingsCoveredCents,
+    goalMonthlySavingsAboveUserCents,
     protectedSavingsMonthlyCents,
     hiddenCushionCents,
     allowedSoFarThisMonthCents,
@@ -284,8 +294,9 @@ export function calculateSpendableCashToday(
       behaviorAdjustmentCents,
       materialDailyChangeCents,
       averageMonthlyRecurringObligationsCents,
-      protectedSavingsMonthlyCents,
+      monthlySavingsCents,
       savingsGoalMonthlyCents,
+      goalMonthlySavingsAboveUserCents,
       hiddenCushionCents,
       cashRealityAdjustmentCents,
       confidence,
@@ -753,8 +764,9 @@ function buildSpendableDrivers(input: {
   behaviorAdjustmentCents: number;
   materialDailyChangeCents: number;
   averageMonthlyRecurringObligationsCents: number;
-  protectedSavingsMonthlyCents: number;
+  monthlySavingsCents: number;
   savingsGoalMonthlyCents: number;
+  goalMonthlySavingsAboveUserCents: number;
   hiddenCushionCents: number;
   cashRealityAdjustmentCents: number;
   confidence: SpendableCashConfidence;
@@ -795,19 +807,14 @@ function buildSpendableDrivers(input: {
     {
       id: "protected-savings",
       label: "Monthly savings",
-      detail: "Your chosen monthly savings are kept out of today's number.",
-      amountCents: -input.protectedSavingsMonthlyCents,
+      detail: input.goalMonthlySavingsAboveUserCents > 0
+        ? "Active savings goals raise the monthly savings amount held out of today's number."
+        : input.savingsGoalMonthlyCents > 0
+          ? "Active savings goals fit inside your monthly savings amount."
+          : "Your chosen monthly savings are kept out of today's number.",
+      amountCents: -input.monthlySavingsCents,
       tone: "neutral",
     },
-    ...(input.savingsGoalMonthlyCents > 0
-      ? [{
-          id: "savings-goals",
-          label: "Savings goals",
-          detail: "Active savings goals are folded into today's number.",
-          amountCents: -input.savingsGoalMonthlyCents,
-          tone: "neutral" as const,
-        }]
-      : []),
     {
       id: "hidden-cushion",
       label: "Safety reserve",

@@ -49,7 +49,7 @@ describe("buildSpendableTrustReceipt", () => {
     expect(formatTrustReceiptInline(receipt)).toMatch(/known limit|no active warning/);
   });
 
-  it("shows protected savings goals separately from base monthly savings", () => {
+  it("keeps savings goals inside the Monthly Savings receipt row", () => {
     const result = calculatePipCash({
       ...fakeSnapshot,
       savingsGoals: [
@@ -71,12 +71,12 @@ describe("buildSpendableTrustReceipt", () => {
     });
     const receipt = buildSpendableTrustReceipt({ result });
 
+    expect(receipt.rows.map((row) => row.id)).toContain("monthly-savings");
+    expect(receipt.rows.map((row) => row.id)).not.toContain("savings-goals");
     expect(receipt.rows.find((row) => row.id === "monthly-savings")).toMatchObject({
       label: "Monthly savings",
-    });
-    expect(receipt.rows.find((row) => row.id === "savings-goals")).toMatchObject({
-      label: "Savings goals",
       value: "-$350",
+      detail: "Monthly Savings includes your chosen savings amount and any active savings-goal need.",
     });
   });
 

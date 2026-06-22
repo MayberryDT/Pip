@@ -6,22 +6,36 @@ import {
   getCurrentPipCashResult,
   NoFinancialDataError,
 } from "@/lib/data/current-snapshot";
+import { SupabaseConfigError } from "@/lib/supabase/env";
 import { calculatePipCash } from "@/lib/pip-cash/engine";
 import { fakeSnapshot } from "@/lib/fake-data";
 
-const mocks = vi.hoisted(() => ({
-  isSupabaseConfigured: vi.fn(),
-  createSupabaseServerClient: vi.fn(),
-  loadCachedPipCashResultForUser: vi.fn(),
-  loadFinancialSnapshotForUser: vi.fn(),
-  loadLatestUnseenPipReactionForUser: vi.fn(),
-  loadPendingPipSyncJobsForUser: vi.fn(),
-  loadSyncStatusForUser: vi.fn(),
-  recordProductEventSafely: vi.fn(),
-}));
+const mocks = vi.hoisted(() => {
+  class MockSupabaseConfigError extends Error {
+    constructor(message = "Supabase is not configured.") {
+      super(message);
+      this.name = "SupabaseConfigError";
+    }
+  }
+
+  return {
+    isSupabaseConfigured: vi.fn(),
+    isFakeDataMode: vi.fn(),
+    SupabaseConfigError: MockSupabaseConfigError,
+    createSupabaseServerClient: vi.fn(),
+    loadCachedPipCashResultForUser: vi.fn(),
+    loadFinancialSnapshotForUser: vi.fn(),
+    loadLatestUnseenPipReactionForUser: vi.fn(),
+    loadPendingPipSyncJobsForUser: vi.fn(),
+    loadSyncStatusForUser: vi.fn(),
+    recordProductEventSafely: vi.fn(),
+  };
+});
 
 vi.mock("@/lib/supabase/env", () => ({
   isSupabaseConfigured: mocks.isSupabaseConfigured,
+  isFakeDataMode: mocks.isFakeDataMode,
+  SupabaseConfigError: mocks.SupabaseConfigError,
 }));
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -54,12 +68,25 @@ afterEach(() => {
 });
 
 describe("getCurrentPipCashResult", () => {
-  it("uses fake data when Supabase is disabled", async () => {
+  it("uses fake data only when fake-data mode is explicit", async () => {
     mocks.isSupabaseConfigured.mockReturnValue(false);
+    mocks.isFakeDataMode.mockReturnValue(true);
 
     await expect(getCurrentPipCashResult({})).resolves.toMatchObject({
       pipCashTodayCents: 4300,
     });
+    expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(mocks.loadCachedPipCashResultForUser).not.toHaveBeenCalled();
+    expect(mocks.loadFinancialSnapshotForUser).not.toHaveBeenCalled();
+  });
+
+  it("fails closed instead of returning fake data when Supabase env is missing", async () => {
+    mocks.isSupabaseConfigured.mockReturnValue(false);
+    mocks.isFakeDataMode.mockReturnValue(false);
+
+    await expect(getCurrentPipCashResult({ scenario: "negative" })).rejects.toBeInstanceOf(
+      SupabaseConfigError,
+    );
     expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
     expect(mocks.loadCachedPipCashResultForUser).not.toHaveBeenCalled();
     expect(mocks.loadFinancialSnapshotForUser).not.toHaveBeenCalled();
@@ -107,6 +134,22 @@ describe("getCurrentPipCashResult", () => {
     await expect(getCurrentPipCashResult({})).resolves.toMatchObject({
       pipCashTodayCents: 4300,
     });
+    expect(mocks.loadFinancialSnapshotForUser).toHaveBeenCalledWith(supabase, "user-1");
+  });
+
+  it("recomputes when the repository rejects an old-policy cached result", async () => {
+    const supabase = createSupabaseClient({ id: "user-1" });
+
+    mocks.isSupabaseConfigured.mockReturnValue(true);
+    mocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    mocks.loadCachedPipCashResultForUser.mockResolvedValue(null);
+    mocks.loadFinancialSnapshotForUser.mockResolvedValue(fakeSnapshot);
+
+    await expect(getCurrentPipCashResult({})).resolves.toMatchObject({
+      monthlySavingsPolicyVersion: "unified_monthly_savings_v1",
+      pipCashTodayCents: 4300,
+    });
+    expect(mocks.loadCachedPipCashResultForUser).toHaveBeenCalledWith(supabase, "user-1");
     expect(mocks.loadFinancialSnapshotForUser).toHaveBeenCalledWith(supabase, "user-1");
   });
 
@@ -209,6 +252,30 @@ describe("getCurrentPipCashState", () => {
 });
 
 describe("getCurrentFinancialSnapshot", () => {
+  it("uses fake transactions only when fake-data mode is explicit", async () => {
+    mocks.isSupabaseConfigured.mockReturnValue(false);
+    mocks.isFakeDataMode.mockReturnValue(true);
+
+    await expect(getCurrentFinancialSnapshot({ scenario: "negative" })).resolves.toMatchObject({
+      settings: expect.objectContaining({
+        asOfDate: expect.any(String),
+      }),
+    });
+    expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(mocks.loadFinancialSnapshotForUser).not.toHaveBeenCalled();
+  });
+
+  it("fails closed instead of returning fake transactions when Supabase env is missing", async () => {
+    mocks.isSupabaseConfigured.mockReturnValue(false);
+    mocks.isFakeDataMode.mockReturnValue(false);
+
+    await expect(getCurrentFinancialSnapshot({ scenario: "negative" })).rejects.toBeInstanceOf(
+      SupabaseConfigError,
+    );
+    expect(mocks.createSupabaseServerClient).not.toHaveBeenCalled();
+    expect(mocks.loadFinancialSnapshotForUser).not.toHaveBeenCalled();
+  });
+
   it("requires authentication instead of returning fake transactions when Supabase is configured", async () => {
     const supabase = createSupabaseClient(null);
 

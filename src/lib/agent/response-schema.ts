@@ -345,6 +345,8 @@ export const cardSchema = z.discriminatedUnion("type", [
     targetDate: z.string().optional(),
     monthlyContributionCents: z.number().int(),
     includeInSpendableCash: z.boolean(),
+    monthlySavingsAfterGoalCents: z.number().int(),
+    monthlySavingsIncreaseCents: z.number().int(),
     currentSpendableCashTodayCents: z.number().int(),
     spendableCashTodayAfterGoalCents: z.number().int(),
     currentBaselineDailyAllowanceCents: z.number().int(),
@@ -420,7 +422,6 @@ const savingsGoalPendingFieldSchema = z.enum([
   "target_date",
   "target_date_or_monthly_contribution",
   "monthly_contribution",
-  "protection_choice",
   "confirmation",
 ]);
 export const pendingActionSchema = z.discriminatedUnion("type", [
@@ -445,14 +446,6 @@ export const pendingActionSchema = z.discriminatedUnion("type", [
     monthlyContributionCents: z.number().int().min(0).max(100_000_000).optional(),
     includeInSpendableCash: z.boolean().optional(),
     missing: z.array(savingsGoalPendingFieldSchema).optional(),
-  }),
-  z.object({
-    type: z.literal("set_savings_goal_protection"),
-    goalId: z.string().min(1).max(120).optional(),
-    name: z.string().trim().min(1).max(80).optional(),
-    includeInSpendableCash: z.boolean(),
-    monthlyContributionCents: z.number().int().min(0).max(100_000_000).optional(),
-    missing: z.array(z.enum(["goal", "confirmation"])).optional(),
   }),
   z.object({
     type: z.literal("ordinary_write"),

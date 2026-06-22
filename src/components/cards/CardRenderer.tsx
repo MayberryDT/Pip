@@ -348,9 +348,7 @@ export function CardRenderer({
             />
           </div>
           <p className="pip-wrap-anywhere mt-3 text-xs leading-5 text-ink/[0.56]">
-            {card.includeInSpendableCash
-              ? "Tracked in Pip only. This Monthly Savings amount is kept out of Spendable Cash Today. Pip does not move money."
-              : "Tracked in Pip only. Not held out of today's number. Pip does not move money."}
+            Tracked in Pip only. Savings goals live inside Monthly Savings. Pip does not move money.
           </p>
         </CardShell>
       );
@@ -400,9 +398,7 @@ export function CardRenderer({
                 <p className="pip-wrap-anywhere mt-1 text-xs leading-5 text-ink/[0.56]">
                   {formatMoney(goal.currentAmountCents)} of {formatMoney(goal.targetAmountCents)} tracked.
                   {" "}
-                  {goal.includeInSpendableCash
-                    ? `${formatMoney(goal.monthlyContributionCents)}/month in Monthly Savings kept out. Pip does not move money.`
-                    : "Monthly Savings tracked in Pip only. Pip does not move money."}
+                  {formatMoney(goal.monthlyContributionCents)}/month in Monthly Savings. Pip does not move money.
                 </p>
               </div>
             ))}

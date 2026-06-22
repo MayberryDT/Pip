@@ -48,16 +48,34 @@ describe("savings goal plan", () => {
     expect(plan.goal.status).toBe("completed");
   });
 
-  it("warns when a protected goal has no monthly contribution", () => {
+  it("does not charge a monthly contribution for active goals already funded by progress", () => {
+    expect(
+      resolveSavingsGoalMonthlyContribution(
+        goal({
+          targetAmountCents: 120000,
+          currentAmountCents: 125000,
+          monthlyContributionCents: 40000,
+        }),
+        "2026-06-18",
+      ),
+    ).toMatchObject({
+      monthlyContributionCents: 0,
+      needsPlan: false,
+    });
+  });
+
+  it("warns when an active goal has no monthly contribution or target-derived plan", () => {
     const plan = buildSavingsGoalPlan(
       goal({
-        includeInSpendableCash: true,
+        targetDate: undefined,
         monthlyContributionCents: 0,
       }),
       "2026-06-18",
     );
 
-    expect(plan.warning).toContain("does not have a monthly contribution");
+    expect(plan.warning).toBe(
+      "Add a monthly savings amount or target date to see how this goal affects Spendable Cash Today.",
+    );
   });
 
   it("sums every active monthly goal contribution", () => {

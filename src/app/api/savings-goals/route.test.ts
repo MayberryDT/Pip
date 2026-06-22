@@ -120,7 +120,7 @@ describe("/api/savings-goals", () => {
     expect(routeMocks.markPipCashSnapshotsStaleForUser).toHaveBeenCalledWith(supabase, "user-1", admin);
   });
 
-  it("creates a protected goal, marks snapshots stale, and records events", async () => {
+  it("creates a goal, marks snapshots stale, and records the ordinary goal event", async () => {
     enableSupabaseEnv();
     routeMocks.isSavingsGoalsEnabled.mockReturnValue(true);
     const supabase = createSupabaseClient({ id: "user-1" });
@@ -148,14 +148,15 @@ describe("/api/savings-goals", () => {
       "user-1",
       "savings_goal_created",
       expect.objectContaining({
-        includeInSpendableCash: true,
+        goalId: "goal-1",
+        monthlyContributionCents: 40000,
       }),
     );
-    expect(routeMocks.recordProductEventSafely).toHaveBeenCalledWith(
+    expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalledWith(
       supabase,
       "user-1",
       "savings_goal_spendable_protection_enabled",
-      expect.any(Object),
+      expect.anything(),
     );
   });
 

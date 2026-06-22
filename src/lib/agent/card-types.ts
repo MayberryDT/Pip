@@ -51,7 +51,6 @@ export type SavingsGoalPendingField =
   | "target_date"
   | "target_date_or_monthly_contribution"
   | "monthly_contribution"
-  | "protection_choice"
   | "confirmation";
 
 export type AgentPendingAction =
@@ -76,14 +75,6 @@ export type AgentPendingAction =
       monthlyContributionCents?: number;
       includeInSpendableCash?: boolean;
       missing?: SavingsGoalPendingField[];
-    }
-  | {
-      type: "set_savings_goal_protection";
-      goalId?: string;
-      name?: string;
-      includeInSpendableCash: boolean;
-      monthlyContributionCents?: number;
-      missing?: Array<"goal" | "confirmation">;
     }
   | {
       type: "ordinary_write";
@@ -212,6 +203,8 @@ export type AgentCard =
       targetDate?: string;
       monthlyContributionCents: number;
       includeInSpendableCash: boolean;
+      monthlySavingsAfterGoalCents: number;
+      monthlySavingsIncreaseCents: number;
       currentSpendableCashTodayCents: number;
       spendableCashTodayAfterGoalCents: number;
       currentBaselineDailyAllowanceCents: number;

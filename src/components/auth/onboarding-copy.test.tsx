@@ -24,6 +24,8 @@ describe("onboarding copy", () => {
     expect(markup).toContain("never stores bank credentials or moves money");
     expect(markup).toContain("Connecting checking accounts and cards makes Spendable Cash Today more accurate");
     expect(markup).toContain("Monthly savings");
+    expect(markup).toContain("Monthly savings is one amount Pip keeps out of Spendable Cash Today");
+    expect(markup).toContain("Savings Goals use that same monthly savings system");
     expect(markup).toContain("Save $200/month");
     expect(markup).toContain("Pip does not move money");
     expect(markup).toContain("pip-character-medium");

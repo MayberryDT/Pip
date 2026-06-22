@@ -183,6 +183,12 @@ export function getSafeAgentFailureMessage(input?: {
   }
 
   if (
+    code === "supabase-config-missing"
+  ) {
+    return "I need local Supabase data configured before I can answer that.";
+  }
+
+  if (
     status === 503 ||
     code === "missing-openai-config" ||
     code === "model-unavailable"

@@ -204,6 +204,28 @@ describe("financial repository row mapping", () => {
     await expect(loadCachedPipCashResultForUser(supabase, "user-1")).resolves.toBeNull();
   });
 
+  it("returns null for cached Pip Cash results from the old monthly savings policy", async () => {
+    const cachedResult = calculatePipCash(fakeSnapshot);
+    const supabase = createPipCashSnapshotsClient({
+      resultRows: [
+        {
+          result: {
+            ...cachedResult,
+            monthlySavingsPolicyVersion: undefined,
+            spendableCashToday: cachedResult.spendableCashToday
+              ? {
+                  ...cachedResult.spendableCashToday,
+                  monthlySavingsPolicyVersion: undefined,
+                }
+              : undefined,
+          },
+        },
+      ],
+    });
+
+    await expect(loadCachedPipCashResultForUser(supabase, "user-1")).resolves.toBeNull();
+  });
+
   it("marks active cached Pip Cash snapshots stale after preference changes", async () => {
     const conditions: Array<[string, unknown]> = [];
     const updates: Record<string, unknown>[] = [];

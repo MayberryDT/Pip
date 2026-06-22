@@ -5,12 +5,16 @@ export class SupabaseConfigError extends Error {
   }
 }
 
-export function isSupabaseConfigured(): boolean {
-  if (process.env.PIP_SUPABASE_MODE === "off") {
+export function isFakeDataMode(env: Record<string, string | undefined> = process.env): boolean {
+  return env.PIP_SUPABASE_MODE === "off";
+}
+
+export function isSupabaseConfigured(env: Record<string, string | undefined> = process.env): boolean {
+  if (isFakeDataMode(env)) {
     return false;
   }
 
-  return Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
+  return Boolean(env.NEXT_PUBLIC_SUPABASE_URL && env.NEXT_PUBLIC_SUPABASE_ANON_KEY);
 }
 
 export function getSupabasePublicConfig(): { url: string; anonKey: string } {

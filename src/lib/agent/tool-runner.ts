@@ -397,6 +397,8 @@ function showTrustReceipt(snapshot: FinancialSnapshot): AgentResponse {
 function showMath(snapshot: FinancialSnapshot): AgentResponse {
   const result = calculatePipCash(snapshot);
   const metric = result.spendableCashToday;
+  const monthlySavingsCents =
+    metric?.monthlySavingsCents ?? result.monthlySavingsCents ?? result.protectedSavingsMonthlyCents;
 
   const cards: AgentResponse["cards"] = [
     {
@@ -404,7 +406,7 @@ function showMath(snapshot: FinancialSnapshot): AgentResponse {
       title: "Math breakdown",
       incomeTotalCents: result.incomeTotalCents,
       spendingTotalCents: result.spendingTotalCents,
-      protectedSavingsMonthlyCents: result.protectedSavingsMonthlyCents,
+      protectedSavingsMonthlyCents: monthlySavingsCents,
       rollingNetCents: result.rollingNetCents,
       dayCount: result.window.dayCount,
       spendableCashTodayCents: metric?.spendableCashTodayCents,
@@ -443,6 +445,8 @@ function composeInsightCard(
 
 function buildPaydayImpactCard(result: ReturnType<typeof calculatePipCash>): Extract<AgentResponse["cards"][number], { type: "insight_card" }> {
   const metric = result.spendableCashToday;
+  const monthlySavingsCents =
+    metric?.monthlySavingsCents ?? result.monthlySavingsCents ?? result.protectedSavingsMonthlyCents;
 
   if (metric) {
     return {
@@ -468,7 +472,7 @@ function buildPaydayImpactCard(result: ReturnType<typeof calculatePipCash>): Ext
         {
           id: "savings",
           label: "Monthly savings",
-          amountCents: -metric.protectedSavingsMonthlyCents,
+          amountCents: -monthlySavingsCents,
           detail: "Held back before today exists.",
           tone: "neutral",
         },
@@ -516,9 +520,9 @@ function buildPaydayImpactCard(result: ReturnType<typeof calculatePipCash>): Ext
       {
         id: "protected-savings",
         label: "Monthly savings",
-        amountCents: -result.protectedSavingsMonthlyCents,
+        amountCents: -monthlySavingsCents,
         detail: "Held out before I calculate Spendable Cash Today.",
-        tone: result.protectedSavingsMonthlyCents > 0 ? "neutral" : "positive",
+        tone: monthlySavingsCents > 0 ? "neutral" : "positive",
       },
       {
         id: "today",

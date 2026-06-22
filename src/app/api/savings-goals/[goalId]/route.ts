@@ -74,27 +74,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       monthlyContributionCents: goal.monthlyContributionCents,
     });
 
-    if (!existing.includeInSpendableCash && goal.includeInSpendableCash) {
-      await recordProductEventSafely(
-        supabase,
-        user.id,
-        "savings_goal_spendable_protection_enabled",
-        {
-          goalId: goal.id,
-          monthlyContributionCents: goal.monthlyContributionCents,
-        },
-      );
-    } else if (existing.includeInSpendableCash && !goal.includeInSpendableCash) {
-      await recordProductEventSafely(
-        supabase,
-        user.id,
-        "savings_goal_spendable_protection_disabled",
-        {
-          goalId: goal.id,
-        },
-      );
-    }
-
     return sensitiveJson(toSavingsGoalPlanResponse(goal));
   } catch (error) {
     if (!(error instanceof SupabaseConfigError)) {

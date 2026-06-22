@@ -20,6 +20,7 @@ import {
 } from "@/lib/pip-cash/dedupe-credit-card-payments";
 import { calculateSpendableCashToday } from "@/lib/pip-cash/spendable-cash-today";
 import { toPipCashSnapshot } from "@/lib/pip-cash/account-filters";
+import { resolveUnifiedMonthlySavings } from "@/lib/pip-cash/monthly-savings";
 import { getActiveSavingsGoalMonthlyCents } from "@/lib/savings-goals/plan";
 
 const MATERIAL_PENDING_THRESHOLD_CENTS = 2000;
@@ -72,8 +73,11 @@ export function calculatePipCash(snapshot: FinancialSnapshot): PipCashResult {
     snapshot.savingsGoals,
     snapshot.settings.asOfDate,
   );
-  const totalSavingsProtectedMonthlyCents =
-    snapshot.settings.protectedSavingsMonthlyCents + savingsGoalMonthlyCents;
+  const monthlySavings = resolveUnifiedMonthlySavings({
+    userMonthlySavingsCents: snapshot.settings.protectedSavingsMonthlyCents,
+    savingsGoalMonthlyCents,
+  });
+  const totalSavingsProtectedMonthlyCents = monthlySavings.totalMonthlySavingsCents;
   const rollingNetCents =
     incomeTotalCents -
     spendingTotalCents -
@@ -83,8 +87,9 @@ export function calculatePipCash(snapshot: FinancialSnapshot): PipCashResult {
     incomeTotalCents,
     spendingTotalCents,
     refundTotalCents,
-    protectedSavingsMonthlyCents: snapshot.settings.protectedSavingsMonthlyCents,
+    monthlySavingsCents: monthlySavings.totalMonthlySavingsCents,
     savingsGoalMonthlyCents,
+    goalMonthlySavingsAboveUserCents: monthlySavings.goalAmountAboveUserMonthlySavingsCents,
     dedupedPaymentCount,
     windowTransactions,
     allTransactions: transactions,
@@ -100,6 +105,12 @@ export function calculatePipCash(snapshot: FinancialSnapshot): PipCashResult {
     incomeTotalCents,
     spendingTotalCents,
     refundTotalCents,
+    monthlySavingsPolicyVersion: monthlySavings.monthlySavingsPolicyVersion,
+    monthlySavingsCents: monthlySavings.totalMonthlySavingsCents,
+    savingsGoalMonthlyCents,
+    totalSavingsProtectedMonthlyCents,
+    goalMonthlySavingsCoveredCents: monthlySavings.goalAmountCoveredByUserMonthlySavingsCents,
+    goalMonthlySavingsAboveUserCents: monthlySavings.goalAmountAboveUserMonthlySavingsCents,
     protectedSavingsMonthlyCents: snapshot.settings.protectedSavingsMonthlyCents,
     window,
     drivers,
@@ -119,8 +130,9 @@ function buildDrivers(input: {
   incomeTotalCents: number;
   spendingTotalCents: number;
   refundTotalCents: number;
-  protectedSavingsMonthlyCents: number;
+  monthlySavingsCents: number;
   savingsGoalMonthlyCents: number;
+  goalMonthlySavingsAboveUserCents: number;
   dedupedPaymentCount: number;
   windowTransactions: Transaction[];
   allTransactions: Transaction[];
@@ -153,21 +165,15 @@ function buildDrivers(input: {
     {
       id: "protected-savings",
       label: "Monthly savings",
-      detail: "Your chosen monthly savings are kept out of today's number.",
-      amountCents: -input.protectedSavingsMonthlyCents,
+      detail: input.goalMonthlySavingsAboveUserCents > 0
+        ? "Active savings goals raise the monthly savings amount held out of today's number."
+        : input.savingsGoalMonthlyCents > 0
+          ? "Active savings goals fit inside your monthly savings amount."
+          : "Your chosen monthly savings are kept out of today's number.",
+      amountCents: -input.monthlySavingsCents,
       tone: "neutral",
     },
   ];
-
-  if (input.savingsGoalMonthlyCents > 0) {
-    drivers.push({
-      id: "savings-goals",
-      label: "Savings goals",
-      detail: "Active savings goals are folded into Spendable Cash Today.",
-      amountCents: -input.savingsGoalMonthlyCents,
-      tone: "neutral",
-    });
-  }
 
   if (rentTotalCents > 0) {
     drivers.push({

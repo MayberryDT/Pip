@@ -80,6 +80,18 @@ describe("/api/savings-goals/[goalId]", () => {
       "savings_goal_updated",
       expect.any(Object),
     );
+    expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "savings_goal_spendable_protection_enabled",
+      expect.anything(),
+    );
+    expect(routeMocks.recordProductEventSafely).not.toHaveBeenCalledWith(
+      supabase,
+      "user-1",
+      "savings_goal_spendable_protection_disabled",
+      expect.anything(),
+    );
   });
 
   it("marks snapshots stale when an active goal monthly amount changes even if the legacy include flag is false", async () => {

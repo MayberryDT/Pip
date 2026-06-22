@@ -7,6 +7,9 @@
   },
   "scripts": {
     "dev": "next dev",
+    "dev:local-staging": "node scripts/run-local-staging-dev.mjs dev --webpack",
+    "build:local-staging": "node scripts/run-local-staging-dev.mjs build --webpack",
+    "start:local-staging": "node scripts/run-local-staging-dev.mjs start",
     "build": "NEXT_PRIVATE_BUILD_WORKER=0 next build --webpack",
     "start": "next start",
     "test": "vitest run",
@@ -17,6 +20,7 @@
     "prove:prd": "node scripts/prove-prd-complete.mjs",
     "test:watch": "vitest",
     "check:deployment": "node scripts/check-deployment-env.mjs",
+    "check:local-staging": "node scripts/check-deployment-env.mjs --mode=local-beta",
     "check:db-schema-names": "node scripts/check-db-schema-names.mjs",
     "check:live-smoke": "node scripts/check-live-smoke-env.mjs",
     "check:netlify-bundle": "node scripts/check-netlify-bundle.mjs",

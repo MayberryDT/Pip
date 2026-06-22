@@ -22,6 +22,8 @@ describe("buildSavingsGoalPreview", () => {
       targetAmountCents: 240000,
       includeInSpendableCash: true,
       monthlyContributionCents: expect.any(Number),
+      monthlySavingsAfterGoalCents: expect.any(Number),
+      monthlySavingsIncreaseCents: expect.any(Number),
       currentSpendableCashTodayCents: expect.any(Number),
       spendableCashTodayAfterGoalCents: expect.any(Number),
       dailyRoomDeltaCents: expect.any(Number),
@@ -30,6 +32,62 @@ describe("buildSavingsGoalPreview", () => {
     expect(preview.card?.spendableCashTodayAfterGoalCents).toBeLessThanOrEqual(
       preview.card?.currentSpendableCashTodayCents ?? 0,
     );
+  });
+
+  it("keeps a covered goal inside the existing Monthly Savings amount", () => {
+    const snapshot = {
+      ...fakeSnapshot,
+      settings: {
+        ...fakeSnapshot.settings,
+        protectedSavingsMonthlyCents: 30000,
+      },
+      savingsGoals: [],
+    };
+    const preview = buildSavingsGoalPreview({
+      snapshot,
+      draft: {
+        type: "preview_savings_goal",
+        name: "Japan",
+        targetAmountCents: 300000,
+        monthlyContributionCents: 28600,
+        includeInSpendableCash: true,
+      },
+    });
+
+    expect(preview.card).toMatchObject({
+      monthlySavingsAfterGoalCents: 30000,
+      monthlySavingsIncreaseCents: 0,
+      dailyRoomDeltaCents: 0,
+    });
+    expect(preview.card?.summary).toContain("fits inside your current Monthly Savings");
+  });
+
+  it("raises Monthly Savings only when a goal needs more than the current amount", () => {
+    const snapshot = {
+      ...fakeSnapshot,
+      settings: {
+        ...fakeSnapshot.settings,
+        protectedSavingsMonthlyCents: 30000,
+      },
+      savingsGoals: [],
+    };
+    const preview = buildSavingsGoalPreview({
+      snapshot,
+      draft: {
+        type: "preview_savings_goal",
+        name: "Emergency fund",
+        targetAmountCents: 500000,
+        monthlyContributionCents: 43000,
+        includeInSpendableCash: true,
+      },
+    });
+
+    expect(preview.card).toMatchObject({
+      monthlySavingsAfterGoalCents: 43000,
+      monthlySavingsIncreaseCents: 13000,
+    });
+    expect(preview.card?.dailyRoomDeltaCents).toBeLessThan(0);
+    expect(preview.card?.summary).toContain("raises Monthly Savings by $130/month");
   });
 
   it("soft-flags goals that would leave the user too tight", () => {

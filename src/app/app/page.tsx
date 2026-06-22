@@ -22,7 +22,9 @@ export default async function AppPage({
 }) {
   const params = await searchParams;
   const devOnboardingState =
-    process.env.NODE_ENV !== "production" ? params?.onboarding : undefined;
+    process.env.NODE_ENV !== "production" && process.env.PIP_LOCAL_STAGING !== "1"
+      ? params?.onboarding
+      : undefined;
   const authNotice = getAuthNotice(params?.auth);
   const connectionNotice = getConnectionNotice(params?.plaid);
 

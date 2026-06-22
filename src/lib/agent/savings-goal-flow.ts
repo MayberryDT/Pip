@@ -23,7 +23,6 @@ export type SavingsGoalToolName = Extract<
   | "create_savings_goal"
   | "list_savings_goals"
   | "update_savings_goal"
-  | "set_savings_goal_protection"
 >;
 
 export type SavingsGoalForcedTool = {
@@ -53,11 +52,6 @@ export const updateSavingsGoalParameters = savingsGoalTargetParameters.extend({
   include_in_spendable_cash: z.boolean().optional(),
   status: z.enum(["active", "paused", "completed", "archived"]).optional(),
 });
-export const savingsGoalProtectionParameters = savingsGoalTargetParameters.extend({
-  include_in_spendable_cash: z.boolean(),
-  monthly_contribution_cents: z.number().int().min(0).max(100_000_000).optional(),
-});
-
 export function createDeterministicUnavailableActionResponse(input: RunAiAgentInput): AgentResponse | null {
   const forcedTool = getSavingsGoalForcedTool(input.message.trim(), normalizePrompt(input.message.trim()));
 
@@ -103,10 +97,6 @@ export async function createDeterministicSavingsGoalResponse(input: RunAiAgentIn
 
   if (forcedTool?.toolName === "update_savings_goal") {
     return updateSavingsGoalDeterministically(input, forcedTool.args);
-  }
-
-  if (forcedTool?.toolName === "set_savings_goal_protection") {
-    return setSavingsGoalProtectionDeterministically(input, forcedTool.args);
   }
 
   if (isSavingsGoalContextProgressPrompt(normalized)) {
@@ -160,39 +150,6 @@ async function updateSavingsGoalDeterministically(
     ...(result.clientAction ? { clientAction: result.clientAction } : {}),
     audit: {
       toolNames: ["update_savings_goal"],
-      usedModel: false,
-    },
-  });
-}
-
-async function setSavingsGoalProtectionDeterministically(
-  input: RunAiAgentInput,
-  args: SavingsGoalForcedTool["args"],
-): Promise<AgentResponse | null> {
-  if (!input.actions?.setSavingsGoalProtection) {
-    return null;
-  }
-
-  const toolInput = savingsGoalProtectionParameters.parse(args);
-  const result = await input.actions.setSavingsGoalProtection({
-    goalId: toolInput.goal_id,
-    name: toolInput.name,
-    includeInSpendableCash: toolInput.include_in_spendable_cash,
-    monthlyContributionCents: toolInput.monthly_contribution_cents,
-  });
-  const cards = result.cards ?? [];
-
-  return agentResponseSchema.parse({
-    message: result.ok
-      ? getSavingsGoalUpdatedMessage(cards)
-      : result.message ?? "I could not update that savings goal yet.",
-    cards,
-    promptChips: createDeterministicTrustPromptChips(input),
-    usedTools: ["set_savings_goal_protection"],
-    responseMode: cards.length > 0 ? "show_card" : "chat_only",
-    ...(result.clientAction ? { clientAction: result.clientAction } : {}),
-    audit: {
-      toolNames: ["set_savings_goal_protection"],
       usedModel: false,
     },
   });
@@ -648,7 +605,6 @@ export function isSavingsGoalToolName(toolName: DeterministicAgentToolName): boo
     "create_savings_goal",
     "list_savings_goals",
     "update_savings_goal",
-    "set_savings_goal_protection",
   ].includes(toolName);
 }
 
@@ -662,8 +618,6 @@ export function hasSavingsGoalAction(input: RunAiAgentInput, toolName: Determini
       return Boolean(input.actions?.listSavingsGoals);
     case "update_savings_goal":
       return Boolean(input.actions?.updateSavingsGoal);
-    case "set_savings_goal_protection":
-      return Boolean(input.actions?.setSavingsGoalProtection);
     default:
       return false;
   }
@@ -702,18 +656,6 @@ export function getSavingsGoalForcedTool(
     return {
       toolName: "list_savings_goals",
       args: {},
-      requireCard: true,
-    };
-  }
-
-  if (isSavingsGoalProtectionPrompt(normalized)) {
-    return {
-      toolName: "set_savings_goal_protection",
-      args: {
-        name,
-        include_in_spendable_cash: !/\b(track only|don'?t protect|do not protect|stop protecting|not in spendable|don'?t keep|do not keep)\b/.test(normalized),
-        ...(monthlyContributionCents === null ? {} : { monthly_contribution_cents: monthlyContributionCents }),
-      },
       requireCard: true,
     };
   }
@@ -796,11 +738,6 @@ function isSavingsGoalListPrompt(normalized: string): boolean {
     /\bshow goal progress\b/.test(normalized) ||
     /\btrip fund\b.{0,32}\bdoing\b/.test(normalized) ||
     /^savings? goals?$/.test(normalized);
-}
-
-function isSavingsGoalProtectionPrompt(normalized: string): boolean {
-  return /\b(keep|hold|reserve|protect|track only|don'?t protect|do not protect|stop protecting)\b.{0,48}\b(goal|spendable cash|spendable)\b/.test(normalized) ||
-    /\b(goal|savings? goal)\b.{0,48}\b(out of spendable|out of today'?s number|not in spendable|kept out)\b/.test(normalized);
 }
 
 function isSavingsGoalProgressPrompt(normalized: string): boolean {

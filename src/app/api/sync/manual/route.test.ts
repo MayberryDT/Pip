@@ -164,6 +164,20 @@ describe("POST /api/sync/manual", () => {
     expect(routeMocks.runManualSync).not.toHaveBeenCalled();
   });
 
+  it("rejects the mock provider for Supabase-backed local staging", async () => {
+    enableSupabaseEnv();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
+
+    const response = await POST(jsonRequest({ provider: "mock" }));
+
+    expect(response.status).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "Mock provider is only available in explicit fake-data mode.",
+    });
+    expect(routeMocks.runManualSync).not.toHaveBeenCalled();
+    expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
+  });
+
   it("returns 503 when Supabase is disabled", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
 
@@ -194,7 +208,7 @@ describe("POST /api/sync/manual", () => {
     routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
     routeMocks.runManualSync.mockResolvedValue({
       syncRunId: "sync-1",
-      provider: "mock",
+      provider: "plaid",
       institutionId: "institution-1",
       accountCount: 3,
       transactionCount: 22,
@@ -202,7 +216,7 @@ describe("POST /api/sync/manual", () => {
       pipCashTodayCents: 4300,
     });
 
-    const response = await POST(jsonRequest({ provider: "mock" }));
+    const response = await POST(jsonRequest({ provider: "plaid" }));
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toMatchObject({
@@ -211,7 +225,7 @@ describe("POST /api/sync/manual", () => {
     });
     expect(routeMocks.runManualSync).toHaveBeenCalledWith(supabase, {
       userId: "user-1",
-      provider: "mock",
+      provider: "plaid",
       writeSupabase: expect.objectContaining({
         kind: "admin",
       }),
@@ -353,7 +367,7 @@ describe("POST /api/sync/manual", () => {
     routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
     routeMocks.runManualSync.mockRejectedValue(new routeMocks.ManualSyncRateLimitError(45));
 
-    const response = await POST(jsonRequest({ provider: "mock" }));
+    const response = await POST(jsonRequest({ provider: "plaid" }));
 
     expect(response.status).toBe(429);
     await expect(response.json()).resolves.toEqual({

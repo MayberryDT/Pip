@@ -82,6 +82,8 @@ describe("model-first policy", () => {
           remainingCents: 500000,
           monthlyContributionCents: 83334,
           includeInSpendableCash: true,
+          monthlySavingsAfterGoalCents: 83334,
+          monthlySavingsIncreaseCents: 53334,
           currentSpendableCashTodayCents: 10400,
           spendableCashTodayAfterGoalCents: 7622,
           currentBaselineDailyAllowanceCents: 3032,

@@ -178,6 +178,7 @@ function getUnsupportedAmountClaim(
     context.pattern.averageMonthlyIncomeCents,
     context.pattern.averageMonthlyRecurringObligationsCents,
     context.pattern.averageMonthlyEverydaySpendCents,
+    context.pattern.monthlySavingsCents,
     context.pattern.protectedSavingsMonthlyCents,
     context.pattern.hiddenCushionCents,
     context.behavior.allowedSoFarThisMonthCents,

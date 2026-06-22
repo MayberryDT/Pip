@@ -54,6 +54,11 @@ export function buildSavingsGoalPreview(input: {
     currentAmountCents,
   });
   const previewResult = calculatePipCash(previewSnapshot);
+  const currentMonthlySavingsCents =
+    currentResult.monthlySavingsCents ?? currentResult.protectedSavingsMonthlyCents;
+  const monthlySavingsAfterGoalCents =
+    previewResult.monthlySavingsCents ?? previewResult.protectedSavingsMonthlyCents;
+  const monthlySavingsIncreaseCents = Math.max(0, monthlySavingsAfterGoalCents - currentMonthlySavingsCents);
   const currentSpendableCashTodayCents = getDisplayedSpendableCashTodayCents(currentResult);
   const spendableCashTodayAfterGoalCents = getDisplayedSpendableCashTodayCents(previewResult);
   const currentBaselineDailyAllowanceCents =
@@ -81,6 +86,8 @@ export function buildSavingsGoalPreview(input: {
       ...(input.draft.targetDate ? { targetDate: input.draft.targetDate } : {}),
       monthlyContributionCents,
       includeInSpendableCash: true,
+      monthlySavingsAfterGoalCents,
+      monthlySavingsIncreaseCents,
       currentSpendableCashTodayCents,
       spendableCashTodayAfterGoalCents,
       currentBaselineDailyAllowanceCents,
@@ -91,6 +98,7 @@ export function buildSavingsGoalPreview(input: {
       summary: buildPreviewSummary({
         name: input.draft.name,
         monthlyContributionCents,
+        monthlySavingsIncreaseCents,
         spendableCashTodayAfterGoalCents,
         usualDailySpendCents,
         warningLevel,
@@ -200,21 +208,40 @@ function getWarningLevel(input: {
 function buildPreviewSummary(input: {
   name: string;
   monthlyContributionCents: number;
+  monthlySavingsIncreaseCents: number;
   spendableCashTodayAfterGoalCents: number;
   usualDailySpendCents?: number;
   warningLevel: Extract<AgentCard, { type: "savings_goal_preview" }>["warningLevel"];
 }): string {
+  const savingsClause = getMonthlySavingsPreviewClause({
+    monthlyContributionCents: input.monthlyContributionCents,
+    monthlySavingsIncreaseCents: input.monthlySavingsIncreaseCents,
+  });
+
   if (input.warningLevel === "too_tight") {
-    return `${input.name} would need ${formatMoney(input.monthlyContributionCents)}/month, but that looks difficult because it leaves only ${formatMoney(input.spendableCashTodayAfterGoalCents)} for today.`;
+    return `${input.name} ${savingsClause}, but that looks difficult because it leaves only ${formatMoney(input.spendableCashTodayAfterGoalCents)} for today.`;
   }
 
   if (input.warningLevel === "tight") {
-    return `${input.name} would need ${formatMoney(input.monthlyContributionCents)}/month and would leave ${formatMoney(input.spendableCashTodayAfterGoalCents)} for today. That looks tight.`;
+    return `${input.name} ${savingsClause} and would leave ${formatMoney(input.spendableCashTodayAfterGoalCents)} for today. That looks tight.`;
   }
 
   if (input.warningLevel === "watch" && input.usualDailySpendCents !== undefined) {
-    return `${input.name} would need ${formatMoney(input.monthlyContributionCents)}/month. Your usual daily spending is around ${formatMoney(input.usualDailySpendCents)}, so watch the room closely.`;
+    return `${input.name} ${savingsClause}. Your usual daily spending is around ${formatMoney(input.usualDailySpendCents)}, so watch the room closely.`;
   }
 
-  return `${input.name} would need ${formatMoney(input.monthlyContributionCents)}/month and is counted in Spendable Cash Today.`;
+  return `${input.name} ${savingsClause}.`;
+}
+
+function getMonthlySavingsPreviewClause(input: {
+  monthlyContributionCents: number;
+  monthlySavingsIncreaseCents: number;
+}): string {
+  const contribution = formatMoney(input.monthlyContributionCents);
+
+  if (input.monthlySavingsIncreaseCents > 0) {
+    return `would need ${contribution}/month and raises Monthly Savings by ${formatMoney(input.monthlySavingsIncreaseCents)}/month`;
+  }
+
+  return `would need ${contribution}/month and fits inside your current Monthly Savings`;
 }

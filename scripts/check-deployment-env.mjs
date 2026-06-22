@@ -23,12 +23,12 @@ export function runDeploymentEnvCheck({
   }
 
   loadEnvFile(".env", cwd, effectiveEnv);
-  loadEnvFile(".env.local", cwd, effectiveEnv);
+  loadEnvFile(".env.local", cwd, effectiveEnv, { override: mode === "local-beta" });
 
   const missing = requiredByMode[mode].filter((name) => !hasValue(effectiveEnv[name]));
   const warnings = [];
 
-  if (mode === "beta") {
+  if (mode === "beta" || mode === "local-beta") {
     if (!hasAiConfiguration(effectiveEnv)) {
       missing.push(
         "OPENAI_API_KEY, OPENAI_BASE_URL, or NETLIFY_AI_GATEWAY_BASE_URL plus NETLIFY_AI_GATEWAY_KEY",
@@ -36,11 +36,27 @@ export function runDeploymentEnvCheck({
     }
 
     if (effectiveEnv.PIP_SUPABASE_MODE === "off") {
-      warnings.push("PIP_SUPABASE_MODE=off disables real Supabase data.");
+      addUnique(missing, `PIP_SUPABASE_MODE must not be off in ${mode} mode.`);
+    }
+
+    if (mode === "local-beta" && effectiveEnv.PIP_LOCAL_STAGING?.trim() !== "1") {
+      addUnique(missing, "PIP_LOCAL_STAGING must be 1 in local-beta mode.");
+    }
+
+    if (mode === "local-beta" && !isLikelySupabaseProjectUrl(effectiveEnv.NEXT_PUBLIC_SUPABASE_URL)) {
+      addUnique(missing, "NEXT_PUBLIC_SUPABASE_URL must be a Supabase project URL in local-beta mode.");
+    }
+
+    if (mode === "local-beta" && !isLikelySupabasePublicKey(effectiveEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY)) {
+      addUnique(missing, "NEXT_PUBLIC_SUPABASE_ANON_KEY must be a Supabase anon or publishable key in local-beta mode.");
+    }
+
+    if (mode === "local-beta" && !isLikelySupabaseServiceRoleKey(effectiveEnv.SUPABASE_SERVICE_ROLE_KEY)) {
+      addUnique(missing, "SUPABASE_SERVICE_ROLE_KEY must be a Supabase service-role or secret key in local-beta mode.");
     }
 
     if (hasValue(effectiveEnv.PLAID_ENV) && effectiveEnv.PLAID_ENV !== "production") {
-      addUnique(missing, "PLAID_ENV must be production for beta mode.");
+      addUnique(missing, `PLAID_ENV must be production for ${mode} mode.`);
     }
 
     const siteOrigin = normalizeOrigin(effectiveEnv.NEXT_PUBLIC_SITE_URL);
@@ -48,19 +64,31 @@ export function runDeploymentEnvCheck({
 
     if (!siteOrigin) {
       addUnique(missing, "NEXT_PUBLIC_SITE_URL");
-    } else if (isLocalhostUrl(siteOrigin)) {
+    } else if (mode === "beta" && isLocalhostUrl(siteOrigin)) {
       addUnique(missing, "NEXT_PUBLIC_SITE_URL must be the production app origin, not localhost.");
+    } else if (mode === "local-beta" && !isLocalhostUrl(siteOrigin)) {
+      addUnique(missing, "NEXT_PUBLIC_SITE_URL must be localhost in local-beta mode.");
     }
 
-    if (plaidRedirectUri && isLocalhostUrl(plaidRedirectUri)) {
+    if (mode === "local-beta" && !plaidRedirectUri) {
+      addUnique(missing, "PLAID_REDIRECT_URI must be set for local-beta mode.");
+    }
+
+    if (mode === "beta" && plaidRedirectUri && isLocalhostUrl(plaidRedirectUri)) {
       addUnique(missing, "PLAID_REDIRECT_URI must not point to localhost in beta mode.");
     }
 
-    if (plaidRedirectUri && siteOrigin && new URL(plaidRedirectUri).origin !== siteOrigin) {
+    if (mode === "local-beta" && plaidRedirectUri && !isLocalhostUrl(plaidRedirectUri)) {
+      addUnique(missing, "PLAID_REDIRECT_URI must point to localhost in local-beta mode.");
+    }
+
+    if (mode === "local-beta" && plaidRedirectUri && siteOrigin && new URL(plaidRedirectUri).origin !== siteOrigin) {
+      addUnique(missing, "PLAID_REDIRECT_URI must share the NEXT_PUBLIC_SITE_URL origin in local-beta mode.");
+    } else if (plaidRedirectUri && siteOrigin && new URL(plaidRedirectUri).origin !== siteOrigin) {
       warnings.push("PLAID_REDIRECT_URI does not share the NEXT_PUBLIC_SITE_URL origin.");
     }
 
-    if (effectiveEnv.PIP_EMAIL_MODE?.trim() !== "off" && !hasBetaEmailConfiguration(effectiveEnv)) {
+    if (mode === "beta" && effectiveEnv.PIP_EMAIL_MODE?.trim() !== "off" && !hasBetaEmailConfiguration(effectiveEnv)) {
       addUnique(
         missing,
         "RESEND_API_KEY, PIP_EMAIL_FROM, PIP_EMAIL_POSTAL_ADDRESS, PIP_EMAIL_UNSUBSCRIBE_SECRET, and RESEND_WEBHOOK_SECRET are required for beta email delivery unless PIP_EMAIL_MODE=off.",
@@ -96,6 +124,18 @@ export function runDeploymentEnvCheck({
 
 const requiredByMode = {
   fake: ["PIP_SUPABASE_MODE", "PIP_RATE_LIMIT_SALT"],
+  "local-beta": [
+    "NEXT_PUBLIC_SITE_URL",
+    "NEXT_PUBLIC_SUPABASE_URL",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "PIP_OPERATOR_TOKEN",
+    "PIP_PROVIDER_TOKEN_KEY_BASE64",
+    "PIP_RATE_LIMIT_SALT",
+    "PLAID_CLIENT_ID",
+    "PLAID_SECRET",
+    "PLAID_ENV",
+  ],
   beta: [
     "NEXT_PUBLIC_SITE_URL",
     "NEXT_PUBLIC_SUPABASE_URL",
@@ -114,15 +154,15 @@ function getMode(argv, stderr) {
   const modeArg = argv.find((arg) => arg.startsWith("--mode="));
   const value = modeArg?.slice("--mode=".length) || "beta";
 
-  if (value !== "beta" && value !== "fake") {
-    stderr("Use --mode=beta or --mode=fake.");
+  if (value !== "beta" && value !== "fake" && value !== "local-beta") {
+    stderr("Use --mode=beta, --mode=local-beta, or --mode=fake.");
     return null;
   }
 
   return value;
 }
 
-function loadEnvFile(fileName, cwd, env) {
+function loadEnvFile(fileName, cwd, env, { override = false } = {}) {
   const path = resolve(cwd, fileName);
 
   if (!existsSync(path)) {
@@ -146,7 +186,7 @@ function loadEnvFile(fileName, cwd, env) {
 
     const [, key, rawValue] = match;
 
-    if (env[key] !== undefined) {
+    if (!override && env[key] !== undefined) {
       continue;
     }
 
@@ -228,6 +268,56 @@ function isLocalhostUrl(rawUrl) {
     return url.hostname === "localhost" || url.hostname === "127.0.0.1" || url.hostname === "::1";
   } catch {
     return false;
+  }
+}
+
+function isLikelySupabaseProjectUrl(value) {
+  if (!hasValue(value)) {
+    return false;
+  }
+
+  try {
+    const url = new URL(value);
+
+    return url.protocol === "https:" && url.hostname.endsWith(".supabase.co");
+  } catch {
+    return false;
+  }
+}
+
+function isLikelySupabasePublicKey(value) {
+  if (!hasValue(value)) {
+    return false;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.startsWith("sb_publishable_") || decodeSupabaseJwtRole(trimmed) === "anon";
+}
+
+function isLikelySupabaseServiceRoleKey(value) {
+  if (!hasValue(value)) {
+    return false;
+  }
+
+  const trimmed = value.trim();
+
+  return trimmed.startsWith("sb_secret_") || decodeSupabaseJwtRole(trimmed) === "service_role";
+}
+
+function decodeSupabaseJwtRole(value) {
+  const parts = value.split(".");
+
+  if (parts.length !== 3) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8"));
+
+    return typeof payload.role === "string" ? payload.role : null;
+  } catch {
+    return null;
   }
 }
 

@@ -641,12 +641,6 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
   return getLegacyForcedAgentTool(input);
 }
 
-function isRetiredSavingsGoalProtectionPrompt(input: RunAiAgentInput): boolean {
-  const forcedTool = getSavingsGoalForcedTool(input.message.trim(), normalizePrompt(input.message.trim()));
-
-  return forcedTool?.toolName === "set_savings_goal_protection";
-}
-
 function isRetiredToolName(toolName: DeterministicAgentToolName): boolean {
   return toolName === "set_savings_goal_protection";
 }
@@ -2829,72 +2823,6 @@ function createFallbackFinalOutput(context: PipAgentContext): AgentFinalOutput |
   };
 }
 
-function shouldRecoverBroadChatFinalOutput(
-  error: AgentUnavailableError,
-  context: PipAgentContext,
-): boolean {
-  if (
-    context.usedTools.length > 0 ||
-    context.forcedTool ||
-    context.availableCards.length > 0 ||
-    context.guidanceContext
-  ) {
-    return false;
-  }
-
-  return shouldRetryFinalOutput(error) || isNoToolChatOnlyPrompt(context.inputMessage);
-}
-
-function createDeterministicNoToolResponse(input: RunAiAgentInput): AgentResponse | null {
-  if (!isSimpleGreetingPrompt(input.message)) {
-    return null;
-  }
-
-  return agentResponseSchema.parse({
-    message: "Ask me about your number, what changed, or a purchase.",
-    cards: [],
-    promptChips: [
-      {
-        id: "ai-what-changed",
-        label: "What changed?",
-        prompt: "What changed?",
-      },
-      {
-        id: "ai-test-purchase",
-        label: "Test a purchase",
-        prompt: "Can I spend $50?",
-      },
-    ],
-    usedTools: [],
-    responseMode: "chat_only",
-    audit: {
-      toolNames: [],
-      usedModel: false,
-    },
-  });
-}
-
-function createBroadChatFallbackFinalOutput(input: RunAiAgentInput): AgentFinalOutput {
-  const greeting = isSimpleGreetingPrompt(input.message);
-  const generalSpendingAdvice = isGeneralSpendingAdvicePrompt(input.message);
-  const creditCardDiscussion = isGeneralCreditCardDiscussionPrompt(input.message);
-  const blockedAdvice = getBlockedAdviceFallbackMessage(input.message);
-
-  return {
-    message: greeting
-      ? "I can help with your Spendable Cash Today. Ask what changed or test a specific purchase amount."
-      : generalSpendingAdvice
-        ? "Start with one small spending rule: choose one category, set a weekly cap, and keep one low-cost thing you still enjoy."
-        : blockedAdvice
-          ? blockedAdvice
-        : creditCardDiscussion
-          ? "I can help with credit cards. We can talk through payoff timing, card use, or how a specific purchase would affect today."
-          : "I’m not sure what you mean yet. Ask about today’s number or test a specific purchase amount.",
-    responseMode: greeting || generalSpendingAdvice || blockedAdvice || creditCardDiscussion ? "chat_only" : "clarify",
-    promptChips: [],
-  };
-}
-
 function isSimpleGreetingPrompt(message: string): boolean {
   return /^(hi|hello|hey|yo|sup|good morning|good afternoon|good evening)$/i.test(message.trim());
 }
@@ -4331,7 +4259,6 @@ function isRepairablePlaidErrorCode(errorCode: string | null | undefined): boole
 }
 
 export const __agentTestHooks = {
-  createBroadChatFallbackFinalOutput,
   getForcedAgentTool,
   getUnsupportedCardPromise,
   guardVisibleFinalMessage,

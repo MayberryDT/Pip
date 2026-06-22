@@ -46,6 +46,13 @@ export async function POST(request: Request) {
       return sensitiveJson({ error: "Invalid provider request." }, { status: 400 });
     }
 
+    if (parsed.data.provider === "mock") {
+      return sensitiveJson(
+        { error: "Mock provider is only available in explicit fake-data mode." },
+        { status: 400 },
+      );
+    }
+
     const providerName = parsed.data.provider as FinancialProviderName;
     const provider = getFinancialDataProvider(providerName);
     const session = await provider.createConnectSession(user.id, {

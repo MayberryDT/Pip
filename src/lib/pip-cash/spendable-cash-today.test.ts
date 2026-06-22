@@ -36,20 +36,31 @@ describe("Spendable Cash Today V2", () => {
     });
   });
 
-  it("includes every active savings goal in Spendable Cash Today", () => {
-    const base = calculatePipCash(healthyPipSnapshot).spendableCashToday;
+  it("does not double count a savings goal already covered by monthly savings", () => {
+    const base = calculatePipCash({
+      ...healthyPipSnapshot,
+      settings: {
+        ...healthyPipSnapshot.settings,
+        protectedSavingsMonthlyCents: 30000,
+      },
+      savingsGoals: [],
+    }).spendableCashToday;
     const withGoal = calculatePipCash({
       ...healthyPipSnapshot,
+      settings: {
+        ...healthyPipSnapshot.settings,
+        protectedSavingsMonthlyCents: 30000,
+      },
       savingsGoals: [
         {
           id: "goal-1",
           userId: "user-1",
-          name: "Japan",
-          targetAmountCents: 300000,
+          name: "Laptop",
+          targetAmountCents: 200000,
           targetDate: "2026-12-20",
           startingAmountCents: 0,
           currentAmountCents: 0,
-          monthlyContributionCents: 50000,
+          monthlyContributionCents: 28600,
           includeInSpendableCash: false,
           status: "active",
           createdAt: "2026-06-20T00:00:00.000Z",
@@ -58,40 +69,58 @@ describe("Spendable Cash Today V2", () => {
       ],
     }).spendableCashToday;
 
-    expect(withGoal?.savingsGoalMonthlyCents).toBe(50000);
-    expect(withGoal?.monthlyEverydayPoolCents).toBe(
-      (base?.monthlyEverydayPoolCents ?? 0) - 50000,
-    );
+    expect(withGoal?.savingsGoalMonthlyCents).toBe(28600);
+    expect(withGoal?.monthlySavingsCents).toBe(30000);
+    expect(withGoal?.totalSavingsProtectedMonthlyCents).toBe(30000);
+    expect(withGoal?.goalMonthlySavingsCoveredCents).toBe(28600);
+    expect(withGoal?.goalMonthlySavingsAboveUserCents).toBe(0);
+    expect(withGoal?.monthlySavingsPolicyVersion).toBe("unified_monthly_savings_v1");
+    expect(withGoal?.monthlyEverydayPoolCents).toBe(base?.monthlyEverydayPoolCents);
+    expect(withGoal?.drivers.map((driver) => driver.id)).toContain("protected-savings");
+    expect(withGoal?.drivers.map((driver) => driver.id)).not.toContain("savings-goals");
   });
 
-  it("holds protected savings goal contributions out separately", () => {
-    const base = calculatePipCash(healthyPipSnapshot).spendableCashToday;
-    const protectedGoal = calculatePipCash({
+  it("raises monthly savings when active savings goals need more than the chosen amount", () => {
+    const base = calculatePipCash({
       ...healthyPipSnapshot,
+      settings: {
+        ...healthyPipSnapshot.settings,
+        protectedSavingsMonthlyCents: 30000,
+      },
+      savingsGoals: [],
+    }).spendableCashToday;
+    const withGoal = calculatePipCash({
+      ...healthyPipSnapshot,
+      settings: {
+        ...healthyPipSnapshot.settings,
+        protectedSavingsMonthlyCents: 30000,
+      },
       savingsGoals: [
         {
           id: "goal-1",
           userId: "user-1",
-          name: "Trip",
+          name: "Japan",
           targetAmountCents: 500000,
-          targetDate: "2027-06-18",
+          targetDate: "2026-12-20",
           startingAmountCents: 0,
-          currentAmountCents: 100000,
-          monthlyContributionCents: 3044,
-          includeInSpendableCash: true,
+          currentAmountCents: 0,
+          monthlyContributionCents: 43000,
+          includeInSpendableCash: false,
           status: "active",
-          createdAt: "2026-06-18T00:00:00.000Z",
-          updatedAt: "2026-06-18T00:00:00.000Z",
+          createdAt: "2026-06-20T00:00:00.000Z",
+          updatedAt: "2026-06-20T00:00:00.000Z",
         },
       ],
     }).spendableCashToday;
 
-    expect(protectedGoal?.savingsGoalMonthlyCents).toBe(3044);
-    expect(protectedGoal?.totalSavingsProtectedMonthlyCents).toBe(23044);
-    expect(protectedGoal?.monthlyEverydayPoolCents).toBe(
-      (base?.monthlyEverydayPoolCents ?? 0) - 3044,
+    expect(withGoal?.savingsGoalMonthlyCents).toBe(43000);
+    expect(withGoal?.monthlySavingsCents).toBe(43000);
+    expect(withGoal?.totalSavingsProtectedMonthlyCents).toBe(43000);
+    expect(withGoal?.goalMonthlySavingsCoveredCents).toBe(30000);
+    expect(withGoal?.goalMonthlySavingsAboveUserCents).toBe(13000);
+    expect(withGoal?.monthlyEverydayPoolCents).toBe(
+      (base?.monthlyEverydayPoolCents ?? 0) - 13000,
     );
-    expect(protectedGoal?.drivers.map((driver) => driver.id)).toContain("savings-goals");
   });
 
   it("lowers today's room when current-month everyday spending is ahead of pace", () => {

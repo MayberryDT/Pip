@@ -53,7 +53,8 @@ export function ProtectedSavingsPicker({
       <div>
         <p className="text-xs font-bold uppercase tracking-normal text-taupe">Monthly savings</p>
         <p className="mt-1 text-xs leading-5 text-ink/[0.62]">
-          Pick how much you want Pip to keep out of your daily spending number each month.
+          Pick the monthly amount Pip should keep out of Spendable Cash Today. Savings Goals use
+          this same monthly amount instead of adding a second holdback.
         </p>
       </div>
 
@@ -113,7 +114,9 @@ export function ProtectedSavingsPicker({
         {isSaving ? "Saving amount..." : `Save ${amountLabel}/month`}
       </button>
 
-      <p className="text-xs leading-5 text-ink/50">You can change this later. Pip does not move money.</p>
+      <p className="text-xs leading-5 text-ink/50">
+        You can change this later. A goal can raise this amount if it needs more. Pip does not move money.
+      </p>
       {error ? (
         <p className="rounded-[10px] border border-red-200 bg-red-50/80 px-3 py-2 text-sm leading-6 text-red-800">
           {error}

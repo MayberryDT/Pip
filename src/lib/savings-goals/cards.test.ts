@@ -23,14 +23,18 @@ describe("savings goal cards", () => {
     if (planCard.type !== "savings_goal_plan") {
       throw new Error(`Expected savings_goal_plan, received ${planCard.type}`);
     }
-    expect(planCard.summary).toContain("Tracked in Pip");
-    expect(planCard.summary).toContain("Pip does not move money");
+    expect(planCard.summary).toBe(
+      "$5,000 left for Japan trip. $833/month uses the same Monthly Savings system as Spendable Cash Today. Pip tracks the plan, but does not move money.",
+    );
+    expect(planCard.summary).not.toContain("would keep it on pace");
     expect(summaryCard.title).toBe("Savings Goals");
     if (summaryCard.type !== "savings_goals_summary") {
       throw new Error(`Expected savings_goals_summary, received ${summaryCard.type}`);
     }
-    expect(summaryCard.summary).toContain("tracked in Pip");
-    expect(summaryCard.summary).toContain("Pip does not move money");
+    expect(summaryCard.summary).toBe(
+      "1 active savings goal tracked inside Monthly Savings. Pip does not move money.",
+    );
+    expect(summaryCard.goals[0]?.monthlyContributionCents).toBe(planCard.monthlyContributionCents);
   });
 });
 

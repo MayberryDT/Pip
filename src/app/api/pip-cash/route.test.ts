@@ -20,6 +20,7 @@ import {
   AuthenticationRequiredError,
   NoFinancialDataError,
 } from "@/lib/data/current-snapshot";
+import { SupabaseConfigError } from "@/lib/supabase/env";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -56,6 +57,19 @@ describe("GET /api/pip-cash", () => {
     expect(response.headers.get("Cache-Control")).toBe("private, no-store");
     await expect(response.json()).resolves.toEqual({
       error: "Authentication required.",
+    });
+  });
+
+  it("returns 503 instead of fake data when Supabase is not configured", async () => {
+    routeMocks.getCurrentPipCashState.mockRejectedValue(new SupabaseConfigError());
+
+    const response = await GET(new Request("http://localhost/api/pip-cash?scenario=negative"));
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("Cache-Control")).toBe("private, no-store");
+    await expect(response.json()).resolves.toEqual({
+      code: "supabase-config-missing",
+      error: "Set Supabase env or PIP_SUPABASE_MODE=off before using fake Pip Cash data.",
     });
   });
 

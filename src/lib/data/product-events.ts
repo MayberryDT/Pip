@@ -60,8 +60,6 @@ export const productEventNames = [
   "savings_goal_created",
   "savings_goal_updated",
   "savings_goal_archived",
-  "savings_goal_spendable_protection_enabled",
-  "savings_goal_spendable_protection_disabled",
   "recurring_obligation_corrected",
   "plaid_webhook_received",
   "plaid_webhook_ignored",

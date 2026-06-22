@@ -11,6 +11,7 @@ import type {
 import { getCurrentAppDate } from "@/lib/date/app-date";
 import { listRecurringObligationRulesForUser } from "@/lib/data/recurring-obligation-rules";
 import { isInstitutionStale } from "@/lib/data/sync-status";
+import { PIP_MONTHLY_SAVINGS_POLICY_VERSION } from "@/lib/pip-cash/monthly-savings";
 import { listSavingsGoalsForUser } from "@/lib/data/savings-goals-repository";
 import { isSavingsGoalsEnabled } from "@/lib/savings-goals/feature-flags";
 
@@ -673,6 +674,7 @@ function isPipCashResult(value: unknown): value is PipCashResult {
   }
 
   return (
+    record.monthlySavingsPolicyVersion === PIP_MONTHLY_SAVINGS_POLICY_VERSION &&
     typeof record.pipCashTodayCents === "number" &&
     typeof record.rollingNetCents === "number" &&
     typeof record.incomeTotalCents === "number" &&
@@ -694,6 +696,7 @@ function isSpendableCashTodayResult(value: unknown): boolean {
   return Boolean(
     record &&
       record.metricVersion === "v2" &&
+      record.monthlySavingsPolicyVersion === PIP_MONTHLY_SAVINGS_POLICY_VERSION &&
       typeof record.spendableCashTodayCents === "number" &&
       typeof record.shortfallCents === "number" &&
       typeof record.baselineDailyAllowanceCents === "number" &&

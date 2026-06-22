@@ -104,6 +104,7 @@ import {
   AuthenticationRequiredError,
   NoFinancialDataError,
 } from "@/lib/data/current-snapshot";
+import { SupabaseConfigError } from "@/lib/supabase/env";
 
 afterEach(() => {
   vi.clearAllMocks();
@@ -137,6 +138,27 @@ describe("POST /api/agent", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Message is required.",
     });
+  });
+
+  it("returns a setup error instead of fake agent data when Supabase env is missing", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
+    routeMocks.getCurrentFinancialSnapshot.mockRejectedValue(
+      new SupabaseConfigError(
+        "Set Supabase env or PIP_SUPABASE_MODE=off before using fake Pip Cash data.",
+      ),
+    );
+
+    const response = await POST(jsonRequest({ message: "Show the math" }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "supabase-config-missing",
+      error: "Set Supabase env or PIP_SUPABASE_MODE=off before using fake Pip Cash data.",
+    });
+    expect(routeMocks.claimAgentModelGate).not.toHaveBeenCalled();
+    expect(routeMocks.runAIAgent).not.toHaveBeenCalled();
   });
 
   it("rejects missing Supabase auth before acquiring a model gate", async () => {

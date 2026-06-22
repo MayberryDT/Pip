@@ -5,6 +5,7 @@ import {
 } from "@/lib/data/current-snapshot";
 import { isFakeDataScenario } from "@/lib/fake-data";
 import { sensitiveJson } from "@/lib/security/http-cache";
+import { SupabaseConfigError } from "@/lib/supabase/env";
 
 export async function GET(request: Request) {
   const urlScenario = new URL(request.url).searchParams.get("scenario");
@@ -24,6 +25,16 @@ export async function GET(request: Request) {
           error: error.message,
         },
         { status: 409 },
+      );
+    }
+
+    if (error instanceof SupabaseConfigError) {
+      return sensitiveJson(
+        {
+          code: "supabase-config-missing",
+          error: "Set Supabase env or PIP_SUPABASE_MODE=off before using fake Pip Cash data.",
+        },
+        { status: 503 },
       );
     }
 

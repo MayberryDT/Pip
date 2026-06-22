@@ -94,18 +94,6 @@ export async function POST(request: Request) {
       monthlyContributionCents: goal.monthlyContributionCents,
     });
 
-    if (goal.includeInSpendableCash) {
-      await recordProductEventSafely(
-        supabase,
-        user.id,
-        "savings_goal_spendable_protection_enabled",
-        {
-          goalId: goal.id,
-          monthlyContributionCents: goal.monthlyContributionCents,
-        },
-      );
-    }
-
     return sensitiveJson(toSavingsGoalPlanResponse(goal), { status: 201 });
   } catch (error) {
     if (!(error instanceof SupabaseConfigError)) {

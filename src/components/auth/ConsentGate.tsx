@@ -41,8 +41,9 @@ export function ConsentGate({ email }: { email: string }) {
             card spend can be counted before a payment settles.
           </p>
           <p className="mt-3">
-            Pick what you want Pip to keep out of your daily spending number each month.
-            Pip does not move money.
+            Monthly savings is one amount Pip keeps out of Spendable Cash Today. Savings Goals use
+            that same monthly savings system, so a goal gives the amount a target instead of adding
+            a separate holdback. Pip does not move money.
           </p>
           <p className="mt-3 text-xs leading-5 text-ink/50">{email}</p>
           <div className="mt-5">

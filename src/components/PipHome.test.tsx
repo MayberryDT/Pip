@@ -71,6 +71,26 @@ describe("PipHome", () => {
     expect(visibleText).not.toContain("I’m checking your connected data.");
   });
 
+  it("does not show a savings-goal subheadline above the assistant", () => {
+    const result = {
+      ...__pipHomeTestHooks.getDemoPipCashResult(),
+      savingsGoalMonthlyCents: 28600,
+    };
+    const markup = renderToStaticMarkup(
+      <PipHome
+        authState={{ status: "ready", email: "tester@example.com" }}
+        enableAccountControls
+        initialResult={result}
+      />,
+    );
+    const visibleText = markup.replace(/<[^>]*>/g, " ");
+
+    expect(countOccurrences(markup, 'data-testid="pip-cash-number"')).toBe(1);
+    expect(markup).not.toContain('data-testid="pip-savings-goal-note"');
+    expect(visibleText).not.toContain("Savings Goals:");
+    expect(visibleText).not.toContain("included before today");
+  });
+
   it("does not immediately fetch Pip Cash again when a live initial result is present", () => {
     expect(
       __pipHomeTestHooks.getInitialBackendLoadPlan({
@@ -274,7 +294,8 @@ describe("PipHome", () => {
     expect(visibleText).not.toContain("Connect data to see today’s number.");
     expect(countOccurrences(markup, 'data-testid="pip-cash-number"')).toBe(0);
     expect(visibleText).toContain("Hi, I’m Pip. I’ll help you find today&#x27;s spending room.");
-    expect(visibleText).toContain("read-only account connection");
+    expect(visibleText).toContain("one monthly savings amount");
+    expect(visibleText).toContain("read-only accounts");
     expect(markup).toContain("Continue with Google");
     expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);
     expect(countOccurrences(markup, 'data-testid="agent-input"')).toBe(0);
@@ -301,6 +322,7 @@ describe("PipHome", () => {
     const visibleText = markup.replace(/<[^>]*>/g, " ");
 
     expect(visibleText).toContain("Choose monthly savings.");
+    expect(visibleText).toContain("One monthly savings amount powers savings goals and Spendable Cash Today.");
     expect(visibleText).toContain("Save $200/month");
     expect(visibleText).toContain("Pip does not move money.");
     expect(countOccurrences(markup, 'data-testid="prompt-chips"')).toBe(0);

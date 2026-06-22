@@ -36,7 +36,7 @@ export function buildSavingsGoalsSummaryCard(plans: SavingsGoalPlan[]): AgentCar
     type: "savings_goals_summary",
     title: "Savings Goals",
     summary: activePlans.length > 0
-      ? `${activePlans.length} active savings goal${activePlans.length === 1 ? "" : "s"} tracked in Pip. Pip does not move money.`
+      ? `${activePlans.length} active savings goal${activePlans.length === 1 ? "" : "s"} tracked inside Monthly Savings. Pip does not move money.`
       : "No active savings goals yet. Pip does not move money.",
     activeGoalCount: activePlans.length,
     protectedMonthlyContributionCents,
@@ -47,7 +47,8 @@ export function buildSavingsGoalsSummaryCard(plans: SavingsGoalPlan[]): AgentCar
       currentAmountCents: plan.goal.currentAmountCents,
       remainingCents: plan.remainingCents,
       ...(plan.goal.targetDate ? { targetDate: plan.goal.targetDate } : {}),
-      monthlyContributionCents: plan.goal.monthlyContributionCents,
+      monthlyContributionCents:
+        plan.goal.monthlyContributionCents || plan.recommendedMonthlyContributionCents || 0,
       includeInSpendableCash: plan.goal.includeInSpendableCash,
       ...(plan.onTrack === undefined ? {} : { onTrack: plan.onTrack }),
     })),
@@ -60,13 +61,9 @@ function buildSavingsGoalPlanSummary(
 ): string {
   const base = `${formatMoney(plan.remainingCents)} left for ${plan.goal.name}.`;
 
-  if (plan.goal.includeInSpendableCash && monthlyContributionCents > 0) {
-    return `${base} ${formatMoney(monthlyContributionCents)}/month in Monthly Savings is kept out of Spendable Cash Today. Tracked in Pip only. Pip does not move money.`;
-  }
-
   if (monthlyContributionCents > 0) {
-    return `${base} ${formatMoney(monthlyContributionCents)}/month in Monthly Savings would keep it on pace. Tracked in Pip only. Pip does not move money.`;
+    return `${base} ${formatMoney(monthlyContributionCents)}/month uses the same Monthly Savings system as Spendable Cash Today. Pip tracks the plan, but does not move money.`;
   }
 
-  return `${base} Tracked in Pip only. Pip does not move money.`;
+  return `${base} Add a monthly savings amount or target date to see how this goal affects Spendable Cash Today. Pip tracks the plan, but does not move money.`;
 }

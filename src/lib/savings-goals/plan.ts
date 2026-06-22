@@ -54,7 +54,9 @@ export function resolveSavingsGoalMonthlyContribution(
   goal: SavingsGoal,
   asOfDate: string,
 ): SavingsGoalContributionResolution {
-  if (goal.status !== "active") {
+  const remainingCents = Math.max(0, goal.targetAmountCents - goal.currentAmountCents);
+
+  if (goal.status !== "active" || remainingCents === 0) {
     return {
       goalId: goal.id,
       name: goal.name,
@@ -104,8 +106,8 @@ export function getProtectedSavingsGoalMonthlyCents(
 }
 
 function getSavingsGoalWarning(goal: SavingsGoal, remainingCents: number): string | undefined {
-  if (goal.includeInSpendableCash && goal.monthlyContributionCents === 0 && remainingCents > 0) {
-    return "This goal is protected, but it does not have a monthly contribution yet.";
+  if (goal.status === "active" && !goal.targetDate && goal.monthlyContributionCents === 0 && remainingCents > 0) {
+    return "Add a monthly savings amount or target date to see how this goal affects Spendable Cash Today.";
   }
 
   return undefined;

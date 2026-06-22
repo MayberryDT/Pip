@@ -40,7 +40,6 @@ import { PromptChips } from "@/components/PromptChips";
 import { getClientPipPlatform, type PipPlatform } from "@/lib/platform/android-shell";
 import { openPlaidLink } from "@/lib/providers/plaid/link-browser";
 import type { PlaidEventMetadata } from "@/lib/providers/plaid/link-browser";
-import { isSavingsGoalsClientEnabled } from "@/lib/savings-goals/feature-flags";
 import { pipTrustPolicy } from "@/lib/trust/pip-trust-policy";
 import {
   AgentRequestError,
@@ -169,12 +168,6 @@ export function PipHome({
         : localResult;
   const hasLoadedServerResult = Boolean(result);
   const pipCashTodayCents = result ? getDisplayedSpendableCashTodayCents(result) : undefined;
-  const protectedSavingsGoalMonthlyCents =
-    result?.savingsGoalMonthlyCents ??
-    result?.spendableCashToday?.savingsGoalMonthlyCents ??
-    0;
-  const showSavingsGoalMetricNote =
-    isSavingsGoalsClientEnabled() && protectedSavingsGoalMonthlyCents > 0;
   const [thread, setThread] = useState<ThreadItem[]>([]);
   const [chips, setChips] = useState<PromptChip[]>(() =>
     getReadyPromptChips({
@@ -1029,11 +1022,6 @@ export function PipHome({
                 >
                   {result ? formatMoney(getDisplayedSpendableCashTodayCents(result)) : "$--"}
                 </div>
-                {showSavingsGoalMetricNote ? (
-                  <p className="pip-metric-receipt" data-testid="pip-savings-goal-note">
-                    Savings Goals: {formatMoney(protectedSavingsGoalMonthlyCents)}/month included before today’s number. Pip does not move money.
-                  </p>
-                ) : null}
               </>
             ) : null}
           </section>
@@ -1460,7 +1448,7 @@ function OnboardingIntro({
           }
           messageClassName="onboarding-intro-message"
         >
-          <p>I’ll keep this out of your daily spending number. Pip does not move money.</p>
+          <p>One monthly savings amount powers savings goals and Spendable Cash Today. Pip does not move money.</p>
           {monthlySavingsError ? (
             <p className="mt-3 rounded-[10px] border border-red-200 bg-red-50/80 px-3 py-2 text-sm leading-6 text-red-800">
               {monthlySavingsError}
@@ -1499,8 +1487,8 @@ function OnboardingIntro({
         messageClassName="onboarding-intro-message"
       >
         <p>
-          First we’ll sign in. Then we’ll choose monthly savings and connect a read-only account
-          connection.
+          First we’ll sign in. Then we’ll choose one monthly savings amount and connect read-only
+          accounts.
         </p>
       </PipIntroScene>
     </div>
@@ -1987,9 +1975,7 @@ function getOpeningBubbleTightNotice(result: PipCashResult): OpeningBubbleInput[
 
 function getOpeningBubbleSavingsOpportunity(result: PipCashResult): boolean {
   const plannedMonthlySavingsCents =
-    (result.monthlySavingsCents ?? 0) +
-    (result.savingsGoalMonthlyCents ?? 0) +
-    result.protectedSavingsMonthlyCents;
+    result.monthlySavingsCents ?? result.protectedSavingsMonthlyCents;
 
   return plannedMonthlySavingsCents <= 0;
 }

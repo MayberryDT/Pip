@@ -196,6 +196,28 @@ describe("agent session helpers", () => {
     } satisfies Partial<AgentRequestError>);
   });
 
+  it("uses a local data setup message when Supabase config is missing", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: vi.fn().mockResolvedValue({ code: "supabase-config-missing" }),
+    }));
+
+    await expect(fetchAgentResponse(
+      "What changed?",
+      "default",
+      [],
+      [],
+      [],
+      "conversation-1",
+    )).rejects.toMatchObject({
+      name: "AgentRequestError",
+      status: 503,
+      code: "supabase-config-missing",
+      message: expect.stringContaining("local Supabase data"),
+    } satisfies Partial<AgentRequestError>);
+  });
+
   it("caps thread history to the latest eight entries", () => {
     const thread = Array.from({ length: 10 }, (_, index) => ({
       id: "turn-" + index,

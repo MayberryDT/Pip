@@ -63,8 +63,6 @@ export function buildSpendableTrustReceipt(input: {
   const pendingCommittedSpendCents = metric?.pendingCommittedSpendCents ?? 0;
   const monthlySavingsCents =
     metric?.monthlySavingsCents ?? result.monthlySavingsCents ?? result.protectedSavingsMonthlyCents;
-  const savingsGoalMonthlyCents =
-    metric?.savingsGoalMonthlyCents ?? result.savingsGoalMonthlyCents ?? 0;
   const confidence = metric?.confidence ?? (result.dataStates.length > 0 ? "medium" : "high");
   const knownLimits = [
     ...(hasStaleConnection
@@ -124,19 +122,10 @@ export function buildSpendableTrustReceipt(input: {
         label: "Monthly savings",
         value: formatMoney(-monthlySavingsCents),
         detail: monthlySavingsCents > 0
-          ? "Your chosen monthly savings are kept out of today's number."
+          ? "Monthly Savings includes your chosen savings amount and any active savings-goal need."
           : "No monthly savings amount is currently held out of today's number.",
         tone: "neutral",
       },
-      ...(savingsGoalMonthlyCents > 0
-        ? [{
-            id: "savings-goals",
-            label: "Savings goals",
-            value: formatMoney(-savingsGoalMonthlyCents),
-            detail: "Protected savings-goal contributions are kept out of today's number.",
-            tone: "neutral" as const,
-          }]
-        : []),
       {
         id: "pending",
         label: "Pending spend",
