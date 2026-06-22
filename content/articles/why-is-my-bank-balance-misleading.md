@@ -12,7 +12,7 @@ faq:
     answer: "Yes, Pip calculates Spendable Cash Today by subtracting upcoming bills, savings, and committed spending from your usable cash."
   - question: "Is reading my bank balance enough to manage money?"
     answer: "No. It’s a snapshot of what exists, not what’s safe. Pip’s daily number helps you avoid overspending without complex budgets."
-ogImage: "/marketing/blog/articles/why-is-my-bank-balance-misleading.svg"
+ogImage: "/marketing/blog/articles/why-is-my-bank-balance-misleading.png"
 publishedAt: "2026-06-22"
 updatedAt: "2026-06-22"
 author: "Pip"

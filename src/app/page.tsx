@@ -25,11 +25,7 @@ export const metadata: Metadata = buildMarketingMetadata({
   path: "/",
 });
 
-const featuredBlogSlugs = [
-  "meet-pip-cute-money-companion",
-  "why-your-bank-balance-is-misleading",
-  "what-is-spendable-cash-today",
-];
+const featuredBlogSlug = "meet-pip-cute-money-companion";
 
 const steps = [
   {
@@ -86,9 +82,11 @@ const askPipConversation = [
 
 export default function MarketingHomePage() {
   const articles = getPublishedArticles();
-  const featuredArticles = featuredBlogSlugs
-    .map((slug) => articles.find((article) => article.slug === slug))
-    .filter((article): article is (typeof articles)[number] => Boolean(article));
+  const featuredArticle =
+    articles.find((article) => article.slug === featuredBlogSlug) ?? articles[0] ?? null;
+  const supportingArticles = articles
+    .filter((article) => article.slug !== featuredArticle?.slug)
+    .slice(0, 2);
 
   return (
     <MarketingLayout>
@@ -362,11 +360,11 @@ export default function MarketingHomePage() {
                 </Link>
             </div>
             <div className="pip-blog-editorial-grid">
-              {featuredArticles[0] ? (
-                <ArticleCard article={featuredArticles[0]} imageLoading="eager" variant="homeFeatured" />
+              {featuredArticle ? (
+                <ArticleCard article={featuredArticle} imageLoading="eager" variant="homeFeatured" />
               ) : null}
               <div className="pip-blog-supporting">
-                {featuredArticles.slice(1).map((article) => (
+                {supportingArticles.map((article) => (
                   <ArticleCard article={article} imageLoading="eager" key={article.slug} variant="homeCompact" />
                 ))}
               </div>
