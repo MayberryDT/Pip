@@ -1,0 +1,1041 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Pip Plaid Webhook Freshness Plan</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #16201d;
+        --muted: #5f6d68;
+        --paper: #f8f7f2;
+        --panel: #ffffff;
+        --line: #d8ded8;
+        --deep: #173f36;
+        --teal: #1d7669;
+        --mint: #dff1e8;
+        --gold: #f2bc57;
+        --gold-soft: #fff1c9;
+        --coral: #c95d47;
+        --coral-soft: #ffe1d8;
+        --blue: #2f6f9f;
+        --blue-soft: #dcebf5;
+        --shadow: 0 16px 40px rgba(22, 32, 29, 0.08);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        line-height: 1.45;
+      }
+
+      a {
+        color: var(--deep);
+        text-underline-offset: 3px;
+      }
+
+      .page {
+        width: min(1180px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 34px 0 56px;
+      }
+
+      header {
+        display: grid;
+        grid-template-columns: 1.2fr 0.8fr;
+        gap: 24px;
+        align-items: end;
+        border-bottom: 1px solid var(--line);
+        padding-bottom: 24px;
+      }
+
+      .eyebrow {
+        margin: 0 0 10px;
+        color: var(--teal);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        margin-top: 0;
+      }
+
+      h1 {
+        margin-bottom: 12px;
+        max-width: 780px;
+        font-size: clamp(2rem, 5vw, 4.4rem);
+        line-height: 0.96;
+        letter-spacing: 0;
+      }
+
+      h2 {
+        margin-bottom: 14px;
+        font-size: clamp(1.55rem, 3vw, 2.55rem);
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+
+      h3 {
+        margin-bottom: 8px;
+        font-size: 1rem;
+        line-height: 1.2;
+      }
+
+      .lede {
+        max-width: 760px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 1.05rem;
+      }
+
+      .summary {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        padding: 18px;
+      }
+
+      .summary strong {
+        display: block;
+        margin-bottom: 8px;
+      }
+
+      .summary p {
+        margin-bottom: 0;
+        color: var(--muted);
+      }
+
+      section {
+        padding: 34px 0 0;
+      }
+
+      .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .grid-3 {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        box-shadow: var(--shadow);
+        padding: 18px;
+      }
+
+      .panel.compact {
+        padding: 14px;
+      }
+
+      .label {
+        display: inline-flex;
+        align-items: center;
+        min-height: 26px;
+        margin-bottom: 10px;
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 3px 9px;
+        color: var(--deep);
+        background: #f7faf8;
+        font-size: 0.75rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .list {
+        display: grid;
+        gap: 10px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .list li {
+        display: grid;
+        grid-template-columns: 26px 1fr;
+        gap: 10px;
+        align-items: start;
+        color: var(--muted);
+      }
+
+      .dot {
+        width: 26px;
+        height: 26px;
+        display: grid;
+        place-items: center;
+        border-radius: 50%;
+        background: var(--mint);
+        color: var(--deep);
+        font-size: 0.75rem;
+        font-weight: 900;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(5, minmax(120px, 1fr));
+        gap: 12px;
+        align-items: stretch;
+      }
+
+      .flow-step {
+        position: relative;
+        min-height: 142px;
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px;
+      }
+
+      .flow-step:after {
+        content: "->";
+        position: absolute;
+        top: 22px;
+        right: -15px;
+        color: var(--muted);
+        font-weight: 900;
+      }
+
+      .flow-step:last-child:after {
+        display: none;
+      }
+
+      .flow-step p {
+        margin-bottom: 0;
+        color: var(--muted);
+        font-size: 0.92rem;
+      }
+
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        margin-bottom: 10px;
+        border-radius: 999px;
+        padding: 3px 8px;
+        font-size: 0.72rem;
+        font-weight: 800;
+      }
+
+      .tag.green {
+        background: var(--mint);
+        color: var(--deep);
+      }
+
+      .tag.gold {
+        background: var(--gold-soft);
+        color: #6f4b08;
+      }
+
+      .tag.red {
+        background: var(--coral-soft);
+        color: #7b2d20;
+      }
+
+      .tag.blue {
+        background: var(--blue-soft);
+        color: #174465;
+      }
+
+      .current-vs-next {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+      }
+
+      .lane-title {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 12px;
+      }
+
+      .lane-title span {
+        color: var(--muted);
+        font-size: 0.82rem;
+        font-weight: 700;
+      }
+
+      .stack {
+        display: grid;
+        gap: 10px;
+      }
+
+      .node {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 12px;
+        background: #fbfdfb;
+      }
+
+      .node strong {
+        display: block;
+        margin-bottom: 4px;
+      }
+
+      .node p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .bad {
+        border-color: #edb4a5;
+        background: #fff8f5;
+      }
+
+      .good {
+        border-color: #b7dccf;
+        background: #f6fffb;
+      }
+
+      .neutral {
+        border-color: #c7d8e5;
+        background: #f6fbff;
+      }
+
+      .scenario-shell {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 18px;
+      }
+
+      .scenario-buttons {
+        display: grid;
+        gap: 8px;
+      }
+
+      button.scenario-button {
+        appearance: none;
+        width: 100%;
+        min-height: 56px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: var(--panel);
+        color: var(--ink);
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+      }
+
+      button.scenario-button strong {
+        display: block;
+        margin-bottom: 2px;
+      }
+
+      button.scenario-button span {
+        color: var(--muted);
+        font-size: 0.84rem;
+      }
+
+      button.scenario-button[aria-pressed="true"] {
+        border-color: var(--teal);
+        background: var(--mint);
+        box-shadow: inset 4px 0 0 var(--teal);
+      }
+
+      .scenario-stage {
+        display: grid;
+        grid-template-columns: 0.95fr 1.05fr;
+        gap: 18px;
+        align-items: stretch;
+      }
+
+      header > *,
+      .grid-2 > *,
+      .grid-3 > *,
+      .current-vs-next > *,
+      .scenario-shell > *,
+      .scenario-stage > * {
+        min-width: 0;
+      }
+
+      .phone {
+        display: grid;
+        align-content: start;
+        min-height: 560px;
+        border: 10px solid #16201d;
+        border-radius: 28px;
+        background: #fdfcf6;
+        padding: 18px;
+        overflow: hidden;
+      }
+
+      .phone-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 18px;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 800;
+      }
+
+      .money-card {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #ffffff;
+        padding: 16px;
+      }
+
+      .money-card .small {
+        margin-bottom: 6px;
+        color: var(--muted);
+        font-size: 0.78rem;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+
+      .amount {
+        margin: 0 0 8px;
+        font-size: clamp(2.4rem, 8vw, 4rem);
+        line-height: 0.95;
+        letter-spacing: 0;
+      }
+
+      .freshness-line {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        border-radius: 999px;
+        padding: 4px 10px;
+        background: var(--blue-soft);
+        color: #174465;
+        font-size: 0.78rem;
+        font-weight: 800;
+      }
+
+      .bubble {
+        margin-top: 16px;
+        border: 1px solid #cdd8d4;
+        border-radius: 8px;
+        background: #f6faf7;
+        padding: 14px;
+      }
+
+      .bubble p {
+        margin-bottom: 0;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .chip {
+        border: 1px solid var(--line);
+        border-radius: 999px;
+        padding: 6px 10px;
+        background: var(--panel);
+        color: var(--deep);
+        font-size: 0.8rem;
+        font-weight: 800;
+      }
+
+      .backend-log {
+        display: grid;
+        gap: 10px;
+      }
+
+      .log-row {
+        display: grid;
+        grid-template-columns: 34px 1fr;
+        gap: 10px;
+        align-items: start;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #fbfdfb;
+      }
+
+      .log-row strong {
+        display: block;
+        margin-bottom: 3px;
+      }
+
+      .log-row p {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.9rem;
+      }
+
+      .mini {
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      .decision-table {
+        width: 100%;
+        border-collapse: collapse;
+        overflow: hidden;
+        background: var(--panel);
+      }
+
+      .table-wrap {
+        width: 100%;
+        overflow-x: auto;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .decision-table th,
+      .decision-table td {
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .decision-table th {
+        background: #eff5f1;
+        color: var(--deep);
+        font-size: 0.78rem;
+        text-transform: uppercase;
+      }
+
+      .decision-table tr:last-child td {
+        border-bottom: 0;
+      }
+
+      code {
+        border: 1px solid var(--line);
+        border-radius: 5px;
+        padding: 1px 5px;
+        background: #f6f8f6;
+        color: #23453d;
+        font-size: 0.88em;
+        overflow-wrap: anywhere;
+      }
+
+      .footer-note {
+        margin-top: 22px;
+        color: var(--muted);
+        font-size: 0.88rem;
+      }
+
+      @media (max-width: 940px) {
+        header,
+        .grid-2,
+        .current-vs-next,
+        .scenario-shell,
+        .scenario-stage {
+          grid-template-columns: 1fr;
+        }
+
+        .grid-3 {
+          grid-template-columns: 1fr;
+        }
+
+        .flow {
+          grid-template-columns: 1fr;
+        }
+
+        .flow-step {
+          min-height: auto;
+        }
+
+        .flow-step:after {
+          content: "";
+          display: none;
+        }
+
+        .phone {
+          min-height: 470px;
+        }
+      }
+
+      @media (max-width: 520px) {
+        .page {
+          width: min(1180px, calc(100% - 22px));
+          padding-top: 22px;
+        }
+
+        .scenario-buttons {
+          grid-template-columns: 1fr;
+        }
+
+        .panel,
+        .summary {
+          padding: 14px;
+        }
+
+        .phone {
+          border-width: 7px;
+          border-radius: 22px;
+          padding: 13px;
+        }
+
+        .decision-table th,
+        .decision-table td {
+          padding: 9px;
+          font-size: 0.9rem;
+        }
+
+        .decision-table {
+          min-width: 640px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header>
+        <div>
+          <p class="eyebrow">Pip freshness redesign</p>
+          <h1>Stop refreshing on every open. Sync when there is a reason.</h1>
+          <p class="lede">
+            The current system already has Plaid webhooks, sync jobs, stale markers, and same-day
+            Spendable Cash Today math. The plan is to connect those pieces into one app-open
+            decision instead of treating every launch like a refresh event.
+          </p>
+        </div>
+        <aside class="summary">
+          <strong>Recommended implementation shape</strong>
+          <p>
+            Use existing <code>plaid_webhook_events</code> and <code>pip_sync_jobs</code> as the
+            durable state. App open reads that state, runs sync only for pending bank updates or
+            stale data, and otherwise lets Pip say useful guidance.
+          </p>
+        </aside>
+      </header>
+
+      <section aria-labelledby="current-title">
+        <h2 id="current-title">What the code does today</h2>
+        <div class="current-vs-next">
+          <article class="panel">
+            <div class="lane-title">
+              <h3>Current app-open path</h3>
+              <span>high call volume</span>
+            </div>
+            <div class="stack">
+              <div class="node bad">
+                <strong>User opens Pip</strong>
+                <p>The client immediately sets the opening bubble to a checking message.</p>
+              </div>
+              <div class="node bad">
+                <strong><code>/api/sync/app-open</code></strong>
+                <p>The decision mostly checks repair, pending jobs, and a 60 second duplicate guard.</p>
+              </div>
+              <div class="node bad">
+                <strong><code>runProviderSync(..., reason: "app_open")</code></strong>
+                <p>Pip calls Plaid <code>/transactions/sync</code> even if Plaid did not signal updates.</p>
+              </div>
+              <div class="node neutral">
+                <strong>Opening bubble</strong>
+                <p>Refresh copy wins priority because the UI is driven by a string message.</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="lane-title">
+              <h3>Current webhook path</h3>
+              <span>useful but disconnected</span>
+            </div>
+            <div class="stack">
+              <div class="node good">
+                <strong>Plaid sends <code>SYNC_UPDATES_AVAILABLE</code></strong>
+                <p>This is the correct signal that transaction changes can be retrieved.</p>
+              </div>
+              <div class="node neutral">
+                <strong><code>plaid_webhook_events</code></strong>
+                <p>The event is recorded with verification and processing state.</p>
+              </div>
+              <div class="node neutral">
+                <strong><code>pip_sync_jobs</code></strong>
+                <p>A job can be enqueued with reason <code>plaid_webhook</code>.</p>
+              </div>
+              <div class="node bad">
+                <strong>Missing bridge to the app</strong>
+                <p>App-open only sees that a job is pending, not that it came from a bank update.</p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section aria-labelledby="state-title">
+        <h2 id="state-title">The state management idea</h2>
+        <div class="grid-3">
+          <article class="panel compact">
+            <span class="label">State source</span>
+            <h3>No new app-wide state table required</h3>
+            <p class="mini">
+              The durable state can be derived from existing rows: active
+              <code>pip_sync_jobs</code>, recent <code>plaid_webhook_events</code>, and
+              <code>connected_institutions.last_successful_sync_at</code>.
+            </p>
+          </article>
+          <article class="panel compact">
+            <span class="label">New concept</span>
+            <h3>Bank update cue</h3>
+            <p class="mini">
+              Add a small typed object to the app-open/current-state APIs:
+              <code>none</code>, <code>webhook_pending</code>, <code>syncing</code>,
+              <code>stale</code>, <code>needs_repair</code>, or <code>recent</code>.
+            </p>
+          </article>
+          <article class="panel compact">
+            <span class="label">User effect</span>
+            <h3>Pip speaks only when true</h3>
+            <p class="mini">
+              Pip says bank-update copy only when Plaid actually sent a signal. Otherwise the
+              opening bubble can be normal coaching, same-day spend, tight-day guidance, or a
+              freshness note.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section aria-labelledby="flow-title">
+        <h2 id="flow-title">Proposed flow</h2>
+        <div class="flow" aria-label="Proposed freshness flow">
+          <article class="flow-step">
+            <span class="tag green">1. Plaid</span>
+            <h3>Update signal</h3>
+            <p>Plaid sends a webhook when synced transaction data has changed.</p>
+          </article>
+          <article class="flow-step">
+            <span class="tag blue">2. Backend</span>
+            <h3>Record and queue</h3>
+            <p>Pip records the webhook and creates a <code>plaid_webhook</code> sync job.</p>
+          </article>
+          <article class="flow-step">
+            <span class="tag gold">3. App open</span>
+            <h3>Read cue</h3>
+            <p>The app-open route checks for active webhook jobs before doing any sync work.</p>
+          </article>
+          <article class="flow-step">
+            <span class="tag green">4. Sync</span>
+            <h3>Pull only when warranted</h3>
+            <p>If there is a pending bank update or stale data, run <code>/transactions/sync</code>.</p>
+          </article>
+          <article class="flow-step">
+            <span class="tag blue">5. UI</span>
+            <h3>Explain the truth</h3>
+            <p>Pip says what happened and shows the refreshed Spendable Cash Today if it changed.</p>
+          </article>
+        </div>
+      </section>
+
+      <section aria-labelledby="scenarios-title">
+        <h2 id="scenarios-title">Visual scenarios</h2>
+        <div class="scenario-shell">
+          <aside class="panel">
+            <h3>Pick an app-open moment</h3>
+            <p class="mini">
+              These are the practical states the product needs to distinguish.
+            </p>
+            <div class="scenario-buttons" role="group" aria-label="Scenarios">
+              <button class="scenario-button" type="button" data-scenario="calm" aria-pressed="true">
+                <strong>No bank update</strong>
+                <span>Use the latest cached number and say useful guidance.</span>
+              </button>
+              <button class="scenario-button" type="button" data-scenario="webhook" aria-pressed="false">
+                <strong>Webhook pending</strong>
+                <span>Plaid signaled changes while the user was away.</span>
+              </button>
+              <button class="scenario-button" type="button" data-scenario="stale" aria-pressed="false">
+                <strong>Data is stale</strong>
+                <span>No webhook, but the last sync is old enough to check.</span>
+              </button>
+              <button class="scenario-button" type="button" data-scenario="changed" aria-pressed="false">
+                <strong>Sync changed today</strong>
+                <span>A same-day transaction came in and lowered the number.</span>
+              </button>
+              <button class="scenario-button" type="button" data-scenario="repair" aria-pressed="false">
+                <strong>Needs repair</strong>
+                <span>The bank connection cannot be synced until reconnected.</span>
+              </button>
+            </div>
+          </aside>
+
+          <div class="scenario-stage">
+            <section class="phone" aria-label="Pip phone preview">
+              <div class="phone-top">
+                <span>Pip</span>
+                <span id="phone-state">Latest numbers</span>
+              </div>
+              <article class="money-card">
+                <div class="small">Spendable Cash Today</div>
+                <p class="amount" id="scenario-amount">$42</p>
+                <span class="freshness-line" id="scenario-freshness">Updated 37 minutes ago</span>
+              </article>
+              <article class="bubble">
+                <p id="scenario-copy">
+                  You have $42 for today. Nothing unusual is pulling on it.
+                </p>
+                <div class="chip-row" id="scenario-chips">
+                  <span class="chip">Why today?</span>
+                  <span class="chip">What changed?</span>
+                </div>
+              </article>
+            </section>
+
+            <section class="panel" aria-label="Backend sequence">
+              <span class="label">Backend sequence</span>
+              <h3 id="scenario-title">No bank update</h3>
+              <div class="backend-log" id="scenario-log"></div>
+            </section>
+          </div>
+        </div>
+      </section>
+
+      <section aria-labelledby="decision-title">
+        <h2 id="decision-title">Decision table for app open</h2>
+        <div class="table-wrap">
+          <table class="decision-table">
+            <thead>
+              <tr>
+                <th>Input state</th>
+                <th>Backend action</th>
+                <th>User-facing copy</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Active <code>pip_sync_jobs.reason = "plaid_webhook"</code></td>
+                <td>Run or process that job immediately, then reload Pip Cash.</td>
+                <td>"I found bank updates. Let me pull them in."</td>
+              </tr>
+              <tr>
+                <td>Recent sync, no active webhook job</td>
+                <td>Do not call Plaid. Use cached snapshot.</td>
+                <td>Normal guidance, same-day spend, tight-day note, or "last updated..."</td>
+              </tr>
+              <tr>
+                <td>Last successful sync older than threshold</td>
+                <td>Run ordinary <code>/transactions/sync</code> as a stale-data check.</td>
+                <td>"Your bank data is getting old, so I am checking it now."</td>
+              </tr>
+              <tr>
+                <td>Pending or running sync job</td>
+                <td>Do not start a duplicate job. Poll/reload freshness state.</td>
+                <td>"Your bank update is already syncing."</td>
+              </tr>
+              <tr>
+                <td>Repairable Plaid error</td>
+                <td>Do not sync. Route to account repair.</td>
+                <td>"This connection needs a quick reconnect before I can update it."</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section aria-labelledby="implementation-title">
+        <h2 id="implementation-title">Implementation map</h2>
+        <div class="grid-2">
+          <article class="panel">
+            <span class="label">Backend changes</span>
+            <ul class="list">
+              <li>
+                <span class="dot">1</span>
+                <span>
+                  Expand the pending sync job loader so app-open can see job reason, provider,
+                  institution, source webhook, and status.
+                </span>
+              </li>
+              <li>
+                <span class="dot">2</span>
+                <span>
+                  Add a small <code>getBankUpdateCueForUser</code> helper that returns the typed cue
+                  app-open and current snapshot need.
+                </span>
+              </li>
+              <li>
+                <span class="dot">3</span>
+                <span>
+                  Change <code>getAppOpenSyncDecision</code> from a 60 second guard to webhook-first,
+                  stale-second, otherwise skip.
+                </span>
+              </li>
+              <li>
+                <span class="dot">4</span>
+                <span>
+                  Make webhook jobs process promptly: either app-open claims them immediately or the
+                  scheduled processor runs pending jobs even when scheduled enqueue is off.
+                </span>
+              </li>
+            </ul>
+          </article>
+
+          <article class="panel">
+            <span class="label">UI changes</span>
+            <ul class="list">
+              <li>
+                <span class="dot">1</span>
+                <span>
+                  Replace the current string-only app-open message with a typed status payload.
+                </span>
+              </li>
+              <li>
+                <span class="dot">2</span>
+                <span>
+                  Update the opening bubble planner so refresh copy only wins when the typed cue says
+                  refresh work is real.
+                </span>
+              </li>
+              <li>
+                <span class="dot">3</span>
+                <span>
+                  Keep existing same-day spend priority after a sync. That is the moment Pip can say
+                  it found spending and took it off today.
+                </span>
+              </li>
+              <li>
+                <span class="dot">4</span>
+                <span>
+                  Show "last updated" as a receipt, not an excuse, whenever no sync is needed.
+                </span>
+              </li>
+            </ul>
+          </article>
+        </div>
+        <p class="footer-note">
+          Plaid docs basis: <a href="https://plaid.com/docs/transactions/">Transactions overview</a>,
+          <a href="https://plaid.com/docs/transactions/webhooks/">Transactions webhooks</a>, and
+          <a href="https://plaid.com/docs/api/products/transactions/#transactionsrefresh">Transactions Refresh</a>.
+          Local code basis: app-open sync, Plaid webhook route, sync jobs, current snapshot freshness,
+          and opening bubble planner.
+        </p>
+      </section>
+    </main>
+
+    <script>
+      const scenarios = {
+        calm: {
+          phoneState: "Latest numbers",
+          title: "No bank update",
+          amount: "$42",
+          freshness: "Updated 37 minutes ago",
+          copy: "You have $42 for today. Nothing unusual is pulling on it.",
+          chips: ["Why today?", "What changed?"],
+          log: [
+            ["1", "Load freshness", "No active Plaid webhook job and last sync is recent."],
+            ["2", "Skip Plaid", "No network sync call is made on app open."],
+            ["3", "Plan bubble", "Refresh copy does not take priority; Pip gives normal guidance."]
+          ]
+        },
+        webhook: {
+          phoneState: "Bank update",
+          title: "Webhook pending",
+          amount: "$42",
+          freshness: "Bank update available",
+          copy: "I found bank updates. Let me pull them in.",
+          chips: ["Checking now", "Accounts"],
+          log: [
+            ["1", "Read job queue", "A pending job exists with reason plaid_webhook."],
+            ["2", "Run sync", "App-open processes that job or calls the same provider sync path."],
+            ["3", "Reload result", "If Spendable Cash Today changed, the updated snapshot replaces the old one."]
+          ]
+        },
+        stale: {
+          phoneState: "Stale check",
+          title: "Data is stale",
+          amount: "$42",
+          freshness: "Last updated yesterday",
+          copy: "Your bank data is getting old, so I am checking it now.",
+          chips: ["Checking now", "Why today?"],
+          log: [
+            ["1", "Load sync status", "No webhook job exists, but stale_after has passed."],
+            ["2", "Run sync", "Pip uses ordinary transactions/sync as a stale-data check."],
+            ["3", "Record freshness", "Last successful sync time moves forward if the sync succeeds."]
+          ]
+        },
+        changed: {
+          phoneState: "Updated today",
+          title: "Sync changed today",
+          amount: "$31",
+          freshness: "Updated just now",
+          copy: "I found pending $11 at Breakfast Spot and took it off today for now.",
+          chips: ["Why today?", "What changed?"],
+          log: [
+            ["1", "Sync completes", "Plaid returns added or modified transactions."],
+            ["2", "Recalculate", "Same-day ledger subtracts daily spend from Spendable Cash Today."],
+            ["3", "React", "Existing Pip reaction logic can surface the same-day transaction."]
+          ]
+        },
+        repair: {
+          phoneState: "Needs attention",
+          title: "Needs repair",
+          amount: "$42",
+          freshness: "Connection needs repair",
+          copy: "This connection needs a quick reconnect before I can update it.",
+          chips: ["Accounts", "Help"],
+          log: [
+            ["1", "Check institution", "Sync status has a repairable Plaid error."],
+            ["2", "Skip sync", "Pip avoids repeating calls that cannot succeed."],
+            ["3", "Route user", "The opening bubble points to account repair instead of refresh."]
+          ]
+        }
+      };
+
+      const buttons = Array.from(document.querySelectorAll(".scenario-button"));
+      const phoneState = document.getElementById("phone-state");
+      const title = document.getElementById("scenario-title");
+      const amount = document.getElementById("scenario-amount");
+      const freshness = document.getElementById("scenario-freshness");
+      const copy = document.getElementById("scenario-copy");
+      const chips = document.getElementById("scenario-chips");
+      const log = document.getElementById("scenario-log");
+
+      function renderScenario(id) {
+        const scenario = scenarios[id];
+
+        buttons.forEach((button) => {
+          button.setAttribute("aria-pressed", String(button.dataset.scenario === id));
+        });
+        phoneState.textContent = scenario.phoneState;
+        title.textContent = scenario.title;
+        amount.textContent = scenario.amount;
+        freshness.textContent = scenario.freshness;
+        copy.textContent = scenario.copy;
+        chips.innerHTML = scenario.chips.map((chip) => `<span class="chip">${chip}</span>`).join("");
+        log.innerHTML = scenario.log
+          .map(
+            ([number, heading, body]) => `
+              <div class="log-row">
+                <span class="dot">${number}</span>
+                <span>
+                  <strong>${heading}</strong>
+                  <p>${body}</p>
+                </span>
+              </div>
+            `
+          )
+          .join("");
+      }
+
+      buttons.forEach((button) => {
+        button.addEventListener("click", () => renderScenario(button.dataset.scenario));
+      });
+
+      renderScenario("calm");
+    </script>
+  </body>
+</html>

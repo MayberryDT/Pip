@@ -1,7 +1,8 @@
+import type { ActivePipSyncJobSummary } from "@/lib/data/sync-jobs";
 import type { SyncStatus } from "@/lib/data/sync-status";
 import type { FinancialProviderName } from "@/lib/providers/FinancialDataProvider";
 
-const APP_OPEN_DUPLICATE_GUARD_MS = 60 * 1000;
+const APP_OPEN_STALE_CHECK_AFTER_MS = 4 * 60 * 60 * 1000;
 const refreshableProviders = new Set<FinancialProviderName>(["plaid", "teller"]);
 const reconnectRequiredErrorCodes = new Set(["provider-token-decrypt-failed"]);
 const repairablePlaidErrorCodes = new Set([
@@ -23,17 +24,22 @@ export type AppOpenSyncDecision =
   | {
       status: "run";
       provider: FinancialProviderName;
-      reason: "app_open_check";
+      reason: "initial_sync" | "stale_check";
     }
   | {
-      status: "no_provider" | "skipped_pending" | "skipped_fresh" | "skipped_recent";
+      status: "run_webhook_job";
+      provider: FinancialProviderName;
+      jobId: string;
+      reason: "plaid_webhook_pending";
+    }
+  | {
+      status: "no_provider" | "skipped_pending" | "skipped_recent";
       reason:
         | "no_refreshable_provider"
         | "sync_in_flight"
-        | "fresh_enough"
-        | "recent_duplicate";
+        | "sync_waiting_for_retry"
+        | "recent_enough";
       message: string;
-      retryAfterSeconds?: number;
       lastSuccessfulSyncAt?: string;
     }
   | {
@@ -48,8 +54,9 @@ export type AppOpenSyncDecision =
 
 export function getAppOpenSyncDecision(input: {
   syncStatus: SyncStatus;
-  hasPendingSyncJob: boolean;
+  activeSyncJobs: ActivePipSyncJobSummary[];
   now: Date;
+  staleCheckAfterMs?: number;
 }): AppOpenSyncDecision {
   const repairInstitution = input.syncStatus.institutions.find(isRepairOnlyInstitution);
   const refreshableInstitutions = getRefreshableInstitutions(input.syncStatus);
@@ -75,41 +82,103 @@ export function getAppOpenSyncDecision(input: {
     };
   }
 
-  if (input.hasPendingSyncJob) {
+  const activeProviderJobs = input.activeSyncJobs.filter((job) => job.provider === provider);
+  const webhookJobs = activeProviderJobs.filter(
+    (job) => job.reason === "plaid_webhook" && job.sourceWebhookEventId,
+  );
+  const availableWebhookJob = webhookJobs.find(
+    (job) => job.status === "pending" && isJobAvailable(job, input.now),
+  );
+
+  if (availableWebhookJob) {
     return {
-      status: "skipped_pending",
-      reason: "sync_in_flight",
-      message: "A refresh is already queued or running.",
+      status: "run_webhook_job",
+      provider,
+      jobId: availableWebhookJob.id,
+      reason: "plaid_webhook_pending",
     };
   }
 
-  const latestStartedAt =
-    input.syncStatus.latestSyncRun?.provider === provider && input.syncStatus.latestSyncRun.startedAt
-      ? new Date(input.syncStatus.latestSyncRun.startedAt)
-      : null;
-  const lastSuccessfulSyncAt = getLastSuccessfulSyncAt(input.syncStatus, provider);
-  const retryAfterSeconds = getCooldownRetryAfterSeconds(latestStartedAt, input.now);
-
-  if (retryAfterSeconds > 0) {
+  if (activeProviderJobs.some((job) => job.status === "running")) {
     return {
-      status: "skipped_recent",
-      reason: "recent_duplicate",
-      message: "A refresh ran recently.",
-      retryAfterSeconds,
-      ...(lastSuccessfulSyncAt ? { lastSuccessfulSyncAt } : {}),
+      status: "skipped_pending",
+      reason: "sync_in_flight",
+      message: "A sync is already running.",
+    };
+  }
+
+  if (webhookJobs.some((job) => job.status === "pending")) {
+    return {
+      status: "skipped_pending",
+      reason: "sync_waiting_for_retry",
+      message: "A webhook sync is waiting for its retry window.",
+    };
+  }
+
+  if (activeProviderJobs.some((job) => job.status === "pending")) {
+    return {
+      status: "skipped_pending",
+      reason: "sync_in_flight",
+      message: "A sync is already queued.",
+    };
+  }
+
+  const lastSuccessfulSyncAt = getLastSuccessfulSyncAt(input.syncStatus, provider);
+  const lastSuccessfulSyncDate = parseDate(lastSuccessfulSyncAt);
+
+  if (!lastSuccessfulSyncDate) {
+    return {
+      status: "run",
+      provider,
+      reason: "initial_sync",
+    };
+  }
+
+  const providerInstitutions = refreshableInstitutions.filter((institution) => institution.provider === provider);
+  const staleCheckAfterMs = input.staleCheckAfterMs ?? APP_OPEN_STALE_CHECK_AFTER_MS;
+  const shouldRunStaleCheck =
+    providerInstitutions.some((institution) => institution.isStale) ||
+    input.now.getTime() - lastSuccessfulSyncDate.getTime() >= staleCheckAfterMs;
+
+  if (shouldRunStaleCheck) {
+    return {
+      status: "run",
+      provider,
+      reason: "stale_check",
     };
   }
 
   return {
-    status: "run",
-    provider,
-    reason: "app_open_check",
+    status: "skipped_recent",
+    reason: "recent_enough",
+    message: "Recent data is fresh enough for app open.",
+    ...(lastSuccessfulSyncAt ? { lastSuccessfulSyncAt } : {}),
   };
 }
 
-type RefreshableInstitution = SyncStatus["institutions"][number] & {
-  provider: FinancialProviderName;
-};
+function isJobAvailable(job: ActivePipSyncJobSummary, now: Date): boolean {
+  const availableAt = parseDate(job.availableAt);
+
+  if (!availableAt) {
+    return false;
+  }
+
+  return availableAt.getTime() <= now.getTime();
+}
+
+function parseDate(value: string | null | undefined): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+
+  return parsed;
+}
 
 function getRefreshableInstitutions(syncStatus: SyncStatus): RefreshableInstitution[] {
   return syncStatus.institutions.filter((item): item is RefreshableInstitution => {
@@ -153,16 +222,6 @@ function getLastSuccessfulSyncAt(
   );
 }
 
-function getCooldownRetryAfterSeconds(latestStartedAt: Date | null, now: Date): number {
-  if (!latestStartedAt) {
-    return 0;
-  }
-
-  const elapsedMs = now.getTime() - latestStartedAt.getTime();
-
-  if (elapsedMs >= APP_OPEN_DUPLICATE_GUARD_MS) {
-    return 0;
-  }
-
-  return Math.ceil((APP_OPEN_DUPLICATE_GUARD_MS - elapsedMs) / 1000);
-}
+type RefreshableInstitution = SyncStatus["institutions"][number] & {
+  provider: FinancialProviderName;
+};

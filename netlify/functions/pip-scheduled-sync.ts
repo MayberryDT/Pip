@@ -36,10 +36,10 @@ export default async function pipScheduledSync() {
   hydrateProcessEnv(env);
   const flags = getPipSyncFeatureFlags(env);
 
-  if (!flags.syncJobsEnabled || !flags.scheduledSyncEnabled) {
+  if (!flags.syncJobsEnabled) {
     return jsonResponse({
       status: "skipped",
-      reason: "scheduled-sync-disabled",
+      reason: "sync-jobs-disabled",
     });
   }
 
@@ -55,11 +55,17 @@ export default async function pipScheduledSync() {
 
   const supabase = createSupabaseAdminClient();
   const now = new Date();
-  const enqueue = await enqueueScheduledPipSyncJobs(supabase, {
-    limit: flags.scheduledSyncBatchSize,
-    minIntervalMinutes: flags.scheduledSyncMinIntervalMinutes,
-    now,
-  });
+  const enqueue = flags.scheduledSyncEnabled
+    ? await enqueueScheduledPipSyncJobs(supabase, {
+        limit: flags.scheduledSyncBatchSize,
+        minIntervalMinutes: flags.scheduledSyncMinIntervalMinutes,
+        now,
+      })
+    : {
+        scanned: 0,
+        enqueued: 0,
+        deduped: 0,
+      };
   const processed = await processPendingPipSyncJobs(supabase, {
     limit: flags.scheduledSyncMaxJobs,
     now,

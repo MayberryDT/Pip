@@ -71,6 +71,8 @@ import {
   getSavingsGoalPreviewMissingFields,
   isCancellationPrompt,
   resolvePendingActionConfirmation,
+  type OrdinaryPendingAction,
+  type SavingsGoalPreviewDraft,
 } from "@/lib/agent/pending-actions";
 import { buildSavingsGoalPreview } from "@/lib/savings-goals/preview";
 import type { PipPlatform } from "@/lib/platform/android-shell";
@@ -336,6 +338,18 @@ export async function runAIAgent(
     return response;
   }
 
+  const deterministicRecentTransactionsResponse = createDeterministicRecentTransactionsFollowUpResponse(input);
+
+  if (deterministicRecentTransactionsResponse) {
+    return deterministicRecentTransactionsResponse;
+  }
+
+  const preModelSavingsGoalResponse = await createPreModelSavingsGoalResponse(input);
+
+  if (preModelSavingsGoalResponse) {
+    return preModelSavingsGoalResponse;
+  }
+
   if (!shouldUseModel()) {
     throw new AgentUnavailableError({
       code: "missing-openai-config",
@@ -419,6 +433,308 @@ export async function runAIAgent(
     code: "openai-request-failed",
     message: "AI request failed.",
   });
+}
+
+function createDeterministicRecentTransactionsFollowUpResponse(input: RunAiAgentInput): AgentResponse | null {
+  if ((input.requestKind ?? "chat") !== "chat" || input.conversationState?.pendingAction) {
+    return null;
+  }
+
+  const normalized = normalizePrompt(input.message);
+
+  if (!isAffirmativeFollowUp(normalized) || !hasRecentTransactionsContext(input)) {
+    return null;
+  }
+
+  if (!input.snapshot) {
+    return null;
+  }
+
+  const response = runAgentTool("show_recent_transactions", { limit: 6 }, input.snapshot);
+
+  return agentResponseSchema.parse({
+    message: "I found recent charges in the current window.",
+    cards: response.cards,
+    promptChips: response.promptChips,
+    usedTools: ["get_recent_transactions"],
+    responseMode: response.cards.length > 0 ? "show_card" : "chat_only",
+    audit: {
+      toolNames: ["get_recent_transactions"],
+      usedModel: false,
+    },
+  });
+}
+
+function hasRecentTransactionsContext(input: RunAiAgentInput): boolean {
+  if (input.conversationState?.lastToolNames?.at(-1) === "get_recent_transactions") {
+    return true;
+  }
+
+  if (input.conversationState?.shownCards?.at(-1)?.type === "recent_transactions") {
+    return true;
+  }
+
+  const recentAssistant = [...(input.history ?? [])].reverse().find((item) => item.role === "assistant")?.content;
+
+  return /\b(recent charges?|recent transactions?|recent purchases?|recent activity|buying lately|what you'?ve been buying)\b/i.test(
+    recentAssistant ?? "",
+  );
+}
+
+async function createPreModelSavingsGoalResponse(input: RunAiAgentInput): Promise<AgentResponse | null> {
+  if ((input.requestKind ?? "chat") !== "chat") {
+    return null;
+  }
+
+  const message = input.message.trim();
+  const pendingAction = input.conversationState?.pendingAction;
+
+  if (pendingAction?.type === "ordinary_write" && pendingAction.action === "create_savings_goal") {
+    if (isCancellationPrompt(message)) {
+      return createSavingsGoalCancellationResponse(input);
+    }
+
+    const confirmation = resolvePendingActionConfirmation({
+      message,
+      pendingAction,
+    });
+
+    if (confirmation.ok) {
+      return createConfirmedSavingsGoalResponse(input, pendingAction);
+    }
+
+    const pendingDraft = createSavingsGoalDraftFromPendingWrite(pendingAction);
+
+    if (pendingDraft) {
+      return createSavingsGoalPreviewResponse(input, buildSavingsGoalDraft({
+        message,
+        pendingAction: pendingDraft,
+        asOfDate: input.snapshot?.settings.asOfDate,
+      }));
+    }
+  }
+
+  if (pendingAction?.type === "preview_savings_goal") {
+    if (isCancellationPrompt(message)) {
+      return createSavingsGoalCancellationResponse(input);
+    }
+
+    return createSavingsGoalPreviewResponse(input, buildSavingsGoalDraft({
+      message,
+      pendingAction,
+      asOfDate: input.snapshot?.settings.asOfDate,
+    }));
+  }
+
+  const forcedTool = getSavingsGoalForcedTool(message, normalizePrompt(message));
+
+  if (forcedTool?.toolName !== "preview_savings_goal" || forcedTool.requireCard) {
+    return null;
+  }
+
+  const draft = buildSavingsGoalDraft({
+    message,
+    asOfDate: input.snapshot?.settings.asOfDate,
+  });
+  const missing = getSavingsGoalPreviewMissingFields(draft);
+
+  if (!missing.includes("target_amount")) {
+    return null;
+  }
+
+  return createSavingsGoalPreviewResponse(input, draft);
+}
+
+function createSavingsGoalCancellationResponse(input: RunAiAgentInput): AgentResponse {
+  return agentResponseSchema.parse({
+    message: "No problem. I won't create that savings goal.",
+    cards: [],
+    promptChips: createDeterministicTrustPromptChips(input),
+    usedTools: [],
+    responseMode: "chat_only",
+    audit: {
+      toolNames: [],
+      usedModel: false,
+    },
+  });
+}
+
+function createSavingsGoalPreviewResponse(
+  input: RunAiAgentInput,
+  draft: SavingsGoalPreviewDraft,
+): AgentResponse | null {
+  const missing = getSavingsGoalPreviewMissingFields(draft);
+
+  if (missing.length > 0) {
+    return agentResponseSchema.parse({
+      message: createSavingsGoalClarificationMessage(draft.name, missing),
+      cards: [],
+      promptChips: createDeterministicTrustPromptChips(input),
+      usedTools: [],
+      responseMode: "clarify",
+      pendingAction: {
+        ...draft,
+        missing,
+      },
+      audit: {
+        toolNames: [],
+        usedModel: false,
+      },
+    });
+  }
+
+  if (!input.snapshot) {
+    return null;
+  }
+
+  const preview = buildSavingsGoalPreview({
+    snapshot: input.snapshot,
+    draft,
+  });
+
+  if (!preview.card) {
+    return agentResponseSchema.parse({
+      message: createSavingsGoalClarificationMessage(draft.name, preview.missing),
+      cards: [],
+      promptChips: createDeterministicTrustPromptChips(input),
+      usedTools: [],
+      responseMode: "clarify",
+      pendingAction: {
+        ...draft,
+        missing: preview.missing,
+      },
+      audit: {
+        toolNames: [],
+        usedModel: false,
+      },
+    });
+  }
+
+  return agentResponseSchema.parse({
+    message: `${draft.name} would need ${formatMoney(preview.card.monthlyContributionCents)}/month. Want me to create it?`,
+    cards: [preview.card],
+    promptChips: createDeterministicTrustPromptChips(input),
+    usedTools: ["preview_savings_goal"],
+    responseMode: "show_card",
+    pendingAction: createOrdinaryPendingAction({
+      action: "create_savings_goal",
+      summary: `Create ${draft.name} savings goal`,
+      payload: {
+        name: draft.name,
+        targetAmountCents: draft.targetAmountCents,
+        targetDate: draft.targetDate,
+        startingAmountCents: draft.startingAmountCents,
+        currentAmountCents: draft.currentAmountCents,
+        monthlyContributionCents: preview.card.monthlyContributionCents,
+        includeInSpendableCash: true,
+      },
+    }),
+    audit: {
+      toolNames: ["preview_savings_goal"],
+      usedModel: false,
+    },
+  });
+}
+
+async function createConfirmedSavingsGoalResponse(
+  input: RunAiAgentInput,
+  pendingAction: OrdinaryPendingAction,
+): Promise<AgentResponse> {
+  if (!input.actions?.createSavingsGoal) {
+    return agentResponseSchema.parse({
+      message: "Savings goals are not available yet. I kept the goal details here so we can try again.",
+      cards: [],
+      promptChips: createDeterministicTrustPromptChips(input),
+      usedTools: ["create_savings_goal"],
+      responseMode: "chat_only",
+      pendingAction,
+      audit: {
+        toolNames: ["create_savings_goal"],
+        usedModel: false,
+      },
+    });
+  }
+
+  const payload = pendingAction.payload ?? {};
+  const toolInput = createSavingsGoalParameters.parse({
+    name: payload.name,
+    target_amount_cents: payload.targetAmountCents,
+    target_date: payload.targetDate,
+    starting_amount_cents: payload.startingAmountCents,
+    current_amount_cents: payload.currentAmountCents,
+    monthly_contribution_cents: payload.monthlyContributionCents,
+    include_in_spendable_cash: true,
+  });
+  const result = await input.actions.createSavingsGoal({
+    name: toolInput.name,
+    targetAmountCents: toolInput.target_amount_cents,
+    targetDate: toolInput.target_date,
+    startingAmountCents: toolInput.starting_amount_cents,
+    currentAmountCents: toolInput.current_amount_cents,
+    monthlyContributionCents: toolInput.monthly_contribution_cents,
+    includeInSpendableCash: toolInput.include_in_spendable_cash,
+  });
+  const cards = result.cards ?? [];
+
+  return agentResponseSchema.parse({
+    message: result.ok
+      ? createSavingsGoalCreatedMessage(cards, toolInput.name)
+      : result.message ?? "I could not save that goal yet. I kept the details so we can try again.",
+    cards,
+    promptChips: createDeterministicTrustPromptChips(input),
+    usedTools: ["create_savings_goal"],
+    responseMode: cards.length > 0 ? "show_card" : "chat_only",
+    ...(result.clientAction ? { clientAction: result.clientAction } : {}),
+    ...(!result.ok ? { pendingAction } : {}),
+    audit: {
+      toolNames: ["create_savings_goal"],
+      usedModel: false,
+    },
+  });
+}
+
+function createSavingsGoalDraftFromPendingWrite(
+  pendingAction: OrdinaryPendingAction,
+): SavingsGoalPreviewDraft | null {
+  const payload = pendingAction.payload ?? {};
+  const name = typeof payload.name === "string" ? payload.name : null;
+  const targetAmountCents = typeof payload.targetAmountCents === "number" ? payload.targetAmountCents : null;
+
+  if (!name || !targetAmountCents) {
+    return null;
+  }
+
+  return {
+    type: "preview_savings_goal",
+    name,
+    targetAmountCents,
+    ...(typeof payload.targetDate === "string" ? { targetDate: payload.targetDate } : {}),
+    ...(typeof payload.startingAmountCents === "number" ? { startingAmountCents: payload.startingAmountCents } : {}),
+    ...(typeof payload.currentAmountCents === "number" ? { currentAmountCents: payload.currentAmountCents } : {}),
+    ...(typeof payload.monthlyContributionCents === "number" ? { monthlyContributionCents: payload.monthlyContributionCents } : {}),
+    includeInSpendableCash: true,
+  };
+}
+
+function createSavingsGoalCreatedMessage(cards: AgentCard[], fallbackName: string): string {
+  const planCard = cards.find((card): card is Extract<AgentCard, { type: "savings_goal_plan" }> =>
+    card.type === "savings_goal_plan"
+  );
+
+  return `${planCard?.name ?? fallbackName} is tracked now, and its monthly plan counts in Spendable Cash Today.`;
+}
+
+function createSavingsGoalClarificationMessage(
+  name: string,
+  missing: ReturnType<typeof getSavingsGoalPreviewMissingFields>,
+): string {
+  const goalName = name === "Savings goal" ? "this goal" : name;
+
+  if (missing.includes("target_amount")) {
+    return `How much do you want to save for ${goalName}?`;
+  }
+
+  return `When do you want ${goalName}, or how much do you want to save each month?`;
 }
 
 function createDeterministicPromptChipRefreshResponse(input: RunAiAgentInput): AgentResponse | null {
@@ -1005,7 +1321,10 @@ function getForcedPromptChipTool(
     };
   }
 
-  if (selectedPromptChipId === "manage-accounts") {
+  if (
+    selectedPromptChipId === "manage-accounts" ||
+    selectedPromptChipId === "settings-connected-accounts"
+  ) {
     return {
       toolName: "get_connected_accounts",
       args: {},
@@ -3452,7 +3771,9 @@ function selectDeterministicCards(
   const suppressExplanation =
     wasCardRecentlyShown(input.conversationState, "pip_cash_explanation") &&
     !explicitlyRequestsRepeatedCard(input.message);
-  const suppressTransactions = !explicitlyRequestsTransactions(input.message);
+  const suppressTransactions =
+    !context.usedTools.includes("get_recent_transactions") &&
+    !explicitlyRequestsTransactions(input.message);
 
   return selected
     .filter((card) => !(suppressExplanation && card.type === "pip_cash_explanation"))
@@ -4089,6 +4410,7 @@ function isConnectedAccountsPrompt(normalized: string): boolean {
   }
 
   return (
+    /\bmanage\b.{0,32}\b(connected\s+)?accounts?\b/.test(normalized) ||
     /\b(show|list|what|which)\b.{0,40}\b(my\s+)?(bank\s+)?accounts?\b/.test(normalized) ||
     /\b(show|list|what|which)\b.{0,40}\b(connected|linked|selected)\s+(accounts?|banks?|cards?|institutions?)\b/.test(normalized) ||
     /\b(what|which)\b.{0,40}\baccounts?\b.{0,24}\b(connected|linked|selected|used)\b/.test(normalized) ||
@@ -4181,8 +4503,9 @@ function isAffirmativeFollowUp(normalized: string): boolean {
 }
 
 function isExplicitTransactionsPrompt(normalized: string): boolean {
-  return /^(show( me| my)? )?(recent )?(transactions?|activity|charges?|purchases?)$/.test(
-    normalized,
+  return (
+    /^(show( me| my)? )?(recent )?(transactions?|activity|charges?|purchases?)$/.test(normalized) ||
+    /\bwhat have i been (?:buying|spending)\b.{0,32}\b(lately|recently|this week|last week)?\b/.test(normalized)
   );
 }
 
@@ -4356,6 +4679,7 @@ function explicitlyRequestsTransactions(message: string): boolean {
     /\b(transactions?|charges?|activity)\b/.test(normalized) ||
     /\b(recent|latest|show|list)\b.*\b(purchases?|spending|spend)\b/.test(normalized) ||
     /\bwhat did i (?:buy|spend)\b/.test(normalized) ||
+    /\bwhat have i been (?:buying|spending)\b/.test(normalized) ||
     /\b(?:buy|bought|spend|spent)\b.{0,24}\b(lately|recently|this week|yesterday)\b/.test(normalized) ||
     /\bwhat did i spend (on|money on)\b/.test(normalized) ||
     /\bwhich purchases?\b/.test(normalized)
@@ -4478,6 +4802,7 @@ export const __agentTestHooks = {
   normalizeAgentFinalOutput,
   repairUnsupportedCardPromises,
   selectGuidanceCard,
+  selectDeterministicCards,
   selectFinalResponseMode,
   selectVisibleModelOutput,
   selectPromptChips: (

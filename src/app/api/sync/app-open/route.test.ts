@@ -2,15 +2,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
 import { getAppOpenSyncDecision } from "@/lib/data/app-open-sync";
 import { POST } from "@/app/api/sync/app-open/route";
+import type { ActivePipSyncJobSummary } from "@/lib/data/sync-jobs";
 import type { SyncStatus } from "@/lib/data/sync-status";
 
 const routeMocks = vi.hoisted(() => ({
   createSupabaseAdminClient: vi.fn(),
   createSupabaseServerClient: vi.fn(),
   getAppAccessFailureForUser: vi.fn(),
-  loadPendingPipSyncJobsForUser: vi.fn(),
+  claimPipSyncJobById: vi.fn(),
+  loadActivePipSyncJobsForUser: vi.fn(),
   loadSyncStatusForUser: vi.fn(),
   loadManualRefreshOnlyForUser: vi.fn(),
+  processPipSyncJob: vi.fn(),
   recordProductEventSafely: vi.fn(),
   runProviderSync: vi.fn(),
 }));
@@ -28,7 +31,9 @@ vi.mock("@/lib/app-access/route-guard", () => ({
 }));
 
 vi.mock("@/lib/data/sync-jobs", () => ({
-  loadPendingPipSyncJobsForUser: routeMocks.loadPendingPipSyncJobsForUser,
+  claimPipSyncJobById: routeMocks.claimPipSyncJobById,
+  loadActivePipSyncJobsForUser: routeMocks.loadActivePipSyncJobsForUser,
+  processPipSyncJob: routeMocks.processPipSyncJob,
 }));
 
 vi.mock("@/lib/data/sync-status", () => ({
@@ -49,6 +54,7 @@ vi.mock("@/lib/data/manual-sync", () => ({
 
 beforeEach(() => {
   routeMocks.getAppAccessFailureForUser.mockResolvedValue(null);
+  routeMocks.loadActivePipSyncJobsForUser.mockResolvedValue([]);
   routeMocks.loadManualRefreshOnlyForUser.mockResolvedValue(false);
   routeMocks.createSupabaseAdminClient.mockReturnValue(createSupabaseAdminClient());
 });
@@ -88,7 +94,7 @@ describe("POST /api/sync/app-open", () => {
     });
     expect(routeMocks.loadManualRefreshOnlyForUser).toHaveBeenCalledWith(supabase, "reviewer-1");
     expect(routeMocks.loadSyncStatusForUser).not.toHaveBeenCalled();
-    expect(routeMocks.loadPendingPipSyncJobsForUser).not.toHaveBeenCalled();
+    expect(routeMocks.loadActivePipSyncJobsForUser).not.toHaveBeenCalled();
     expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
   });
 
@@ -122,7 +128,6 @@ describe("POST /api/sync/app-open", () => {
         }),
       ],
     }));
-    routeMocks.loadPendingPipSyncJobsForUser.mockResolvedValue([]);
     routeMocks.runProviderSync.mockResolvedValue({
       syncRunId: "sync-1",
       provider: "plaid",
@@ -199,7 +204,12 @@ describe("POST /api/sync/app-open", () => {
     enableSupabaseEnv();
     routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
     routeMocks.loadSyncStatusForUser.mockResolvedValue(createSyncStatus());
-    routeMocks.loadPendingPipSyncJobsForUser.mockResolvedValue([{ status: "pending" }]);
+    routeMocks.loadActivePipSyncJobsForUser.mockResolvedValue([
+      createActiveJob({
+        status: "pending",
+        reason: "scheduled",
+      }),
+    ]);
 
     const response = await POST();
 
@@ -221,6 +231,113 @@ describe("POST /api/sync/app-open", () => {
     expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
   });
 
+  it("claims and processes a due Plaid webhook job on app open", async () => {
+    enableSupabaseEnv();
+    const supabase = createSupabaseClient({ id: "user-1" });
+    const adminSupabase = createSupabaseAdminClient();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(supabase);
+    routeMocks.createSupabaseAdminClient.mockReturnValue(adminSupabase);
+    routeMocks.loadSyncStatusForUser.mockResolvedValue(createSyncStatus());
+    routeMocks.loadActivePipSyncJobsForUser.mockResolvedValue([
+      createActiveJob({
+        id: "job-1",
+        reason: "plaid_webhook",
+        status: "pending",
+        sourceWebhookEventId: "webhook-1",
+        availableAt: "2026-06-16T12:00:00.000Z",
+      }),
+    ]);
+    routeMocks.claimPipSyncJobById.mockResolvedValue({
+      id: "job-1",
+      provider: "plaid",
+      user_id: "user-1",
+    });
+    routeMocks.processPipSyncJob.mockResolvedValue({
+      jobId: "job-1",
+      status: "succeeded",
+      result: {
+        syncRunId: "sync-1",
+        provider: "plaid",
+        institutionId: "institution-1",
+        institutionIds: ["institution-1"],
+        status: "succeeded",
+        accountCount: 2,
+        transactionCount: 1,
+        balanceCount: 2,
+        pipCashTodayCents: 8300,
+        sameDayNewSpendCents: 525,
+        sameDayNewTransactions: [
+          {
+            date: "2026-06-16",
+            label: "Coffee Shop",
+            amountCents: -525,
+            pending: false,
+            treatment: "daily_spend",
+          },
+        ],
+        failedInstitutionCount: 0,
+        failures: [],
+      },
+    });
+
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "ran",
+      provider: "plaid",
+      reason: "plaid_webhook",
+      result: {
+        syncRunId: "sync-1",
+        sameDayNewSpendCents: 525,
+      },
+    });
+    expect(routeMocks.claimPipSyncJobById).toHaveBeenCalledWith(adminSupabase, "job-1", {
+      now: expect.any(Date),
+    });
+    expect(routeMocks.processPipSyncJob).toHaveBeenCalledWith(
+      adminSupabase,
+      expect.objectContaining({
+        id: "job-1",
+      }),
+      {
+        now: expect.any(Date),
+      },
+    );
+    expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
+  });
+
+  it("skips a webhook job when another worker claims it first", async () => {
+    enableSupabaseEnv();
+    const adminSupabase = createSupabaseAdminClient();
+    routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
+    routeMocks.createSupabaseAdminClient.mockReturnValue(adminSupabase);
+    routeMocks.loadSyncStatusForUser.mockResolvedValue(createSyncStatus());
+    routeMocks.loadActivePipSyncJobsForUser.mockResolvedValue([
+      createActiveJob({
+        id: "job-1",
+        reason: "plaid_webhook",
+        status: "pending",
+        sourceWebhookEventId: "webhook-1",
+        availableAt: "2026-06-16T12:00:00.000Z",
+      }),
+    ]);
+    routeMocks.claimPipSyncJobById.mockResolvedValue(null);
+
+    const response = await POST();
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      status: "skipped_pending",
+      reason: "sync_in_flight",
+    });
+    expect(routeMocks.claimPipSyncJobById).toHaveBeenCalledWith(adminSupabase, "job-1", {
+      now: expect.any(Date),
+    });
+    expect(routeMocks.processPipSyncJob).not.toHaveBeenCalled();
+    expect(routeMocks.runProviderSync).not.toHaveBeenCalled();
+  });
+
   it("returns repair metadata instead of syncing an undecryptable Plaid token", async () => {
     enableSupabaseEnv();
     routeMocks.createSupabaseServerClient.mockResolvedValue(createSupabaseClient({ id: "user-1" }));
@@ -235,7 +352,6 @@ describe("POST /api/sync/app-open", () => {
       ],
       hasStaleInstitution: true,
     }));
-    routeMocks.loadPendingPipSyncJobsForUser.mockResolvedValue([]);
 
     const response = await POST();
 
@@ -286,7 +402,6 @@ describe("POST /api/sync/app-open", () => {
       },
       hasStaleInstitution: true,
     }));
-    routeMocks.loadPendingPipSyncJobsForUser.mockResolvedValue([]);
     routeMocks.runProviderSync.mockRejectedValue(
       new ProviderSyncError({
         provider: "plaid",
@@ -337,7 +452,7 @@ describe("POST /api/sync/app-open", () => {
 });
 
 describe("getAppOpenSyncDecision", () => {
-  it("runs fresh data outside the short duplicate guard", () => {
+  it("skips fresh data inside the stale-check window", () => {
     expect(
       getAppOpenSyncDecision({
         syncStatus: createSyncStatus({
@@ -359,17 +474,18 @@ describe("getAppOpenSyncDecision", () => {
             errorMessage: null,
           },
         }),
-        hasPendingSyncJob: false,
+        activeSyncJobs: [],
         now: new Date("2026-06-16T12:05:00.000Z"),
       }),
     ).toEqual({
-      status: "run",
-      provider: "plaid",
-      reason: "app_open_check",
+      status: "skipped_recent",
+      reason: "recent_enough",
+      message: "Recent data is fresh enough for app open.",
+      lastSuccessfulSyncAt: "2026-06-16T12:00:00.000Z",
     });
   });
 
-  it("runs when the last successful sync is outside the app-open cooldown", () => {
+  it("runs a stale check when the last successful sync is outside the stale-check window", () => {
     expect(
       getAppOpenSyncDecision({
         syncStatus: createSyncStatus({
@@ -391,13 +507,41 @@ describe("getAppOpenSyncDecision", () => {
             errorMessage: null,
           },
         }),
-        hasPendingSyncJob: false,
-        now: new Date("2026-06-16T12:11:00.000Z"),
+        activeSyncJobs: [],
+        now: new Date("2026-06-16T16:01:00.000Z"),
       }),
     ).toEqual({
       status: "run",
       provider: "plaid",
-      reason: "app_open_check",
+      reason: "stale_check",
+    });
+  });
+
+  it("runs the available webhook job before a delayed older webhook retry", () => {
+    expect(
+      getAppOpenSyncDecision({
+        syncStatus: createSyncStatus(),
+        activeSyncJobs: [
+          createActiveJob({
+            id: "retry-delayed",
+            reason: "plaid_webhook",
+            availableAt: "2026-06-16T12:05:00.000Z",
+            createdAt: "2026-06-16T11:55:00.000Z",
+          }),
+          createActiveJob({
+            id: "ready-webhook",
+            reason: "plaid_webhook",
+            availableAt: "2026-06-16T12:00:00.000Z",
+            createdAt: "2026-06-16T11:56:00.000Z",
+          }),
+        ],
+        now: new Date("2026-06-16T12:00:00.000Z"),
+      }),
+    ).toEqual({
+      status: "run_webhook_job",
+      provider: "plaid",
+      jobId: "ready-webhook",
+      reason: "plaid_webhook_pending",
     });
   });
 });
@@ -450,6 +594,22 @@ function createInstitution(
     isStale: false,
     errorCode: null,
     errorMessage: null,
+    ...overrides,
+  };
+}
+
+function createActiveJob(
+  overrides: Partial<ActivePipSyncJobSummary> = {},
+): ActivePipSyncJobSummary {
+  return {
+    id: "job-1",
+    provider: "plaid",
+    institutionId: "institution-1",
+    reason: "plaid_webhook",
+    status: "pending",
+    sourceWebhookEventId: "webhook-1",
+    availableAt: "2026-06-16T12:00:00.000Z",
+    createdAt: "2026-06-16T11:59:00.000Z",
     ...overrides,
   };
 }

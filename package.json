@@ -6,7 +6,7 @@
     "node": "24.x"
   },
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "dev:local-staging": "node scripts/run-local-staging-dev.mjs dev --webpack",
     "build:local-staging": "node scripts/run-local-staging-dev.mjs build --webpack",
     "start:local-staging": "node scripts/run-local-staging-dev.mjs start",

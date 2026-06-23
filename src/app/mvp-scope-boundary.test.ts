@@ -19,6 +19,7 @@ describe("MVP scope boundary", () => {
       .map((dir) => relative(join(process.cwd(), "src/app/api"), dir));
     const netlifyToml = readFileSync(join(process.cwd(), "netlify.toml"), "utf8");
     const netlifyFunctions = findSourceFiles(join(process.cwd(), "netlify/functions"))
+      .filter((file) => !file.endsWith(".test.ts") && !file.endsWith(".test.tsx"))
       .map((file) => relative(process.cwd(), file));
     const scheduledFunction = readFileSync(
       join(process.cwd(), "netlify/functions/pip-scheduled-sync.ts"),

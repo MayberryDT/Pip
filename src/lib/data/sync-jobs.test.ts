@@ -14,9 +14,11 @@ vi.mock("@/lib/data/product-events", () => ({
 }));
 
 import {
+  claimPipSyncJobById,
   claimPendingPipSyncJobs,
   enqueuePipSyncJob,
   enqueueScheduledPipSyncJobs,
+  loadActivePipSyncJobsForUser,
   processPipSyncJob,
 } from "@/lib/data/sync-jobs";
 import { ProviderSyncError } from "@/lib/providers/provider-errors";
@@ -124,6 +126,84 @@ describe("Pip sync jobs", () => {
       attempts: 1,
       started_at: "2026-06-05T12:00:00.000Z",
     });
+    expect(supabase.updatePredicates[0]).toContainEqual({
+      method: "lte",
+      column: "available_at",
+      value: "2026-06-05T12:00:00.000Z",
+    });
+  });
+
+  it("loads active sync jobs with webhook metadata for app-open decisions", async () => {
+    const supabase = createSyncJobsClient({
+      activeJobs: [
+        {
+          id: "job-1",
+          provider: "plaid",
+          institution_id: "institution-1",
+          reason: "plaid_webhook",
+          status: "pending",
+          source_webhook_event_id: "webhook-1",
+          available_at: "2026-06-05T12:00:00.000Z",
+          created_at: "2026-06-05T11:59:00.000Z",
+        },
+      ],
+    });
+
+    await expect(loadActivePipSyncJobsForUser(supabase.client, "user-1")).resolves.toEqual([
+      {
+        id: "job-1",
+        provider: "plaid",
+        institutionId: "institution-1",
+        reason: "plaid_webhook",
+        status: "pending",
+        sourceWebhookEventId: "webhook-1",
+        availableAt: "2026-06-05T12:00:00.000Z",
+        createdAt: "2026-06-05T11:59:00.000Z",
+      },
+    ]);
+  });
+
+  it("claims one due job by id and re-checks availability during the update", async () => {
+    const supabase = createSyncJobsClient({
+      jobById: {
+        ...baseJob(),
+        status: "pending",
+        attempts: 0,
+      },
+    });
+
+    await expect(
+      claimPipSyncJobById(supabase.client, "job-1", {
+        now: new Date("2026-06-05T12:00:00.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      id: "job-1",
+      status: "running",
+      attempts: 1,
+    });
+    expect(supabase.updatePredicates[0]).toContainEqual({
+      method: "lte",
+      column: "available_at",
+      value: "2026-06-05T12:00:00.000Z",
+    });
+  });
+
+  it("does not claim a retry-delayed job by id", async () => {
+    const supabase = createSyncJobsClient({
+      jobById: {
+        ...baseJob(),
+        status: "pending",
+        attempts: 1,
+        available_at: "2026-06-05T12:05:00.000Z",
+      },
+    });
+
+    await expect(
+      claimPipSyncJobById(supabase.client, "job-1", {
+        now: new Date("2026-06-05T12:00:00.000Z"),
+      }),
+    ).resolves.toBeNull();
+    expect(supabase.updates).toEqual([]);
   });
 
   it("marks a job succeeded after provider sync completes", async () => {
@@ -166,6 +246,47 @@ describe("Pip sync jobs", () => {
       balance_count: 2,
       created_reaction_type: "small_lift",
     });
+    expect(supabase.webhookUpdates).toEqual([
+      {
+        id: "webhook-1",
+        row: {
+          processed_at: "2026-06-05T12:00:00.000Z",
+        },
+      },
+    ]);
+  });
+
+  it("keeps a succeeded job succeeded when webhook bookkeeping fails", async () => {
+    const supabase = createSyncJobsClient({
+      webhookUpdateError: new Error("webhook update failed"),
+    });
+    syncJobMocks.runProviderSync.mockResolvedValue({
+      syncRunId: "sync-run-1",
+      provider: "plaid",
+      institutionId: "institution-1",
+      institutionIds: ["institution-1"],
+      status: "succeeded",
+      accountCount: 2,
+      transactionCount: 14,
+      balanceCount: 2,
+      pipCashTodayCents: 12000,
+      failedInstitutionCount: 0,
+      failures: [],
+      createdReactionType: "small_lift",
+    });
+
+    await expect(
+      processPipSyncJob(supabase.client, baseJob(), {
+        now: new Date("2026-06-05T12:00:00.000Z"),
+      }),
+    ).resolves.toMatchObject({
+      status: "succeeded",
+      jobId: "job-1",
+    });
+    expect(supabase.updates).toHaveLength(1);
+    expect(supabase.updates[0]).toMatchObject({
+      status: "succeeded",
+    });
   });
 
   it("retries failed jobs with exponential backoff until max attempts", async () => {
@@ -195,6 +316,7 @@ describe("Pip sync jobs", () => {
       available_at: "2026-06-05T12:05:00.000Z",
       last_error: "access_token=[redacted] failed",
     });
+    expect(supabase.webhookUpdates).toEqual([]);
   });
 
   it("does not retry provider failures that require user repair", async () => {
@@ -231,6 +353,14 @@ describe("Pip sync jobs", () => {
       completed_at: "2026-06-05T12:00:00.000Z",
       last_error: "This connection needs repair.",
     });
+    expect(supabase.webhookUpdates).toEqual([
+      {
+        id: "webhook-1",
+        row: {
+          processed_at: "2026-06-05T12:00:00.000Z",
+        },
+      },
+    ]);
   });
 
   it("skips scheduled jobs for users still set to manual-refresh-only", async () => {
@@ -262,13 +392,42 @@ function createSyncJobsClient(
     insertError?: Record<string, unknown>;
     existingJob?: Record<string, unknown>;
     pendingJobs?: Record<string, unknown>[];
+    activeJobs?: Record<string, unknown>[];
+    jobById?: Record<string, unknown> | null;
+    webhookUpdateError?: Error;
   } = {},
 ) {
   const inserts: Record<string, unknown>[] = [];
   const updates: Record<string, unknown>[] = [];
+  const webhookUpdates: { id: string; row: Record<string, unknown> }[] = [];
+  const updatePredicates: { method: string; column: string; value: unknown }[][] = [];
+  let currentSelect = "";
+  let selectedJobId: string | null = null;
+  let availableAtCutoff: string | null = null;
+  let latestUpdatePredicates: { method: string; column: string; value: unknown }[] = [];
 
   const client = {
     from(tableName: string) {
+      if (tableName === "plaid_webhook_events") {
+        return {
+          update(row: Record<string, unknown>) {
+            return {
+              eq(column: string, value: unknown) {
+                expect(column).toBe("id");
+                webhookUpdates.push({
+                  id: String(value),
+                  row,
+                });
+
+                return Promise.resolve({
+                  error: input.webhookUpdateError ?? null,
+                });
+              },
+            };
+          },
+        };
+      }
+
       expect(tableName).toBe("pip_sync_jobs");
 
       return {
@@ -296,11 +455,15 @@ function createSyncJobsClient(
             },
           };
         },
-        select() {
+        select(columns?: string) {
+          currentSelect = columns ?? "";
+
           return query;
         },
         update(row: Record<string, unknown>) {
           updates.push(row);
+          latestUpdatePredicates = [];
+          updatePredicates.push(latestUpdatePredicates);
 
           return query;
         },
@@ -309,16 +472,45 @@ function createSyncJobsClient(
   };
 
   const query = {
-    eq() {
+    eq(column?: string, value?: unknown) {
+      if (column === "id") {
+        selectedJobId = String(value);
+      }
+      if (latestUpdatePredicates) {
+        latestUpdatePredicates.push({
+          method: "eq",
+          column: String(column),
+          value,
+        });
+      }
+
       return query;
     },
     in() {
       return query;
     },
-    lte() {
+    lte(column?: string, value?: unknown) {
+      if (column === "available_at") {
+        availableAtCutoff = String(value);
+      }
+      if (latestUpdatePredicates) {
+        latestUpdatePredicates.push({
+          method: "lte",
+          column: String(column),
+          value,
+        });
+      }
+
       return query;
     },
     order() {
+      if (currentSelect.includes("source_webhook_event_id")) {
+        return Promise.resolve({
+          data: input.activeJobs ?? [],
+          error: null,
+        });
+      }
+
       return query;
     },
     limit() {
@@ -336,12 +528,26 @@ function createSyncJobsClient(
     },
     maybeSingle() {
       const latestUpdate = updates.at(-1);
+      const jobById = input.jobById === undefined ? undefined : input.jobById;
+
+      if (!latestUpdate && jobById !== undefined) {
+        const jobIsDue =
+          !jobById ||
+          !availableAtCutoff ||
+          new Date(String(jobById.available_at)).getTime() <= new Date(availableAtCutoff).getTime();
+
+        return Promise.resolve({
+          data: selectedJobId === jobById?.id && jobIsDue ? jobById : null,
+          error: null,
+        });
+      }
 
       return Promise.resolve({
         data: latestUpdate?.status === "running"
           ? {
               ...baseJob(),
               ...input.pendingJobs?.[0],
+              ...input.jobById,
               ...latestUpdate,
             }
           : input.existingJob ?? null,
@@ -357,6 +563,8 @@ function createSyncJobsClient(
     client: client as never,
     inserts,
     updates,
+    webhookUpdates,
+    updatePredicates,
   };
 }
 

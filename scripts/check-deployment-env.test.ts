@@ -408,6 +408,28 @@ RESEND_API_KEY=resend-key
     expect(output).toContain("RESEND_WEBHOOK_SECRET");
   });
 
+  it("allows CI placeholder beta checks without real email delivery secrets", async () => {
+    const cwd = createTempProject("");
+
+    const result = await runCheck(cwd, "--mode=beta", {
+      CI: "true",
+      NEXT_PUBLIC_SITE_URL: "https://spendwithpip.com",
+      NEXT_PUBLIC_SUPABASE_URL: "https://ci.supabase.co",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "ci-placeholder",
+      SUPABASE_SERVICE_ROLE_KEY: "ci-placeholder",
+      PIP_OPERATOR_TOKEN: "ci-placeholder",
+      PIP_PROVIDER_TOKEN_KEY_BASE64: "ci-placeholder",
+      PIP_RATE_LIMIT_SALT: "ci-placeholder-rate-limit-salt",
+      PLAID_CLIENT_ID: "ci-placeholder",
+      PLAID_SECRET: "ci-placeholder",
+      PLAID_ENV: "production",
+      OPENAI_BASE_URL: "https://api.openai.com/v1",
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Deployment env check passed for beta mode.");
+  });
+
   it("documents the production rate-limit salt in local and Netlify setup files", () => {
     expect(readFileSync(".env.example", "utf8")).toContain("PIP_RATE_LIMIT_SALT=");
     expect(readFileSync("README.md", "utf8")).toContain("PIP_RATE_LIMIT_SALT");

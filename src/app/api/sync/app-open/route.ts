@@ -1,7 +1,11 @@
 import { getAppAccessFailureForUser } from "@/lib/app-access/route-guard";
 import { getAppOpenSyncDecision, type AppOpenSyncDecision } from "@/lib/data/app-open-sync";
 import { recordProductEventSafely } from "@/lib/data/product-events";
-import { loadPendingPipSyncJobsForUser } from "@/lib/data/sync-jobs";
+import {
+  claimPipSyncJobById,
+  loadActivePipSyncJobsForUser,
+  processPipSyncJob,
+} from "@/lib/data/sync-jobs";
 import { loadSyncStatusForUser } from "@/lib/data/sync-status";
 import { runProviderSync } from "@/lib/data/manual-sync";
 import { loadManualRefreshOnlyForUser } from "@/lib/data/user-settings";
@@ -46,27 +50,62 @@ export async function POST() {
       });
     }
 
-    const [syncStatus, pendingJobs] = await Promise.all([
+    const [syncStatus, activeSyncJobs] = await Promise.all([
       loadSyncStatusForUser(supabase, user.id, now),
-      loadPendingPipSyncJobsForUser(supabase, user.id),
+      loadActivePipSyncJobsForUser(supabase, user.id),
     ]);
     const decision = getAppOpenSyncDecision({
       syncStatus,
-      hasPendingSyncJob: pendingJobs.some(
-        (job) => job.status === "pending" || job.status === "running",
-      ),
+      activeSyncJobs,
       now,
     });
+    const hasPendingSyncJob = activeSyncJobs.some(
+      (job) => job.status === "pending" || job.status === "running",
+    );
 
-    if (decision.status !== "run") {
+    if (decision.status !== "run" && decision.status !== "run_webhook_job") {
       await recordProductEventSafely(supabase, user.id, "app_open_sync_decision", {
         ...toAppOpenDecisionEventProperties(decision),
-        hasPendingSyncJob: pendingJobs.some(
-          (job) => job.status === "pending" || job.status === "running",
-        ),
+        hasPendingSyncJob,
       });
 
       return sensitiveJson(decision);
+    }
+
+    if (decision.status === "run_webhook_job") {
+      const writeSupabase = createSupabaseAdminClient();
+      const job = await claimPipSyncJobById(writeSupabase, decision.jobId, {
+        now,
+      });
+
+      if (!job) {
+        return sensitiveJson({
+          status: "skipped_pending",
+          reason: "sync_in_flight",
+          message: "A sync is already running.",
+        });
+      }
+
+      const processed = await processPipSyncJob(writeSupabase, job, {
+        now,
+      });
+
+      if (processed.status === "succeeded") {
+        return sensitiveJson({
+          status: "ran",
+          provider: decision.provider,
+          reason: "plaid_webhook",
+          result: processed.result,
+        });
+      }
+
+      return sensitiveJson({
+        status: processed.status,
+        provider: decision.provider,
+        reason: "plaid_webhook",
+        error: processed.error,
+        ...("availableAt" in processed ? { availableAt: processed.availableAt } : {}),
+      });
     }
 
     try {
@@ -82,6 +121,7 @@ export async function POST() {
       return sensitiveJson({
         status: "ran",
         provider: decision.provider,
+        reason: decision.reason,
         result,
       });
     } catch (error) {
@@ -132,14 +172,15 @@ function toErrorBody(error: unknown) {
   };
 }
 
-function toAppOpenDecisionEventProperties(decision: Exclude<AppOpenSyncDecision, { status: "run" }>) {
+function toAppOpenDecisionEventProperties(
+  decision: Exclude<AppOpenSyncDecision, { status: "run" } | { status: "run_webhook_job" }>,
+) {
   return {
     status: decision.status,
     reason: decision.reason,
     ...("provider" in decision ? { provider: decision.provider } : {}),
     ...("institutionId" in decision ? { institutionId: decision.institutionId } : {}),
     ...("errorCode" in decision ? { errorCode: decision.errorCode } : {}),
-    ...("retryAfterSeconds" in decision ? { retryAfterSeconds: decision.retryAfterSeconds } : {}),
     ...("lastSuccessfulSyncAt" in decision ? { lastSuccessfulSyncAt: decision.lastSuccessfulSyncAt } : {}),
   };
 }

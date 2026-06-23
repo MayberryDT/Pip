@@ -109,6 +109,10 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return toolResponse(input, "show_trust_receipt", {});
   }
 
+  if (input.selectedPromptChipId === "ai-spending-breakdown") {
+    return toolResponse(input, "show_spending_breakdown", {});
+  }
+
   if (/^(hi|hello|hey|yo)\b/.test(normalized)) {
     return baseResponse(input, {
       message: "Hi. Ask me about Spendable Cash Today or setup.",
@@ -165,6 +169,10 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
       }).message,
       usedTools: ["get_trust_policy"],
     });
+  }
+
+  if (isRecentTransactionPrompt(normalized)) {
+    return toolResponse(input, "show_recent_transactions", { limit: 6 });
   }
 
   if (isSpendingPrompt(normalized)) {
@@ -700,6 +708,15 @@ function isSavingsGoalPrompt(normalized: string): boolean {
 function isSavingsGoalListPrompt(normalized: string): boolean {
   return /\b(show|list|what|which|update|progress|how are)\b.{0,32}\bsavings? goals?\b/.test(normalized) ||
     /^savings? goals?$/.test(normalized);
+}
+
+function isRecentTransactionPrompt(normalized: string): boolean {
+  return (
+    /\bwhat did i (?:buy|spend)\b.{0,32}\b(lately|recently|yesterday|this week|last week)?\b/.test(normalized) ||
+    /\bwhat have i been (?:buying|spending)\b.{0,32}\b(lately|recently|this week|last week)?\b/.test(normalized) ||
+    /\b(show|list|pull up|find)\b.{0,32}\b(recent|latest)\b.{0,20}\b(transactions?|charges?|purchases?|activity)\b/.test(normalized) ||
+    /\bwhat charges hit\b/.test(normalized)
+  );
 }
 
 function isTrustReceiptPrompt(normalized: string): boolean {

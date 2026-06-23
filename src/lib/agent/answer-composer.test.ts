@@ -26,6 +26,44 @@ describe("answer composer", () => {
     expect(answer.message).toContain("go deeper");
   });
 
+  it("uses short bridge copy for spending breakdown cards instead of repeating card rows", () => {
+    const answer = composeAgentVisibleAnswer({
+      modelOutput: {
+        message:
+          "Here’s your spending breakdown breakdown for 2026-05-23 to 2026-06-22. Income was $2,971.39, spending was $2,173.27, and protected savings was $300.00/month. Top categories were donations, services, and merchandise.",
+      },
+      userMessage: "Show my spending breakdown",
+      cards: [
+        {
+          type: "spending_breakdown",
+          title: "Spending breakdown",
+          periodLabel: "Last 31 days",
+          totals: {
+            incomeCents: 297139,
+            spendingCents: -217327,
+            refundsCents: 0,
+            cardPaymentsCents: 0,
+          },
+          topCategories: [],
+          topMerchants: [],
+          incomeSources: [],
+          refundSources: [],
+          cardPayments: [],
+        },
+      ],
+      usedTools: ["get_spending_breakdown"],
+      maxChars: 260,
+      maxWords: 45,
+    });
+
+    expect(answer).toMatchObject({
+      message: "I grouped the main money flows.",
+      answerPatternId: "spending-breakdown-card",
+      repeatedMessage: false,
+      repetitionAdjusted: false,
+    });
+  });
+
   it("preserves model output for purchase cards instead of deterministic simulation copy", () => {
     const answer = composeAgentVisibleAnswer({
       modelOutput: {

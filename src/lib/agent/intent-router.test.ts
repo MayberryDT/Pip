@@ -66,6 +66,7 @@ describe("intent router", () => {
     ["you can't show my bank account balance?", "balances.actual_accounts", "get_true_balances"],
     ["how much do I have in checking", "balances.actual_accounts", "get_true_balances"],
     ["what did I buy lately", "transactions.recent", "get_recent_transactions"],
+    ["what have I been buying?", "transactions.recent", "get_recent_transactions"],
     ["what charges hit this week", "transactions.recent", "get_recent_transactions"],
     ["where is my money going by category", "spending.breakdown", "get_spending_breakdown"],
     ["what repeats every month", "recurring.activity", "get_recurring_activity"],
