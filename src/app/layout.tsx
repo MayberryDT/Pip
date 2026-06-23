@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { PwaServiceWorkerRegistration } from "@/components/PwaServiceWorkerRegistration";
 import "./globals.css";
+
+const UMAMI_WEBSITE_ID = process.env.NEXT_PUBLIC_UMAMI_WEBSITE_ID;
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://spendwithpip.com"),
@@ -64,6 +67,14 @@ export default function RootLayout({
       <body>
         <PwaServiceWorkerRegistration />
         {children}
+        {UMAMI_WEBSITE_ID ? (
+          <Script
+            defer
+            src="https://analytics.animasai.co/script.js"
+            data-website-id={UMAMI_WEBSITE_ID}
+            strategy="afterInteractive"
+          />
+        ) : null}
       </body>
     </html>
   );

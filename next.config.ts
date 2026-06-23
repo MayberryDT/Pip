@@ -19,6 +19,7 @@ const scriptSources = [
   ...(process.env.NODE_ENV === "development" ? ["'unsafe-eval'"] : []),
   "https://cdn.plaid.com",
   "https://*.plaid.com",
+  "https://analytics.animasai.co",
 ].join(" ");
 
 const connectSources = [
@@ -28,6 +29,7 @@ const connectSources = [
   "wss://*.supabase.co",
   "https://*.plaid.com",
   "https://connect.teller.io",
+  "https://analytics.animasai.co",
 ].join(" ");
 
 const securityHeaders = [
