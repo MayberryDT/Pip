@@ -62,7 +62,18 @@ describe("CardRenderer", () => {
     const button = findElementByType(element, "button");
 
     button?.props.onClick();
-    expect(prompts).toEqual(["Show support"]);
+    expect(prompts).toEqual(["Show connected accounts"]);
+  });
+
+  it("renders settings actions before compact metadata", () => {
+    const markup = renderToStaticMarkup(
+      <CardRenderer card={settingsPanelCard()} onSubmitPrompt={() => undefined} />,
+    );
+
+    expect(markup.indexOf("Account &amp; data")).toBeGreaterThan(-1);
+    expect(markup.indexOf("Manage accounts")).toBeGreaterThan(-1);
+    expect(markup.indexOf("tester@example.com")).toBeGreaterThan(-1);
+    expect(markup.indexOf("Manage accounts")).toBeLessThan(markup.indexOf("tester@example.com"));
   });
 
   it("applies long-token wrapping to insight card text surfaces", () => {
@@ -600,11 +611,11 @@ function getRenderableCards(): Array<{
       card: settingsPanelCard(),
       expectedText: [
         "Settings",
-        "Account",
+        "Account &amp; data",
         "tester@example.com",
         "Connected data loaded",
         "Support",
-        "Privacy and terms",
+        "Privacy &amp; legal",
       ],
     },
     {
@@ -642,7 +653,8 @@ function settingsPanelCard(): AgentCard {
   return {
     type: "settings_panel",
     title: "Settings",
-    accountRows: [
+    summary: "Account, data, support, privacy, and deletion controls stay in this chat.",
+    metadataRows: [
       {
         label: "Account",
         value: "tester@example.com",
@@ -652,28 +664,51 @@ function settingsPanelCard(): AgentCard {
         value: "Connected data loaded",
       },
     ],
-    sections: [
+    actionGroups: [
+      {
+        title: "Account & data",
+        actions: [
+          {
+            id: "settings-connected-accounts",
+            label: "Manage accounts",
+            prompt: "Show connected accounts",
+            style: "primary",
+          },
+          {
+            id: "settings-trust-receipt",
+            label: "Trust receipt",
+            prompt: "Show the trust receipt behind today's number",
+            style: "secondary",
+          },
+        ],
+      },
       {
         title: "Support",
-        body: "Get help, report answer quality, or send tester feedback from this chat.",
+        actions: [
+          {
+            id: "settings-support",
+            label: "Support",
+            prompt: "Show support",
+            style: "secondary",
+          },
+        ],
       },
       {
-        title: "Privacy and terms",
-        body: "Read the short in-app version here without leaving Pip.",
-      },
-    ],
-    actions: [
-      {
-        id: "settings-support",
-        label: "Support",
-        prompt: "Show support",
-        style: "secondary",
-      },
-      {
-        id: "settings-delete-account",
-        label: "Delete account",
-        prompt: "Delete my account",
-        style: "danger",
+        title: "Privacy & legal",
+        actions: [
+          {
+            id: "settings-privacy",
+            label: "Privacy",
+            prompt: "Show privacy",
+            style: "secondary",
+          },
+          {
+            id: "settings-delete-account",
+            label: "Delete account",
+            prompt: "Delete my account",
+            style: "danger",
+          },
+        ],
       },
     ],
   };

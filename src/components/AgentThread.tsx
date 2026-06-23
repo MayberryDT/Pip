@@ -26,7 +26,7 @@ export type AgentReportInput = {
   responseExcerpt?: string;
 };
 
-const defaultAgentErrorText = "I couldn’t answer that cleanly. Try again.";
+const defaultAgentErrorText = "I need another pass at that. Please ask again.";
 type MatchMedia = (query: string) => { matches: boolean };
 
 export function AgentThread({

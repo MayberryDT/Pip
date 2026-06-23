@@ -33,6 +33,12 @@ export function guardVisibleFinalMessage(
     message = possessionRepairedMessage;
   }
 
+  const artifactRepairedMessage = repairVisibleModelArtifacts(message, cards);
+
+  if (artifactRepairedMessage !== message) {
+    message = artifactRepairedMessage;
+  }
+
   if (!fitsVisibleLimits(message, limits)) {
     throw new AgentUnavailableError({
       code: "model-returned-too-long-final-message",
@@ -107,6 +113,67 @@ export function guardVisibleFinalMessage(
   }
 
   return message;
+}
+
+function repairVisibleModelArtifacts(message: string, cards: AgentCard[]): string {
+  const recurringCard = cards.find(
+    (card): card is Extract<AgentCard, { type: "recurring_activity" }> =>
+      card.type === "recurring_activity",
+  );
+
+  if (
+    recurringCard &&
+    /\bi(?:'|\u2019)?m checking if any data is missing\b.{0,120}\b(?:card|read)\b/i.test(message)
+  ) {
+    return getRecurringActivityBridge(recurringCard);
+  }
+
+  if (recurringCard && isOffTopicRecurringBridge(message)) {
+    return getRecurringActivityBridge(recurringCard);
+  }
+
+  return trimVisibleArtifacts(message)
+    .replace(/\s*(?:here(?:'|\u2019)?s|here is)\s+(?:the\s+)?card:?\s*$/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getRecurringActivityBridge(
+  card: Extract<AgentCard, { type: "recurring_activity" }>,
+): string {
+  return card.items.length > 0
+    ? "I found likely repeat items."
+    : "I do not see a clear repeat item yet.";
+}
+
+function isOffTopicRecurringBridge(message: string): boolean {
+  return (
+    /\b(pattern assumptions?|completed months?|baseline|current-month spending|normal room|bills held back|monthly savings)\b/i.test(
+      message,
+    ) &&
+    !/\b(recurring|repeating|repeat items?|subscriptions?|monthly charges?|bills? coming up)\b/i.test(
+      message,
+    )
+  );
+}
+
+function trimVisibleArtifacts(message: string): string {
+  let candidate = message.trim();
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const repaired = candidate
+      .replace(/\s*(?:null|\{\})\s*$/i, "")
+      .replace(/\s+([.!?])/g, "$1")
+      .trim();
+
+    if (repaired === candidate) {
+      break;
+    }
+
+    candidate = repaired;
+  }
+
+  return candidate;
 }
 
 function repairUserMoneyPossessives(message: string): string {

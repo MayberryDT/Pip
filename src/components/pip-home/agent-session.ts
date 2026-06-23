@@ -1,4 +1,5 @@
 import type { AgentCard, AgentResponse, PromptChip } from "@/lib/agent/card-types";
+import { summarizeVisibleCardFacts, type VisibleCardFacts } from "@/lib/agent/visible-card-context";
 import type { FakeDataScenario } from "@/lib/fake-data";
 
 export type AgentThreadItem = {
@@ -10,6 +11,14 @@ export type AgentThreadItem = {
 };
 
 export type AgentRequestKind = "chat" | "prompt_chips" | "opening_bubble";
+
+export type AgentConversationStatePayload = {
+  shownCards: Array<{ type: string; title?: string }>;
+  visibleCardFacts: VisibleCardFacts[];
+  lastToolNames: string[];
+  promptChips: PromptChip[];
+  pendingAction?: AgentResponse["pendingAction"];
+};
 
 export class AgentRequestError extends Error {
   code?: string;
@@ -94,7 +103,8 @@ export function getConversationState(
   thread: AgentThreadItem[],
   visibleChips: PromptChip[],
   chipHistory: PromptChip[],
-) {
+) : AgentConversationStatePayload {
+  const visibleCards = thread.flatMap((item) => item.response?.cards ?? []);
   const shownCards = thread
     .flatMap((item) => item.response?.cards ?? [])
     .map((card) => ({
@@ -102,6 +112,7 @@ export function getConversationState(
       title: card.title,
     }))
     .slice(-8);
+  const visibleCardFacts = summarizeVisibleCardFacts(visibleCards);
   const lastToolNames = thread
     .flatMap((item) => item.response?.usedTools ?? item.response?.audit.toolNames ?? [])
     .slice(-8);
@@ -118,6 +129,7 @@ export function getConversationState(
 
   return {
     shownCards,
+    visibleCardFacts,
     lastToolNames,
     promptChips,
     ...(pendingAction ? { pendingAction } : {}),
@@ -202,8 +214,8 @@ export function getSafeAgentFailureMessage(input?: {
     code === "invalid-agent-response" ||
     code === "agent-output-rejected"
   ) {
-    return "I couldn’t answer that cleanly. Try again, or ask for the math.";
+    return "I need another pass at that. Please ask again.";
   }
 
-  return "I couldn’t answer that cleanly. Try again.";
+  return "I need another pass at that. Please ask again.";
 }

@@ -144,6 +144,10 @@ const routeSpecs: RouteSpec[] = [
       "what subscriptions are coming up",
       "show upcoming bills",
       "what monthly charges are coming up",
+      "what is the total of my monthly bills",
+      "how much are my recurring bills total",
+      "what do my subscriptions add up to",
+      "how much am I spending on monthly charges",
     ],
   },
   {

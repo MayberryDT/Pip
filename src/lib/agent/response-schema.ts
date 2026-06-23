@@ -185,9 +185,9 @@ const settingsTextRowSchema = z.object({
   value: z.string().min(1).max(180),
 });
 
-const settingsSectionSchema = z.object({
+const settingsActionGroupSchema = z.object({
   title: z.string().min(1).max(80),
-  body: z.string().min(1).max(260),
+  actions: z.array(settingsActionSchema).min(1).max(4),
 });
 
 const settingsDetailRowSchema = z.object({
@@ -397,9 +397,9 @@ export const cardSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("settings_panel"),
     title: z.string().min(1).max(80),
-    accountRows: z.array(settingsTextRowSchema).min(1).max(4),
-    sections: z.array(settingsSectionSchema).min(1).max(4),
-    actions: z.array(settingsActionSchema).min(1).max(8),
+    summary: z.string().min(1).max(220),
+    metadataRows: z.array(settingsTextRowSchema).min(1).max(4),
+    actionGroups: z.array(settingsActionGroupSchema).min(1).max(4),
   }),
   z.object({
     type: z.literal("settings_detail"),

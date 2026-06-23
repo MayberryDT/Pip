@@ -440,6 +440,156 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("routes recurring aggregate questions to data without requiring a card", () => {
+    for (const message of [
+      "what is the total of my monthly bills",
+      "how much are my recurring bills total",
+      "what do my subscriptions add up to",
+      "how much am I spending on monthly charges",
+    ]) {
+      expect(
+        __agentTestHooks.getForcedAgentTool({
+          message,
+        }),
+      ).toMatchObject({
+        toolName: "get_recurring_activity",
+        requireCard: false,
+      });
+    }
+  });
+
+  it("does not force the recurring activity tool when visible recurring facts can answer an aggregate follow-up", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "What's the total of these monthly bills?",
+        history: [
+          { role: "user", content: "What bills are coming up?" },
+          { role: "assistant", content: "I found likely repeating items." },
+        ],
+        conversationState: {
+          shownCards: [{ type: "recurring_activity", title: "Likely recurring activity" }],
+          visibleCardFacts: [
+            {
+              type: "recurring_activity",
+              title: "Likely recurring activity",
+              facts: ["Visible recurring expense total: $35.79 across 2 items."],
+              values: [
+                {
+                  id: "visible-1",
+                  label: "Google Workspace",
+                  amountCents: -1680,
+                  confidence: "high",
+                },
+                {
+                  id: "visible-2",
+                  label: "Hulu",
+                  amountCents: -1899,
+                  confidence: "medium",
+                },
+              ],
+            },
+          ],
+          lastToolNames: ["get_recurring_activity"],
+          promptChips: [],
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("sends visible card facts to the model for cardless follow-up answers", async () => {
+    const visibleCardFacts = [
+      {
+        type: "recurring_activity" as const,
+        title: "Recurring activity",
+        facts: [
+          "Visible recurring expense total: $18.99.",
+          "Visible recurring income total: $0.00.",
+        ],
+        values: [
+          {
+            id: "recurring-expense-total",
+            label: "Visible recurring expense total",
+            amountCents: 1899,
+            confidence: "high" as const,
+          },
+        ],
+      },
+    ];
+    const runtime = {
+      run: vi.fn(async () => ({
+        message: "Those visible monthly bills add up to $18.99.",
+        cards: [],
+        promptChips: [],
+        usedTools: [],
+        responseMode: "chat_only" as const,
+        audit: {
+          toolNames: [],
+          usedModel: true,
+          model: "test-model",
+          transport: "openai-direct" as const,
+        },
+      })),
+    };
+
+    const response = await runAIAgent(
+      {
+        message: "What do these monthly bills add up to?",
+        history: [
+          { role: "user", content: "What bills are coming up?" },
+          { role: "assistant", content: "I found recurring activity." },
+        ],
+        conversationState: {
+          visibleCardFacts,
+        },
+      },
+      runtime,
+    );
+
+    expect(runtime.run).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "What do these monthly bills add up to?",
+        history: expect.arrayContaining([
+          { role: "user", content: "What bills are coming up?" },
+        ]),
+        conversationState: expect.objectContaining({
+          visibleCardFacts,
+        }),
+      }),
+    );
+    expect(response).toMatchObject({
+      message: "Those visible monthly bills add up to $18.99.",
+      cards: [],
+      responseMode: "chat_only",
+      audit: {
+        usedModel: true,
+      },
+    });
+  });
+
+  it("keeps recent chat history and visible facts in the model input", () => {
+    const source = readFileSync(new URL("./ai-agent.ts", import.meta.url), "utf8");
+    const inputSource = source.slice(
+      source.indexOf("function createAgentInput"),
+      source.indexOf("function formatHistoryForModel"),
+    );
+
+    expect(inputSource).toContain("...formatHistoryForModel(input.history)");
+    expect(inputSource).toContain("recent_visible_card_facts");
+    expect(inputSource).toContain("recent_visible_card_context");
+  });
+
+  it("answers fresh recurring aggregate questions with data but no card requirement", async () => {
+    const response = await runAIAgent(
+      { message: "How much are my recurring bills total?" },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_recurring_activity"]);
+    expect(response.responseMode).toBe("chat_only");
+    expect(response.cards).toEqual([]);
+    expect(response.message.toLowerCase()).toContain("repeat expenses total");
+  });
+
   it("calls the spending breakdown tool for complete breakdown requests", async () => {
     const response = await runAIAgent(
       { message: "Give me a complete breakdown" },

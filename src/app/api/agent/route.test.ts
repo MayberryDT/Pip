@@ -226,6 +226,67 @@ describe("POST /api/agent", () => {
     expect(routeMocks.releaseAgentModelGate).toHaveBeenCalledWith("lease-1");
   });
 
+  it("does not replace the model path in local fake app mode when model config is missing", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_LOCAL_FAKE_APP_MODE", "1");
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_KEY", "");
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockRejectedValue(
+      new AgentUnavailableError({
+        code: "missing-openai-config",
+        message: "AI is not configured.",
+        detail: "Set OPENAI_API_KEY, OPENAI_BASE_URL, or enable Netlify AI Gateway before using the agent.",
+      }),
+    );
+
+    const response = await POST(jsonRequest({
+      message: "Show the pattern assumptions behind this number",
+    }));
+
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({
+      code: "missing-openai-config",
+      error: "AI is not configured.",
+    });
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Show the pattern assumptions behind this number",
+        snapshot: fakeSnapshot,
+      }),
+    );
+    expect(routeMocks.runAIAgent.mock.calls[0]).toHaveLength(1);
+    expect(routeMocks.releaseAgentModelGate).toHaveBeenCalledWith("lease-1");
+  });
+
+  it("uses the normal model-backed agent path in local fake app mode when model config exists", async () => {
+    vi.stubEnv("PIP_SUPABASE_MODE", "off");
+    vi.stubEnv("PIP_LOCAL_FAKE_APP_MODE", "1");
+    vi.stubEnv("OPENAI_API_KEY", "test-key");
+    routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
+    routeMocks.runAIAgent.mockResolvedValue(createAgentResponse({
+      message: "I found what changed.",
+      cards: [],
+      usedTools: [],
+      responseMode: "chat_only",
+    }));
+
+    const response = await POST(jsonRequest({
+      message: "Show the pattern assumptions behind this number",
+    }));
+
+    expect(response.status).toBe(200);
+    expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: "Show the pattern assumptions behind this number",
+        snapshot: fakeSnapshot,
+      }),
+    );
+    expect(routeMocks.runAIAgent.mock.calls[0]).toHaveLength(1);
+  });
+
   it("calls the real agent route path without runtime injection", async () => {
     vi.stubEnv("PIP_SUPABASE_MODE", "off");
     routeMocks.getCurrentFinancialSnapshot.mockResolvedValue(fakeSnapshot);
@@ -289,6 +350,16 @@ describe("POST /api/agent", () => {
     expect(routeMocks.runAIAgent).toHaveBeenCalledWith(
       expect.objectContaining({
         message: "Can I spend $12?",
+        history: [
+          {
+            role: "user",
+            content: "Why this number?",
+          },
+          {
+            role: "assistant",
+            content: "Rent is included.",
+          },
+        ],
         snapshot: fakeSnapshot,
       }),
     );

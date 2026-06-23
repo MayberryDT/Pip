@@ -35,6 +35,34 @@ describe("model-first policy", () => {
     })).toBeNull();
   });
 
+  it("does not allow local fake app to bypass model-first visible response policy", () => {
+    const response = createResponse({
+      message: "I found what changed.",
+      usedModel: false,
+      usedTools: ["get_pip_cash_drivers"],
+      responseMode: "show_card",
+      cards: [
+        {
+          type: "pip_cash_explanation",
+          title: "Spendable Cash Today",
+          summary: "The number changed because spending changed.",
+          drivers: [],
+          warnings: [],
+          dataStates: [],
+        },
+      ],
+    });
+
+    expect(getModelFirstViolation({
+      requestKind: "chat",
+      userMessage: "Show the pattern assumptions behind this number",
+      response,
+      deterministicException: ["local", "fake", "app"].join("_") as never,
+    })).toMatchObject({
+      code: "deterministic_visible_response",
+    });
+  });
+
   it("rejects finance answers that do not use tools, cards, or a structured clarification", () => {
     const response = createResponse({
       message: "That sounds fine to me.",

@@ -62,6 +62,7 @@ import {
   updateSavingsGoalParameters,
 } from "@/lib/agent/savings-goal-flow";
 import {
+  type DeterministicVisibleException,
   getModelFirstViolation,
 } from "@/lib/agent/model-first-policy";
 import {
@@ -94,6 +95,10 @@ import {
   guardVisibleFinalMessage,
   repairUnsupportedCardPromises,
 } from "@/lib/agent/visible-response-guard";
+import {
+  formatVisibleCardFactsForModel,
+  type VisibleCardFacts,
+} from "@/lib/agent/visible-card-context";
 
 export {
   createOpenAIClient,
@@ -128,6 +133,7 @@ export type AgentConversationState = {
     type: AgentCard["type"] | string;
     title?: string;
   }>;
+  visibleCardFacts?: VisibleCardFacts[];
   lastToolNames?: string[];
   promptChips?: PromptChip[];
   pendingAction?: AgentPendingAction;
@@ -224,6 +230,7 @@ export type RunAiAgentInput = {
 };
 
 export type AgentRuntime = {
+  deterministicVisibleException?: DeterministicVisibleException;
   run: (input: RunAiAgentInput) => Promise<AgentResponse>;
 };
 
@@ -313,6 +320,8 @@ export async function runAIAgent(
       requestKind: input.requestKind ?? "chat",
       userMessage: input.message,
       response,
+      deterministicException: runtime.deterministicVisibleException,
+      visibleContextAvailable: hasVisibleContext(input),
     });
 
     if (violation) {
@@ -358,6 +367,7 @@ export async function runAIAgent(
         requestKind: input.requestKind ?? "chat",
         userMessage: input.message,
         response,
+        visibleContextAvailable: hasVisibleContext(input),
       });
 
       if (violation) {
@@ -386,6 +396,7 @@ export async function runAIAgent(
             requestKind: input.requestKind ?? "chat",
             userMessage: input.message,
             response,
+            visibleContextAvailable: hasVisibleContext(input),
           });
 
           if (!violation) {
@@ -657,10 +668,22 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
         return undefined;
       }
 
+      const normalized = normalizePrompt(input.message.trim());
+
+      if (
+        decision.toolName === "get_recurring_activity" &&
+        isRecurringAggregatePrompt(normalized) &&
+        hasVisibleRecurringAggregateContext(input)
+      ) {
+        return undefined;
+      }
+
       return {
         toolName: decision.toolName,
         args: decision.args,
-        requireCard: decision.requireCard,
+        requireCard: decision.toolName === "get_recurring_activity" && isRecurringAggregatePrompt(normalized)
+          ? false
+          : decision.requireCard,
       };
     }
   }
@@ -820,6 +843,14 @@ function getLegacyForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | und
 
   if (affirmativeFollowUpTool) {
     return affirmativeFollowUpTool;
+  }
+
+  if (isRecurringAggregatePrompt(normalized) && !hasVisibleRecurringAggregateContext(input)) {
+    return {
+      toolName: "get_recurring_activity",
+      args: {},
+      requireCard: false,
+    };
   }
 
   if (isExplicitRecurringPrompt(normalized)) {
@@ -1989,6 +2020,18 @@ function createPipTools() {
             card?.type === "recurring_activity"
               ? {
                   itemCount: card.items.length,
+                  expenseItemCount: card.items.filter((item) => item.amountCents < 0).length,
+                  expenseTotal: formatMoneyWithCents(
+                    card.items
+                      .filter((item) => item.amountCents < 0)
+                      .reduce((total, item) => total + Math.abs(item.amountCents), 0),
+                  ),
+                  incomeItemCount: card.items.filter((item) => item.amountCents > 0).length,
+                  incomeTotal: formatMoneyWithCents(
+                    card.items
+                      .filter((item) => item.amountCents > 0)
+                      .reduce((total, item) => total + item.amountCents, 0),
+                  ),
                   nextItems: card.items.slice(0, 3).map((item) => ({
                     label: item.label,
                     expectedDate: item.expectedDate,
@@ -2350,7 +2393,8 @@ function createPipInstructions(runContext: {
     "Use Spendable Cash Today for the top daily metric. Do not say PIP legacy cash wording in visible replies.",
     "There is no dashboard, dashboard page, budget page, transaction page, tab view, or separate area to send the user to.",
     "Do not mention dashboards, pages, tabs, sections, navigation, budgeting apps, expense tracking, or financial planning.",
-    "Never calculate money yourself. Use tools for any current financial fact, balance, transaction, driver, data-quality status, or purchase simulation.",
+    "Use tools for any fresh current financial fact, balance, transaction, driver, data-quality status, or purchase simulation.",
+    "You may do simple arithmetic or comparisons only from trusted visible card facts in recent_visible_card_context or from a same-turn tool result. State that scope in plain language.",
     "Use get_trust_policy for questions about Plaid, bank-data providers, AI providers, AI training, privacy, security, deletion, subscriptions, money movement, guarantees, or financial-advice boundaries.",
     "Use get_trust_receipt when the user asks whether the current number is fresh, current, trustworthy, based on complete data, what it includes, what it may be missing, or asks for a receipt behind the number.",
     "The Spendable Cash Today number is calculated by Pip's product logic. AI explains and answers; AI does not own the money calculation.",
@@ -2393,7 +2437,8 @@ function createPipInstructions(runContext: {
     "If the user asks what to cut back on, where they are overspending, what spending looks wasteful, or how to save money from recent spending, call get_spending_opportunity.",
     "If the user asks how they are doing, what you think, what they should do, whether spending is too high, whether to lower monthly savings, whether they are broke, or asks for your read, call get_financial_guidance_context.",
     "If the user asks for a trend, forecast, projection, or next-days view, call forecast_spendable_cash.",
-    "If the user asks about recurring bills, subscriptions, monthly charges, or likely upcoming repeats, call get_recurring_activity.",
+    "If the user asks about fresh recurring bills, subscriptions, monthly charges, or likely upcoming repeats, call get_recurring_activity.",
+    "If the user asks for the total, sum, largest, smallest, or comparison of visible or recently shown recurring items and recent_visible_card_context includes recurring facts, answer from that visible context without calling get_recurring_activity.",
     "If the user corrects whether a merchant is a monthly bill, subscription, recurring item, or not a bill, call correct_recurring_obligation. If the merchant name is missing, ask one short clarifying question.",
     "If the user asks for a complete, item, category, merchant, income, spending, refund, or card-payment breakdown, call get_spending_breakdown.",
     "Only ask for an amount when the user is clearly asking you to simulate or test a specific purchase but did not provide the amount.",
@@ -2406,6 +2451,7 @@ function createPipInstructions(runContext: {
     "Do not call get_recent_transactions for general why, math, negative Spendable Cash Today, or can-I-spend questions.",
     "Prefer a short answer plus a structured card. For simple card answers, keep the chat concise and let the card carry the detail.",
     "When a utility card is returned, write one short bridge sentence. For guidance_card, write the read itself. Do not duplicate card rows in chat.",
+    "Cards are visual aids, not permission to answer. Use chat_only for grounded follow-ups when a card would be redundant.",
     "Cards are optional. Prefer conversational explanation after the first card.",
     "Do not repeat a card whose type is listed in recent_card_types unless the user clearly asks to see that card, details, or breakdown again.",
     "Tools create utility cards. For financial reads only, you may emit guidanceCardDraft in the final structured output after get_financial_guidance_context or purchase guidanceContext was used.",
@@ -2475,6 +2521,10 @@ function createAgentInput(
               .map((card) => card.title)
               .filter(Boolean)
               .slice(-8),
+            recent_visible_card_facts: context.conversationState.visibleCardFacts.slice(-4),
+            recent_visible_card_context: formatVisibleCardFactsForModel(
+              context.conversationState.visibleCardFacts,
+            ),
             last_tool_names: context.conversationState.lastToolNames.slice(-8),
             recent_prompt_chips: context.conversationState.promptChips.slice(-18),
             pending_action: context.conversationState.pendingAction ?? null,
@@ -2492,6 +2542,17 @@ function createAgentInput(
       ],
     },
   ];
+}
+
+function hasVisibleContext(input: RunAiAgentInput): boolean {
+  return Boolean(input.conversationState?.visibleCardFacts?.length);
+}
+
+function hasVisibleRecurringAggregateContext(input: RunAiAgentInput): boolean {
+  return Boolean(input.conversationState?.visibleCardFacts?.some((card) =>
+    card.type === "recurring_activity" &&
+    (card.facts.length > 0 || card.values.length > 0),
+  ));
 }
 
 function formatHistoryForModel(history: AgentHistoryItem[] | undefined): AgentInputItem[] {
@@ -2538,6 +2599,7 @@ function createPipContext(
     actions: input.actions,
     conversationState: {
       shownCards: (input.conversationState?.shownCards ?? []).slice(-8),
+      visibleCardFacts: (input.conversationState?.visibleCardFacts ?? []).slice(-4),
       lastToolNames: (input.conversationState?.lastToolNames ?? []).slice(-8),
       promptChips: (input.conversationState?.promptChips ?? []).slice(-24),
       ...(input.conversationState?.pendingAction
@@ -3853,6 +3915,13 @@ function isExplicitRecurringPrompt(normalized: string): boolean {
     /\b(recurring|repeating|repeat|subscription|subscriptions|bills? (are )?coming up|monthly charges?|upcoming bills?)\b/.test(normalized) ||
     /\b(youtube|premium|netflix|spotify|hulu|stream|membership|gym|phone bill|utilities?)\b.*\b(coming|upcoming|repeat|again|next|recurring)\b/.test(normalized) ||
     /\b(coming|upcoming|repeat|again|next|recurring)\b.*\b(youtube|premium|netflix|spotify|hulu|stream|membership|gym|phone bill|utilities?)\b/.test(normalized)
+  );
+}
+
+function isRecurringAggregatePrompt(normalized: string): boolean {
+  return (
+    /\b(total|sum|add(?:ed)? up|altogether|how much|how many dollars|spending|spend)\b/.test(normalized) &&
+    /\b(monthly bills?|recurring bills?|subscriptions?|monthly charges?|repeat(?:ing)? items?)\b/.test(normalized)
   );
 }
 

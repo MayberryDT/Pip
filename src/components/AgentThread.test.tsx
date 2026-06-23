@@ -52,7 +52,7 @@ describe("AgentThread", () => {
     expect(markup).toContain('aria-label="Pip"');
     expect(markup).toContain("/brand/pip-character/v001/avatar/concerned.png");
     expect(markup).toContain('data-expression="concerned"');
-    expect(visibleText).toContain("I couldn’t answer that cleanly. Try again.");
+    expect(visibleText).toContain("I need another pass at that. Please ask again.");
     expect(visibleText).not.toContain("AI request failed");
   });
 

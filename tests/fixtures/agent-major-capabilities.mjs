@@ -13,7 +13,7 @@ export const majorCapabilities = [
     },
     paraphrases: ["hello", "hey", "good morning"],
     stateCases: [],
-    multiTurnJourneys: [],
+    multiTurnJourneys: ["major-multiturn-recurring-aggregate-followup"],
     uiProof: { desktop: true, mobile: true, expectedText: ["Spendable Cash Today"] },
     productionPolicy: "public_safe",
     androidReview: false,
@@ -491,6 +491,49 @@ export const majorCapabilityMultiTurnCases = [
     forbiddenCards: ["pip_cash_explanation"],
     forbiddenAdjacentSameTools: ["get_pip_cash_drivers"],
     expectNoRepeatedAssistantMessage: true,
+  },
+  {
+    id: "major-multiturn-recurring-aggregate-followup",
+    capabilityId: "recurring_activity",
+    capability: "Recurring bills and subscriptions",
+    safetyClass: "local_private",
+    description: "Visible recurring card total follow-up answers in chat without requiring another card.",
+    message: "What's the total of these monthly bills?",
+    history: [
+      { role: "user", content: "What bills are coming up?" },
+      { role: "assistant", content: "I found likely repeating items." },
+    ],
+    conversationState: {
+      shownCards: [{ type: "recurring_activity", title: "Likely recurring activity" }],
+      visibleCardFacts: [
+        {
+          type: "recurring_activity",
+          title: "Likely recurring activity",
+          facts: ["Visible recurring expense total: $35.79 across 2 items."],
+          values: [
+            {
+              id: "visible-1",
+              label: "Google Workspace",
+              amountCents: -1680,
+              date: "2026-07-01",
+              confidence: "high",
+            },
+            {
+              id: "visible-2",
+              label: "Hulu",
+              amountCents: -1899,
+              date: "2026-07-04",
+              confidence: "medium",
+            },
+          ],
+        },
+      ],
+      lastToolNames: ["get_recurring_activity"],
+      promptChips: [],
+    },
+    expectedResponseMode: "chat_only",
+    expectNoCards: true,
+    forbiddenTools: ["get_recurring_activity"],
   },
   {
     id: "major-multiturn-savings-goal-amount-date",
