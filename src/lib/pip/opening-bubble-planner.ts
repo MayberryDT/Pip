@@ -1,7 +1,6 @@
 import type { PromptChip } from "@/lib/agent/card-types";
 
 export type OpeningBubblePriority =
-  | "refresh"
   | "same_day_spend"
   | "missing_data"
   | "clarification"
@@ -18,10 +17,6 @@ export type OpeningBubblePlan = {
 };
 
 export type OpeningBubbleInput = {
-  refresh?: {
-    status: "checking" | "ran" | "failed" | "skipped";
-    message?: string;
-  };
   sameDaySpend?: {
     amountCents: number;
     merchantName?: string;
@@ -46,22 +41,6 @@ export type OpeningBubbleInput = {
 };
 
 export function planOpeningBubble(input: OpeningBubbleInput): OpeningBubblePlan {
-  if (input.refresh?.status === "checking") {
-    return {
-      priority: "refresh",
-      message: input.refresh.message ?? "I am checking for new transactions now. This number may move.",
-      chips: [chip("refresh-data", "Refresh", "Refresh my connected data")],
-    };
-  }
-
-  if (input.refresh?.status === "failed") {
-    return {
-      priority: "refresh",
-      message: input.refresh.message ?? "I could not fully refresh your bank data. Your connection may need attention.",
-      chips: [chip("manage-accounts", "Accounts", "Manage connected accounts")],
-    };
-  }
-
   if (input.sameDaySpend && input.sameDaySpend.amountCents > 0) {
     const merchant = input.sameDaySpend.merchantName
       ? ` at ${input.sameDaySpend.merchantName}`
@@ -81,7 +60,7 @@ export function planOpeningBubble(input: OpeningBubbleInput): OpeningBubblePlan 
     return {
       priority: "missing_data",
       message: input.missingData.message,
-      chips: [chip("manage-accounts", "Accounts", "Manage connected accounts")],
+      chips: [chip("manage-accounts", "Accounts", "Show connected accounts")],
     };
   }
 
@@ -102,14 +81,6 @@ export function planOpeningBubble(input: OpeningBubbleInput): OpeningBubblePlan 
       priority: "savings_opportunity",
       message: "You have not set a savings goal yet. I can help with one.",
       chips: [chip("set-savings-goal", "Set a goal", "Help me set a savings goal")],
-    };
-  }
-
-  if (input.refresh?.status === "ran" || input.refresh?.status === "skipped") {
-    return {
-      priority: "refresh",
-      message: input.refresh.message ?? "I checked your transactions. Your spendable number is up to date.",
-      chips: [whyTodayChip()],
     };
   }
 

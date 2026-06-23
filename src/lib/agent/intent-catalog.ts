@@ -221,6 +221,7 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
     positiveExamples: [
       "show recent transactions",
       "what did i buy lately",
+      "what have i been buying",
       "show my latest purchases",
       "what charges hit this week",
       "where did my money go yesterday",
@@ -233,7 +234,7 @@ export const intentCatalog: readonly IntentCatalogEntry[] = [
       "what bills are coming up",
       "what can i cut back on",
     ],
-    lexicalBoosts: ["transactions", "charges", "purchases", "activity", "buy lately", "bought lately", "what did i buy", "charges hit", "spend lately"],
+    lexicalBoosts: ["transactions", "charges", "purchases", "activity", "buy lately", "bought lately", "been buying", "what did i buy", "what have i been buying", "charges hit", "spend lately"],
     lexicalHardNegatives: ["category", "merchant breakdown", "subscriptions", "recurring", "forecast", "cut back", "bills"],
     defaultArgs: { limit: 6 },
     followUpParents: [],

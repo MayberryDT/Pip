@@ -546,6 +546,7 @@ function isConnectedAccountsPrompt(normalized: string): boolean {
 function isRecentTransactionsPrompt(normalized: string): boolean {
   return (
     /\bwhat did i (?:buy|spend)\b.{0,32}\b(lately|recently|yesterday|this week|last week)?\b/.test(normalized) ||
+    /\bwhat have i been (?:buying|spending)\b.{0,32}\b(lately|recently|this week|last week)?\b/.test(normalized) ||
     /\b(show|list|pull up|find)\b.{0,32}\b(recent|latest)\b.{0,20}\b(transactions?|charges?|purchases?|activity)\b/.test(normalized) ||
     /\bwhat charges hit\b/.test(normalized) ||
     /\bwhere did my money go yesterday\b/.test(normalized)

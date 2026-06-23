@@ -52,6 +52,16 @@ export type ComposedAgentVisibleAnswer = {
 export function composeAgentVisibleAnswer(
   input: ComposeAgentVisibleAnswerInput,
 ): ComposedAgentVisibleAnswer {
+  const cardBackedAnswer = composeCardBackedAnswer(input.cards[0], input.userMessage);
+
+  if (cardBackedAnswer) {
+    return {
+      ...cardBackedAnswer,
+      repeatedMessage: false,
+      repetitionAdjusted: false,
+    };
+  }
+
   const modelMessage = composeModelMessage(input.modelOutput, {
     maxChars: input.maxChars,
     maxWords: input.maxWords,
@@ -109,8 +119,13 @@ function composeModelMessage(
 
 function composeCardBackedAnswer(
   card: AgentCard | undefined,
+  userMessage: string,
 ): { message: string; answerPatternId: string } | null {
   if (!card) {
+    return null;
+  }
+
+  if (isCardExplanationFollowUp(userMessage)) {
     return null;
   }
 
@@ -118,30 +133,19 @@ function composeCardBackedAnswer(
     case "pip_cash_explanation":
       return null;
     case "purchase_simulation":
-      if (card.shortfallCents && card.shortfallCents > 0) {
-        return {
-          message: `That would add ${formatMoney(card.shortfallCents)} to your shortfall.`,
-          answerPatternId: "purchase-simulation",
-        };
-      }
-
-      if (card.todayOverageCents > 0) {
-        return {
-          message: `That would put Spendable Cash Today at ${formatMoney(card.todayRemainingCents)}.`,
-          answerPatternId: "purchase-simulation",
-        };
-      }
-
-      return {
-        message: `That would leave ${formatMoney(card.todayRemainingCents)} in Spendable Cash Today.`,
-        answerPatternId: "purchase-simulation",
-      };
+      return null;
     case "true_balances":
       return null;
     case "recent_transactions":
-      return null;
+      return {
+        message: "I found recent charges in the current window.",
+        answerPatternId: "recent-transactions-card",
+      };
     case "spending_breakdown":
-      return null;
+      return {
+        message: "I grouped the main money flows.",
+        answerPatternId: "spending-breakdown-card",
+      };
     case "recurring_activity":
       return null;
     case "spendable_cash_forecast":
@@ -171,6 +175,12 @@ function composeCardBackedAnswer(
     case "account_connections":
       return null;
   }
+}
+
+function isCardExplanationFollowUp(message: string): boolean {
+  return /^(why|why\?|how|how\?|what do you mean|tell me more|more|explain|explain that)$/i.test(
+    message.trim(),
+  );
 }
 
 function fitVisibleMessage(

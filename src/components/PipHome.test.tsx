@@ -29,6 +29,7 @@ describe("PipHome", () => {
     expect(markup).toContain("Accounts");
     expect(markup).toContain("Settings");
     expect(markup).toContain("What pattern are you using?");
+    expect(markup).not.toContain("Check if the data looks right");
     expect(markup).not.toContain("Show the biggest drivers");
     expect(markup).not.toContain("Missing card");
     expect(markup).not.toContain("Test purchase");
@@ -437,45 +438,98 @@ describe("PipHome", () => {
     ).toBeNull();
   });
 
-  it("shows warm app-open checking, success, and skip copy", () => {
-    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "checking" })).toMatch(
-      /checking|searching/i,
-    );
-    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "ran" })).toMatch(
-      /checked|transactions/i,
-    );
-    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "skipped_recent" })).toMatch(
-      /checked|recently|already/i,
-    );
-    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "skipped_pending" })).toMatch(
-      /checking|already/i,
-    );
-    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "skipped_manual_only" })).toMatch(
-      /automatic refresh|manual/i,
-    );
-    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "no_provider" })).toMatch(
-      /connect|account/i,
-    );
+  it("extracts only confirmed new daily-spend transactions from app-open payloads", () => {
+    expect(
+      __pipHomeTestHooks.getAppOpenNewTransactionCue({
+        status: "ran",
+        result: {
+          sameDayNewTransactions: [
+            {
+              date: "2026-06-16",
+              label: "Coffee Shop",
+              amountCents: -525,
+              pending: false,
+              treatment: "daily_spend",
+            },
+            {
+              date: "2026-06-16",
+              label: "Target",
+              amountCents: -1800,
+              pending: true,
+              treatment: "daily_spend",
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      amountCents: 1800,
+      merchantName: "Target",
+      pending: true,
+    });
+
+    expect(
+      __pipHomeTestHooks.getAppOpenNewTransactionCue({
+        status: "skipped_recent",
+        result: {
+          sameDayNewTransactions: [
+            {
+              date: "2026-06-16",
+              label: "Target",
+              amountCents: -1800,
+              pending: true,
+              treatment: "daily_spend",
+            },
+          ],
+        },
+      }),
+    ).toBeNull();
   });
 
-  it("maps app-open refresh failures to short Pip status copy", () => {
-    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "failed" })).toMatch(
-      /refresh|connection/i,
-    );
-    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "needs_repair" })).toMatch(
-      /refresh|connection/i,
-    );
-    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: true, status: "partial" })).toMatch(
-      /refresh|connection/i,
-    );
+  it("rejects non-daily-spend or malformed app-open transactions", () => {
     expect(
-      __pipHomeTestHooks.getAppOpenSyncMessage({
-        ok: true,
+      __pipHomeTestHooks.getAppOpenNewTransactionCue({
         status: "ran",
-        resultStatus: "partial",
+        result: {
+          sameDayNewTransactions: [
+            {
+              date: "2026-06-16",
+              label: "Rent",
+              amountCents: -120000,
+              pending: false,
+              treatment: "known_bill",
+            },
+            {
+              date: "2026-06-16",
+              label: "Refund",
+              amountCents: 1200,
+              pending: false,
+              treatment: "daily_spend",
+            },
+            {
+              label: "Missing Date",
+              amountCents: -900,
+              pending: false,
+              treatment: "daily_spend",
+            },
+          ],
+        },
       }),
-    ).toMatch(/refresh|connection/i);
-    expect(__pipHomeTestHooks.getAppOpenSyncMessage({ ok: false })).toMatch(/refresh|connection/i);
+    ).toBeNull();
+  });
+
+  it("does not render generic app-open status copy in the ready intro", () => {
+    const markup = renderToStaticMarkup(
+      <PipHome
+        authState={{ status: "ready", email: "tester@example.com" }}
+        enableAccountControls
+        initialResult={__pipHomeTestHooks.getDemoPipCashResult()}
+      />,
+    );
+
+    expect(markup).not.toMatch(/checking your connected transactions/i);
+    expect(markup).not.toMatch(/checked your transactions/i);
+    expect(markup).not.toMatch(/up to date/i);
+    expect(markup).not.toMatch(/using your latest spendable/i);
   });
 
   it("uses the opening bubble planner for same-day spend and prompt chips", () => {
@@ -484,36 +538,41 @@ describe("PipHome", () => {
 
     expect(metric).toBeDefined();
 
-    const plan = __pipHomeTestHooks.getReadyOpeningBubblePlan({
-      result: {
-        ...result,
-        spendableCashToday: {
-          ...metric!,
-          sameDayDiscretionarySpendCents: 1800,
-          sameDayPendingSpendCents: 1800,
-          sameDayLedger: {
-            ...metric!.sameDayLedger,
-            discretionarySpendCents: 1800,
-            pendingSpendCents: 1800,
-            items: [
-              {
-                transactionId: "target-pending",
-                accountId: "checking",
-                date: metric!.sameDayLedger.asOfDate,
-                label: "Target",
-                amountCents: -1800,
-                treatment: "daily_spend",
-                pending: true,
-                reason: "same-day card purchase",
-              },
-            ],
-          },
+    const resultWithCachedSameDaySpend = {
+      ...result,
+      spendableCashToday: {
+        ...metric!,
+        sameDayDiscretionarySpendCents: 1800,
+        sameDayPendingSpendCents: 1800,
+        sameDayLedger: {
+          ...metric!.sameDayLedger,
+          discretionarySpendCents: 1800,
+          pendingSpendCents: 1800,
+          items: [
+            {
+              transactionId: "target-pending",
+              accountId: "checking",
+              date: metric!.sameDayLedger.asOfDate,
+              label: "Target",
+              amountCents: -1800,
+              treatment: "daily_spend" as const,
+              pending: true,
+              reason: "same-day card purchase",
+            },
+          ],
         },
       },
-      appOpenSyncMessage: __pipHomeTestHooks.getAppOpenSyncMessage({
-        ok: true,
-        status: "ran",
-      }) ?? undefined,
+    };
+    const cachedOnlyPlan = __pipHomeTestHooks.getReadyOpeningBubblePlan({
+      result: resultWithCachedSameDaySpend,
+    });
+    const plan = __pipHomeTestHooks.getReadyOpeningBubblePlan({
+      result: resultWithCachedSameDaySpend,
+      appOpenNewTransactionCue: {
+        amountCents: 1800,
+        merchantName: "Target",
+        pending: true,
+      },
     });
     const chips = __pipHomeTestHooks.getOpeningBubblePromptChips({
       openingBubblePlan: plan,
@@ -526,6 +585,8 @@ describe("PipHome", () => {
       ],
     });
 
+    expect(cachedOnlyPlan.priority).not.toBe("same_day_spend");
+    expect(cachedOnlyPlan.message).not.toMatch(/I found/i);
     expect(plan).toMatchObject({
       priority: "same_day_spend",
       message: "I found pending $18 at Target and took it off today for now.",

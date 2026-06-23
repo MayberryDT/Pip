@@ -286,6 +286,134 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("shows recent transactions for present-perfect buying questions", async () => {
+    const response = await runAIAgent(
+      { message: "what have i been buying?" },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_recent_transactions"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "recent_transactions",
+    });
+  });
+
+  it("keeps a current-turn recent transactions card for vague show-me follow-ups", () => {
+    const card: AgentCard = {
+      type: "recent_transactions",
+      title: "Recent transactions",
+      transactions: [],
+    };
+
+    const cards = __agentTestHooks.selectDeterministicCards(
+      {
+        message: "I found these recent items.",
+        responseMode: "show_card",
+        promptChips: [],
+      },
+      {
+        usedTools: ["get_recent_transactions"],
+        availableCards: [card],
+        conversationState: {
+          shownCards: [],
+          lastToolNames: [],
+          promptChips: [],
+        },
+      } as unknown as Parameters<typeof __agentTestHooks.selectDeterministicCards>[1],
+      {
+        message: "show me",
+      } as Parameters<typeof __agentTestHooks.selectDeterministicCards>[2],
+    );
+
+    expect(cards).toEqual([card]);
+  });
+
+  it("re-shows recent transactions for show-me follow-ups without asking the model", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_KEY", "");
+
+    const response = await runAIAgent({
+      message: "show me",
+      snapshot: fakeSnapshot,
+      onboardingState: {
+        status: "ready",
+        hasFinancialData: true,
+      },
+      conversationState: {
+        shownCards: [
+          {
+            type: "recent_transactions",
+            title: "Recent transactions",
+          },
+        ],
+        lastToolNames: ["get_recent_transactions"],
+      },
+      history: [
+        {
+          role: "user",
+          content: "what have i been buying?",
+        },
+        {
+          role: "assistant",
+          content: "I found recent charges in the current window.",
+        },
+      ],
+    });
+
+    expect(response.audit.usedModel).toBe(false);
+    expect(response.usedTools).toEqual(["get_recent_transactions"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.message).toBe("I found recent charges in the current window.");
+    expect(response.cards[0]).toMatchObject({
+      type: "recent_transactions",
+    });
+  });
+
+  it("keeps the recent transactions card for a vague show-me follow-up", async () => {
+    const response = await runAIAgent(
+      {
+        message: "show me",
+        history: [
+          {
+            role: "user",
+            content: "what have i been buying?",
+          },
+          {
+            role: "assistant",
+            content: "I can walk you through recent activity.",
+          },
+        ],
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_recent_transactions"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "recent_transactions",
+    });
+  });
+
+  it("uses a short bridge for spending breakdown cards", async () => {
+    const response = await runAIAgent(
+      {
+        message: "Show my spending breakdown",
+        selectedPromptChipId: "ai-spending-breakdown",
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_spending_breakdown"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "spending_breakdown",
+    });
+    expect(response.message).toBe("I grouped the main money flows.");
+  });
+
   it("calls the forecast tool when the user asks for a 7-day trend", async () => {
     const response = await runAIAgent(
       { message: "Show 7 day trend" },
@@ -1068,6 +1196,191 @@ describe("runAIAgent", () => {
     });
   });
 
+  it("keeps generic savings goal setup stateful before asking the model", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_KEY", "");
+
+    const response = await runAIAgent({
+      message: "i want to start a savings goal",
+      onboardingState: {
+        status: "ready",
+        hasFinancialData: true,
+      },
+      actions: createSavingsGoalActions(),
+    });
+
+    expect(response.audit.usedModel).toBe(false);
+    expect(response.usedTools).toEqual([]);
+    expect(response.responseMode).toBe("clarify");
+    expect(response.pendingAction).toMatchObject({
+      type: "preview_savings_goal",
+      name: "Savings goal",
+      missing: ["target_amount", "target_date_or_monthly_contribution"],
+      includeInSpendableCash: true,
+    });
+  });
+
+  it("starts savings goal setup after a spending breakdown card without falling back to a 502", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_KEY", "");
+
+    const response = await runAIAgent({
+      message: "i want to start a savings goal",
+      onboardingState: {
+        status: "ready",
+        hasFinancialData: true,
+      },
+      conversationState: {
+        shownCards: [
+          {
+            type: "spending_breakdown",
+            title: "Spending breakdown",
+          },
+        ],
+        lastToolNames: ["get_spending_breakdown"],
+      },
+      history: [
+        {
+          role: "user",
+          content: "Show my spending breakdown",
+        },
+        {
+          role: "assistant",
+          content: "I grouped the main money flows.",
+        },
+      ],
+      actions: createSavingsGoalActions(),
+    });
+
+    expect(response.audit.usedModel).toBe(false);
+    expect(response.usedTools).toEqual([]);
+    expect(response.responseMode).toBe("clarify");
+    expect(response.message).toBe("How much do you want to save for this goal?");
+    expect(response.pendingAction).toMatchObject({
+      type: "preview_savings_goal",
+      name: "Savings goal",
+      missing: ["target_amount", "target_date_or_monthly_contribution"],
+    });
+  });
+
+  it("previews and creates a multi-turn savings goal without relying on model output", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_KEY", "");
+
+    const actions = createSavingsGoalActions();
+    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
+    const baseInput = {
+      onboardingState: {
+        status: "ready" as const,
+        hasFinancialData: true,
+      },
+      snapshot: fakeSnapshot,
+      actions,
+    };
+
+    const start = await runAIAgent({
+      ...baseInput,
+      message: "i want to start a savings goal",
+    });
+    const amount = await runAIAgent({
+      ...baseInput,
+      message: "5000",
+      conversationState: { pendingAction: start.pendingAction },
+    });
+    const preview = await runAIAgent({
+      ...baseInput,
+      message: "in 6 months",
+      conversationState: { pendingAction: amount.pendingAction },
+    });
+    const created = await runAIAgent({
+      ...baseInput,
+      message: "yes",
+      conversationState: { pendingAction: preview.pendingAction },
+    });
+
+    expect(amount.responseMode).toBe("clarify");
+    expect(amount.pendingAction).toMatchObject({
+      type: "preview_savings_goal",
+      targetAmountCents: 500000,
+      missing: ["target_date_or_monthly_contribution"],
+    });
+    expect(preview.usedTools).toEqual(["preview_savings_goal"]);
+    expect(preview.responseMode).toBe("show_card");
+    expect(preview.cards[0]).toMatchObject({
+      type: "savings_goal_preview",
+      targetAmountCents: 500000,
+      includeInSpendableCash: true,
+    });
+    expect(preview.pendingAction).toMatchObject({
+      type: "ordinary_write",
+      action: "create_savings_goal",
+    });
+    expect(created.usedTools).toEqual(["create_savings_goal"]);
+    expect(created.responseMode).toBe("show_card");
+    expect(created.cards[0]).toMatchObject({
+      type: "savings_goal_plan",
+      targetAmountCents: 500000,
+      includeInSpendableCash: true,
+    });
+    expect(createSavingsGoal).toHaveBeenCalledTimes(1);
+  });
+
+  it("cancels a pending savings goal preview when the user says no", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_KEY", "");
+
+    const actions = createSavingsGoalActions();
+    const createSavingsGoal = vi.spyOn(actions, "createSavingsGoal");
+    const baseInput = {
+      onboardingState: {
+        status: "ready" as const,
+        hasFinancialData: true,
+      },
+      snapshot: fakeSnapshot,
+      actions,
+    };
+    const start = await runAIAgent({
+      ...baseInput,
+      message: "i want to set a savings goal",
+    });
+    const amount = await runAIAgent({
+      ...baseInput,
+      message: "2000",
+      conversationState: { pendingAction: start.pendingAction },
+    });
+    const preview = await runAIAgent({
+      ...baseInput,
+      message: "by December",
+      conversationState: { pendingAction: amount.pendingAction },
+    });
+    const cancelled = await runAIAgent({
+      ...baseInput,
+      message: "no",
+      conversationState: { pendingAction: preview.pendingAction },
+    });
+
+    expect(preview.usedTools).toEqual(["preview_savings_goal"]);
+    expect(preview.cards[0]).toMatchObject({
+      type: "savings_goal_preview",
+      targetAmountCents: 200000,
+    });
+    expect(cancelled.audit.usedModel).toBe(false);
+    expect(cancelled.usedTools).toEqual([]);
+    expect(cancelled.cards).toEqual([]);
+    expect(cancelled.responseMode).toBe("chat_only");
+    expect(cancelled.pendingAction).toBeUndefined();
+    expect(cancelled.message.toLowerCase()).toContain("won't create");
+    expect(createSavingsGoal).not.toHaveBeenCalled();
+  });
+
   it("asks for missing savings goal details with model-written copy", async () => {
     const response = await runAIAgent(
       {
@@ -1294,6 +1607,7 @@ describe("runAIAgent", () => {
       ["how much do I have in checking", "get_true_balances"],
       ["show my bank accounts", "get_connected_accounts"],
       ["what did I buy lately", "get_recent_transactions"],
+      ["what have I been buying?", "get_recent_transactions"],
       ["what charges hit this week", "get_recent_transactions"],
       ["where is my money going by category", "get_spending_breakdown"],
       ["what repeats every month", "get_recurring_activity"],
@@ -1598,6 +1912,25 @@ describe("runAIAgent", () => {
       __agentTestHooks.getForcedAgentTool({
         message: "Show connected accounts",
         selectedPromptChipId: "manage-accounts",
+      }),
+    ).toMatchObject({
+      toolName: "get_connected_accounts",
+      requireCard: true,
+    });
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Manage accounts",
+        selectedPromptChipId: "settings-connected-accounts",
+      }),
+    ).toMatchObject({
+      toolName: "get_connected_accounts",
+      requireCard: true,
+    });
+
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "Manage connected accounts",
       }),
     ).toMatchObject({
       toolName: "get_connected_accounts",

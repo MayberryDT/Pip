@@ -92,7 +92,12 @@ export function runDeploymentEnvCheck({
       warnings.push("PLAID_REDIRECT_URI does not share the NEXT_PUBLIC_SITE_URL origin.");
     }
 
-    if (mode === "beta" && effectiveEnv.PIP_EMAIL_MODE?.trim() !== "off" && !hasBetaEmailConfiguration(effectiveEnv)) {
+    if (
+      mode === "beta" &&
+      effectiveEnv.PIP_EMAIL_MODE?.trim() !== "off" &&
+      !isCiPlaceholderBetaCheck(effectiveEnv) &&
+      !hasBetaEmailConfiguration(effectiveEnv)
+    ) {
       addUnique(
         missing,
         "RESEND_API_KEY, PIP_EMAIL_FROM, PIP_EMAIL_POSTAL_ADDRESS, PIP_EMAIL_UNSUBSCRIBE_SECRET, and RESEND_WEBHOOK_SECRET are required for beta email delivery unless PIP_EMAIL_MODE=off.",
@@ -235,6 +240,10 @@ function hasBetaEmailConfiguration(env) {
     "PIP_EMAIL_UNSUBSCRIBE_SECRET",
     "RESEND_WEBHOOK_SECRET",
   ].every((name) => hasValue(env[name]));
+}
+
+function isCiPlaceholderBetaCheck(env) {
+  return env.CI === "true" && env.NEXT_PUBLIC_SUPABASE_URL === "https://ci.supabase.co";
 }
 
 function normalizeOrigin(rawUrl) {

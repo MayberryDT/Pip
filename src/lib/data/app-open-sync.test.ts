@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getAppOpenSyncDecision } from "@/lib/data/app-open-sync";
+import type { ActivePipSyncJobSummary } from "@/lib/data/sync-jobs";
 import type { SyncStatus } from "@/lib/data/sync-status";
 
 describe("getAppOpenSyncDecision", () => {
@@ -15,19 +16,23 @@ describe("getAppOpenSyncDecision", () => {
             }),
           ],
         }),
-        hasPendingSyncJob: false,
+        activeSyncJobs: [],
         now: new Date("2026-06-16T12:00:00.000Z"),
       }),
       getAppOpenSyncDecision({
         syncStatus: createSyncStatus(),
-        hasPendingSyncJob: true,
+        activeSyncJobs: [
+          createActiveJob({
+            reason: "scheduled",
+          }),
+        ],
         now: new Date("2026-06-16T12:00:00.000Z"),
       }),
       getAppOpenSyncDecision({
         syncStatus: createSyncStatus({
           institutions: [],
         }),
-        hasPendingSyncJob: false,
+        activeSyncJobs: [],
         now: new Date("2026-06-16T12:00:00.000Z"),
       }),
       getAppOpenSyncDecision({
@@ -41,13 +46,13 @@ describe("getAppOpenSyncDecision", () => {
           ],
           hasStaleInstitution: true,
         }),
-        hasPendingSyncJob: false,
+        activeSyncJobs: [],
         now: new Date("2026-06-16T12:00:00.000Z"),
       }),
     ];
 
     expect(decisions.map((decision) => decision.reason)).toEqual([
-      "app_open_check",
+      "initial_sync",
       "sync_in_flight",
       "no_refreshable_provider",
       "provider_needs_repair",
@@ -57,7 +62,7 @@ describe("getAppOpenSyncDecision", () => {
     }
   });
 
-  it("runs for connected data that is fresh but outside the short duplicate guard", () => {
+  it("skips fresh data inside the stale-check window", () => {
     expect(
       getAppOpenSyncDecision({
         syncStatus: createSyncStatus({
@@ -79,60 +84,53 @@ describe("getAppOpenSyncDecision", () => {
             errorMessage: null,
           },
         }),
-        hasPendingSyncJob: false,
+        activeSyncJobs: [],
         now: new Date("2026-06-16T12:05:00.000Z"),
       }),
     ).toEqual({
-      status: "run",
-      provider: "plaid",
-      reason: "app_open_check",
+      status: "skipped_recent",
+      reason: "recent_enough",
+      message: "Recent data is fresh enough for app open.",
+      lastSuccessfulSyncAt: "2026-06-16T12:00:00.000Z",
     });
   });
 
-  it("runs for same-day successful data when no duplicate sync just started", () => {
+  it("runs a stale check when the latest successful sync is old enough", () => {
     expect(
       getAppOpenSyncDecision({
         syncStatus: createSyncStatus({
           institutions: [
             createInstitution({
-              lastSuccessfulSyncAt: "2026-06-16T12:05:00.000Z",
-              staleAfter: "2026-06-17T12:05:00.000Z",
+              lastSuccessfulSyncAt: "2026-06-16T12:00:00.000Z",
+              staleAfter: "2026-06-17T12:00:00.000Z",
               isStale: false,
             }),
           ],
         }),
-        hasPendingSyncJob: false,
-        now: new Date("2026-06-16T12:05:10.000Z"),
+        activeSyncJobs: [],
+        now: new Date("2026-06-16T16:01:00.000Z"),
       }),
     ).toEqual({
       status: "run",
       provider: "plaid",
-      reason: "app_open_check",
+      reason: "stale_check",
     });
   });
 
-  it("skips only a short duplicate provider run that just started", () => {
+  it("skips a webhook sync waiting for its retry window", () => {
     expect(
       getAppOpenSyncDecision({
-        syncStatus: createSyncStatus({
-          latestSyncRun: {
-            provider: "plaid",
-            status: "started",
-            startedAt: "2026-06-16T12:00:30.000Z",
-            completedAt: null,
-            accountCount: 0,
-            transactionCount: 0,
-            balanceCount: 0,
-            errorMessage: null,
-          },
-        }),
-        hasPendingSyncJob: false,
+        syncStatus: createSyncStatus(),
+        activeSyncJobs: [
+          createActiveJob({
+            availableAt: "2026-06-16T12:05:00.000Z",
+          }),
+        ],
         now: new Date("2026-06-16T12:01:00.000Z"),
       }),
     ).toMatchObject({
-      status: "skipped_recent",
-      reason: "recent_duplicate",
-      retryAfterSeconds: 30,
+      status: "skipped_pending",
+      reason: "sync_waiting_for_retry",
     });
   });
 });
@@ -159,6 +157,20 @@ function createInstitution(
     isStale: false,
     errorCode: null,
     errorMessage: null,
+    ...overrides,
+  };
+}
+
+function createActiveJob(overrides: Partial<ActivePipSyncJobSummary> = {}): ActivePipSyncJobSummary {
+  return {
+    id: "job-1",
+    provider: "plaid",
+    institutionId: "institution-1",
+    reason: "plaid_webhook",
+    status: "pending",
+    sourceWebhookEventId: "webhook-1",
+    availableAt: "2026-06-16T12:00:00.000Z",
+    createdAt: "2026-06-16T11:59:00.000Z",
     ...overrides,
   };
 }

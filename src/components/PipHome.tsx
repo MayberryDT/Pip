@@ -91,6 +91,7 @@ const settingsCancelPromptChip: PromptChip = {
 };
 const APP_OPEN_REFRESH_CLIENT_COOLDOWN_MS = 60_000;
 
+type AppOpenNewTransactionCue = NonNullable<OpeningBubbleInput["sameDaySpend"]>;
 type ChatOnlyPendingFlow = "feedback" | "delete-account" | null;
 type SettingsDetailKind = "support" | "privacy" | "terms";
 type ChatOnlyRequest =
@@ -150,7 +151,8 @@ export function PipHome({
   );
   const [serverErrorText, setServerErrorText] = useState("");
   const [syncStatus, setSyncStatus] = useState<SyncStatusResponse | null>(null);
-  const [appOpenSyncMessage, setAppOpenSyncMessage] = useState("");
+  const [appOpenNewTransactionCue, setAppOpenNewTransactionCue] =
+    useState<AppOpenNewTransactionCue | null>(null);
   const [hasLoadedServerState, setHasLoadedServerState] = useState(Boolean(initialResult));
   const [backendReloadKey, setBackendReloadKey] = useState(0);
   const appOpenRefreshInFlightRef = useRef(false);
@@ -174,7 +176,7 @@ export function PipHome({
       authState: activeAuthState,
       enableAccountControls: onboardingPromptControlsEnabled,
       result,
-      appOpenSyncMessage,
+      appOpenNewTransactionCue,
     }),
   );
   const [chipHistory, setChipHistory] = useState<PromptChip[]>(() =>
@@ -182,7 +184,7 @@ export function PipHome({
       authState: activeAuthState,
       enableAccountControls: onboardingPromptControlsEnabled,
       result,
-      appOpenSyncMessage,
+      appOpenNewTransactionCue,
     }),
   );
   const promptChipRequestKeyRef = useRef<string | null>(null);
@@ -391,7 +393,7 @@ export function PipHome({
       authState: activeAuthState,
       enableAccountControls: onboardingPromptControlsEnabled,
       result,
-      appOpenSyncMessage,
+      appOpenNewTransactionCue,
     });
 
     setChips(nextChips);
@@ -402,7 +404,7 @@ export function PipHome({
     }
   }, [
     activeAuthState,
-    appOpenSyncMessage,
+    appOpenNewTransactionCue,
     hasConversation,
     liveAccountControlsEnabled,
     localResult,
@@ -499,7 +501,7 @@ export function PipHome({
       return;
     }
 
-    const openingBubblePlan = getReadyOpeningBubblePlan({ result, appOpenSyncMessage });
+    const openingBubblePlan = getReadyOpeningBubblePlan({ result, appOpenNewTransactionCue });
     const requestKey = [
       activeAuthState?.status ?? "demo",
       scenario,
@@ -516,6 +518,10 @@ export function PipHome({
     let ignore = false;
     openingBubbleRequestKeyRef.current = requestKey;
     setOpeningBubbleMessage(null);
+
+    if (openingBubblePlan.priority === "same_day_spend") {
+      return;
+    }
 
     void fetchAgentResponse(
       [
@@ -544,7 +550,7 @@ export function PipHome({
     };
   }, [
     activeAuthState?.status,
-    appOpenSyncMessage,
+    appOpenNewTransactionCue,
     chipHistory,
     chips,
     conversationId,
@@ -1042,7 +1048,7 @@ export function PipHome({
             />
           ) : thread.length === 0 ? (
             <DefaultAssistantIntro
-              appOpenSyncMessage={appOpenSyncMessage}
+              appOpenNewTransactionCue={appOpenNewTransactionCue}
               connectionNotice={connectionNotice}
               modelOpeningBubbleMessage={openingBubbleMessage}
               result={result}
@@ -1351,7 +1357,6 @@ export function PipHome({
 
     appOpenRefreshInFlightRef.current = true;
     lastAppOpenRefreshRequestAtRef.current = now;
-    setAppOpenSyncMessage(getAppOpenSyncMessage({ ok: true, status: "checking" }) ?? "");
 
     try {
       const response = await fetch("/api/sync/app-open", {
@@ -1361,32 +1366,19 @@ export function PipHome({
       const status = payload && typeof payload === "object" && "status" in payload
         ? payload.status
         : undefined;
-      const resultStatus =
-        payload &&
-        typeof payload === "object" &&
-        "result" in payload &&
-        payload.result &&
-        typeof payload.result === "object" &&
-        "status" in payload.result
-          ? payload.result.status
-          : undefined;
-      const syncMessage = getAppOpenSyncMessage({
-        ok: response.ok,
-        status,
-        resultStatus,
-      });
 
       if (
         response.ok &&
         (status === "ran" ||
           status === "needs_repair" ||
-          status === "failed")
+          status === "failed" ||
+          status === "retrying")
       ) {
         setBackendReloadKey((current) => current + 1);
       }
-      setAppOpenSyncMessage(syncMessage ?? "");
+      setAppOpenNewTransactionCue(response.ok ? getAppOpenNewTransactionCue(payload) : null);
     } catch {
-      setAppOpenSyncMessage(getAppOpenSyncMessage({ ok: false }) ?? "");
+      setAppOpenNewTransactionCue(null);
     } finally {
       appOpenRefreshInFlightRef.current = false;
     }
@@ -1551,22 +1543,22 @@ function ReadyIntro({
 }
 
 function DefaultAssistantIntro({
-  appOpenSyncMessage,
+  appOpenNewTransactionCue,
   connectionNotice,
   modelOpeningBubbleMessage,
   result,
 }: {
-  appOpenSyncMessage?: string;
+  appOpenNewTransactionCue?: AppOpenNewTransactionCue | null;
   connectionNotice?: "plaid-connected";
   modelOpeningBubbleMessage?: string | null;
   result: PipCashResult | null;
 }) {
   if (result) {
-    const openingBubblePlan = getReadyOpeningBubblePlan({ result, appOpenSyncMessage });
-    const showAppOpenSyncMessage =
-      appOpenSyncMessage &&
-      appOpenSyncMessage !== openingBubblePlan.message &&
-      openingBubblePlan.priority !== "normal";
+    const openingBubblePlan = getReadyOpeningBubblePlan({ result, appOpenNewTransactionCue });
+    const title =
+      openingBubblePlan.priority === "same_day_spend"
+        ? openingBubblePlan.message
+        : modelOpeningBubbleMessage ?? openingBubblePlan.message;
 
     return (
       <div
@@ -1577,10 +1569,8 @@ function DefaultAssistantIntro({
         {connectionNotice === "plaid-connected" ? <PlaidConnectedNotice /> : null}
         <PipIntroScene
           priority
-          title={modelOpeningBubbleMessage ?? openingBubblePlan.message}
-        >
-          {showAppOpenSyncMessage ? <p>{appOpenSyncMessage}</p> : null}
-        </PipIntroScene>
+          title={title}
+        />
       </div>
     );
   }
@@ -1870,78 +1860,16 @@ function getSettingsConversationPromptChips(input: {
 }
 
 function getReadyOpeningBubblePlan(input: {
-  appOpenSyncMessage?: string;
+  appOpenNewTransactionCue?: AppOpenNewTransactionCue | null;
   result: PipCashResult;
 }): OpeningBubblePlan {
   return planOpeningBubble({
-    refresh: getOpeningBubbleRefresh(input.appOpenSyncMessage),
-    sameDaySpend: getOpeningBubbleSameDaySpend(input.result),
+    sameDaySpend: input.appOpenNewTransactionCue ?? undefined,
     missingData: getOpeningBubbleMissingData(input.result),
     tight: getOpeningBubbleTightNotice(input.result),
     savingsOpportunity: getOpeningBubbleSavingsOpportunity(input.result),
     spendableCashTodayCents: getDisplayedSpendableCashTodayCents(input.result),
   });
-}
-
-function getOpeningBubbleRefresh(
-  message: string | undefined,
-): OpeningBubbleInput["refresh"] | undefined {
-  if (!message) {
-    return undefined;
-  }
-
-  if (/checking|searching/i.test(message)) {
-    return {
-      status: "checking",
-      message,
-    };
-  }
-
-  if (/could not|connection|repair/i.test(message)) {
-    return {
-      status: "failed",
-      message,
-    };
-  }
-
-  if (/recently|already|automatic refresh|last spendable|manual/i.test(message)) {
-    return {
-      status: "skipped",
-      message,
-    };
-  }
-
-  return {
-    status: "ran",
-    message,
-  };
-}
-
-function getOpeningBubbleSameDaySpend(result: PipCashResult): OpeningBubbleInput["sameDaySpend"] {
-  const ledger = result.spendableCashToday?.sameDayLedger;
-  const dailySpendItems =
-    ledger?.items.filter((item) => item.treatment === "daily_spend") ?? [];
-  const largestItem = dailySpendItems.reduce<(typeof dailySpendItems)[number] | undefined>(
-    (largest, item) =>
-      !largest || Math.abs(item.amountCents) > Math.abs(largest.amountCents) ? item : largest,
-    undefined,
-  );
-
-  if (largestItem) {
-    return {
-      amountCents: Math.abs(largestItem.amountCents),
-      merchantName: largestItem.label,
-      pending: largestItem.pending,
-    };
-  }
-
-  const sameDaySpendCents = result.spendableCashToday?.sameDayDiscretionarySpendCents ?? 0;
-
-  return sameDaySpendCents > 0
-    ? {
-        amountCents: sameDaySpendCents,
-      }
-    : undefined;
 }
 
 function getOpeningBubbleMissingData(result: PipCashResult): OpeningBubbleInput["missingData"] {
@@ -2223,7 +2151,7 @@ function getReadyPromptChips(input: {
   authState: PipAuthState | undefined;
   enableAccountControls: boolean;
   result: PipCashResult | null;
-  appOpenSyncMessage?: string;
+  appOpenNewTransactionCue?: AppOpenNewTransactionCue | null;
 }): PromptChip[] {
   const defaultChips = getDefaultPromptChips(
     input.authState,
@@ -2238,7 +2166,7 @@ function getReadyPromptChips(input: {
   return getOpeningBubblePromptChips({
     openingBubblePlan: getReadyOpeningBubblePlan({
       result: input.result,
-      appOpenSyncMessage: input.appOpenSyncMessage,
+      appOpenNewTransactionCue: input.appOpenNewTransactionCue,
     }),
     defaultChips,
   });
@@ -2367,52 +2295,60 @@ function getInitialBackendLoadPlan(input: {
   };
 }
 
-function getAppOpenSyncMessage(input: {
-  ok: boolean;
-  resultStatus?: unknown;
-  status?: unknown;
-  fallbackMessage?: string;
-}): string | null {
-  if (!input.ok) {
-    return input.fallbackMessage ?? "I could not refresh your bank data. Your connection may need attention.";
+function getAppOpenNewTransactionCue(payload: unknown): AppOpenNewTransactionCue | null {
+  if (!isRecord(payload) || payload.status !== "ran" || !isRecord(payload.result)) {
+    return null;
   }
 
-  if (input.status === "checking") {
-    return "I’m checking your connected transactions now.";
+  const transactions = payload.result.sameDayNewTransactions;
+
+  if (!Array.isArray(transactions)) {
+    return null;
   }
 
-  if (
-    input.status === "failed" ||
-    input.status === "needs_repair" ||
-    input.status === "partial" ||
-    input.resultStatus === "failed" ||
-    input.resultStatus === "needs_repair" ||
-    input.resultStatus === "partial"
-  ) {
-    return "I could not fully refresh your bank data. Your connection may need attention.";
+  const largestTransaction = transactions.reduce<Record<string, unknown> | null>((largest, transaction) => {
+    if (!isRecord(transaction) || !isAppOpenDailySpendTransaction(transaction)) {
+      return largest;
+    }
+
+    if (!largest || Math.abs(transaction.amountCents) > Math.abs(largest.amountCents as number)) {
+      return transaction;
+    }
+
+    return largest;
+  }, null);
+
+  if (!largestTransaction) {
+    return null;
   }
 
-  if (input.status === "ran") {
-    return "I checked your transactions. Your spendable number is up to date.";
-  }
+  const merchantName =
+    typeof largestTransaction.label === "string" && largestTransaction.label.trim()
+      ? largestTransaction.label.trim()
+      : undefined;
 
-  if (input.status === "skipped_recent" || input.status === "skipped_fresh") {
-    return "I checked recently, so I’m using your latest spendable number.";
-  }
+  return {
+    amountCents: Math.abs(largestTransaction.amountCents as number),
+    ...(merchantName ? { merchantName } : {}),
+    pending: Boolean(largestTransaction.pending),
+  };
+}
 
-  if (input.status === "skipped_pending") {
-    return "I’m already checking transactions. I’ll keep using the last number while that finishes.";
-  }
+function isAppOpenDailySpendTransaction(
+  transaction: Record<string, unknown>,
+): transaction is Record<string, unknown> & { amountCents: number } {
+  return (
+    typeof transaction.date === "string" &&
+    transaction.date.trim().length > 0 &&
+    typeof transaction.amountCents === "number" &&
+    Number.isFinite(transaction.amountCents) &&
+    transaction.amountCents < 0 &&
+    transaction.treatment === "daily_spend"
+  );
+}
 
-  if (input.status === "skipped_manual_only") {
-    return "Automatic refresh is off, so I’m using your last spendable number.";
-  }
-
-  if (input.status === "no_provider") {
-    return "Connect an account and I can check transactions automatically.";
-  }
-
-  return null;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
 function getClientErrorMessage(error: unknown): string {
@@ -2442,7 +2378,7 @@ export const __pipHomeTestHooks = {
   getAgentResponsePromptChips,
   getDemoPipCashResult: () => calculatePipCash(getFakeSnapshot("default")),
   getAgentErrorText,
-  getAppOpenSyncMessage,
+  getAppOpenNewTransactionCue,
   getAppOpenRefreshProvider,
   getClientActionErrorText,
   getConversationState,

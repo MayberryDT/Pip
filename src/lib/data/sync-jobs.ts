@@ -15,6 +15,17 @@ export type EnqueuePipSyncJobResult = {
   created: boolean;
 };
 
+export type ActivePipSyncJobSummary = {
+  id: string;
+  provider: Database["public"]["Enums"]["financial_provider"];
+  institutionId: string | null;
+  reason: PipSyncJobReason;
+  status: "pending" | "running";
+  sourceWebhookEventId: string | null;
+  availableAt: string;
+  createdAt: string;
+};
+
 export type ProcessPipSyncJobResult =
   | {
       jobId: string;
@@ -51,6 +62,39 @@ export async function loadPendingPipSyncJobsForUser(
   }
 
   return data ?? [];
+}
+
+export async function loadActivePipSyncJobsForUser(
+  supabase: SupabaseClient<Database>,
+  userId: string,
+): Promise<ActivePipSyncJobSummary[]> {
+  const { data, error } = await supabase
+    .from("pip_sync_jobs")
+    .select("id, provider, institution_id, reason, status, source_webhook_event_id, available_at, created_at")
+    .eq("user_id", userId)
+    .in("status", ["pending", "running"])
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []).filter(isActiveSyncJobStatus).map((job) => ({
+    id: job.id,
+    provider: job.provider,
+    institutionId: job.institution_id,
+    reason: job.reason,
+    status: job.status,
+    sourceWebhookEventId: job.source_webhook_event_id,
+    availableAt: job.available_at,
+    createdAt: job.created_at,
+  }));
+}
+
+function isActiveSyncJobStatus<T extends Pick<PipSyncJob, "status">>(
+  job: T,
+): job is T & { status: "pending" | "running" } {
+  return job.status === "pending" || job.status === "running";
 }
 
 export async function enqueuePipSyncJob(
@@ -155,6 +199,7 @@ export async function claimPendingPipSyncJobs(
       })
       .eq("id", job.id)
       .eq("status", "pending")
+      .lte("available_at", now.toISOString())
       .select("*")
       .maybeSingle();
 
@@ -168,6 +213,53 @@ export async function claimPendingPipSyncJobs(
   }
 
   return claimed;
+}
+
+export async function claimPipSyncJobById(
+  supabase: SupabaseClient<Database>,
+  jobId: string,
+  input: {
+    now?: Date;
+  } = {},
+): Promise<PipSyncJob | null> {
+  const now = input.now ?? new Date();
+  const { data: job, error } = await supabase
+    .from("pip_sync_jobs")
+    .select("*")
+    .eq("id", jobId)
+    .eq("status", "pending")
+    .lte("available_at", now.toISOString())
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (!job) {
+    return null;
+  }
+
+  const attempts = job.attempts + 1;
+  const { data: updated, error: updateError } = await supabase
+    .from("pip_sync_jobs")
+    .update({
+      status: "running",
+      attempts,
+      started_at: now.toISOString(),
+      updated_at: now.toISOString(),
+      last_error: null,
+    })
+    .eq("id", job.id)
+    .eq("status", "pending")
+    .lte("available_at", now.toISOString())
+    .select("*")
+    .maybeSingle();
+
+  if (updateError) {
+    throw updateError;
+  }
+
+  return updated ?? null;
 }
 
 export async function processPipSyncJob(
@@ -206,6 +298,8 @@ export async function processPipSyncJob(
       throw error;
     }
 
+    await markSourceWebhookEventProcessed(supabase, job, now);
+
     return {
       jobId: job.id,
       status: "succeeded",
@@ -227,6 +321,10 @@ export async function processPipSyncJob(
 
     if (updateError) {
       throw updateError;
+    }
+
+    if (!canRetry) {
+      await markSourceWebhookEventProcessed(supabase, job, now);
     }
 
     return canRetry
@@ -362,7 +460,32 @@ async function loadBackgroundEnabledUserIds(
     (data ?? [])
       .filter((settings) => !settings.manual_refresh_only)
       .map((settings) => settings.user_id),
-  );
+    );
+}
+
+async function markSourceWebhookEventProcessed(
+  supabase: SupabaseClient<Database>,
+  job: PipSyncJob,
+  now: Date,
+): Promise<void> {
+  if (!job.source_webhook_event_id) {
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from("plaid_webhook_events")
+      .update({
+        processed_at: now.toISOString(),
+      })
+      .eq("id", job.source_webhook_event_id);
+
+    if (error) {
+      return;
+    }
+  } catch {
+    return;
+  }
 }
 
 async function loadActiveJobByDedupeKey(
