@@ -468,9 +468,7 @@ export function PipHome({
           return;
         }
 
-        const nextPromptChips = liveAccountControlsEnabled
-          ? withSettingsPromptChip(response.promptChips)
-          : response.promptChips;
+        const nextPromptChips = getAgentResponsePromptChips(response.promptChips);
 
         setChips(nextPromptChips);
         setChipHistory((current) => mergePromptChipHistory(current, nextPromptChips));
@@ -609,9 +607,7 @@ export function PipHome({
             : item,
         ),
       );
-      const responsePromptChips = liveAccountControlsEnabled
-        ? withSettingsPromptChip(response.promptChips)
-        : response.promptChips;
+      const responsePromptChips = getAgentResponsePromptChips(response.promptChips);
       const nextVisibleChips = getNextVisiblePromptChips(
         responsePromptChips,
         chips,
@@ -1620,7 +1616,7 @@ function getPlatformLabel(platform: PipPlatform): string {
 
 type SettingsPanelCard = Extract<AgentCard, { type: "settings_panel" }>;
 type SettingsDetailCard = Extract<AgentCard, { type: "settings_detail" }>;
-type SettingsAction = SettingsPanelCard["actions"][number];
+type SettingsAction = SettingsPanelCard["actionGroups"][number]["actions"][number];
 
 function createSettingsPanelCard(input: {
   email?: string;
@@ -1631,7 +1627,8 @@ function createSettingsPanelCard(input: {
   return {
     type: "settings_panel",
     title: "Settings",
-    accountRows: [
+    summary: "Account, data, support, privacy, and deletion controls stay in this chat.",
+    metadataRows: [
       {
         label: "Account",
         value: input.email ?? "Not signed in",
@@ -1645,22 +1642,91 @@ function createSettingsPanelCard(input: {
         value: input.hasConnectedData ? "Connected data loaded" : "No connected data loaded",
       },
     ],
-    sections: [
-      {
-        title: "Support",
-        body: "Get help, report answer quality, or send tester feedback from this chat.",
-      },
-      {
-        title: "Privacy and terms",
-        body: "Read the short in-app version here without leaving Pip.",
-      },
-      {
-        title: "Trust receipt",
-        body: "Ask for the receipt behind the number to see freshness, counted accounts, confidence, and known limits.",
-      },
-    ],
-    actions: getSettingsActions(input),
+    actionGroups: getSettingsActionGroups(input),
   };
+}
+
+function getSettingsActionGroups(input: {
+  canUseAccountActions: boolean;
+  hasConnectedData: boolean;
+}): SettingsPanelCard["actionGroups"] {
+  const accountActions: SettingsAction[] = [];
+
+  if (input.hasConnectedData) {
+    accountActions.push({
+      id: "settings-connected-accounts",
+      label: "Manage accounts",
+      prompt: "Show connected accounts",
+      style: "primary",
+    });
+  }
+
+  accountActions.push({
+    id: "settings-trust-receipt",
+    label: "Trust receipt",
+    prompt: "Show the trust receipt behind today's number",
+    style: "secondary",
+  });
+
+  const groups: SettingsPanelCard["actionGroups"] = [
+    {
+      title: "Account & data",
+      actions: accountActions,
+    },
+    {
+      title: "Support",
+      actions: [
+        {
+          id: "settings-support",
+          label: "Support",
+          prompt: "Show support",
+          style: "secondary",
+        },
+        ...(input.canUseAccountActions
+          ? [{
+              id: "settings-feedback",
+              label: "Send feedback",
+              prompt: "Send feedback",
+              style: "secondary",
+            } satisfies SettingsAction]
+          : []),
+      ],
+    },
+    {
+      title: "Privacy & legal",
+      actions: [
+        {
+          id: "settings-privacy",
+          label: "Privacy",
+          prompt: "Show privacy",
+          style: "secondary",
+        },
+        {
+          id: "settings-terms",
+          label: "Terms",
+          prompt: "Show terms",
+          style: "secondary",
+        },
+        ...(input.canUseAccountActions
+          ? [{
+              id: "settings-delete-account",
+              label: "Delete account",
+              prompt: "Delete my account",
+              style: "danger",
+            } satisfies SettingsAction]
+          : []),
+      ],
+    },
+  ];
+
+  return groups.filter((group) => group.actions.length > 0);
+}
+
+function getSettingsOverviewActions(input: {
+  canUseAccountActions: boolean;
+  hasConnectedData: boolean;
+}): SettingsAction[] {
+  return getSettingsActionGroups(input).flatMap((group) => group.actions);
 }
 
 function createSettingsDetailCard(
@@ -1677,7 +1743,7 @@ function createSettingsDetailCard(
       prompt: "Settings",
       style: "secondary",
     },
-    ...getSettingsActions(input).filter((action) => action.id !== `settings-${kind}`),
+    ...getSettingsOverviewActions(input).filter((action) => action.id !== `settings-${kind}`),
   ];
 
   if (kind === "support") {
@@ -1756,60 +1822,6 @@ function createSettingsDetailCard(
     ],
     actions: sharedActions,
   };
-}
-
-function getSettingsActions(input: {
-  canUseAccountActions: boolean;
-  hasConnectedData: boolean;
-}): SettingsAction[] {
-  const actions: SettingsAction[] = [
-    {
-      id: "settings-support",
-      label: "Support",
-      prompt: "Show support",
-      style: "secondary",
-    },
-    {
-      id: "settings-privacy",
-      label: "Privacy",
-      prompt: "Show privacy",
-      style: "secondary",
-    },
-    {
-      id: "settings-terms",
-      label: "Terms",
-      prompt: "Show terms",
-      style: "secondary",
-    },
-  ];
-
-  if (input.hasConnectedData) {
-    actions.push({
-      id: "settings-connected-accounts",
-      label: "Manage accounts",
-      prompt: "Show connected accounts",
-      style: "primary",
-    });
-  }
-
-  if (input.canUseAccountActions) {
-    actions.push(
-      {
-        id: "settings-feedback",
-        label: "Send feedback",
-        prompt: "Send feedback",
-        style: "secondary",
-      },
-      {
-        id: "settings-delete-account",
-        label: "Delete account",
-        prompt: "Delete my account",
-        style: "danger",
-      },
-    );
-  }
-
-  return actions;
 }
 
 const settingsConversationPromptChipExcludedIds = new Set([
@@ -2187,24 +2199,24 @@ function getDefaultPromptChips(
   result: PipCashResult | null,
 ): PromptChip[] {
   if (authState?.status === "guest" || authState?.status === "needs-consent") {
-    return getOnboardingPromptChips({
+    return withSettingsPromptChip(getOnboardingPromptChips({
       status: authState.status,
       hasFinancialData: false,
-    });
+    }));
   }
 
   if (enableAccountControls && !result) {
-    return getOnboardingPromptChips({
+    return withSettingsPromptChip(getOnboardingPromptChips({
       status: "ready",
       hasFinancialData: false,
-    });
+    }));
   }
 
-  if (enableAccountControls && result) {
+  if (result) {
     return withSettingsPromptChip(getSuggestedPrompts(result));
   }
 
-  return result ? getSuggestedPrompts(result) : [];
+  return withSettingsPromptChip([]);
 }
 
 function getReadyPromptChips(input: {
@@ -2280,6 +2292,10 @@ function withSettingsPromptChip(chips: PromptChip[]): PromptChip[] {
     settingsPromptChip,
     ...chips.filter((chip) => chip.id !== "manage-accounts" && chip.id !== settingsPromptChip.id),
   ].slice(0, 3);
+}
+
+function getAgentResponsePromptChips(chips: PromptChip[]): PromptChip[] {
+  return chips;
 }
 
 function getErrorMessage(payload: unknown, fallback: string): string {
@@ -2423,6 +2439,7 @@ export const __pipHomeTestHooks = {
   createSettingsPanelCard,
   getChatOnlyRequest,
   getDefaultPromptChips,
+  getAgentResponsePromptChips,
   getDemoPipCashResult: () => calculatePipCash(getFakeSnapshot("default")),
   getAgentErrorText,
   getAppOpenSyncMessage,
@@ -2436,7 +2453,7 @@ export const __pipHomeTestHooks = {
   getNextVisiblePromptChips,
   getReadyDataAction,
   getSafeAgentFailureMessage,
-  getSettingsActions,
+  getSettingsActionGroups,
   getSettingsConversationPromptChips,
   withSettingsPromptChip,
 };

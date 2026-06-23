@@ -104,6 +104,21 @@ import {
   resolveInstitutionTarget,
 } from "@/lib/agent/account-connections";
 
+const visibleCardValueSchema = z.object({
+  id: z.string().min(1).max(120),
+  label: z.string().min(1).max(160),
+  amountCents: z.number().int().optional(),
+  date: z.string().min(1).max(40).optional(),
+  confidence: z.enum(["high", "medium", "low"]).optional(),
+});
+
+const visibleCardFactsSchema = z.object({
+  type: z.string().min(1).max(80),
+  title: z.string().max(120).optional(),
+  facts: z.array(z.string().min(1).max(220)).max(10),
+  values: z.array(visibleCardValueSchema).max(12),
+});
+
 const requestSchema = z.object({
   message: z.string().min(1).max(500),
   requestKind: z.enum(["chat", "prompt_chips", "opening_bubble"]).optional(),
@@ -148,6 +163,7 @@ const requestSchema = z.object({
         )
         .max(8)
         .optional(),
+      visibleCardFacts: z.array(visibleCardFactsSchema).max(4).optional(),
       lastToolNames: z.array(z.string().min(1).max(80)).max(8).optional(),
       promptChips: z
         .array(
@@ -227,23 +243,22 @@ export async function POST(request: Request) {
     }
 
     modelGateLeaseId = modelGateClaim.leaseId;
-    const response = await runAIAgent(
-      {
-        message: parsed.data.message,
-        snapshot: routeContext.snapshot,
-        requestKind: parsed.data.requestKind,
-        platform: getClientPipPlatform(request.headers.get("user-agent")),
-        history: parsed.data.history,
-        conversationState: parsed.data.conversationState,
-        syncStatus: routeContext.syncStatus,
-        onboardingState: routeContext.onboardingState,
-        selectedPromptChipId: parsed.data.selectedPromptChipId,
-        qualityVariant: resolvePipAgentQualityVariant(
-          request.headers.get("x-pip-agent-variant") || process.env.PIP_AGENT_VARIANT,
-        ),
-        actions: routeContext.actions,
-      },
-    );
+    const agentInput = {
+      message: parsed.data.message,
+      snapshot: routeContext.snapshot,
+      requestKind: parsed.data.requestKind,
+      platform: getClientPipPlatform(request.headers.get("user-agent")),
+      history: parsed.data.history,
+      conversationState: parsed.data.conversationState,
+      syncStatus: routeContext.syncStatus,
+      onboardingState: routeContext.onboardingState,
+      selectedPromptChipId: parsed.data.selectedPromptChipId,
+      qualityVariant: resolvePipAgentQualityVariant(
+        request.headers.get("x-pip-agent-variant") || process.env.PIP_AGENT_VARIANT,
+      ),
+      actions: routeContext.actions,
+    };
+    const response = await runAIAgent(agentInput);
 
     if ((parsed.data.requestKind ?? "chat") === "chat") {
       const routeResult = routeContext.snapshot ? calculatePipCash(routeContext.snapshot) : null;

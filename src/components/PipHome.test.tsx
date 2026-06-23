@@ -27,8 +27,8 @@ describe("PipHome", () => {
     expect(markup).not.toContain("This may change if you connect the missing card.");
     expect(markup).toContain("Ask Pip anything...");
     expect(markup).toContain("Accounts");
+    expect(markup).toContain("Settings");
     expect(markup).toContain("What pattern are you using?");
-    expect(markup).toContain("Check if the data looks right");
     expect(markup).not.toContain("Show the biggest drivers");
     expect(markup).not.toContain("Missing card");
     expect(markup).not.toContain("Test purchase");
@@ -198,22 +198,24 @@ describe("PipHome", () => {
     expect(settingsCard).toMatchObject({
       type: "settings_panel",
       title: "Settings",
-      accountRows: expect.arrayContaining([
+      summary: "Account, data, support, privacy, and deletion controls stay in this chat.",
+      metadataRows: expect.arrayContaining([
         {
           label: "Account",
           value: "play-review@animasai.co",
         },
       ]),
     });
-    expect(settingsCard.actions.map((action) => action.id)).toEqual([
-      "settings-support",
-      "settings-privacy",
-      "settings-terms",
-      "settings-connected-accounts",
-      "settings-feedback",
-      "settings-delete-account",
+    expect(settingsCard.actionGroups.map((group) => group.title)).toEqual([
+      "Account & data",
+      "Support",
+      "Privacy & legal",
     ]);
-    expect(settingsCard.actions.find((action) => action.id === "settings-connected-accounts")).toMatchObject({
+    expect(settingsCard.actionGroups[0]?.actions.map((action) => action.id)).toEqual([
+      "settings-connected-accounts",
+      "settings-trust-receipt",
+    ]);
+    expect(settingsCard.actionGroups[0]?.actions.find((action) => action.id === "settings-connected-accounts")).toMatchObject({
       label: "Manage accounts",
       prompt: "Show connected accounts",
       style: "primary",
@@ -267,6 +269,23 @@ describe("PipHome", () => {
       prompt: "Settings",
     });
     expect(chips.map((chip) => chip.id)).not.toContain("manage-accounts");
+  });
+
+  it("does not force settings into post-chat agent prompt chips", () => {
+    const chips = [
+      {
+        id: "ai-follow-up",
+        label: "What should I focus on?",
+        prompt: "What should I focus on?",
+      },
+      {
+        id: "ai-total",
+        label: "Total these",
+        prompt: "What do these add up to?",
+      },
+    ];
+
+    expect(__pipHomeTestHooks.getAgentResponsePromptChips(chips)).toEqual(chips);
   });
 
   it("shows Plaid OAuth completion as a same-screen Pip message", () => {
@@ -622,7 +641,7 @@ describe("PipHome", () => {
         code: "invalid-agent-output",
         status: 502,
       }),
-    ).toBe("I couldn’t answer that cleanly. Try again, or ask for the math.");
+    ).toBe("I need another pass at that. Please ask again.");
     expect(
       __pipHomeTestHooks.getSafeAgentFailureMessage({
         code: "authentication-required",
@@ -645,7 +664,7 @@ describe("PipHome", () => {
     expect(visibleMessage).toBe("I can’t reach the answer service right now. Try again in a moment.");
     expect(visibleMessage).not.toMatch(/OPENAI_API_KEY|Netlify AI Gateway|sk-/);
     expect(__pipHomeTestHooks.getAgentErrorText(new Error("sk-secret OPENAI_API_KEY missing"))).toBe(
-      "I couldn’t answer that cleanly. Try again.",
+      "I need another pass at that. Please ask again.",
     );
   });
 

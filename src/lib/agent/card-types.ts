@@ -267,19 +267,19 @@ export type AgentCard =
   | {
       type: "settings_panel";
       title: string;
-      accountRows: Array<{
+      summary: string;
+      metadataRows: Array<{
         label: string;
         value: string;
       }>;
-      sections: Array<{
+      actionGroups: Array<{
         title: string;
-        body: string;
-      }>;
-      actions: Array<{
-        id: string;
-        label: string;
-        prompt: string;
-        style: "primary" | "secondary" | "danger";
+        actions: Array<{
+          id: string;
+          label: string;
+          prompt: string;
+          style: "primary" | "secondary" | "danger";
+        }>;
       }>;
     }
   | {

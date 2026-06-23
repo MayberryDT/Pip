@@ -20,6 +20,7 @@ export function getModelFirstViolation(input: {
   userMessage: string;
   response: AgentResponse;
   deterministicException?: DeterministicVisibleException;
+  visibleContextAvailable?: boolean;
 }): ModelFirstViolation | null {
   if (isAllowedDeterministicException(input)) {
     return null;
@@ -35,7 +36,7 @@ export function getModelFirstViolation(input: {
   if (
     (input.requestKind ?? "chat") === "chat" &&
     isKnownPersonalFinanceIntent(input.userMessage) &&
-    isUnsupportedFinanceResponse(input.userMessage, input.response)
+    isUnsupportedFinanceResponse(input.userMessage, input.response, input.visibleContextAvailable)
   ) {
     return {
       code: "unsupported_finance_answer",
@@ -51,6 +52,7 @@ export function assertModelFirstResponse(input: {
   userMessage: string;
   response: AgentResponse;
   deterministicException?: DeterministicVisibleException;
+  visibleContextAvailable?: boolean;
 }) {
   const violation = getModelFirstViolation(input);
 
@@ -100,7 +102,11 @@ export function isKnownPersonalFinanceIntent(message: string): boolean {
   );
 }
 
-function isUnsupportedFinanceResponse(message: string, response: AgentResponse): boolean {
+function isUnsupportedFinanceResponse(
+  message: string,
+  response: AgentResponse,
+  visibleContextAvailable?: boolean,
+): boolean {
   if (
     isSavingsGoalIntent(message) &&
     response.responseMode === "clarify" &&
@@ -109,6 +115,15 @@ function isUnsupportedFinanceResponse(message: string, response: AgentResponse):
     isSavingsClarificationWithoutState(response)
   ) {
     return true;
+  }
+
+  if (
+    visibleContextAvailable &&
+    response.audit.usedModel &&
+    response.responseMode === "chat_only" &&
+    isVisibleContextFollowUp(message)
+  ) {
+    return false;
   }
 
   return response.usedTools.length === 0 &&
@@ -135,6 +150,13 @@ function isSavingsGoalIntent(message: string): boolean {
   return /\b(save|saving|savings goal|goal|trip fund|emergency fund)\b/i.test(message);
 }
 
+function isVisibleContextFollowUp(message: string): boolean {
+  const normalized = normalizePrompt(message);
+
+  return /\b(this|that|these|those|shown|visible|card|above)\b/.test(normalized) &&
+    /\b(total|sum|add(?:ed)? up|altogether|how much|largest|biggest|highest|smallest|lowest|cheapest|which one)\b/.test(normalized);
+}
+
 function isAllowedDeterministicException(input: {
   requestKind?: ModelFirstRequestKind;
   response: AgentResponse;
@@ -144,7 +166,10 @@ function isAllowedDeterministicException(input: {
     return true;
   }
 
-  return Boolean(input.deterministicException);
+  return input.deterministicException === "hard_outage" ||
+    input.deterministicException === "validation_error" ||
+    input.deterministicException === "silent_prompt_chips" ||
+    input.deterministicException === "system_ready";
 }
 
 function isGeneralEducationPrompt(normalized: string): boolean {

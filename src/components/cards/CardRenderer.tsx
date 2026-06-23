@@ -455,20 +455,20 @@ export function CardRenderer({
     case "settings_panel":
       return (
         <CardShell icon={<ShieldCheck aria-hidden="true" size={18} />} title={card.title}>
-          <div className="space-y-2">
-            {card.accountRows.map((row) => (
+          <p className="pip-wrap-anywhere text-sm leading-6 text-ink/[0.68]">{card.summary}</p>
+          <div className="mt-3 space-y-2">
+            {card.actionGroups.map((group) => (
+              <SettingsActionGroup key={group.title} group={group} onSubmitPrompt={onSubmitPrompt} />
+            ))}
+          </div>
+          <div className="mt-3 space-y-2">
+            {card.metadataRows.map((row) => (
               <div key={`${row.label}-${row.value}`} className="flex min-h-10 items-start justify-between gap-4 rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2">
                 <p className="text-sm font-semibold text-ink">{row.label}</p>
                 <p className="pip-wrap-anywhere max-w-[58%] text-right text-sm text-ink/[0.62]">{row.value}</p>
               </div>
             ))}
           </div>
-          <div className="mt-3 space-y-2">
-            {card.sections.map((section) => (
-              <SettingsSection key={section.title} title={section.title} body={section.body} />
-            ))}
-          </div>
-          <SettingsActions actions={card.actions} onSubmitPrompt={onSubmitPrompt} />
         </CardShell>
       );
 
@@ -588,7 +588,7 @@ function SettingsActions({
   actions,
   onSubmitPrompt,
 }: {
-  actions: Extract<AgentCard, { type: "settings_panel" }>["actions"];
+  actions: Extract<AgentCard, { type: "settings_panel" }>["actionGroups"][number]["actions"];
   onSubmitPrompt?: (prompt: string) => void;
 }) {
   if (actions.length === 0 || !onSubmitPrompt) {
@@ -607,6 +607,21 @@ function SettingsActions({
           {action.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+function SettingsActionGroup({
+  group,
+  onSubmitPrompt,
+}: {
+  group: Extract<AgentCard, { type: "settings_panel" }>["actionGroups"][number];
+  onSubmitPrompt?: (prompt: string) => void;
+}) {
+  return (
+    <div className="rounded-[0.9rem] border border-line bg-porcelain/[0.42] px-3 py-2.5">
+      <p className="pip-wrap-anywhere text-sm font-semibold text-ink">{group.title}</p>
+      <SettingsActions actions={group.actions} onSubmitPrompt={onSubmitPrompt} />
     </div>
   );
 }
@@ -708,7 +723,7 @@ function getAccountActionClassName(
 }
 
 function getSettingsActionClassName(
-  style: Extract<AgentCard, { type: "settings_panel" }>["actions"][number]["style"],
+  style: Extract<AgentCard, { type: "settings_panel" }>["actionGroups"][number]["actions"][number]["style"],
 ): string {
   const base =
     "focus-ring ui-pressable inline-flex min-h-10 items-center rounded-full border px-3 text-xs font-semibold";

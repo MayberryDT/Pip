@@ -248,6 +248,30 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return toolResponse(input, "show_math", {});
   }
 
+  if (
+    /\b(total|sum|add(?:ed)? up|altogether|how much)\b/.test(normalized) &&
+    /\b(monthly bills?|recurring bills?|subscriptions?|monthly charges?)\b/.test(normalized)
+  ) {
+    const response = runAgentTool("show_recurring_activity", {}, snapshot);
+    const card = response.cards[0];
+
+    if (card?.type === "recurring_activity") {
+      const expenseItems = card.items.filter((item) => item.amountCents < 0);
+      const expenseTotalCents = expenseItems.reduce(
+        (total, item) => total + Math.abs(item.amountCents),
+        0,
+      );
+
+      return baseResponse(input, {
+        message: `Your repeat expenses total ${formatMoney(expenseTotalCents)} right now.`,
+        usedTools: ["get_recurring_activity"],
+        responseMode: "chat_only",
+        cards: [],
+        promptChips: response.promptChips,
+      });
+    }
+  }
+
   if (/\b(recurring|repeating|subscription|subscriptions|bills? (are )?coming up|monthly charges?|upcoming bills?|youtube|premium)\b/.test(normalized)) {
     return toolResponse(input, "show_recurring_activity", {});
   }
@@ -449,11 +473,11 @@ function toolResponse(
       usedModel: true,
       model: PIP_AI_MODEL,
       transport: getPipAiTransport(),
-          guidance: guidanceContext
-            ? {
-                validationOutcome: "context_built",
-                guidanceSource: "none",
-                metricVersion: "v2",
+      guidance: guidanceContext
+        ? {
+            validationOutcome: "context_built",
+            guidanceSource: "none",
+            metricVersion: "v2",
             state: guidanceContext.currentRead.state,
             confidence: guidanceContext.currentRead.confidence,
             evidenceIds: guidanceContext.evidence.map((evidence) => evidence.id),

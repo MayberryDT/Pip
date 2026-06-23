@@ -35,6 +35,9 @@ export type PromptChipFamilyId =
   | "ai-missing-card"
   | "ai-pending-items"
   | "ai-refresh-data"
+  | "ai-total-visible"
+  | "ai-what-stands-out"
+  | "ai-where-focus"
   | "ai-payday-impact"
   | "ai-pattern-assumptions"
   | "ai-spending-pressure"
@@ -220,6 +223,24 @@ const readyChipCatalog: Record<PromptChipFamilyId, ChipDefinition> = {
     label: "Refresh connected data",
     prompt: "Refresh my connected data",
     mode: "diagnostic",
+  },
+  "ai-total-visible": {
+    id: "ai-total-visible",
+    label: "What do these add up to?",
+    prompt: "What do these add up to?",
+    mode: "context",
+  },
+  "ai-what-stands-out": {
+    id: "ai-what-stands-out",
+    label: "What stands out here?",
+    prompt: "What stands out here?",
+    mode: "context",
+  },
+  "ai-where-focus": {
+    id: "ai-where-focus",
+    label: "Where should I focus?",
+    prompt: "Where should I focus?",
+    mode: "context",
   },
   "ai-payday-impact": {
     id: "ai-payday-impact",
@@ -516,11 +537,11 @@ function getJobChipFamilyIds(job: ConversationJob): PromptChipFamilyId[] {
     case "forecast":
       return ["ai-recurring-items", "ai-upcoming-bills", "ai-recent-charges", "ai-biggest-drivers"];
     case "recurring_activity":
-      return ["ai-next-few-days", "ai-recent-charges", "ai-spending-breakdown", "ai-biggest-drivers"];
+      return ["ai-total-visible", "ai-what-stands-out", "ai-next-few-days", "ai-recent-charges"];
     case "recent_transactions":
-      return ["ai-biggest-drivers", "ai-spending-breakdown", "ai-upcoming-bills", "ai-next-few-days"];
+      return ["ai-what-stands-out", "ai-spending-breakdown", "ai-upcoming-bills", "ai-next-few-days"];
     case "spending_breakdown":
-      return ["ai-show-math", "ai-recent-charges", "ai-upcoming-bills", "ai-payday-impact"];
+      return ["ai-where-focus", "ai-what-stands-out", "ai-recent-charges", "ai-upcoming-bills"];
     case "math":
       return ["ai-biggest-drivers", "ai-what-affects-today", "ai-how-it-works"];
     case "true_balances":

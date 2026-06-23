@@ -226,12 +226,12 @@ export function inferConversationJob(
     return "true_balances";
   }
 
-  if (isTransactionsPrompt(normalized)) {
-    return "recent_transactions";
-  }
-
   if (isRecurringPrompt(normalized)) {
     return "recurring_activity";
+  }
+
+  if (isTransactionsPrompt(normalized)) {
+    return "recent_transactions";
   }
 
   if (isForecastPrompt(normalized)) {
@@ -355,11 +355,19 @@ function isBalancesPrompt(normalized: string): boolean {
 }
 
 function isTransactionsPrompt(normalized: string): boolean {
+  if (isRecurringPrompt(normalized)) {
+    return false;
+  }
+
   return /\b(transactions?|charges?|purchases?|recent activity|recent items?)\b/.test(normalized);
 }
 
 function isRecurringPrompt(normalized: string): boolean {
-  return /\b(recurring|repeating|repeat|subscriptions?|upcoming bills?|bills? (are )?coming up|monthly charges?)\b/.test(normalized);
+  return (
+    /\b(recurring|repeating|repeat|subscriptions?|upcoming bills?|bills? (are )?coming up|monthly charges?)\b/.test(normalized) ||
+    /\b(total|sum|add(?:ed)? up|altogether|how much|spending|spend)\b.{0,32}\b(monthly bills?|recurring bills?|subscriptions?|monthly charges?)\b/.test(normalized) ||
+    /\b(monthly bills?|recurring bills?|subscriptions?|monthly charges?)\b.{0,32}\b(total|sum|add(?:ed)? up|altogether|how much)\b/.test(normalized)
+  );
 }
 
 function isForecastPrompt(normalized: string): boolean {

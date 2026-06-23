@@ -268,6 +268,69 @@ describe("prompt chip planner", () => {
       "ai-cash-flow-basic",
     ]);
   });
+
+  it("offers deeper follow-ups after a recurring activity card", () => {
+    const plan = planPromptChips({
+      result: calculatePipCash(fakeSnapshot),
+      message: "What bills are coming up?",
+      responseCards: [
+        {
+          type: "recurring_activity",
+          title: "Likely recurring activity",
+          asOfDate: "2026-06-22",
+          horizonDays: 35,
+          items: [],
+        },
+      ],
+      responseToolNames: ["get_recurring_activity"],
+    });
+
+    expect(plan.conversationJob).toBe("recurring_activity");
+    expect(plan.chips.map((chip) => chip.id)).toEqual([
+      "ai-total-visible",
+      "ai-what-stands-out",
+      "ai-next-few-days",
+    ]);
+  });
+
+  it("offers interpretive follow-ups after a spending breakdown card", () => {
+    const plan = planPromptChips({
+      result: calculatePipCash(fakeSnapshot),
+      message: "Show my spending breakdown",
+      responseCards: [
+        {
+          type: "spending_breakdown",
+          title: "Spending breakdown",
+          window: {
+            startDate: "2026-06-01",
+            endDate: "2026-06-22",
+            dayCount: 22,
+            daysElapsed: 22,
+            daysRemaining: 8,
+          },
+          totals: {
+            incomeCents: 250000,
+            spendingCents: -110000,
+            refundCents: 0,
+            rentCents: -90000,
+            cardPaymentCents: 0,
+            protectedSavingsMonthlyCents: 20000,
+          },
+          topCategories: [],
+          topMerchants: [],
+          incomeSources: [],
+        },
+      ],
+      responseToolNames: ["get_spending_breakdown"],
+    });
+
+    expect(plan.conversationJob).toBe("spending_breakdown");
+    expect(plan.chips.map((chip) => chip.id)).toEqual([
+      "ai-where-focus",
+      "ai-what-stands-out",
+      "ai-recent-charges",
+    ]);
+  });
 });
 
 function resultWithSpendableState(state: "normal" | "overspending") {

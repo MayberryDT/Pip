@@ -140,6 +140,37 @@ test("AI agent loop keeps one number while cards persist in the thread", async (
   await expect(page.getByTestId("pip-cash-number")).toHaveText("$104");
 });
 
+test("Pip answers a total follow-up from the visible recurring card", async ({ page }) => {
+  await routeAgentThroughMockModel(page);
+  await page.goto("/app");
+  await page.waitForLoadState("networkidle");
+
+  const input = page.getByLabel("Ask Pip");
+  await input.fill("What bills are coming up?");
+  const [recurringResponse] = await Promise.all([
+    waitForAgentResponse(page),
+    page.getByRole("button", { name: "Send" }).click(),
+  ]);
+  const recurringJson = await recurringResponse.json();
+
+  expect(recurringJson.audit.toolNames).toEqual(["get_recurring_activity"]);
+  await expect(page.getByRole("heading", { name: "Likely recurring activity" })).toBeVisible();
+
+  await input.fill("What's the total of these monthly bills?");
+  const [totalResponse] = await Promise.all([
+    waitForAgentResponse(page),
+    page.getByRole("button", { name: "Send" }).click(),
+  ]);
+  const totalJson = await totalResponse.json();
+
+  expect(totalJson.responseMode).toBe("chat_only");
+  expect(totalJson.cards).toEqual([]);
+  expect(totalJson.audit.toolNames).toEqual([]);
+  await expect(page.getByText(/visible monthly bills total \$35\.79/i)).toBeVisible();
+  await expect(page.getByText(/couldn[’']t answer/i)).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Likely recurring activity" })).toHaveCount(1);
+});
+
 test("mobile viewport keeps the one-number layout from overlapping or overflowing", async ({
   page,
 }) => {
@@ -193,13 +224,49 @@ test("mobile viewport keeps the one-number layout from overlapping or overflowin
 });
 
 test("chat send feels responsive while the agent is thinking", async ({ page }) => {
+  let releaseChatResponse: (() => void) | undefined;
+  const chatResponseReady = new Promise<void>((resolve) => {
+    releaseChatResponse = resolve;
+  });
+
   await page.route("**/api/agent", async (route) => {
-    await new Promise((resolve) => setTimeout(resolve, 700));
+    const body = route.request().postDataJSON() as { requestKind?: string } | null;
+
+    if (body?.requestKind === "prompt_chips" || body?.requestKind === "opening_bubble") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(baseAgentResponse({
+          message: "Ready.",
+          cards: [],
+          promptChips: [
+            {
+              id: "bills",
+              label: "Upcoming bills",
+              prompt: "What bills are coming up?",
+            },
+            {
+              id: "balances",
+              label: "True balances",
+              prompt: "Show my true balances",
+            },
+            {
+              id: "math",
+              label: "Show math",
+              prompt: "Show the math",
+            },
+          ],
+        })),
+      });
+      return;
+    }
+
+    await chatResponseReady;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        message: "Hi. Ask me about Spendable Cash Today or setup.",
+      body: JSON.stringify(baseAgentResponse({
+        message: "The pattern assumptions are income timing, recurring bills, protected savings, and recent spending.",
         cards: [],
         promptChips: [
           {
@@ -218,32 +285,28 @@ test("chat send feels responsive while the agent is thinking", async ({ page }) 
             prompt: "Show the math",
           },
         ],
-        audit: {
-          toolNames: [],
-          usedModel: true,
-          model: "test-model",
-        },
         usedTools: [],
         responseMode: "chat_only",
-      }),
+      })),
     });
   });
-  await page.goto("/app");
+  await page.goto("/app?onboarding=demo");
   await page.waitForLoadState("networkidle");
 
-  await page.getByLabel("Ask Pip").fill("hi");
+  await page.getByLabel("Ask Pip").fill("Show the pattern assumptions behind this number");
   const responsePromise = waitForAgentResponse(page);
   await page.getByRole("button", { name: "Send" }).click();
 
-  await expect(page.getByText("hi", { exact: true })).toBeVisible();
+  await expect(page.getByText("Show the pattern assumptions behind this number", { exact: true })).toBeVisible();
   await expect(page.getByLabel("Ask Pip")).toHaveValue("");
   await expect(page.getByLabel("Ask Pip")).toBeEnabled();
   await expect(page.getByTestId("agent-thinking")).toBeVisible();
   await expectHeaderToBeCompact(page);
+  releaseChatResponse?.();
   await responsePromise;
   await expect(page.getByTestId("agent-thinking")).toBeHidden();
   await expect(page.getByLabel("Ask Pip")).toBeEnabled();
-  await expect(page.getByText("Hi. Ask me about Spendable Cash Today or setup.")).toBeVisible();
+  await expect(page.getByText("The pattern assumptions are income timing, recurring bills, protected savings, and recent spending.")).toBeVisible();
 });
 
 test("guest onboarding starts Google OAuth from the Pip screen", async ({ page }) => {
@@ -647,7 +710,7 @@ function waitForAgentResponse(page: Page) {
     try {
       const body = response.request().postDataJSON() as { requestKind?: string } | null;
 
-      return body?.requestKind !== "prompt_chips";
+      return body?.requestKind !== "prompt_chips" && body?.requestKind !== "opening_bubble";
     } catch {
       return true;
     }
@@ -671,6 +734,10 @@ function createMockAgentResponse(
     requestKind?: string;
     conversationState?: {
       lastToolNames?: string[];
+      visibleCardFacts?: Array<{
+        type: string;
+        values?: Array<{ amountCents?: number }>;
+      }>;
     };
   } = {},
 ) {
@@ -796,6 +863,78 @@ function createMockAgentResponse(
           mode: "connect",
         },
       },
+    });
+  }
+
+  if (
+    /\b(total|sum|add(?:ed)? up|altogether|how much)\b/.test(normalized) &&
+    /\b(these|monthly bills?|recurring|subscriptions?|monthly charges?)\b/.test(normalized)
+  ) {
+    const totalCents = getVisibleRecurringExpenseTotalCents(body.conversationState?.visibleCardFacts ?? []);
+
+    if (totalCents !== null) {
+      return baseAgentResponse({
+        message: `The visible monthly bills total ${formatTestMoneyWithCents(totalCents)} across 2 items.`,
+        usedTools: [],
+        responseMode: "chat_only",
+        cards: [],
+      });
+    }
+  }
+
+  if (
+    /\b(recurring|repeating|subscriptions?|bills? (are )?coming up|monthly charges?|upcoming bills?)\b/.test(normalized)
+  ) {
+    return baseAgentResponse({
+      message: "I found likely repeating items.",
+      usedTools: ["get_recurring_activity"],
+      responseMode: "show_card",
+      cards: [
+        {
+          type: "recurring_activity",
+          title: "Likely recurring activity",
+          asOfDate: "2026-06-22",
+          horizonDays: 35,
+          items: [
+            {
+              id: "google-workspace",
+              label: "Google Workspace",
+              merchantName: "Google Workspace",
+              expectedDate: "2026-07-01",
+              amountCents: -1680,
+              kind: "purchase",
+              cadence: "monthly",
+              confidence: "high",
+              sourceTransactionCount: 3,
+              lastSeenDate: "2026-06-01",
+            },
+            {
+              id: "hulu",
+              label: "Hulu",
+              merchantName: "Hulu",
+              expectedDate: "2026-07-04",
+              amountCents: -1899,
+              kind: "purchase",
+              cadence: "monthly",
+              confidence: "medium",
+              sourceTransactionCount: 2,
+              lastSeenDate: "2026-06-04",
+            },
+          ],
+        },
+      ],
+      promptChips: [
+        {
+          id: "ai-total-visible",
+          label: "What do these add up to?",
+          prompt: "What do these add up to?",
+        },
+        {
+          id: "ai-what-stands-out",
+          label: "What stands out here?",
+          prompt: "What stands out here?",
+        },
+      ],
     });
   }
 
@@ -1007,6 +1146,36 @@ function formatTestMoney(amountCents: number) {
   const absoluteDollars = Math.abs(Math.round(amountCents / 100));
 
   return `${sign}$${absoluteDollars.toLocaleString("en-US")}`;
+}
+
+function formatTestMoneyWithCents(amountCents: number) {
+  const sign = amountCents < 0 ? "-" : "";
+  const absolute = Math.abs(amountCents);
+  const dollars = Math.floor(absolute / 100);
+  const cents = absolute % 100;
+
+  return `${sign}$${dollars.toLocaleString("en-US")}.${String(cents).padStart(2, "0")}`;
+}
+
+function getVisibleRecurringExpenseTotalCents(
+  visibleCardFacts: Array<{
+    type: string;
+    values?: Array<{ amountCents?: number }>;
+  }>,
+): number | null {
+  const recurringFacts = visibleCardFacts.find((facts) => facts.type === "recurring_activity");
+
+  if (!recurringFacts?.values?.length) {
+    return null;
+  }
+
+  const expenseValues = recurringFacts.values.filter((value) => (value.amountCents ?? 0) < 0);
+
+  if (expenseValues.length === 0) {
+    return null;
+  }
+
+  return expenseValues.reduce((total, value) => total + Math.abs(value.amountCents ?? 0), 0);
 }
 
 function extractTestMoneyCents(message: string): number | null {
