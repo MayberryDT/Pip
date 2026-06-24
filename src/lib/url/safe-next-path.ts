@@ -44,5 +44,5 @@ function isUnsafeAuthNextPath(path: string): boolean {
 }
 
 function isAllowedAuthNextPath(pathname: string): boolean {
-  return pathname === "/app" || pathname.startsWith("/app/");
+  return pathname === "/app" || pathname.startsWith("/app/") || pathname === "/admin";
 }

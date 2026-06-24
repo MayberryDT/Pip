@@ -25,6 +25,8 @@ describe("getSafeAuthNextPath", () => {
     ["/app?auth=ok", "/app?auth=ok"],
     ["/app/settings", "/app/settings"],
     ["/app/settings?tab=accounts", "/app/settings?tab=accounts"],
+    ["/admin", "/admin"],
+    ["/admin?auth=ok", "/admin?auth=ok"],
   ])("allows app destination %j", (next, expected) => {
     expect(getSafeAuthNextPath(next, origin)).toBe(expected);
   });

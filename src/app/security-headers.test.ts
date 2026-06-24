@@ -24,6 +24,7 @@ const hsts = "max-age=31536000; includeSubDomains; preload";
 
 const sensitiveRouteFiles = [
   "src/app/api/account/delete/route.ts",
+  "src/app/api/admin/access-grants/route.ts",
   "src/app/api/agent/route.ts",
   "src/app/api/auth/consent/route.ts",
   "src/app/api/auth/reviewer-login/route.ts",

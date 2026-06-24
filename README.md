@@ -123,6 +123,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 PIP_LOCAL_FAKE_APP_MODE=
 PIP_LOCAL_AGENT_EVAL_MODE=
 PIP_OPERATOR_TOKEN=
+PIP_ADMIN_EMAILS=
 PIP_RATE_LIMIT_SALT=
 PIP_LOCAL_STAGING=
 ```
@@ -176,6 +177,14 @@ curl -X POST "$NEXT_PUBLIC_SITE_URL/api/operator/access-grants" \
 ```
 
 - Revoke access with the same endpoint and `{"email":"person@example.com","action":"revoke"}`.
+
+Admin control center:
+
+- `/admin` is a private owner surface for waitlist review and access grants.
+- Set `PIP_ADMIN_EMAILS=mayberrydt@gmail.com` in production before enabling it.
+- Admin access uses the signed-in Supabase Google session; the browser never receives `PIP_OPERATOR_TOKEN` or the Supabase service-role key.
+- The Grant access action writes `app_access_grants` through the server admin client and sends the existing invite email.
+
 - Granted authenticated users must accept the real-data consent step and can keep or change the default protected-savings amount before seeing Spendable Cash Today.
 - Chat owns setup and account actions. Manual refresh, protected-savings settings, provider repair, sign-out, and delete-data should be reached through Pip rather than a separate settings/dashboard surface.
 - `/api/sync/manual` runs server-side provider sync, rate limits manual refreshes, records sync logs, and stores a Spendable Cash Today snapshot. Plaid syncs every stored Item and can return a `partial` result when at least one institution refreshed but another needs repair.
