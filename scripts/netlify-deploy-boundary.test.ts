@@ -24,6 +24,8 @@ describe("Netlify deployment secret boundary", () => {
     expect(safeDeployScript).toContain("hideLocalEnvFiles");
     expect(safeDeployScript).toContain("restoreLocalEnvFiles");
     expect(safeDeployScript).toContain("copyNextStaticIntoServerFunction");
+    expect(safeDeployScript).toContain("removeGeneratedTestFunctionArtifacts");
+    expect(safeDeployScript).toContain("manifest.json");
     expect(safeDeployScript).toContain("--no-build");
     expect(safeDeployScript).toContain(".netlify/static");
     expect(getFunctionBody(safeDeployScript, "cleanGeneratedNetlifyArtifacts")).toContain(

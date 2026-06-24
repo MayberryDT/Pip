@@ -4,10 +4,12 @@ import {
   copyFileSync,
   existsSync,
   mkdtempSync,
+  readFileSync,
   readdirSync,
   rmSync,
   statSync,
   unlinkSync,
+  writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -86,6 +88,8 @@ function prepareGeneratedNetlifyArtifacts() {
     return staticCopyStatus;
   }
 
+  removeGeneratedTestFunctionArtifacts();
+
   rmSync(join(root, ".netlify/static/cache"), {
     recursive: true,
     force: true,
@@ -117,6 +121,51 @@ function copyNextStaticIntoServerFunction() {
   }
 
   return run("zip", ["-qr", zipPath, ".next/static"], {}, handlerDirectory);
+}
+
+function removeGeneratedTestFunctionArtifacts() {
+  const functionsDirectory = join(root, ".netlify/functions");
+  const manifestPath = join(functionsDirectory, "manifest.json");
+
+  if (!existsSync(manifestPath)) {
+    return;
+  }
+
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+
+  if (!Array.isArray(manifest.functions)) {
+    return;
+  }
+
+  const deployableFunctions = [];
+
+  for (const functionEntry of manifest.functions) {
+    if (isGeneratedTestFunction(functionEntry)) {
+      if (typeof functionEntry.path === "string") {
+        rmSync(functionEntry.path, { force: true });
+      }
+      continue;
+    }
+
+    deployableFunctions.push(functionEntry);
+  }
+
+  writeFileSync(
+    manifestPath,
+    JSON.stringify({
+      ...manifest,
+      functions: deployableFunctions,
+    }),
+  );
+}
+
+function isGeneratedTestFunction(functionEntry) {
+  return Boolean(
+    functionEntry &&
+      typeof functionEntry === "object" &&
+      (String(functionEntry.name ?? "").includes(".test") ||
+        String(functionEntry.mainFile ?? "").includes(".test.")),
+  );
 }
 
 function run(command, args, extraEnv = {}, cwd = root) {
