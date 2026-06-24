@@ -20,6 +20,9 @@ author: "Pip"
 tags:
   - "spendable cash"
   - "daily money habits"
+related:
+  - "what-is-spendable-cash-today"
+  - "why-is-my-bank-balance-misleading"
 ---
 ## Quick answer
 
