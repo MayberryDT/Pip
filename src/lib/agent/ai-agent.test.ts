@@ -568,12 +568,109 @@ describe("runAIAgent", () => {
     });
   });
 
-  it("routes recurring aggregate questions to data without requiring a card", () => {
+  it("routes plain save-money prompts to a grounded cutback opportunity", async () => {
+    const response = await runAIAgent(
+      {
+        message: "i want to save money",
+        snapshot: getFakeSnapshot("cutback-dining"),
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_spending_opportunity"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "insight_card",
+      title: "Cutback opportunity",
+    });
+  });
+
+  it("routes how-did-you-get-the-number prompts to the math tool", async () => {
+    const response = await runAIAgent(
+      {
+        message: "How did you get the spendable cash today number?",
+        snapshot: getFakeSnapshot("healthy"),
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_pip_cash_math"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "math_breakdown",
+    });
+  });
+
+  it("answers recurring bill totals without surfacing unsupported finance output", async () => {
+    const response = await runAIAgent(
+      {
+        message: "What's the total of these monthly bills?",
+        snapshot: getFakeSnapshot("production-scale"),
+        history: [
+          { role: "user", content: "What bills are coming up?" },
+          { role: "assistant", content: "Here are your upcoming bills." },
+        ],
+        conversationState: {
+          shownCards: [{ type: "recurring_activity", title: "Likely recurring activity" }],
+          lastToolNames: ["get_recurring_activity"],
+          promptChips: [],
+        },
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_recurring_activity"]);
+    expect(response.responseMode).toBe("chat_only");
+    expect(response.cards).toEqual([]);
+    expect(response.message.toLowerCase()).toMatch(/repeat|monthly|bill|total/);
+  });
+
+  it("answers recurring bill totals before model execution when only recent recurring context exists", async () => {
+    const response = await runAIAgent({
+      message: "What's the total of these monthly bills?",
+      snapshot: getFakeSnapshot("production-scale"),
+      history: [
+        { role: "user", content: "What bills are coming up?" },
+        { role: "assistant", content: "Here are your upcoming bills." },
+      ],
+      conversationState: {
+        shownCards: [{ type: "recurring_activity", title: "Likely recurring activity" }],
+        lastToolNames: ["get_recurring_activity"],
+        promptChips: [],
+      },
+    });
+
+    expect(response.audit.usedModel).toBe(false);
+    expect(response.usedTools).toEqual(["get_recurring_activity"]);
+    expect(response.responseMode).toBe("chat_only");
+    expect(response.cards).toEqual([]);
+    expect(response.message).toMatch(/monthly bills add up to \$\d/);
+  });
+
+  it("does not answer recurring totals cardlessly without recurring context", async () => {
+    const response = await runAIAgent(
+      {
+        message: "What's the total of these monthly bills?",
+        snapshot: getFakeSnapshot("production-scale"),
+      },
+      createMockModelClient(),
+    );
+
+    expect(response.usedTools).toEqual(["get_recurring_activity"]);
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "recurring_activity",
+    });
+  });
+
+  it("routes standalone recurring aggregate questions to the recurring card", () => {
     for (const message of [
       "what is the total of my monthly bills",
       "how much are my recurring bills total",
       "what do my subscriptions add up to",
       "how much am I spending on monthly charges",
+      "whats the total of these monthly bills",
+      "the total of my monthly bills? how much am i spending a month?",
     ]) {
       expect(
         __agentTestHooks.getForcedAgentTool({
@@ -581,9 +678,79 @@ describe("runAIAgent", () => {
         }),
       ).toMatchObject({
         toolName: "get_recurring_activity",
-        requireCard: false,
+        requireCard: true,
       });
     }
+  });
+
+  it("routes recurring aggregate follow-ups to data without requiring a card", () => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message: "whats the total of these monthly bills",
+        history: [
+          { role: "user", content: "What bills are coming up?" },
+          { role: "assistant", content: "Here are your upcoming bills." },
+        ],
+        conversationState: {
+          shownCards: [{ type: "recurring_activity", title: "Likely recurring activity" }],
+          lastToolNames: ["get_recurring_activity"],
+          promptChips: [],
+        },
+      }),
+    ).toMatchObject({
+      toolName: "get_recurring_activity",
+      requireCard: false,
+    });
+  });
+
+  it.each([
+    ["i want to save money", "get_spending_opportunity"],
+    ["help me save money", "get_spending_opportunity"],
+    ["how can I save money on car expenses?", "get_spending_opportunity"],
+    ["How did you get the spendable cash today number?", "get_pip_cash_math"],
+    ["how did you come up with today's number?", "get_pip_cash_math"],
+    ["whats the total of these monthly bills?", "get_recurring_activity"],
+  ])("forces the correct tool for production phrase %s", (message, toolName) => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message,
+        snapshot: getFakeSnapshot("healthy"),
+      }),
+    ).toMatchObject({ toolName });
+  });
+
+  it.each([
+    "i want to save money for a big purchase",
+    "help me save for a vacation",
+    "move $200 to savings",
+    "transfer money to savings",
+  ])("does not force cutback for savings setup or money movement phrase %s", (message) => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message,
+        snapshot: getFakeSnapshot("healthy"),
+      }),
+    ).not.toMatchObject({ toolName: "get_spending_opportunity" });
+  });
+
+  it.each([
+    "what do these charges add up to?",
+    "how much did my charges total?",
+  ])("does not force recurring activity for generic charge total phrase %s", (message) => {
+    expect(
+      __agentTestHooks.getForcedAgentTool({
+        message,
+        history: [
+          { role: "user", content: "Show recent transactions" },
+          { role: "assistant", content: "I found recent charges." },
+        ],
+        conversationState: {
+          shownCards: [{ type: "recent_transactions", title: "Recent transactions" }],
+          lastToolNames: ["get_recent_transactions"],
+          promptChips: [],
+        },
+      }),
+    ).not.toMatchObject({ toolName: "get_recurring_activity" });
   });
 
   it("does not force the recurring activity tool when visible recurring facts can answer an aggregate follow-up", () => {
@@ -645,13 +812,13 @@ describe("runAIAgent", () => {
     ];
     const runtime = {
       run: vi.fn(async () => ({
-        message: "Those visible monthly bills add up to $18.99.",
+        message: "I can see the recurring bills currently on the card.",
         cards: [],
         promptChips: [],
-        usedTools: [],
+        usedTools: ["get_recurring_activity"],
         responseMode: "chat_only" as const,
         audit: {
-          toolNames: [],
+          toolNames: ["get_recurring_activity"],
           usedModel: true,
           model: "test-model",
           transport: "openai-direct" as const,
@@ -661,7 +828,7 @@ describe("runAIAgent", () => {
 
     const response = await runAIAgent(
       {
-        message: "What do these monthly bills add up to?",
+        message: "Tell me more about these bills",
         history: [
           { role: "user", content: "What bills are coming up?" },
           { role: "assistant", content: "I found recurring activity." },
@@ -675,7 +842,7 @@ describe("runAIAgent", () => {
 
     expect(runtime.run).toHaveBeenCalledWith(
       expect.objectContaining({
-        message: "What do these monthly bills add up to?",
+        message: "Tell me more about these bills",
         history: expect.arrayContaining([
           { role: "user", content: "What bills are coming up?" },
         ]),
@@ -685,11 +852,65 @@ describe("runAIAgent", () => {
       }),
     );
     expect(response).toMatchObject({
-      message: "Those visible monthly bills add up to $18.99.",
+      message: "I can see the recurring bills currently on the card.",
       cards: [],
       responseMode: "chat_only",
       audit: {
         usedModel: true,
+      },
+    });
+  });
+
+  it("answers visible recurring aggregate follow-ups without rerunning the recurring tool", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "");
+    vi.stubEnv("OPENAI_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_BASE_URL", "");
+    vi.stubEnv("NETLIFY_AI_GATEWAY_KEY", "");
+
+    const response = await runAIAgent(
+      {
+        message: "What do these monthly bills add up to?",
+        history: [
+          { role: "user", content: "What bills are coming up?" },
+          { role: "assistant", content: "I found recurring activity." },
+        ],
+        conversationState: {
+          shownCards: [{ type: "recurring_activity", title: "Likely recurring activity" }],
+          visibleCardFacts: [
+            {
+              type: "recurring_activity" as const,
+              title: "Likely recurring activity",
+              facts: ["Visible recurring expense total: $35.79 across 2 items."],
+              values: [
+                {
+                  id: "visible-1",
+                  label: "Google Workspace",
+                  amountCents: -1680,
+                  confidence: "high" as const,
+                },
+                {
+                  id: "visible-2",
+                  label: "Hulu",
+                  amountCents: -1899,
+                  confidence: "medium" as const,
+                },
+              ],
+            },
+          ],
+          lastToolNames: ["get_recurring_activity"],
+          promptChips: [],
+        },
+      },
+    );
+
+    expect(response).toMatchObject({
+      message: "Those monthly bills add up to $35.79 across 2 items.",
+      cards: [],
+      usedTools: [],
+      responseMode: "chat_only",
+      audit: {
+        usedModel: false,
+        toolNames: [],
       },
     });
   });
@@ -706,16 +927,17 @@ describe("runAIAgent", () => {
     expect(inputSource).toContain("recent_visible_card_context");
   });
 
-  it("answers fresh recurring aggregate questions with data but no card requirement", async () => {
+  it("shows the recurring card for fresh recurring aggregate questions", async () => {
     const response = await runAIAgent(
       { message: "How much are my recurring bills total?" },
       createMockModelClient(),
     );
 
     expect(response.usedTools).toEqual(["get_recurring_activity"]);
-    expect(response.responseMode).toBe("chat_only");
-    expect(response.cards).toEqual([]);
-    expect(response.message.toLowerCase()).toContain("repeat expenses total");
+    expect(response.responseMode).toBe("show_card");
+    expect(response.cards[0]).toMatchObject({
+      type: "recurring_activity",
+    });
   });
 
   it("calls the spending breakdown tool for complete breakdown requests", async () => {
@@ -997,6 +1219,7 @@ describe("runAIAgent", () => {
     expect(response.usedTools).toEqual(["get_data_quality"]);
     expect(response.responseMode).toBe("show_card");
     expect(["missing_card_nudge", "connect_account"]).toContain(response.cards[0]?.type);
+    expect(response.message).not.toMatch(/\btrust receipt\b/i);
   });
 
   it("routes savings goal prompts through the real forced-tool classifier", () => {
@@ -1159,6 +1382,25 @@ describe("runAIAgent", () => {
     ).toBe("clarify");
   });
 
+  it("reports preview_savings_goal for savings-goal clarify turns", async () => {
+    for (const message of ["I want to save for Japan", "Save for a big purchase"]) {
+      const response = await runAIAgent(
+        {
+          message,
+          snapshot: getFakeSnapshot("default"),
+        },
+        createMockModelClient(),
+      );
+
+      expect(response.responseMode).toBe("clarify");
+      expect(response.usedTools, message).toEqual(["preview_savings_goal"]);
+      expect(response.audit.toolNames, message).toEqual(["preview_savings_goal"]);
+      expect(response.pendingAction).toMatchObject({
+        type: "preview_savings_goal",
+      });
+    }
+  });
+
   it("coerces no-card non-pending clarify replies back to chat only", () => {
     expect(
       __agentTestHooks.selectFinalResponseMode({
@@ -1212,7 +1454,7 @@ describe("runAIAgent", () => {
     });
 
     expect(response.audit.usedModel).toBe(false);
-    expect(response.usedTools).toEqual([]);
+    expect(response.usedTools).toEqual(["preview_savings_goal"]);
     expect(response.responseMode).toBe("clarify");
     expect(response.pendingAction).toMatchObject({
       type: "preview_savings_goal",
@@ -1257,7 +1499,7 @@ describe("runAIAgent", () => {
     });
 
     expect(response.audit.usedModel).toBe(false);
-    expect(response.usedTools).toEqual([]);
+    expect(response.usedTools).toEqual(["preview_savings_goal"]);
     expect(response.responseMode).toBe("clarify");
     expect(response.message).toBe("How much do you want to save for this goal?");
     expect(response.pendingAction).toMatchObject({
@@ -1395,7 +1637,7 @@ describe("runAIAgent", () => {
     );
 
     expect(response.audit.usedModel).toBe(true);
-    expect(response.usedTools).toEqual([]);
+    expect(response.usedTools).toEqual(["preview_savings_goal"]);
     expect(response.responseMode).toBe("clarify");
     expect(response.pendingAction).toMatchObject({
       type: "preview_savings_goal",
@@ -1500,7 +1742,7 @@ describe("runAIAgent", () => {
       createMockModelClient(),
     );
 
-    expect(response.usedTools).toEqual([]);
+    expect(response.usedTools).toEqual(["preview_savings_goal"]);
     expect(response.responseMode).toBe("clarify");
     expect(response.pendingAction).toMatchObject({
       type: "preview_savings_goal",

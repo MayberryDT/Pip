@@ -186,14 +186,14 @@ async function createSavingsGoalDraftResponse(
       message: `How much do you want to save for ${formatSavingsGoalNameForPrompt(draft.name)}?`,
       cards: [],
       promptChips: createDeterministicTrustPromptChips(input),
-      usedTools: [],
+      usedTools: ["preview_savings_goal"],
       responseMode: "clarify",
       pendingAction: {
         ...draft,
         missing,
       },
       audit: {
-        toolNames: [],
+        toolNames: ["preview_savings_goal"],
         usedModel: false,
       },
     });
@@ -262,14 +262,14 @@ async function createSavingsGoalDraftResponse(
       message: `How much do you want to save for ${formatSavingsGoalNameForPrompt(draft.name)}?`,
       cards: [],
       promptChips: createDeterministicTrustPromptChips(input),
-      usedTools: [],
+      usedTools: ["preview_savings_goal"],
       responseMode: "clarify",
       pendingAction: {
         ...draft,
         missing: ["target_amount"],
       },
       audit: {
-        toolNames: [],
+        toolNames: ["preview_savings_goal"],
         usedModel: false,
       },
     });

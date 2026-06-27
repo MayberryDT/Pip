@@ -35,6 +35,17 @@ describe("agent route telemetry", () => {
         ],
         conversationState: {
           shownCards: [{ type: "insight_card", title: "Pattern assumptions" }],
+          visibleCardFacts: [
+            {
+              type: "recurring_activity",
+              facts: [{ label: "Netflix" }, { label: "YouTube Premium" }],
+              values: [
+                { label: "Netflix", amountCents: -2199 },
+                { label: "YouTube Premium", amountCents: -1399 },
+                { label: "Spotify", amountCents: -1099 },
+              ],
+            },
+          ],
           lastToolNames: ["get_pattern_assumptions"],
           promptChips: [
             {
@@ -93,6 +104,8 @@ describe("agent route telemetry", () => {
       selectedPromptChipId: "pattern-assumptions",
       historyLength: 1,
       shownCardCount: 1,
+      visibleCardFactCount: 2,
+      visibleCardValueCount: 3,
       lastToolCount: 1,
       promptChipCount: 1,
       onboardingStatus: "ready",

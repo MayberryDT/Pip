@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=1080, height=1920">
+    <title>Pip Bank Balance Post</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
+
+      html,
+      body {
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #fcf9f8;
+        color: #1c1b1b;
+        font-family: Arial, Helvetica, sans-serif;
+      }
+
+      #root {
+        position: relative;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #fcf9f8;
+        isolation: isolate;
+      }
+
+      .source-video {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+      }
+
+      .edge-shade {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        background:
+          linear-gradient(180deg, rgba(252, 249, 248, 0.52) 0%, rgba(252, 249, 248, 0) 24%, rgba(252, 249, 248, 0) 66%, rgba(252, 249, 248, 0.7) 100%),
+          linear-gradient(90deg, rgba(252, 249, 248, 0.38) 0%, rgba(252, 249, 248, 0) 30%, rgba(252, 249, 248, 0) 70%, rgba(252, 249, 248, 0.3) 100%);
+        pointer-events: none;
+      }
+
+      .scene {
+        position: absolute;
+        inset: 0;
+        z-index: 5;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+      }
+
+      .scene-content {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        box-sizing: border-box;
+        flex-direction: column;
+        gap: 24px;
+        padding: 92px 68px;
+        visibility: hidden;
+      }
+
+      #scene-1 .scene-content {
+        visibility: visible;
+      }
+
+      .top-stack {
+        justify-content: flex-start;
+        align-items: flex-start;
+      }
+
+      .center-stack {
+        justify-content: center;
+        align-items: center;
+      }
+
+      .lower-stack {
+        justify-content: flex-end;
+        align-items: stretch;
+      }
+
+      .label {
+        display: inline-flex;
+        width: max-content;
+        max-width: 100%;
+        align-items: center;
+        border: 1px solid rgba(78, 101, 69, 0.22);
+        border-radius: 999px;
+        background: rgba(255, 253, 248, 0.84);
+        box-shadow: 0 18px 44px rgba(28, 27, 27, 0.09);
+        color: #4e6545;
+        font-size: 30px;
+        font-weight: 900;
+        letter-spacing: 0;
+        line-height: 1;
+        padding: 18px 26px;
+        text-transform: uppercase;
+      }
+
+      .leaf-dot {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        margin-right: 14px;
+        border-radius: 999px 999px 999px 0;
+        background: #8da682;
+        transform: rotate(-38deg);
+      }
+
+      .money-card,
+      .text-card,
+      .question-card,
+      .ledger-card,
+      .cta-card {
+        border: 1px solid rgba(255, 253, 248, 0.82);
+        border-radius: 38px;
+        background: rgba(255, 253, 248, 0.94);
+        box-shadow: 0 30px 74px rgba(28, 27, 27, 0.14);
+        backdrop-filter: blur(12px);
+      }
+
+      .money-card {
+        width: max-content;
+        max-width: 920px;
+        padding: 30px 42px 36px;
+      }
+
+      .money-value {
+        color: #1c1b1b;
+        font-family: Georgia, serif;
+        font-size: 164px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+        letter-spacing: 0;
+        line-height: 0.92;
+      }
+
+      .sage-money .money-value {
+        color: #4e6545;
+      }
+
+      .text-card {
+        display: flex;
+        width: 900px;
+        max-width: 100%;
+        justify-content: center;
+        gap: 16px;
+        padding: 30px 28px;
+      }
+
+      .bill-chip {
+        border: 1px solid rgba(78, 101, 69, 0.18);
+        border-radius: 999px;
+        background: rgba(141, 166, 130, 0.16);
+        color: #34492f;
+        font-size: 42px;
+        font-weight: 900;
+        line-height: 1;
+        padding: 22px 24px;
+      }
+
+      .spendable-card {
+        align-self: stretch;
+        margin-top: 82px;
+        padding: 36px 42px 54px;
+      }
+
+      .spendable-label {
+        color: #4e6545;
+        font-size: 34px;
+        font-weight: 900;
+        letter-spacing: 0;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .spendable-number {
+        margin-top: 18px;
+        color: #4e6545;
+        font-family: Georgia, serif;
+        font-size: 190px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+        line-height: 0.92;
+      }
+
+      .question-card {
+        width: 900px;
+        max-width: 100%;
+        margin-bottom: 126px;
+        padding: 40px 46px;
+      }
+
+      .question-eyebrow {
+        color: #545a50;
+        font-size: 27px;
+        font-weight: 900;
+        line-height: 1;
+        text-transform: uppercase;
+      }
+
+      .question-text {
+        margin-top: 18px;
+        color: #1c1b1b;
+        font-family: Georgia, serif;
+        font-size: 92px;
+        font-weight: 500;
+        letter-spacing: 0;
+        line-height: 1.02;
+      }
+
+      .ledger-card {
+        width: 650px;
+        max-width: 100%;
+        margin-left: auto;
+        margin-bottom: 86px;
+        background: #fffdf8;
+        padding: 30px 34px;
+      }
+
+      .ledger-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 28px;
+        border-bottom: 1px solid rgba(78, 101, 69, 0.15);
+        color: #2f352d;
+        font-size: 31px;
+        font-weight: 900;
+        line-height: 1.15;
+        padding: 22px 0;
+      }
+
+      .ledger-row:first-child {
+        padding-top: 4px;
+      }
+
+      .ledger-row:last-child {
+        border-bottom: 0;
+        padding-bottom: 4px;
+      }
+
+      .ledger-value {
+        color: #1c1b1b;
+        font-family: Georgia, serif;
+        font-size: 56px;
+        font-variant-numeric: tabular-nums;
+        font-weight: 500;
+        line-height: 1;
+      }
+
+      .ledger-row.after .ledger-value {
+        color: #4e6545;
+        font-size: 68px;
+      }
+
+      .cta-card {
+        width: 944px;
+        max-width: 100%;
+        margin-bottom: 54px;
+        padding: 42px 48px 44px;
+      }
+
+      .pip-logo {
+        width: 176px;
+        height: auto;
+        margin-bottom: 24px;
+        filter: drop-shadow(0 12px 22px rgba(78, 101, 69, 0.12));
+      }
+
+      .cta-title {
+        max-width: 810px;
+        color: #1c1b1b;
+        font-family: Georgia, serif;
+        font-size: 86px;
+        font-weight: 500;
+        letter-spacing: 0;
+        line-height: 1.02;
+      }
+
+      .cta-url {
+        display: inline-flex;
+        width: max-content;
+        max-width: 100%;
+        margin-top: 26px;
+        border-radius: 999px;
+        background: rgba(141, 166, 130, 0.22);
+        color: #34492f;
+        font-size: 38px;
+        font-weight: 900;
+        line-height: 1;
+        padding: 20px 26px;
+      }
+
+      .transition-wash {
+        position: absolute;
+        inset: -8%;
+        z-index: 12;
+        background:
+          radial-gradient(circle at 50% 42%, rgba(255, 253, 248, 0.96) 0 16%, rgba(255, 253, 248, 0) 38%),
+          linear-gradient(90deg, rgba(244, 232, 215, 0), #f4e8d7 28%, #fffdf8 58%, rgba(252, 249, 248, 0));
+        opacity: 0;
+        pointer-events: none;
+        transform: translateX(-112%) skewX(-8deg);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root" class="clip" data-composition-id="main" data-start="0" data-duration="21.733875" data-track-index="2" data-width="1080" data-height="1920">
+      <video id="source-video" class="clip source-video" data-start="0" data-duration="21.733875" data-track-index="0" src="assets/source-sped-up.mp4" muted playsinline crossorigin="anonymous" data-layout-ignore data-no-inspect></video>
+      <audio id="voiceover" class="clip" data-start="0" data-duration="21.733875" data-track-index="1" src="assets/voiceover.mp3" data-volume="1"></audio>
+
+      <div class="edge-shade" data-layout-ignore></div>
+
+      <section id="scene-1" class="clip scene" data-start="0" data-duration="2.89785" data-track-index="3" aria-label="Bank balance" data-layout-allow-occlusion>
+        <div class="scene-content top-stack">
+          <p class="label s1-label"><span class="leaf-dot"></span>BANK BALANCE</p>
+          <div class="money-card s1-card">
+            <p class="money-value s1-money">$2,841</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-2" class="clip scene" data-start="2.89785" data-duration="2.89785" data-track-index="4" aria-label="Rent bills savings" data-layout-allow-occlusion>
+        <div class="scene-content center-stack">
+          <div class="text-card s2-card">
+            <span class="bill-chip s2-chip-1">Rent.</span>
+            <span class="bill-chip s2-chip-2">Bills.</span>
+            <span class="bill-chip s2-chip-3">Savings.</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-3" class="clip scene" data-start="5.7957" data-duration="3.62231" data-track-index="5" aria-label="Spendable cash today" data-layout-allow-occlusion>
+        <div class="scene-content top-stack">
+          <div class="money-card spendable-card sage-money s3-card">
+            <p class="spendable-label s3-label">SPENDABLE CASH TODAY</p>
+            <p class="spendable-number s3-money">$146</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-4" class="clip scene" data-start="9.41801" data-duration="4.34678" data-track-index="6" aria-label="Can I spend one hundred twenty dollars" data-layout-allow-occlusion>
+        <div class="scene-content lower-stack">
+          <div class="question-card s4-card">
+            <p class="question-eyebrow s4-label">Ask before buying</p>
+            <p class="question-text s4-question">Can I spend $120?</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-5" class="clip scene" data-start="13.76479" data-duration="4.34677" data-track-index="7" aria-label="Purchase result" data-layout-allow-occlusion>
+        <div class="scene-content lower-stack">
+          <div class="ledger-card s5-card">
+            <div class="ledger-row s5-current">
+              <span>Current:</span>
+              <span class="ledger-value">$146</span>
+            </div>
+            <div class="ledger-row s5-purchase">
+              <span>Purchase:</span>
+              <span class="ledger-value">&minus;$120</span>
+            </div>
+            <div class="ledger-row after s5-after">
+              <span>After:</span>
+              <span class="ledger-value">$26</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scene-6" class="clip scene" data-start="18.11156" data-duration="3.62231" data-track-index="8" aria-label="Before you spend check Pip" data-layout-allow-occlusion>
+        <div class="scene-content lower-stack">
+          <div class="cta-card s6-card">
+            <img class="pip-logo s6-logo" src="assets/pip-logo.png" alt="Pip logo">
+            <h1 class="cta-title s6-title">Before you spend, check Pip.</h1>
+            <p class="cta-url s6-url">spendwithpip.com</p>
+          </div>
+        </div>
+      </section>
+
+      <div id="transition-wash" class="transition-wash" data-layout-ignore></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const mainTl = gsap.timeline({ paused: true });
+
+      function warmWash(fromScene, toScene, at) {
+        mainTl.set("#transition-wash", { xPercent: -112, opacity: 0, transformOrigin: "left center" }, at);
+        mainTl.to("#transition-wash", { xPercent: 0, opacity: 1, duration: 0.24, ease: "sine.inOut" }, at);
+        mainTl.to("#transition-wash", { xPercent: 112, opacity: 0, duration: 0.32, ease: "power1.inOut" }, at + 0.24);
+      }
+
+      mainTl.set("#scene-1 .scene-content", { visibility: "visible" }, 0);
+      mainTl.set("#scene-1 .scene-content", { visibility: "hidden" }, 2.89785);
+      mainTl.set("#scene-2 .scene-content", { visibility: "visible" }, 2.89785);
+      mainTl.set("#scene-2 .scene-content", { visibility: "hidden" }, 5.7957);
+      mainTl.set("#scene-3 .scene-content", { visibility: "visible" }, 5.7957);
+      mainTl.set("#scene-3 .scene-content", { visibility: "hidden" }, 9.41801);
+      mainTl.set("#scene-4 .scene-content", { visibility: "visible" }, 9.41801);
+      mainTl.set("#scene-4 .scene-content", { visibility: "hidden" }, 13.76479);
+      mainTl.set("#scene-5 .scene-content", { visibility: "visible" }, 13.76479);
+      mainTl.set("#scene-5 .scene-content", { visibility: "hidden" }, 18.11156);
+      mainTl.set("#scene-6 .scene-content", { visibility: "visible" }, 18.11156);
+
+      mainTl.from(".s1-label", { opacity: 0, y: 26, duration: 0.42, ease: "power3.out" }, 0.18);
+      mainTl.from(".s1-card", { opacity: 0, x: -34, scale: 0.95, duration: 0.56, ease: "expo.out" }, 0.34);
+      mainTl.from(".s1-money", { opacity: 0, y: 20, duration: 0.4, ease: "sine.out" }, 0.54);
+
+      warmWash("#scene-1", "#scene-2", 2.7);
+      mainTl.from(".s2-card", { opacity: 0, y: 34, scale: 0.94, duration: 0.48, ease: "back.out(1.24)" }, 3.02);
+      mainTl.from(".s2-chip-1", { opacity: 0, x: -24, duration: 0.34, ease: "power4.out" }, 3.12);
+      mainTl.from(".s2-chip-2", { opacity: 0, y: 22, duration: 0.34, ease: "sine.out" }, 3.24);
+      mainTl.from(".s2-chip-3", { opacity: 0, x: 24, duration: 0.34, ease: "expo.out" }, 3.36);
+
+      warmWash("#scene-2", "#scene-3", 5.58);
+      mainTl.from(".s3-card", { opacity: 0, y: -30, scale: 0.96, duration: 0.5, ease: "power3.out" }, 5.94);
+      mainTl.from(".s3-label", { opacity: 0, x: -24, duration: 0.36, ease: "expo.out" }, 6.12);
+      mainTl.from(".s3-money", { opacity: 0, y: 28, duration: 0.46, ease: "back.out(1.18)" }, 6.42);
+
+      warmWash("#scene-3", "#scene-4", 9.2);
+      mainTl.from(".s4-card", { opacity: 0, y: 42, scale: 0.95, duration: 0.52, ease: "power4.out" }, 9.58);
+      mainTl.from(".s4-label", { opacity: 0, x: -22, duration: 0.34, ease: "sine.out" }, 9.78);
+      mainTl.from(".s4-question", { opacity: 0, y: 28, duration: 0.46, ease: "back.out(1.28)" }, 10.0);
+
+      warmWash("#scene-4", "#scene-5", 13.54);
+      mainTl.from(".s5-card", { opacity: 0, x: 34, scale: 0.96, duration: 0.46, ease: "expo.out" }, 13.88);
+      mainTl.from(".s5-current", { opacity: 0, y: 22, duration: 0.34, ease: "power3.out" }, 13.96);
+      mainTl.from(".s5-purchase", { opacity: 0, x: 24, duration: 0.34, ease: "sine.out" }, 15.2);
+      mainTl.from(".s5-after", { opacity: 0, y: 24, scale: 0.96, duration: 0.38, ease: "back.out(1.2)" }, 16.64);
+
+      warmWash("#scene-5", "#scene-6", 17.9);
+      mainTl.from(".s6-card", { opacity: 0, y: 38, scale: 0.96, duration: 0.52, ease: "power3.out" }, 18.24);
+      mainTl.from(".s6-logo", { opacity: 0, scale: 0.86, rotation: -3, duration: 0.42, ease: "back.out(1.35)" }, 18.38);
+      mainTl.from(".s6-title", { opacity: 0, x: -30, duration: 0.52, ease: "expo.out" }, 18.6);
+      mainTl.from(".s6-url", { opacity: 0, y: 24, scale: 0.94, duration: 0.38, ease: "sine.out" }, 19.56);
+
+      window.__timelines["main"] = mainTl;
+    </script>
+  </body>
+</html>

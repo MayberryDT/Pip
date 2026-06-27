@@ -344,6 +344,19 @@ export async function runAIAgent(
     return deterministicRecentTransactionsResponse;
   }
 
+  const deterministicVisibleRecurringAggregateResponse =
+    createDeterministicVisibleRecurringAggregateResponse(input);
+
+  if (deterministicVisibleRecurringAggregateResponse) {
+    return deterministicVisibleRecurringAggregateResponse;
+  }
+
+  const deterministicRecurringAggregateResponse = createDeterministicRecurringAggregateResponse(input);
+
+  if (deterministicRecurringAggregateResponse) {
+    return deterministicRecurringAggregateResponse;
+  }
+
   const preModelSavingsGoalResponse = await createPreModelSavingsGoalResponse(input);
 
   if (preModelSavingsGoalResponse) {
@@ -465,6 +478,115 @@ function createDeterministicRecentTransactionsFollowUpResponse(input: RunAiAgent
   });
 }
 
+function createDeterministicRecurringAggregateResponse(input: RunAiAgentInput): AgentResponse | null {
+  if ((input.requestKind ?? "chat") !== "chat" || input.conversationState?.pendingAction) {
+    return null;
+  }
+
+  const normalized = normalizePrompt(input.message);
+
+  if (!isRecurringAggregatePrompt(normalized) || !hasRecentRecurringActivityContext(input)) {
+    return null;
+  }
+
+  if (!input.snapshot) {
+    return null;
+  }
+
+  const response = runAgentTool("show_recurring_activity", {}, input.snapshot);
+  const recurringCard = response.cards.find(
+    (card): card is Extract<AgentCard, { type: "recurring_activity" }> =>
+      card.type === "recurring_activity",
+  );
+
+  if (!recurringCard) {
+    return null;
+  }
+
+  const expenseItems = recurringCard.items.filter((item) => item.amountCents < 0);
+  const expenseTotalCents = expenseItems.reduce(
+    (total, item) => total + Math.abs(item.amountCents),
+    0,
+  );
+
+  return agentResponseSchema.parse({
+    message: `Those monthly bills add up to ${formatMoneyWithCents(expenseTotalCents)} across ${expenseItems.length} items.`,
+    cards: [],
+    promptChips: response.promptChips,
+    usedTools: ["get_recurring_activity"],
+    responseMode: "chat_only",
+    audit: {
+      toolNames: ["get_recurring_activity"],
+      usedModel: false,
+    },
+  });
+}
+
+function createDeterministicVisibleRecurringAggregateResponse(input: RunAiAgentInput): AgentResponse | null {
+  if ((input.requestKind ?? "chat") !== "chat" || input.conversationState?.pendingAction) {
+    return null;
+  }
+
+  const normalized = normalizePrompt(input.message);
+
+  if (!isRecurringAggregatePrompt(normalized)) {
+    return null;
+  }
+
+  const recurringFacts = input.conversationState?.visibleCardFacts?.find(
+    (entry) => entry.type === "recurring_activity",
+  );
+
+  if (!recurringFacts) {
+    return null;
+  }
+
+  const expenseValues = recurringFacts.values.filter((value) => {
+    const label = value.label.toLowerCase();
+
+    if (/\bincome\b/.test(label)) {
+      return false;
+    }
+
+    return (typeof value.amountCents === "number" && value.amountCents < 0) ||
+      /\b(expense|bill|subscription|charge|monthly)\b/.test(label);
+  });
+  let expenseTotalCents = expenseValues.reduce(
+    (total, value) => total + Math.abs(value.amountCents ?? 0),
+    0,
+  );
+  let itemCount = expenseValues.length;
+
+  if (expenseTotalCents === 0) {
+    const totalFact = recurringFacts.facts.find((fact) =>
+      /\brecurring expense total\b/i.test(fact) || /\bmonthly bills?\b/i.test(fact)
+    );
+    const amountMatch = totalFact?.match(/\$([0-9,]+(?:\.[0-9]{2})?)/);
+    const itemMatch = totalFact?.match(/\bacross\s+(\d+)\s+items?\b/i);
+
+    if (amountMatch) {
+      expenseTotalCents = Math.round(Number(amountMatch[1].replace(/,/g, "")) * 100);
+      itemCount = itemMatch ? Number(itemMatch[1]) : itemCount;
+    }
+  }
+
+  if (expenseTotalCents === 0) {
+    return null;
+  }
+
+  return agentResponseSchema.parse({
+    message: `Those monthly bills add up to ${formatMoneyWithCents(expenseTotalCents)} across ${itemCount} items.`,
+    cards: [],
+    promptChips: createDeterministicTrustPromptChips(input),
+    usedTools: [],
+    responseMode: "chat_only",
+    audit: {
+      toolNames: [],
+      usedModel: false,
+    },
+  });
+}
+
 function hasRecentTransactionsContext(input: RunAiAgentInput): boolean {
   if (input.conversationState?.lastToolNames?.at(-1) === "get_recent_transactions") {
     return true;
@@ -570,14 +692,14 @@ function createSavingsGoalPreviewResponse(
       message: createSavingsGoalClarificationMessage(draft.name, missing),
       cards: [],
       promptChips: createDeterministicTrustPromptChips(input),
-      usedTools: [],
+      usedTools: ["preview_savings_goal"],
       responseMode: "clarify",
       pendingAction: {
         ...draft,
         missing,
       },
       audit: {
-        toolNames: [],
+        toolNames: ["preview_savings_goal"],
         usedModel: false,
       },
     });
@@ -597,21 +719,21 @@ function createSavingsGoalPreviewResponse(
       message: createSavingsGoalClarificationMessage(draft.name, preview.missing),
       cards: [],
       promptChips: createDeterministicTrustPromptChips(input),
-      usedTools: [],
+      usedTools: ["preview_savings_goal"],
       responseMode: "clarify",
       pendingAction: {
         ...draft,
         missing: preview.missing,
       },
       audit: {
-        toolNames: [],
+        toolNames: ["preview_savings_goal"],
         usedModel: false,
       },
     });
   }
 
   return agentResponseSchema.parse({
-    message: `${draft.name} would need ${formatMoney(preview.card.monthlyContributionCents)}/month. Want me to create it?`,
+    message: `${draft.name} would need ${formatMoney(preview.card.monthlyContributionCents)}/month.`,
     cards: [preview.card],
     promptChips: createDeterministicTrustPromptChips(input),
     usedTools: ["preview_savings_goal"],
@@ -998,7 +1120,7 @@ function getForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | undefined
         toolName: decision.toolName,
         args: decision.args,
         requireCard: decision.toolName === "get_recurring_activity" && isRecurringAggregatePrompt(normalized)
-          ? false
+          ? !hasRecentRecurringActivityContext(input)
           : decision.requireCard,
       };
     }
@@ -1165,7 +1287,7 @@ function getLegacyForcedAgentTool(input: RunAiAgentInput): ForcedAgentTool | und
     return {
       toolName: "get_recurring_activity",
       args: {},
-      requireCard: false,
+      requireCard: !hasRecentRecurringActivityContext(input),
     };
   }
 
@@ -2874,6 +2996,17 @@ function hasVisibleRecurringAggregateContext(input: RunAiAgentInput): boolean {
   ));
 }
 
+function hasRecentRecurringActivityContext(input: RunAiAgentInput): boolean {
+  return Boolean(
+    input.conversationState?.lastToolNames?.includes("get_recurring_activity") ||
+      input.conversationState?.shownCards?.some((card) => card.type === "recurring_activity") ||
+      input.history?.slice(-6).some((item) =>
+        item.role === "assistant" &&
+        /\b(recurring|repeat(?:ing)? items?|subscriptions?|upcoming bills?|bills? coming up|monthly bills?)\b/i.test(item.content)
+      ),
+  );
+}
+
 function formatHistoryForModel(history: AgentHistoryItem[] | undefined): AgentInputItem[] {
   return formatHistoryForGrounding(history).map((item) => ({
     role: item.role,
@@ -4023,6 +4156,8 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
     /\b(what|where|which|find|show|spot|identify|help|how)\b/.test(normalized) ||
     /\bspending opportunit(?:y|ies)\b/.test(normalized) ||
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what|costs?|expenses?|cash)\b/.test(normalized) ||
+    /\b(i want to|help me|how can i|how do i|where can i|ways? to)\b.{0,24}\bsave money\b/.test(normalized) ||
+    /\bsave money\b.{0,24}\b(this week|from spending|on spending|recent spending|where|how|help)\b/.test(normalized) ||
     /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized) ||
     /\b(money leaking|where .* leaking)\b/.test(normalized)
   );
@@ -4030,7 +4165,9 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
 
 function isSavingsSetupOrSettingsPrompt(normalized: string): boolean {
   return /\b(monthly savings|protected savings|savings cushion)\b/.test(normalized) ||
-    /\bsave\b.{0,24}\b(account settings|settings|preferences)\b/.test(normalized);
+    /\bsave\b.{0,24}\b(account settings|settings|preferences)\b/.test(normalized) ||
+    /\bsavings? goals?\b/.test(normalized) ||
+    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized);
 }
 
 function isDataQualityPrompt(normalized: string): boolean {
@@ -4104,8 +4241,10 @@ function isSpendableCashDefinitionPrompt(normalized: string): boolean {
 }
 
 function isExplicitMathPrompt(normalized: string): boolean {
-  return /^(show( me)? )?(the )?(math|math breakdown|formula|calculation|calculation details)$/.test(
-    normalized,
+  return (
+    /^(show( me)? )?(the )?(math|math breakdown|formula|calculation|calculation details)$/.test(normalized) ||
+    /\bhow did you\b.{0,32}\b(get|calculate|come up with)\b.{0,32}\b(number|spendable cash|spendable cash today)\b/.test(normalized) ||
+    /\bwhat\b.{0,32}\b(went into|numbers went into|calculation|formula)\b.{0,32}\b(number|spendable cash|spendable cash today|this)\b/.test(normalized)
   );
 }
 
@@ -4241,7 +4380,7 @@ function isExplicitRecurringPrompt(normalized: string): boolean {
 
 function isRecurringAggregatePrompt(normalized: string): boolean {
   return (
-    /\b(total|sum|add(?:ed)? up|altogether|how much|how many dollars|spending|spend)\b/.test(normalized) &&
+    /\b(total|sum|add(?:ed)? up|altogether|how much|how many dollars|spending a month|spend a month)\b/.test(normalized) &&
     /\b(monthly bills?|recurring bills?|subscriptions?|monthly charges?|repeat(?:ing)? items?)\b/.test(normalized)
   );
 }

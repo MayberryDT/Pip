@@ -1212,6 +1212,9 @@ describe("Pip agent eval harness", () => {
       expect(messages).toContain("What did I buy lately?");
       expect(messages).toContain("What charges hit this week?");
       expect(messages).toContain("What can I cut back on?");
+      expect(messages).toContain("i want to save money");
+      expect(messages).toContain("How did you get the spendable cash today number?");
+      expect(messages).toContain("the total of my monthly bills? how much am i spending a month?");
       expect(messages).toContain("Erase everything you know about me");
     } finally {
       rmSync(tempDir, { recursive: true, force: true });
@@ -1222,6 +1225,7 @@ describe("Pip agent eval harness", () => {
     const { majorCapabilityMultiTurnCases, runAgentEval } = await loadEvalHarness();
     const tempDir = mkdtempSync(join(tmpdir(), "pip-major-multiturn-"));
     const reportPath = join(tempDir, "report.json");
+    const messages: string[] = [];
 
     try {
       const report = await runAgentEval({
@@ -1231,8 +1235,13 @@ describe("Pip agent eval harness", () => {
         conversationPrefix: "major-multiturn-test",
         log: () => undefined,
         fetchImpl: async (_url: string, options: { body?: string }) => {
-          const body = JSON.parse(options.body ?? "{}") as { message: string };
-          const caseDef = majorCapabilityMultiTurnCases.find((candidate) => candidate.message === body.message);
+          const body = JSON.parse(options.body ?? "{}") as { message: string; conversationId?: string };
+          messages.push(body.message);
+          const caseDef =
+            majorCapabilityMultiTurnCases.find((candidate) =>
+              body.conversationId?.endsWith(candidate.id),
+            ) ??
+            majorCapabilityMultiTurnCases.find((candidate) => candidate.message === body.message);
           const cardTypes = caseDef?.expectedCards ?? (caseDef?.expectedAnyCards?.slice(0, 1) ?? []);
 
           return {
@@ -1255,6 +1264,12 @@ describe("Pip agent eval harness", () => {
       expect(report.suite).toBe("major-capabilities-multiturn");
       expect(report.caseCount).toBeGreaterThanOrEqual(12);
       expect(report.failureCount).toBe(0);
+      expect(messages).toContain("What's the total of these monthly bills?");
+      expect(
+        majorCapabilityMultiTurnCases.some(
+          (caseDef) => caseDef.id === "major-multiturn-recurring-total-followup-no-visible-facts",
+        ),
+      ).toBe(true);
       expect(majorCapabilityMultiTurnCases.some((caseDef) => caseDef.history?.length > 0)).toBe(true);
       expect(
         majorCapabilityMultiTurnCases

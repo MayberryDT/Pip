@@ -466,6 +466,10 @@ function getDeterministicIntentId(normalized: string): string | null {
     return "policy.trust";
   }
 
+  if (isMathBreakdownPrompt(normalized)) {
+    return "math.breakdown";
+  }
+
   if (isSpendableExplanationPrompt(normalized)) {
     return "spendable.explanation";
   }
@@ -556,6 +560,8 @@ function isRecentTransactionsPrompt(normalized: string): boolean {
 function isRecurringActivityPrompt(normalized: string): boolean {
   return (
     /\b(subscriptions?|bills?|monthly charges?)\b.{0,36}\b(coming up|upcoming|repeat|recurring|every month)\b/.test(normalized) ||
+    /\b(total|sum|add(?:ed)? up|altogether|how much|how many dollars|spending a month|spend a month)\b.{0,56}\b(these monthly bills?|my monthly bills?|monthly bills?|recurring bills?|subscriptions?|monthly charges?)\b/.test(normalized) ||
+    /\b(these monthly bills?|my monthly bills?|monthly bills?|recurring bills?|subscriptions?|monthly charges?)\b.{0,56}\b(total|sum|add(?:ed)? up|altogether|how much|how many dollars|spending a month|spend a month)\b/.test(normalized) ||
     /\bwhat repeats every month\b/.test(normalized) ||
     /\b(show|list)\b.{0,24}\b(recurring|repeat|upcoming bills?|monthly charges?)\b/.test(normalized) ||
     /\byoutube premium\b.{0,24}\bcoming up\b/.test(normalized)
@@ -603,6 +609,14 @@ function isSpendableExplanationPrompt(normalized: string): boolean {
   );
 }
 
+function isMathBreakdownPrompt(normalized: string): boolean {
+  return (
+    /\bhow did you\b.{0,32}\b(get|calculate|come up with)\b.{0,32}\b(number|spendable cash|spendable cash today)\b/.test(normalized) ||
+    /\bwhat\b.{0,32}\b(went into|numbers went into|calculation|formula)\b.{0,32}\b(number|spendable cash|spendable cash today|this)\b/.test(normalized) ||
+    /\bshow\b.{0,24}\b(math|formula|calculation)\b/.test(normalized)
+  );
+}
+
 function isSpendingBreakdownPrompt(normalized: string): boolean {
   return (
     /\bbreak down my categories\b/.test(normalized) ||
@@ -611,7 +625,22 @@ function isSpendingBreakdownPrompt(normalized: string): boolean {
 }
 
 function isCutbackOpportunityPrompt(normalized: string): boolean {
-  return /\b(money leaking|where .* leaking)\b/.test(normalized);
+  if (isSavingsGoalSetupPrompt(normalized)) {
+    return false;
+  }
+
+  return (
+    /\b(money leaking|where .* leaking)\b/.test(normalized) ||
+    /\b(i want to|help me|how can i|how do i|where can i|ways? to)\b.{0,24}\bsave money\b/.test(normalized) ||
+    /\bsave money\b.{0,24}\b(this week|from spending|on spending|recent spending|where|how|help)\b/.test(normalized)
+  );
+}
+
+function isSavingsGoalSetupPrompt(normalized: string): boolean {
+  return (
+    /\bsavings? goals?\b/.test(normalized) ||
+    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized)
+  );
 }
 
 function isSpendableDefinitionPrompt(normalized: string): boolean {

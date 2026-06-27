@@ -47,6 +47,8 @@ const allowedMetadataKeys = new Set([
   "selectedPromptChipId",
   "historyLength",
   "shownCardCount",
+  "visibleCardFactCount",
+  "visibleCardValueCount",
   "lastToolCount",
   "promptChipCount",
   "onboardingStatus",

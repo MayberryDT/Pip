@@ -151,7 +151,10 @@ function composeCardBackedAnswer(
     case "spendable_cash_forecast":
       return null;
     case "missing_card_nudge":
-      return null;
+      return {
+        message: "I found a possible missing card in the current money picture.",
+        answerPatternId: "missing-card-nudge-card",
+      };
     case "math_breakdown":
       return null;
     case "trust_receipt":
