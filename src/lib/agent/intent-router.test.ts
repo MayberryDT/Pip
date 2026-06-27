@@ -88,6 +88,49 @@ describe("intent router", () => {
     });
   });
 
+  it.each([
+    ["i want to save money", "spending.cutback_opportunity", "get_spending_opportunity"],
+    ["help me save money", "spending.cutback_opportunity", "get_spending_opportunity"],
+    ["how can I save money", "spending.cutback_opportunity", "get_spending_opportunity"],
+    ["how can I save money on car expenses?", "spending.cutback_opportunity", "get_spending_opportunity"],
+    ["How did you get the spendable cash today number?", "math.breakdown", "get_pip_cash_math"],
+    ["how did you come up with today's number?", "math.breakdown", "get_pip_cash_math"],
+    ["what went into this number?", "math.breakdown", "get_pip_cash_math"],
+    ["whats the total of these monthly bills?", "recurring.activity", "get_recurring_activity"],
+    ["what do these monthly bills add up to?", "recurring.activity", "get_recurring_activity"],
+    ["the total of my monthly bills? how much am i spending a month?", "recurring.activity", "get_recurring_activity"],
+  ])("routes production failure phrase %s", (message, intentId, toolName) => {
+    expect(route(message)).toMatchObject({
+      kind: "route",
+      intentId,
+      toolName,
+    });
+  });
+
+  it.each([
+    "i want to save money for a big purchase",
+    "help me save for a vacation",
+    "move $200 to savings",
+    "transfer money to savings",
+  ])("does not misroute savings or money movement phrase %s", (message) => {
+    const decision = route(message);
+
+    if (decision.kind === "route") {
+      expect(decision.toolName).not.toBe("get_spending_opportunity");
+    }
+  });
+
+  it.each([
+    "what do these charges add up to?",
+    "how much did my charges total?",
+  ])("does not misroute generic charge total phrase %s to recurring activity", (message) => {
+    const decision = route(message);
+
+    if (decision.kind === "route") {
+      expect(decision.toolName).not.toBe("get_recurring_activity");
+    }
+  });
+
   it("separates actual balances from connected accounts", () => {
     expect(route("show my bank balance")).toMatchObject({
       kind: "route",

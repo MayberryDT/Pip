@@ -119,12 +119,12 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     });
   }
 
-  if (amountCents === null && isFinancialGuidancePrompt(normalized)) {
-    return guidanceResponse(input);
-  }
-
   if (isSpendingOpportunityPrompt(normalized)) {
     return toolResponse(input, "show_spending_opportunity", {});
+  }
+
+  if (amountCents === null && isFinancialGuidancePrompt(normalized)) {
+    return guidanceResponse(input);
   }
 
   if (isDataQualityPrompt(normalized)) {
@@ -256,14 +256,15 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
     return toolResponse(input, "show_math", {});
   }
 
-  if (
-    /\b(total|sum|add(?:ed)? up|altogether|how much)\b/.test(normalized) &&
-    /\b(monthly bills?|recurring bills?|subscriptions?|monthly charges?)\b/.test(normalized)
-  ) {
+  if (isRecurringAggregatePrompt(normalized)) {
     const response = runAgentTool("show_recurring_activity", {}, snapshot);
     const card = response.cards[0];
 
     if (card?.type === "recurring_activity") {
+      if (!hasRecentRecurringActivityContext(input)) {
+        return toolResponse(input, "show_recurring_activity", {});
+      }
+
       const expenseItems = card.items.filter((item) => item.amountCents < 0);
       const expenseTotalCents = expenseItems.reduce(
         (total, item) => total + Math.abs(item.amountCents),
@@ -301,6 +302,10 @@ function createMockResponse(input: RunAiAgentInput): AgentResponse {
   }
 
   if (/\bmath\b|\bformula\b|\bcalculation\b/.test(normalized)) {
+    return toolResponse(input, "show_math", {});
+  }
+
+  if (isExplicitMathPrompt(normalized)) {
     return toolResponse(input, "show_math", {});
   }
 
@@ -359,6 +364,7 @@ function savingsGoalPreviewResponse(input: RunAiAgentInput): AgentResponse {
       message: missing.includes("target_amount")
         ? `How much do you want to save for ${draft.name}?`
         : `When do you want ${draft.name}, or how much do you want to save each month?`,
+      usedTools: ["preview_savings_goal"],
       responseMode: "clarify",
       pendingAction: {
         ...draft,
@@ -375,6 +381,7 @@ function savingsGoalPreviewResponse(input: RunAiAgentInput): AgentResponse {
   if (!preview.card) {
     return baseResponse(input, {
       message: "Tell me the date or monthly amount so I can preview that goal.",
+      usedTools: ["preview_savings_goal"],
       responseMode: "clarify",
       pendingAction: {
         ...draft,
@@ -384,7 +391,7 @@ function savingsGoalPreviewResponse(input: RunAiAgentInput): AgentResponse {
   }
 
   return baseResponse(input, {
-    message: `${draft.name} would need ${formatMoney(preview.card.monthlyContributionCents)}/month. Want me to create it?`,
+    message: `${draft.name} would need ${formatMoney(preview.card.monthlyContributionCents)}/month.`,
     cards: [preview.card],
     usedTools: ["preview_savings_goal"],
     responseMode: "show_card",
@@ -684,6 +691,8 @@ function isSpendingOpportunityPrompt(normalized: string): boolean {
     /\b(what|where|which|find|show|spot|identify|help|how)\b/.test(normalized) ||
     /\bspending opportunit(?:y|ies)\b/.test(normalized) ||
     /\b(cut back|cutback|spend less|save money|save more(?: money)?|save a little|save cash|save this week|overspending|over spending|waste|wasteful|stop buying|trim|lower expenses?|reduce expenses?|cut expenses?|cut costs?|trim costs?)\b.*\b(spending|spend|money|buying|recent|this week|category|merchant|where|what|costs?|expenses?|cash)\b/.test(normalized) ||
+    /\b(i want to|help me|how can i|how do i|where can i|ways? to)\b.{0,24}\bsave money\b/.test(normalized) ||
+    /\bsave money\b.{0,24}\b(this week|from spending|on spending|recent spending|where|how|help)\b/.test(normalized) ||
     /\b(costs?|expenses?)\b.{0,36}\b(cut|trim|lower|reduce)\b/.test(normalized)
   );
 }
@@ -696,7 +705,34 @@ function isDataQualityPrompt(normalized: string): boolean {
 
 function isSavingsSetupOrSettingsPrompt(normalized: string): boolean {
   return /\b(monthly savings|protected savings|savings cushion)\b/.test(normalized) ||
-    /\bsave\b.{0,24}\b(account settings|settings|preferences)\b/.test(normalized);
+    /\bsave\b.{0,24}\b(account settings|settings|preferences)\b/.test(normalized) ||
+    /\bsavings? goals?\b/.test(normalized) ||
+    /\bsave\b.{0,32}\b(for|toward|towards)\b/.test(normalized);
+}
+
+function isExplicitMathPrompt(normalized: string): boolean {
+  return (
+    /\bhow did you\b.{0,32}\b(get|calculate|come up with)\b.{0,32}\b(number|spendable cash|spendable cash today)\b/.test(normalized) ||
+    /\bwhat\b.{0,32}\b(went into|numbers went into|calculation|formula)\b.{0,32}\b(number|spendable cash|spendable cash today|this)\b/.test(normalized)
+  );
+}
+
+function isRecurringAggregatePrompt(normalized: string): boolean {
+  return (
+    /\b(total|sum|add(?:ed)? up|altogether|how much|how many dollars|spending a month|spend a month)\b/.test(normalized) &&
+    /\b(these monthly bills?|my monthly bills?|monthly bills?|recurring bills?|subscriptions?|monthly charges?)\b/.test(normalized)
+  );
+}
+
+function hasRecentRecurringActivityContext(input: RunAiAgentInput): boolean {
+  return Boolean(
+    input.conversationState?.lastToolNames?.includes("get_recurring_activity") ||
+      input.conversationState?.shownCards?.some((card) => card.type === "recurring_activity") ||
+      input.history?.slice(-6).some((item) =>
+        item.role === "assistant" &&
+        /\b(recurring|repeat(?:ing)? items?|subscriptions?|upcoming bills?|bills? coming up|monthly bills?)\b/i.test(item.content)
+      ),
+  );
 }
 
 function isSavingsGoalPrompt(normalized: string): boolean {

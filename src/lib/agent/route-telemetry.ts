@@ -25,6 +25,7 @@ export type AgentRouteTelemetryRequest = {
   history?: AgentHistoryItem[];
   conversationState?: {
     shownCards?: Array<{ type: string; title?: string }>;
+    visibleCardFacts?: Array<{ type: string; facts?: unknown[]; values?: unknown[] }>;
     lastToolNames?: string[];
     promptChips?: PromptChip[];
   };
@@ -47,6 +48,14 @@ export function createChatTurnRequestMetadata(
     selectedPromptChipId: input.selectedPromptChipId ?? null,
     historyLength: input.history?.length ?? 0,
     shownCardCount: input.conversationState?.shownCards?.length ?? 0,
+    visibleCardFactCount: input.conversationState?.visibleCardFacts?.reduce(
+      (total, card) => total + (Array.isArray(card.facts) ? card.facts.length : 0),
+      0,
+    ) ?? 0,
+    visibleCardValueCount: input.conversationState?.visibleCardFacts?.reduce(
+      (total, card) => total + (Array.isArray(card.values) ? card.values.length : 0),
+      0,
+    ) ?? 0,
     lastToolCount: input.conversationState?.lastToolNames?.length ?? 0,
     promptChipCount: input.conversationState?.promptChips?.length ?? 0,
     onboardingStatus: routeContext?.onboardingState.status ?? null,
