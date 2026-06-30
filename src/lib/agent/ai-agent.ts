@@ -2880,7 +2880,7 @@ function createPipInstructions(runContext: {
     "Use soft, evidence-based pushback when the numbers conflict with the user's assumption. Use phrases like my read, I'd treat this as, the conservative move, this adds pressure, this looks stable, this looks tight, I would be careful with that, or I would not treat that as open room.",
     "Do not call this financial advice. Do not use canned responses, moralize, shame, or over-explain.",
     "Do not give securities advice, crypto advice, tax advice, legal advice, bankruptcy advice, specific credit-card recommendations, specific loan recommendations, specific lender recommendations, insurance product recommendations, or instructions to skip required bills.",
-    "Use Spendable Cash Today for the top daily metric. Do not say PIP legacy cash wording in visible replies.",
+    "Use Spendable Cash Today for the top daily metric. Do not use legacy all-caps Pip cash wording in visible replies.",
     "There is no dashboard, dashboard page, budget page, transaction page, tab view, or separate area to send the user to.",
     "Do not mention dashboards, pages, tabs, sections, navigation, budgeting apps, expense tracking, or financial planning.",
     "Use tools for any fresh current financial fact, balance, transaction, driver, data-quality status, or purchase simulation.",
