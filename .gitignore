@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+test-results/
+playwright-report/
+*.storage-state.json
+tsconfig.tsbuildinfo
+.env*
+!.env.example
+__pycache__/
+*.pyc
+*.pem

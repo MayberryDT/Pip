@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#F8F3EA" />
+    <title>Pip is offline</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --paper: #f8f3ea;
+        --ink: #2f312b;
+        --moss: #5a6b54;
+        --line: rgba(92, 77, 58, 0.16);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        background: var(--paper);
+        color: var(--ink);
+        font-family:
+          Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(100%, 420px);
+        text-align: center;
+      }
+
+      img {
+        width: 96px;
+        height: 96px;
+        border-radius: 24px;
+      }
+
+      h1 {
+        margin: 18px 0 10px;
+        font-family: Georgia, "Times New Roman", Times, serif;
+        font-size: 2.4rem;
+        font-weight: 400;
+        color: var(--moss);
+      }
+
+      p {
+        margin: 0;
+        color: rgba(47, 49, 43, 0.68);
+        font-size: 1rem;
+        line-height: 1.6;
+      }
+
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 24px;
+        padding: 28px 22px;
+        background: rgba(255, 252, 247, 0.68);
+      }
+    </style>
+  </head>
+  <body>
+    <main class="panel">
+      <img src="/icon-192.png" alt="" />
+      <h1>Pip is offline</h1>
+      <p>Reconnect to refresh Spendable Cash Today and keep chatting with Pip.</p>
+    </main>
+  </body>
+</html>

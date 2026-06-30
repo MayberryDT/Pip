@@ -1,0 +1,129 @@
+import { z } from "zod";
+import { getAppAccessFailureForUser } from "@/lib/app-access/route-guard";
+import {
+  markPipCashSnapshotsStaleForUser,
+  upsertUserSettings,
+} from "@/lib/data/financial-repository";
+import { recordProductEventSafely } from "@/lib/data/product-events";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const settingsSchema = z.object({
+  protectedSavingsMonthlyCents: z.number().int().min(0).max(10_000_000),
+});
+
+export async function GET() {
+  if (!isSupabaseConfigured()) {
+    return sensitiveJson(
+      {
+        error: "Supabase is not configured.",
+      },
+      { status: 503 },
+    );
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
+    }
+
+    const appAccessFailure = await getAppAccessFailureForUser(user);
+
+    if (appAccessFailure) {
+      return appAccessFailure;
+    }
+
+    const { data, error } = await supabase
+      .from("user_settings")
+      .select("*")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (error) {
+      throw error;
+    }
+
+    return sensitiveJson({
+      protectedSavingsMonthlyCents: data?.protected_savings_monthly_cents ?? 20000,
+      manualRefreshOnly: data?.manual_refresh_only ?? false,
+      privacyConsentAt: data?.privacy_consent_at ?? null,
+    });
+  } catch (error) {
+    if (!(error instanceof SupabaseConfigError)) {
+      console.error("[settings] settings request failed", getSafeErrorMessage(error, "Settings request failed."));
+    }
+
+    return sensitiveJson(toErrorBody(error), { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  if (!isSupabaseConfigured()) {
+    return sensitiveJson(
+      {
+        error: "Supabase is not configured.",
+      },
+      { status: 503 },
+    );
+  }
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
+    }
+
+    const appAccessFailure = await getAppAccessFailureForUser(user);
+
+    if (appAccessFailure) {
+      return appAccessFailure;
+    }
+
+    const body = await request.json().catch(() => null);
+    const parsed = settingsSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return sensitiveJson({ error: "Invalid settings." }, { status: 400 });
+    }
+
+    const settings = await upsertUserSettings(supabase, user.id, parsed.data);
+    await markPipCashSnapshotsStaleForUser(supabase, user.id, createSupabaseAdminClient());
+    await recordProductEventSafely(supabase, user.id, "settings_updated", {
+      protectedSavingsMonthlyCents: parsed.data.protectedSavingsMonthlyCents,
+    });
+
+    return sensitiveJson(settings);
+  } catch (error) {
+    if (!(error instanceof SupabaseConfigError)) {
+      console.error("[settings] settings request failed", getSafeErrorMessage(error, "Settings request failed."));
+    }
+
+    return sensitiveJson(toErrorBody(error), { status: 500 });
+  }
+}
+
+function toErrorBody(error: unknown) {
+  if (error instanceof SupabaseConfigError) {
+    return {
+      error: error.message,
+    };
+  }
+
+  return {
+    error: "Settings request failed.",
+  };
+}

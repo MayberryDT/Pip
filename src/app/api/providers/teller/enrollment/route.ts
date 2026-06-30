@@ -1,0 +1,207 @@
+import { z } from "zod";
+import { getAppAccessFailureForUser } from "@/lib/app-access/route-guard";
+import { recordProductEventSafely } from "@/lib/data/product-events";
+import { getTellerConfig } from "@/lib/providers/teller/config";
+import { storeTellerCredential } from "@/lib/providers/teller/credential-store";
+import { getSafeErrorMessage } from "@/lib/security/error-messages";
+import { sensitiveJson } from "@/lib/security/http-cache";
+import { isSupabaseConfigured, SupabaseConfigError } from "@/lib/supabase/env";
+import { createSupabaseAdminClient } from "@/lib/supabase/admin";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+const enrollmentSchema = z.object({
+  accessToken: z.string().min(8).max(500),
+  nonce: z.string().min(8).max(120),
+  enrollment: z.object({
+    id: z.string().min(1).max(200),
+    institution: z
+      .object({
+        name: z.string().min(1).max(160).optional(),
+      })
+      .optional(),
+    user: z
+      .object({
+        id: z.string().min(1).max(200).optional(),
+      })
+      .optional(),
+  }),
+});
+
+export async function POST(request: Request) {
+  if (!isSupabaseConfigured()) {
+    return sensitiveJson({ error: "Supabase is not configured." }, { status: 503 });
+  }
+
+  let userId: string | null = null;
+  let admin: ReturnType<typeof createSupabaseAdminClient> | null = null;
+  let institutionName = "Teller institution";
+
+  try {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { user },
+      error: userError,
+    } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return sensitiveJson({ error: "Authentication required." }, { status: 401 });
+    }
+
+    userId = user.id;
+    const appAccessFailure = await getAppAccessFailureForUser(user);
+
+    if (appAccessFailure) {
+      return appAccessFailure;
+    }
+
+    const body = await request.json().catch(() => null);
+    const parsed = enrollmentSchema.safeParse(body);
+
+    if (!parsed.success) {
+      return sensitiveJson({ error: "Invalid Teller enrollment." }, { status: 400 });
+    }
+
+    const cookieNonce = getCookie(request, "pip_teller_nonce");
+
+    if (!cookieNonce || cookieNonce !== parsed.data.nonce) {
+      return sensitiveJson({ error: "Teller connect session expired." }, { status: 403 });
+    }
+
+    const config = getTellerConfig();
+    admin = createSupabaseAdminClient();
+    institutionName = parsed.data.enrollment.institution?.name ?? "Teller institution";
+    const institution = await upsertTellerInstitution(admin, {
+      userId: user.id,
+      institutionName,
+    });
+
+    await storeTellerCredential({
+      supabase: admin,
+      institutionId: institution.id,
+      userId: user.id,
+      enrollmentId: parsed.data.enrollment.id,
+      accessToken: parsed.data.accessToken,
+      institutionName,
+      environment: config.environment,
+    });
+    await recordProductEventSafely(admin, user.id, "connect_session_created", {
+      provider: "teller",
+      status: "enrollment-stored",
+      institutionName,
+    });
+
+    const response = sensitiveJson({
+      status: "connected",
+      institutionId: institution.id,
+      institutionName,
+    });
+    response.cookies.delete("pip_teller_nonce");
+
+    return response;
+  } catch (error) {
+    if (userId && admin) {
+      await recordProductEventSafely(admin, userId, "connect_session_failed", {
+        provider: "teller",
+        status: "enrollment-storage-failed",
+        institutionName,
+        error: getSafeErrorMessage(error, "Teller enrollment request failed."),
+      });
+    }
+
+    return sensitiveJson(toErrorBody(error), { status: 500 });
+  }
+}
+
+async function upsertTellerInstitution(
+  supabase: ReturnType<typeof createSupabaseAdminClient>,
+  input: {
+    userId: string;
+    institutionName: string;
+  },
+) {
+  const { data: existing, error: findError } = await supabase
+    .from("connected_institutions")
+    .select("*")
+    .eq("user_id", input.userId)
+    .eq("provider", "teller")
+    .eq("institution_name", input.institutionName)
+    .maybeSingle();
+
+  if (findError) {
+    throw findError;
+  }
+
+  const payload = {
+    status: "connected" as const,
+    error_code: null,
+    error_message: null,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (existing) {
+    const { data, error } = await supabase
+      .from("connected_institutions")
+      .update(payload)
+      .eq("user_id", input.userId)
+      .eq("id", existing.id)
+      .select("*")
+      .single();
+
+    if (error) {
+      throw error;
+    }
+
+    return data;
+  }
+
+  const { data, error } = await supabase
+    .from("connected_institutions")
+    .insert({
+      user_id: input.userId,
+      provider: "teller",
+      institution_name: input.institutionName,
+      ...payload,
+    })
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+function getCookie(request: Request, name: string): string | null {
+  const cookie = request.headers.get("cookie");
+
+  if (!cookie) {
+    return null;
+  }
+
+  return (
+    cookie
+      .split(";")
+      .map((item) => item.trim())
+      .find((item) => item.startsWith(`${name}=`))
+      ?.slice(name.length + 1) ?? null
+  );
+}
+
+function toErrorBody(error: unknown) {
+  if (error instanceof SupabaseConfigError) {
+    return {
+      error: error.message,
+    };
+  }
+
+  if (error instanceof Error) {
+    return {
+      error: getSafeErrorMessage(error, "Teller enrollment request failed."),
+    };
+  }
+
+  return {
+    error: "Teller enrollment request failed.",
+  };
+}
